@@ -34,8 +34,7 @@ import { indexBlocksByPath } from "../lib/blocks.js";
  */
 
 export function useCmsContent() {
-  const { config, blocks: seedBlocks, setBlocks, refetchToken, triggerRefetch, getAccessToken } =
-    useCmsContext();
+  const { config, blocks: seedBlocks, setBlocks, refetchToken, triggerRefetch, getAccessToken } = useCmsContext();
   const slug = usePathname() ?? "/";
 
   // Seed from the provider's blocks map (populated by `initialBlocks` on the
@@ -43,11 +42,7 @@ export function useCmsContent() {
   // an empty array while the (admin-only) refetch is in flight.
   const [state, setState] = useState(
     /** @returns {{ blocks: BlockResponse[], isLoading: boolean, error: Error|null }} */
-    () => ({
-      blocks: Array.from(seedBlocks.values()),
-      isLoading: false,
-      error: null,
-    }),
+    () => ({ blocks: Array.from(seedBlocks.values()), isLoading: false, error: null }),
   );
 
   useEffect(() => {

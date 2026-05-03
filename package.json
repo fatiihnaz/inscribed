@@ -16,6 +16,9 @@
     },
     "./nextauth": {
       "import": "./dist/nextauth.js"
+    },
+    "./page": {
+      "import": "./dist/page.js"
     }
   },
   "files": [

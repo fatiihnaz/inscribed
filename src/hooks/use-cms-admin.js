@@ -51,11 +51,7 @@ export function useCmsAdmin() {
      */
     async (blocks) => {
       if (!canSave) {
-        const err = new Error(
-          isAdmin
-            ? "Cannot save: missing userSub"
-            : "Cannot save: not in admin mode",
-        );
+        const err = new Error(isAdmin ? "Cannot save: missing userSub" : "Cannot save: not in admin mode");
         setError(err);
         throw err;
       }

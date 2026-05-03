@@ -6,6 +6,7 @@ export default defineConfig({
     server: "src/server/get-content.js",
     actions: "src/server/actions.js",
     nextauth: "src/nextauth/index.jsx",
+    page: "src/server/cms-page.jsx",
   },
   format: ["esm"],
   splitting: true,

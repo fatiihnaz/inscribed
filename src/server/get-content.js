@@ -16,12 +16,7 @@ import { getClientCredentialsToken } from "./service-token.js";
 
 /**
  * @import { CmsConfig } from "../lib/config.js"
- * @import {
- *   BlockResponse,
- *   ContentResponse,
- *   SyncManifestRequest,
- *   SyncResultResponse,
- * } from "../lib/schemas.js"
+ * @import { BlockResponse, ContentResponse, SyncManifestRequest, SyncResultResponse } from "../lib/schemas.js"
  */
 
 /**

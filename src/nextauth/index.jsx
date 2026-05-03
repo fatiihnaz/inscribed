@@ -42,12 +42,8 @@ function Inner({ config, isAdmin, userSub, initialBlocks, onAfterSave, children 
   );
 
   return (
-    <CmsProvider
-      config={config}
-      isAdmin={isAdmin}
-      userSub={userSub}
-      initialBlocks={initialBlocks}
-      onAfterSave={onAfterSave}
+    <CmsProvider config={config} isAdmin={isAdmin} userSub={userSub}
+      initialBlocks={initialBlocks} onAfterSave={onAfterSave}
       getAccessToken={isAdmin ? getAccessToken : undefined}
     >
       {children}

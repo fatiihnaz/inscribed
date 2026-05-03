@@ -30,6 +30,7 @@ import { createContext, useContext } from "react";
  * @property {number} refetchToken      Bumped to force `useCmsContent` to refetch.
  * @property {() => void} triggerRefetch
  * @property {((slug: string) => void | Promise<void>) | null} onAfterSave  Called after a successful save (typically a Server Action that calls `revalidateTag(cmsCacheTag(slug))`).
+ * @property {(() => Promise<string>) | null} getAccessToken  Returns the current user's JWT access token; added as `Authorization: Bearer {token}` on write requests. Null in public/demo mode.
  */
 
 /** @type {React.Context<CmsContextValue|null>} */

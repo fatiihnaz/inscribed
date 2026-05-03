@@ -157,22 +157,27 @@ export async function fetchDataSources(config, slug, init) {
 
 /**
  * `PUT /cms/content` - admin save. `userSub` is the Keycloak `sub` claim
- * and is required by the backend for write authorization.
+ * (informational header). `accessToken` is the full Keycloak JWT sent as
+ * `Authorization: Bearer {token}` for backend signature verification.
  *
  * 409 Conflict surfaces as `CmsApiError` with `isConflict === true`.
  *
  * @param {CmsConfig} config
  * @param {string} userSub
  * @param {UpdatePageRequest} request
+ * @param {string} [accessToken]
  * @returns {Promise<UpdatePageResponse>}
  */
-export async function updateContent(config, userSub, request) {
+export async function updateContent(config, userSub, request, accessToken) {
   if (!userSub) {
     throw new Error("updateContent: userSub is required for write requests");
   }
+  /** @type {Record<string, string>} */
+  const extraHeaders = { "X-User-Sub": userSub };
+  if (accessToken) extraHeaders["Authorization"] = `Bearer ${accessToken}`;
   const response = await fetch(buildUrl(config, "/content"), {
     method: "PUT",
-    headers: { ...baseHeaders(config), "X-User-Sub": userSub },
+    headers: { ...baseHeaders(config), ...extraHeaders },
     body: JSON.stringify(request),
   });
   if (!response.ok) throw await toApiError(response);
@@ -184,12 +189,15 @@ export async function updateContent(config, userSub, request) {
  *
  * @param {CmsConfig} config
  * @param {SyncManifestRequest} request
+ * @param {string} [accessToken]  Service JWT from Keycloak client-credentials grant.
  * @returns {Promise<SyncResultResponse>}
  */
-export async function syncManifest(config, request) {
+export async function syncManifest(config, request, accessToken) {
+  /** @type {Record<string, string>} */
+  const extraHeaders = accessToken ? { "Authorization": `Bearer ${accessToken}` } : {};
   const response = await fetch(buildUrl(config, "/sync"), {
     method: "POST",
-    headers: baseHeaders(config),
+    headers: { ...baseHeaders(config), ...extraHeaders },
     body: JSON.stringify(request),
   });
   if (!response.ok) throw await toApiError(response);

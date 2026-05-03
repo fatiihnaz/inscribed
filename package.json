@@ -10,23 +10,38 @@
     },
     "./server": {
       "import": "./dist/server.js"
+    },
+    "./actions": {
+      "import": "./dist/actions.js"
+    },
+    "./nextauth": {
+      "import": "./dist/nextauth.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
+    "next": "^14.0.0 || ^15.0.0",
+    "next-auth": "^4.0.0",
     "react": "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0",
-    "next": "^14.0.0 || ^15.0.0"
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next-auth": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "next": "^15.0.0",
+    "next-auth": "^4.24.14",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "next": "^15.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0"
   }

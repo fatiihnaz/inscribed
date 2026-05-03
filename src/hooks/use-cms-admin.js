@@ -32,7 +32,7 @@ import { updateContent, CmsApiError } from "../lib/api-client.js";
  * @returns {UseCmsAdminResult}
  */
 export function useCmsAdmin() {
-  const { config, isAdmin, userSub, triggerRefetch, onAfterSave } =
+  const { config, isAdmin, userSub, triggerRefetch, onAfterSave, getAccessToken } =
     useCmsContext();
   const pathname = usePathname() ?? "/";
 
@@ -62,10 +62,13 @@ export function useCmsAdmin() {
       setIsSaving(true);
       setError(null);
       try {
-        const result = await updateContent(config, /** @type {string} */ (userSub), {
-          slug: pathname,
-          blocks,
-        });
+        const accessToken = await getAccessToken();
+        const result = await updateContent(
+          config,
+          /** @type {string} */ (userSub),
+          { slug: pathname, blocks },
+          accessToken || undefined,
+        );
         setLastResult(result);
         triggerRefetch();
         // Drop the server's ISR cache for this slug so a subsequent
@@ -91,7 +94,7 @@ export function useCmsAdmin() {
         setIsSaving(false);
       }
     },
-    [canSave, isAdmin, config, userSub, pathname, triggerRefetch, onAfterSave],
+    [canSave, isAdmin, config, userSub, pathname, triggerRefetch, onAfterSave, getAccessToken],
   );
 
   const save = useCallback(

@@ -34,13 +34,18 @@ import { indexBlocksByPath } from "../lib/blocks.js";
  */
 
 export function useCmsContent() {
-  const { config, setBlocks, refetchToken, triggerRefetch } = useCmsContext();
+  const { config, blocks: seedBlocks, setBlocks, refetchToken, triggerRefetch, getAccessToken } =
+    useCmsContext();
   const slug = usePathname() ?? "/";
 
+  // Seed from the provider's blocks map (populated by `initialBlocks` on the
+  // server) so the first render exposes the SSR-fetched content rather than
+  // an empty array while the (admin-only) refetch is in flight.
   const [state, setState] = useState(
-    /** @type {{ blocks: BlockResponse[], isLoading: boolean, error: Error|null }} */ ({
-      blocks: [],
-      isLoading: true,
+    /** @returns {{ blocks: BlockResponse[], isLoading: boolean, error: Error|null }} */
+    () => ({
+      blocks: Array.from(seedBlocks.values()),
+      isLoading: false,
       error: null,
     }),
   );
@@ -49,28 +54,27 @@ export function useCmsContent() {
     let cancelled = false;
     setState((s) => ({ ...s, isLoading: true, error: null }));
 
-    fetchContent(config, slug)
-      .then((response) => {
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
+        const response = await fetchContent(config, slug, init);
         if (cancelled) return;
         const indexed = indexBlocksByPath(response.blocks);
         setBlocks(() => indexed);
         setState({ blocks: response.blocks, isLoading: false, error: null });
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
-        // Surface the failure - silent errors here mean every EditableRegion
-        // falls back to its placeholder and AdminDrawer reports "block isn't
-        // in the current page yet", which looks like missing data rather than
-        // a network/CORS failure.
         // eslint-disable-next-line no-console
         console.error("[skylab-cms] fetchContent failed:", err);
-        setState({ blocks: [], isLoading: false, error: err });
-      });
+        setState({ blocks: [], isLoading: false, error: /** @type {Error} */ (err) });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [config, slug, refetchToken, setBlocks]);
+  }, [config, slug, refetchToken, setBlocks, getAccessToken]);
 
   return {
     blocks: state.blocks,

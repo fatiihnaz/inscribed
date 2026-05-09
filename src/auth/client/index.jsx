@@ -3,18 +3,23 @@
 /**
  * @file NextAuth-aware CmsProvider wrapper.
  *
- * Import from `@skylab/cms/nextauth`.
+ * Import from `@skylab/cms/auth/client`.
  * Requires `next-auth` to be installed in the consuming app.
  *
  * Wraps children with NextAuth's `SessionProvider` (so you don't need to
  * add it to layout.jsx) and wires `useSession()` into `CmsProvider` so
  * admin saves include a valid `Authorization: Bearer` header automatically.
+ *
+ * `client-only` import below makes server-side imports throw at build
+ * time, mirroring the `server-only` guard on `@skylab/cms/auth/server`.
  */
+
+import "client-only";
 
 import { SessionProvider, signIn, signOut, useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo } from "react";
 
-import { CmsProvider } from "../index.js";
+import { CmsProvider } from "../../index.js";
 
 /**
  * @import { CmsConfig } from "../lib/config.js"

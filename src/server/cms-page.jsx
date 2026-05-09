@@ -42,9 +42,10 @@
  */
 
 import { headers } from "next/headers";
+import { getServerSession } from "next-auth";
 
-import { revalidateCmsSlug } from "./actions.js";
 import { getCmsPageBlocks } from "./get-content.js";
+import { isCmsAdmin, readCmsAuthMeta } from "../auth/server/options.js";
 
 const PATHNAME_HEADER = "x-pathname";
 
@@ -54,20 +55,34 @@ const PATHNAME_HEADER = "x-pathname";
 
 /**
  * @typedef {Object} CreateCmsPageOptions
+ * @property {CmsConfig | { baseUrl: string }} config
  * @property {*} Provider
  *   The CMS provider component - typically `NextAuthCmsProvider` from
- *   `@skylab/cms/nextauth`, or your own wrapper around `CmsProvider`.
- * @property {CmsConfig | { baseUrl: string }} config
+ *   `@skylab/cms/nextauth`, or your own wrapper. The provider receives
+ *   `config`, `isAdmin`, `userSub`, `initialBlocks`, `onAfterSave`, and
+ *   `session` props.
+ * @property {import("next-auth").AuthOptions} [authOptions]
+ *   When set, `getSession` and `deriveAdmin` are wired automatically:
+ *   `getSession` calls `getServerSession(authOptions)` and admin gating
+ *   uses the metadata stamped by `createCmsAuthOptions` (or falls back to
+ *   `session != null`). Pass `getSession`/`deriveAdmin` to override.
  * @property {() => Promise<*|null>} [getSession]
- *   Resolve the active session (e.g. `() => getServerSession(authOptions)`).
- *   Omit for public-only setups - every visitor is treated as non-admin.
+ *   Manual session resolver. Wins over `authOptions`. Omit for public-only
+ *   setups - every visitor is treated as non-admin.
  * @property {(session: *) => boolean} [deriveAdmin]
- *   Default: `session != null`.
+ *   Manual admin check. Wins over `authOptions` metadata. Default depends
+ *   on `authOptions`: if it carries CMS metadata, that drives the check;
+ *   otherwise `session != null`.
  * @property {(session: *) => string | null} [deriveUserSub]
  *   Default: `session?.user?.id ?? null`.
  * @property {(slug: string) => void | Promise<void>} [onAfterSave]
- *   Server Action invoked after a successful admin save. Default:
- *   `revalidateCmsSlug` from `@skylab/cms/actions`.
+ *   Server Action invoked after a successful admin save. Typically
+ *   `revalidateCmsSlug` from `@skylab/cms/actions` - import it on the
+ *   consumer side and pass it explicitly. The "use server" directive
+ *   only survives across package entry boundaries, so importing the
+ *   action inside this file (and using it as a default) would strip its
+ *   Server Action status during bundling and Next.js would refuse to
+ *   pass it to the client provider.
  */
 
 /**
@@ -75,10 +90,14 @@ const PATHNAME_HEADER = "x-pathname";
  * @returns {(props: { slug?: string, children: React.ReactNode }) => Promise<React.ReactElement>}
  */
 export function createCmsPage(options) {
-  const { Provider, config, getSession,
-    deriveAdmin = (session) => session != null,
+  const {
+    Provider,
+    config,
+    authOptions,
+    getSession,
+    deriveAdmin,
     deriveUserSub = (session) => session?.user?.id ?? null,
-    onAfterSave = revalidateCmsSlug,
+    onAfterSave,
   } = options;
 
   if (!Provider) {
@@ -88,9 +107,18 @@ export function createCmsPage(options) {
     throw new Error("createCmsPage: `config` option is required");
   }
 
+  const authMeta = authOptions ? readCmsAuthMeta(authOptions) : null;
+  const resolvedGetSession =
+    getSession ?? (authOptions ? () => getServerSession(authOptions) : null);
+  const resolvedDeriveAdmin =
+    deriveAdmin ??
+    (authMeta
+      ? (session) => isCmsAdmin(session, authMeta)
+      : (session) => session != null);
+
   return async function CmsPage({ slug, children }) {
     const resolvedSlug = slug ?? (await resolveSlugFromHeaders());
-    const session = getSession ? await getSession() : null;
+    const session = resolvedGetSession ? await resolvedGetSession() : null;
 
     let initialBlocks = [];
     try {
@@ -100,7 +128,7 @@ export function createCmsPage(options) {
     }
 
     return (
-      <Provider config={config} isAdmin={deriveAdmin(session)} userSub={deriveUserSub(session)}
+      <Provider config={config} isAdmin={resolvedDeriveAdmin(session)} userSub={deriveUserSub(session)}
         initialBlocks={initialBlocks} onAfterSave={onAfterSave} session={session}
       >
         {children}

@@ -14,11 +14,17 @@
     "./actions": {
       "import": "./dist/actions.js"
     },
-    "./nextauth": {
-      "import": "./dist/nextauth.js"
-    },
     "./page": {
       "import": "./dist/page.js"
+    },
+    "./auth/server": {
+      "import": "./dist/auth-server.js"
+    },
+    "./auth/server/signin": {
+      "import": "./dist/auth-server-signin.js"
+    },
+    "./auth/client": {
+      "import": "./dist/auth-client.js"
     }
   },
   "files": [
@@ -33,7 +39,9 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "framer-motion": "^11.11.0"
+    "client-only": "^0.0.1",
+    "framer-motion": "^11.11.0",
+    "server-only": "^0.0.1"
   },
   "peerDependencies": {
     "next": "^14.0.0 || ^15.0.0",

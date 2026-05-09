@@ -17,6 +17,7 @@
 
 export { CmsProvider } from "./components/CmsProvider.jsx";
 export { EditableRegion } from "./components/EditableRegion.jsx";
+export { EditableList } from "./components/EditableList.jsx";
 
 export { useCmsContent } from "./hooks/use-cms-content.js";
 export { useCmsAdmin } from "./hooks/use-cms-admin.js";

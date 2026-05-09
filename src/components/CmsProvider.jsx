@@ -19,7 +19,7 @@ import { useCmsContent } from "../hooks/use-cms-content.js";
 
 /**
  * @import { CmsConfig } from "../lib/config.js"
- * @import { BlockResponse } from "../lib/schemas.js"
+ * @import { BlockResponse, ItemSchema } from "../lib/schemas.js"
  */
 
 const AdminDrawer = dynamic(
@@ -73,6 +73,31 @@ export function CmsProvider({
   // user types. Cleared on save / discard / navigation.
   const [drafts, setDraftsState] = useState(
     /** @returns {Map<string, *>} */ (() => new Map()),
+  );
+
+  // Registry of <EditableList> itemSchemas so the AdminDrawer can render
+  // List editors. Lives in a ref + a forced rerender counter rather than
+  // setState - register/unregister fires inside child useEffects, which
+  // would otherwise schedule a parent setState mid-commit and warn.
+  const itemSchemasRef = useRef(/** @type {Map<string, ItemSchema>} */ (new Map()));
+  const [itemSchemasVersion, setItemSchemasVersion] = useState(0);
+
+  const registerItemSchema = useCallback(
+    /** @param {string} blockPath @param {ItemSchema} schema */
+    (blockPath, schema) => {
+      itemSchemasRef.current.set(blockPath, schema);
+      setItemSchemasVersion((n) => n + 1);
+    },
+    [],
+  );
+
+  const unregisterItemSchema = useCallback(
+    /** @param {string} blockPath */
+    (blockPath) => {
+      if (!itemSchemasRef.current.delete(blockPath)) return;
+      setItemSchemasVersion((n) => n + 1);
+    },
+    [],
   );
 
   // Sync the blocks map when `initialBlocks` arrives with new content (e.g.
@@ -240,6 +265,9 @@ export function CmsProvider({
       setActiveBlock: setActiveBlockGuarded,
       refetchToken,
       triggerRefetch,
+      itemSchemas: itemSchemasRef.current,
+      registerItemSchema,
+      unregisterItemSchema,
       onAfterSave: stableOnAfterSave,
       getAccessToken: stableGetAccessToken,
       isDrawerOpen,
@@ -261,6 +289,9 @@ export function CmsProvider({
       setActiveBlockGuarded,
       refetchToken,
       triggerRefetch,
+      itemSchemasVersion,
+      registerItemSchema,
+      unregisterItemSchema,
       stableOnAfterSave,
       stableGetAccessToken,
       isDrawerOpen,

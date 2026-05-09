@@ -141,10 +141,14 @@ export function EditableRegion({ blockPath, as, blockType: _bt, defaultValue: _d
           style={{
             position: "absolute",
             top: 0,
-            right: 0,
+            // Pull the chip out by the hover/active ring's outer thickness
+            // (1.5px on hover, 2px on active) so its right edge lines up
+            // with the ring instead of leaving a sliver of hover-tint
+            // background showing past the chip.
+            right: isActive ? -2 : -1.5,
             transform: "translateY(-100%)",
-            background: "rgba(14,11,8,0.90)",
-            border: "1px solid rgba(201,184,150,0.18)",
+            background: "#221d18",
+            border: "1px solid rgba(255,255,255,0.10)",
             borderBottom: "none",
             borderRadius: "4px 4px 0 0",
             padding: "1px 6px",

@@ -60,6 +60,7 @@ const UNRESOLVED = Symbol("unresolved");
  * @property {string} blockPath
  * @property {BlockType} blockType
  * @property {*} defaultValue
+ * @property {import("../lib/schemas.js").ItemSchema} [itemSchema]  List blocks only.
  */
 
 /**
@@ -123,12 +124,15 @@ export async function discoverManifests(options = {}) {
       let nextSortOrder = blockMap.size + 1;
       for (const region of ordered) {
         if (blockMap.has(region.blockPath)) continue;
-        blockMap.set(region.blockPath, {
+        /** @type {ManifestBlockItem} */
+        const entry = {
           blockPath: region.blockPath,
           blockType: region.blockType,
           defaultValue: region.defaultValue,
           sortOrder: nextSortOrder++,
-        });
+        };
+        if (region.itemSchema) entry.itemSchema = region.itemSchema;
+        blockMap.set(region.blockPath, entry);
       }
     }
   }
@@ -307,48 +311,143 @@ async function analyzeFile(filePath) {
     },
     JSXOpeningElement(p) {
       const name = p.node.name;
-      if (name.type !== "JSXIdentifier" || name.name !== "EditableRegion") return;
+      if (name.type !== "JSXIdentifier") return;
 
-      const props = readJsxProps(p.node);
-      const blockPath = props.blockPath;
-      const blockType = props.blockType;
-      const hasDefault = Object.prototype.hasOwnProperty.call(props, "defaultValue");
-
-      if (typeof blockPath !== "string") {
-        warnings.push({
-          file: filePath,
-          loc: locOf(p.node),
-          message:
-            "<EditableRegion> needs a static blockPath string. Skipping discovery for this region.",
-        });
+      if (name.name === "EditableRegion") {
+        handleEditableRegion(p.node, filePath, analysis, warnings);
         return;
       }
-      if (typeof blockType !== "string") {
-        warnings.push({
-          file: filePath,
-          loc: locOf(p.node),
-          message: `<EditableRegion blockPath="${blockPath}"> is missing a static blockType prop. Skipping.`,
-        });
+      if (name.name === "EditableList") {
+        handleEditableList(p.node, filePath, analysis, warnings);
         return;
       }
-      if (!hasDefault) {
-        warnings.push({
-          file: filePath,
-          loc: locOf(p.node),
-          message: `<EditableRegion blockPath="${blockPath}"> is missing a static defaultValue prop. Skipping.`,
-        });
-        return;
-      }
-
-      analysis.regions.push({
-        blockPath,
-        blockType: /** @type {BlockType} */ (blockType),
-        defaultValue: props.defaultValue,
-      });
     },
   });
 
   return { analysis, warnings };
+}
+
+/**
+ * Pull a static `<EditableRegion>` declaration into the file analysis.
+ * Required props: blockPath, blockType, defaultValue. Anything missing
+ * yields a warning and the region is skipped.
+ *
+ * @param {*} openingNode
+ * @param {string} filePath
+ * @param {FileAnalysis} analysis
+ * @param {DiscoveryWarning[]} warnings
+ */
+function handleEditableRegion(openingNode, filePath, analysis, warnings) {
+  const props = readJsxProps(openingNode);
+  const blockPath = props.blockPath;
+  const blockType = props.blockType;
+  const hasDefault = Object.prototype.hasOwnProperty.call(props, "defaultValue");
+
+  if (typeof blockPath !== "string") {
+    warnings.push({
+      file: filePath,
+      loc: locOf(openingNode),
+      message:
+        "<EditableRegion> needs a static blockPath string. Skipping discovery for this region.",
+    });
+    return;
+  }
+  if (typeof blockType !== "string") {
+    warnings.push({
+      file: filePath,
+      loc: locOf(openingNode),
+      message: `<EditableRegion blockPath="${blockPath}"> is missing a static blockType prop. Skipping.`,
+    });
+    return;
+  }
+  if (!hasDefault) {
+    warnings.push({
+      file: filePath,
+      loc: locOf(openingNode),
+      message: `<EditableRegion blockPath="${blockPath}"> is missing a static defaultValue prop. Skipping.`,
+    });
+    return;
+  }
+
+  analysis.regions.push({
+    blockPath,
+    blockType: /** @type {BlockType} */ (blockType),
+    defaultValue: props.defaultValue,
+  });
+}
+
+/**
+ * Pull a static `<EditableList>` declaration into the file analysis.
+ * Required props: blockPath, itemSchema. `defaultValue` is optional and
+ * defaults to `[]` (empty list) - lists usually start empty.
+ *
+ * The itemSchema must be a plain object literal. Each value is itself a
+ * `{ blockType, defaultValue }` literal pair; that's the manifest's
+ * `ItemSchema` shape, validated structurally below.
+ *
+ * @param {*} openingNode
+ * @param {string} filePath
+ * @param {FileAnalysis} analysis
+ * @param {DiscoveryWarning[]} warnings
+ */
+function handleEditableList(openingNode, filePath, analysis, warnings) {
+  const props = readJsxProps(openingNode);
+  const blockPath = props.blockPath;
+  const itemSchema = props.itemSchema;
+
+  if (typeof blockPath !== "string") {
+    warnings.push({
+      file: filePath,
+      loc: locOf(openingNode),
+      message:
+        "<EditableList> needs a static blockPath string. Skipping discovery for this list.",
+    });
+    return;
+  }
+  if (!isValidItemSchema(itemSchema)) {
+    warnings.push({
+      file: filePath,
+      loc: locOf(openingNode),
+      message: `<EditableList blockPath="${blockPath}"> is missing or has a non-static itemSchema. Each field must be a plain object with literal blockType + defaultValue.`,
+    });
+    return;
+  }
+
+  const defaultValue = Object.prototype.hasOwnProperty.call(props, "defaultValue")
+    ? props.defaultValue
+    : [];
+
+  if (!Array.isArray(defaultValue)) {
+    warnings.push({
+      file: filePath,
+      loc: locOf(openingNode),
+      message: `<EditableList blockPath="${blockPath}"> defaultValue must be an array. Skipping.`,
+    });
+    return;
+  }
+
+  analysis.regions.push({
+    blockPath,
+    blockType: /** @type {BlockType} */ ("List"),
+    defaultValue,
+    itemSchema,
+  });
+}
+
+/**
+ * Structural check that `value` looks like an `ItemSchema`: a plain
+ * object whose values are `{ blockType: string, defaultValue: * }`.
+ *
+ * @param {*} value
+ */
+function isValidItemSchema(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return false;
+  for (const field of Object.values(value)) {
+    if (field == null || typeof field !== "object" || Array.isArray(field)) return false;
+    if (typeof field.blockType !== "string") return false;
+    if (!Object.prototype.hasOwnProperty.call(field, "defaultValue")) return false;
+  }
+  return true;
 }
 
 /**

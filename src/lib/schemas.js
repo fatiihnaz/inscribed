@@ -13,9 +13,28 @@
  *   - Image           : { src: string, alt: string }
  *   - Link            : { href: string, label: string }
  *   - Date            : ISO 8601 string, e.g. "2026-08-15T18:00:00.000Z". Empty string when unset.
- *   - Group / DataSource: consumed by code; no inline rendering.
+ *   - List            : Array of plain objects shaped by the manifest's `itemSchema`
+ *                       (each object's keys map to leaf block types). The whole
+ *                       list shares one `version` - all reorder/add/remove/edit
+ *                       operations save atomically.
+ *   - DataSource      : Consumed by code; no inline rendering.
  *
- * @typedef {"Text" | "RichText" | "Image" | "Link" | "Date" | "Group" | "DataSource"} BlockType
+ * @typedef {"Text" | "RichText" | "Image" | "Link" | "Date" | "List" | "DataSource"} BlockType
+ */
+
+/**
+ * Per-field metadata for a List's item shape. Each entry pairs a leaf block
+ * type (Text, Image, ...) with the seed value used when a new list item is
+ * inserted. Nested lists (a field whose `blockType` is "List") aren't
+ * supported in this iteration.
+ *
+ * @typedef {Object} ItemSchemaField
+ * @property {Exclude<BlockType, "List" | "DataSource">} blockType
+ * @property {*} defaultValue
+ */
+
+/**
+ * @typedef {Object<string, ItemSchemaField>} ItemSchema
  */
 
 /**
@@ -71,6 +90,7 @@
  * @property {BlockType} blockType
  * @property {*} defaultValue
  * @property {number} sortOrder
+ * @property {ItemSchema} [itemSchema]   List blocks only - shape of one item.
  */
 
 /**

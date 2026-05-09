@@ -27,7 +27,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { usePathname } from "next/navigation";
-import { ChevronsLeft, ChevronDown, Check, Undo2, LogOut } from "lucide-react";
+import { ChevronsLeft, ChevronDown, Check, Undo2, LogOut, Plus, Trash2, ChevronUp } from "lucide-react";
 
 import { useCmsContext } from "../lib/context.js";
 import { useCmsAdmin } from "../hooks/use-cms-admin.js";
@@ -106,6 +106,7 @@ export function AdminDrawer() {
     clearDrafts,
     isDrawerOpen,
     setDrawerOpen,
+    itemSchemas,
     userInfo,
     onSignOut,
   } = useCmsContext();
@@ -181,6 +182,7 @@ export function AdminDrawer() {
             clearDraft={clearDraft}
             activeBlockPath={activeBlock}
             onFocus={setActiveBlock}
+            itemSchemas={itemSchemas}
           />
 
           {error ? (
@@ -301,9 +303,10 @@ function PanelHeader({ breadcrumbs, dirty }) {
  *   clearDraft: (blockPath: string) => void,
  *   activeBlockPath: string | null,
  *   onFocus: (blockPath: string | null) => void,
+ *   itemSchemas: Map<string, import("../lib/schemas.js").ItemSchema>,
  * }} props
  */
-function BlockList({ blockList, drafts, setDraft, clearDraft, activeBlockPath, onFocus }) {
+function BlockList({ blockList, drafts, setDraft, clearDraft, activeBlockPath, onFocus, itemSchemas }) {
   return (
     <section style={paneStyle}>
       <div style={sectionLabelStyle}>
@@ -334,6 +337,7 @@ function BlockList({ blockList, drafts, setDraft, clearDraft, activeBlockPath, o
                 onChange={(v) => setDraft(block.blockPath, v)}
                 onReset={() => clearDraft(block.blockPath)}
                 onFocus={() => onFocus(block.blockPath)}
+                itemSchema={itemSchemas.get(block.blockPath) ?? null}
               />
             </motion.li>
           ))}
@@ -356,9 +360,10 @@ function BlockList({ blockList, drafts, setDraft, clearDraft, activeBlockPath, o
  *   onChange: (value: *) => void,
  *   onReset: () => void,
  *   onFocus: () => void,
+ *   itemSchema: import("../lib/schemas.js").ItemSchema | null,
  * }} props
  */
-function BlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus }) {
+function BlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
   const value = hasDraft ? draft : block.value;
   const isDirty =
@@ -439,7 +444,7 @@ function BlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocu
             onMouseDown={onFocus}
           >
             <div style={blockBodyStyle}>
-              {renderEditor(block, value, onChange)}
+              {renderEditor(block, value, onChange, itemSchema)}
             </div>
           </motion.div>
         )}
@@ -556,8 +561,8 @@ function PanelFooter({ userInfo, onSignOut }) {
 
 /** @param {{ type: BlockType }} props */
 function TypeChip({ type }) {
-  const styles = TYPE_STYLES[type] ?? TYPE_STYLES.Group;
-  
+  const styles = TYPE_STYLES[type] ?? TYPE_STYLES.Text;
+
   return (
     <span style={typeChipStyle}>
       {styles.label}
@@ -592,8 +597,9 @@ function pathnameToBreadcrumbs(pathname) {
  * @param {BlockResponse} block
  * @param {*} value
  * @param {(value: *) => void} onChange
+ * @param {import("../lib/schemas.js").ItemSchema | null} itemSchema
  */
-function renderEditor(block, value, onChange) {
+function renderEditor(block, value, onChange, itemSchema) {
   switch (/** @type {BlockType} */ (block.blockType)) {
     case "Text":
       return <TextEditor value={value ?? ""} onChange={onChange} />;
@@ -605,7 +611,8 @@ function renderEditor(block, value, onChange) {
       return <LinkEditor value={value} onChange={onChange} />;
     case "Date":
       return <DateEditor value={value} onChange={onChange} />;
-    case "Group":
+    case "List":
+      return <ListEditor value={value} onChange={onChange} itemSchema={itemSchema} />;
     case "DataSource":
     default:
       return (
@@ -615,4 +622,300 @@ function renderEditor(block, value, onChange) {
       );
   }
 }
+
+// ---------------------------------------------------------------------------
+// List editor
+// ---------------------------------------------------------------------------
+
+/**
+ * Editor for `List`-typed blocks. Mirrors the inline page UI: per-item
+ * controls (move up/down, delete) plus an "+ Add" button. Each item is
+ * rendered as a sub-card whose body is the per-field editor stack
+ * (Text/Image/Link/etc.) keyed by the registered itemSchema.
+ *
+ * `itemSchema` arrives via the AdminDrawer's CmsContext registry - it's
+ * populated when an `<EditableList>` mounts on the page. Without it we
+ * render a hint instead of editors so the admin sees why and the data
+ * isn't lost.
+ *
+ * @param {{
+ *   value: *,
+ *   onChange: (value: *) => void,
+ *   itemSchema: import("../lib/schemas.js").ItemSchema | null,
+ * }} props
+ */
+function ListEditor({ value, onChange, itemSchema }) {
+  /** @type {Record<string, *>[]} */
+  const items = Array.isArray(value) ? value : [];
+
+  if (!itemSchema) {
+    return (
+      <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
+        Bu liste için <code>itemSchema</code> bulunamadı. Sayfada{" "}
+        <code>&lt;EditableList&gt;</code> render ediliyor mu?
+      </div>
+    );
+  }
+
+  /** @param {Record<string, *>[]} next */
+  const setItems = (next) => onChange(next);
+
+  const onAdd = () => {
+    /** @type {Record<string, *>} */
+    const fresh = {};
+    for (const [key, field] of Object.entries(itemSchema)) {
+      fresh[key] = field.defaultValue == null
+        ? field.defaultValue
+        : JSON.parse(JSON.stringify(field.defaultValue));
+    }
+    setItems([...items, fresh]);
+  };
+
+  /** @param {number} i */
+  const onRemove = (i) => setItems(items.filter((_, idx) => idx !== i));
+
+  /** @param {number} i @param {-1|1} dir */
+  const onMove = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= items.length) return;
+    const next = items.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    setItems(next);
+  };
+
+  /** @param {number} i @param {string} fieldKey @param {*} fieldValue */
+  const onFieldChange = (i, fieldKey, fieldValue) => {
+    const next = items.slice();
+    next[i] = { ...next[i], [fieldKey]: fieldValue };
+    setItems(next);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {items.length === 0 ? (
+        <div style={emptyStateStyle}>
+          Liste boş. "+ Öğe ekle" butonuyla başlayabilirsin.
+        </div>
+      ) : null}
+
+      {items.map((item, i) => (
+        <ListItemCard
+          key={i}
+          index={i}
+          total={items.length}
+          item={item}
+          itemSchema={itemSchema}
+          onFieldChange={(k, v) => onFieldChange(i, k, v)}
+          onRemove={() => onRemove(i)}
+          onMoveUp={i > 0 ? () => onMove(i, -1) : null}
+          onMoveDown={i < items.length - 1 ? () => onMove(i, 1) : null}
+        />
+      ))}
+
+      <button
+        type="button"
+        onClick={onAdd}
+        style={listAddButtonStyle}
+        className="skylab-cms-icon-action"
+      >
+        <Plus size={13} />
+        <span>Öğe ekle</span>
+      </button>
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   index: number,
+ *   total: number,
+ *   item: Record<string, *>,
+ *   itemSchema: import("../lib/schemas.js").ItemSchema,
+ *   onFieldChange: (fieldKey: string, value: *) => void,
+ *   onRemove: () => void,
+ *   onMoveUp: (() => void) | null,
+ *   onMoveDown: (() => void) | null,
+ * }} props
+ */
+function ListItemCard({ index, total, item, itemSchema, onFieldChange, onRemove, onMoveUp, onMoveDown }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div style={listItemCardStyle}>
+      <div
+        style={{ ...listItemHeaderStyle, cursor: "pointer", userSelect: "none" }}
+        onClick={() => setIsOpen((v) => !v)}
+      >
+        <span style={listItemIndexStyle}>#{index + 1} / {total}</span>
+
+        <div style={{ display: "inline-flex", gap: 2, marginLeft: "auto" }}>
+          {onMoveUp ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
+              style={listItemIconStyle}
+              title="Yukarı taşı"
+              aria-label="Yukarı taşı"
+            >
+              <ChevronUp size={12} />
+            </button>
+          ) : null}
+          {onMoveDown ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
+              style={listItemIconStyle}
+              title="Aşağı taşı"
+              aria-label="Aşağı taşı"
+            >
+              <ChevronDown size={12} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            style={listItemDangerStyle}
+            title="Sil"
+            aria-label="Sil"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+
+        <motion.span
+          initial={false}
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+          style={{ display: "inline-flex", color: TEXT_MUTED, marginLeft: 4 }}
+        >
+          <ChevronDown size={13} />
+        </motion.span>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {isOpen ? (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.32, 0.72, 0.18, 1] }}
+            style={{ overflow: "hidden" }}
+          >
+            <div style={listItemBodyStyle}>
+              {Object.entries(itemSchema).map(([key, field]) => (
+                <div key={key} style={listFieldStyle}>
+                  <div style={listFieldLabelStyle}>{key}</div>
+                  {renderFieldEditor(field.blockType, item[key], (v) => onFieldChange(key, v))}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * @param {string} blockType
+ * @param {*} value
+ * @param {(value: *) => void} onChange
+ */
+function renderFieldEditor(blockType, value, onChange) {
+  switch (blockType) {
+    case "Text":     return <TextEditor value={value ?? ""} onChange={onChange} />;
+    case "RichText": return <RichTextEditor value={value ?? ""} onChange={onChange} />;
+    case "Image":    return <ImageEditor value={value} onChange={onChange} />;
+    case "Link":     return <LinkEditor value={value} onChange={onChange} />;
+    case "Date":     return <DateEditor value={value} onChange={onChange} />;
+    default:
+      return (
+        <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
+          <code>{blockType}</code> tipi list itemschema'sında desteklenmiyor.
+        </div>
+      );
+  }
+}
+
+// ---- List-editor styles ---------------------------------------------------
+
+const listItemCardStyle = /** @type {React.CSSProperties} */ ({
+  border: "1px solid rgba(201,184,150,0.12)",
+  borderRadius: 6,
+  background: "rgba(201,184,150,0.03)",
+});
+
+const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "8px 10px",
+  fontSize: 12,
+  color: TEXT_MUTED,
+});
+
+const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
+  fontFamily: "ui-monospace, 'SF Mono', monospace",
+  fontSize: 11,
+  color: ACCENT,
+  letterSpacing: "0.04em",
+});
+
+const listItemIconStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 22,
+  height: 22,
+  border: "none",
+  background: "transparent",
+  color: TEXT_MUTED,
+  borderRadius: 4,
+  cursor: "pointer",
+  padding: 0,
+});
+
+const listItemDangerStyle = /** @type {React.CSSProperties} */ ({
+  ...listItemIconStyle,
+  color: "#e26464",
+});
+
+const listItemBodyStyle = /** @type {React.CSSProperties} */ ({
+  padding: "8px 10px 12px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  borderTop: "1px solid rgba(201,184,150,0.08)",
+});
+
+const listFieldStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+});
+
+const listFieldLabelStyle = /** @type {React.CSSProperties} */ ({
+  fontSize: 10,
+  fontWeight: 600,
+  color: TEXT_MUTED,
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+});
+
+const listAddButtonStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+  padding: "8px 12px",
+  background: "transparent",
+  border: "1px dashed rgba(201,184,150,0.35)",
+  borderRadius: 6,
+  color: ACCENT,
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: "pointer",
+  letterSpacing: "0.02em",
+});
 

@@ -13,7 +13,7 @@ import { createContext, useContext } from "react";
 
 /**
  * @import { CmsConfig } from "./config.js"
- * @import { BlockResponse } from "./schemas.js"
+ * @import { BlockResponse, ItemSchema } from "./schemas.js"
  */
 
 /**
@@ -33,6 +33,12 @@ import { createContext, useContext } from "react";
  * @property {(blockPath: string|null) => void} setActiveBlock
  * @property {number} refetchToken      Bumped to force `useCmsContent` to refetch.
  * @property {() => void} triggerRefetch
+ * @property {Map<string, ItemSchema>} itemSchemas
+ *   Registry populated by `<EditableList>` instances at mount time. The
+ *   AdminDrawer reads it to know how to render List editors (per-field
+ *   atomic editors). Unregistered on unmount; key is the list's blockPath.
+ * @property {(blockPath: string, schema: ItemSchema) => void} registerItemSchema
+ * @property {(blockPath: string) => void} unregisterItemSchema
  * @property {((slug: string) => void | Promise<void>) | null} onAfterSave  Called after a successful save (typically a Server Action that calls `revalidateTag(cmsCacheTag(slug))`).
  * @property {(() => Promise<string>) | null} getAccessToken  Returns the current user's JWT access token; added as `Authorization: Bearer {token}` on write requests. Null in public/demo mode.
  * @property {boolean} isDrawerOpen      Admin-only: whether the editor drawer is expanded.

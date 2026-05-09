@@ -505,7 +505,7 @@ export const TYPE_STYLES = {
   Image:      { color: "rgb(170, 215, 180)", bg: "rgba(110, 180, 130, 0.10)", ring: "rgba(110, 180, 130, 0.22)", label: "Image" },
   Link:       { color: "rgb(225, 200, 160)", bg: "rgba(200, 160, 100, 0.10)", ring: "rgba(200, 160, 100, 0.22)", label: "Link" },
   Date:       { color: "rgb(180, 220, 210)", bg: "rgba(100, 180, 160, 0.10)", ring: "rgba(100, 180, 160, 0.22)", label: "Date" },
-  Group:      { color: "rgb(210, 215, 220)", bg: "rgba(255, 255, 255, 0.05)", ring: "rgba(255, 255, 255, 0.10)", label: "Group" },
+  List:       { color: "rgb(220, 200, 170)", bg: "rgba(201, 184, 150, 0.10)", ring: "rgba(201, 184, 150, 0.22)", label: "List" },
   DataSource: { color: "rgb(230, 190, 210)", bg: "rgba(220, 140, 180, 0.10)", ring: "rgba(220, 140, 180, 0.22)", label: "Data" },
 };
 

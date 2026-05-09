@@ -77,16 +77,19 @@ function baseHeaders(config) {
 async function toApiError(response) {
   /** @type {ProblemDetails|null} */
   let problem = null;
+  let rawBody = "";
   try {
-    const text = await response.text();
-    if (text) {
-      const parsed = JSON.parse(text);
+    rawBody = await response.text();
+    if (rawBody) {
+      const parsed = JSON.parse(rawBody);
       if (parsed && typeof parsed === "object") {
         problem = /** @type {ProblemDetails} */ (parsed);
       }
     }
   } catch {
-    // non-JSON body; fall through with problem = null
+    // Body present but not JSON. Keep `rawBody` so the caller can still
+    // surface whatever the backend wrote (often a plain "validation
+    // failed: ..." string).
   }
 
   const blockPath =
@@ -94,10 +97,14 @@ async function toApiError(response) {
       ? /** @type {*} */ (problem).blockPath
       : null;
 
+  // Prefer ProblemDetails.detail; fall back to the raw body so non-JSON
+  // 4xx responses (rare but they happen) still bubble up something useful.
+  const detail = problem?.detail || (rawBody && !problem ? rawBody : "") || response.statusText;
+
   return new CmsApiError({
     status: response.status,
     title: problem?.title,
-    detail: problem?.detail || response.statusText,
+    detail,
     problem,
     blockPath,
   });

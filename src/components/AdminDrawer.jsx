@@ -32,12 +32,9 @@ import { ChevronsLeft, ChevronDown, Check, Undo2, LogOut, Plus, Trash2, ChevronU
 import { useCmsContext } from "../lib/context.js";
 import { useCmsAdmin } from "../hooks/use-cms-admin.js";
 import { CmsApiError } from "../lib/api-client.js";
+import { addItem, moveItem, removeItem } from "../lib/list-ops.js";
 
-import { TextEditor } from "./editors/TextEditor.jsx";
-import { RichTextEditor } from "./editors/RichTextEditor.jsx";
-import { ImageEditor } from "./editors/ImageEditor.jsx";
-import { LinkEditor } from "./editors/LinkEditor.jsx";
-import { DateEditor } from "./editors/DateEditor.jsx";
+import { FieldEditor } from "./editors/FieldEditor.jsx";
 
 import {
   PANEL_WIDTH,
@@ -956,27 +953,17 @@ function pathnameToBreadcrumbs(pathname) {
  * @param {import("../lib/schemas.js").ItemSchema | null} itemSchema
  */
 function renderEditor(block, value, onChange, itemSchema) {
-  switch (/** @type {BlockType} */ (block.blockType)) {
-    case "Text":
-      return <TextEditor value={value ?? ""} onChange={onChange} />;
-    case "RichText":
-      return <RichTextEditor value={value ?? ""} onChange={onChange} />;
-    case "Image":
-      return <ImageEditor value={value} onChange={onChange} />;
-    case "Link":
-      return <LinkEditor value={value} onChange={onChange} />;
-    case "Date":
-      return <DateEditor value={value} onChange={onChange} />;
-    case "List":
-      return <ListEditor value={value} onChange={onChange} itemSchema={itemSchema} />;
-    case "DataSource":
-    default:
-      return (
-        <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
-          <code>{block.blockType}</code> tipi için inline editör henüz yok.
-        </div>
-      );
+  if (block.blockType === "List") {
+    return <ListEditor value={value} onChange={onChange} itemSchema={itemSchema} />;
   }
+  const primitive = FieldEditor({ blockType: block.blockType, value, onChange });
+  if (primitive) return primitive;
+  // DataSource and anything else the SDK doesn't know how to edit inline.
+  return (
+    <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
+      <code>{block.blockType}</code> tipi için inline editör henüz yok.
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1016,26 +1003,15 @@ function ListEditor({ value, onChange, itemSchema }) {
   /** @param {Record<string, *>[]} next */
   const setItems = (next) => onChange(next);
 
-  const onAdd = () => {
-    /** @type {Record<string, *>} */
-    const fresh = {};
-    for (const [key, field] of Object.entries(itemSchema)) {
-      fresh[key] = field.defaultValue == null
-        ? field.defaultValue
-        : JSON.parse(JSON.stringify(field.defaultValue));
-    }
-    setItems([...items, fresh]);
-  };
+  const onAdd = () => setItems(addItem(items, itemSchema));
 
   /** @param {number} i */
-  const onRemove = (i) => setItems(items.filter((_, idx) => idx !== i));
+  const onRemove = (i) => setItems(removeItem(items, i));
 
   /** @param {number} i @param {-1|1} dir */
   const onMove = (i, dir) => {
-    const j = i + dir;
-    if (j < 0 || j >= items.length) return;
-    const next = items.slice();
-    [next[i], next[j]] = [next[j], next[i]];
+    const next = moveItem(items, i, dir);
+    if (next === items) return;
     setItems(next);
   };
 
@@ -1159,39 +1135,29 @@ function ListItemCard({ index, total, item, itemSchema, onFieldChange, onRemove,
             style={{ overflow: "hidden" }}
           >
             <div style={listItemBodyStyle}>
-              {Object.entries(itemSchema).map(([key, field]) => (
-                <div key={key} style={listFieldStyle}>
-                  <div style={listFieldLabelStyle}>{key}</div>
-                  {renderFieldEditor(field.blockType, item[key], (v) => onFieldChange(key, v))}
-                </div>
-              ))}
+              {Object.entries(itemSchema).map(([key, field]) => {
+                const editor = FieldEditor({
+                  blockType: field.blockType,
+                  value: item[key],
+                  onChange: (v) => onFieldChange(key, v),
+                });
+                return (
+                  <div key={key} style={listFieldStyle}>
+                    <div style={listFieldLabelStyle}>{key}</div>
+                    {editor ?? (
+                      <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
+                        <code>{field.blockType}</code> tipi list itemschema'sında desteklenmiyor.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </motion.div>
         ) : null}
       </AnimatePresence>
     </div>
   );
-}
-
-/**
- * @param {string} blockType
- * @param {*} value
- * @param {(value: *) => void} onChange
- */
-function renderFieldEditor(blockType, value, onChange) {
-  switch (blockType) {
-    case "Text":     return <TextEditor value={value ?? ""} onChange={onChange} />;
-    case "RichText": return <RichTextEditor value={value ?? ""} onChange={onChange} />;
-    case "Image":    return <ImageEditor value={value} onChange={onChange} />;
-    case "Link":     return <LinkEditor value={value} onChange={onChange} />;
-    case "Date":     return <DateEditor value={value} onChange={onChange} />;
-    default:
-      return (
-        <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
-          <code>{blockType}</code> tipi list itemschema'sında desteklenmiyor.
-        </div>
-      );
-  }
 }
 
 // ---- List-editor styles ---------------------------------------------------

@@ -25,6 +25,7 @@
  */
 
 import { cloneElement, useContext, useState } from "react";
+import DOMPurify from "isomorphic-dompurify";
 
 import { useCmsContext } from "../lib/context.js";
 import { CmsGroupContext } from "../lib/group-context.js";
@@ -229,8 +230,19 @@ function renderBlock(blockType, value, props) {
     }
     case "RichText": {
       const Tag = as ?? "div";
-      // RichText values are HTML strings produced by the rich-text editor.
-      return <Tag {...rest} dangerouslySetInnerHTML={{ __html: value }} />;
+      // RichText values are HTML strings produced by Tiptap. Sanitise on
+      // every render (SSR + client) so an admin pasting hostile markup
+      // can only XSS themselves while in the editor - public visitors
+      // never see <script>, event handlers, or javascript: URLs.
+      // `isomorphic-dompurify` swaps in jsdom on the Node side
+      // automatically; on the client it's a thin wrapper around the
+      // standard DOMPurify build.
+      return (
+        <Tag
+          {...rest}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(value) }}
+        />
+      );
     }
     case "Image":
       return <img {...rest} src={value.src} alt={value.alt ?? ""} />;

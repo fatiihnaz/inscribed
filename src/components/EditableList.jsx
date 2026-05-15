@@ -43,6 +43,7 @@ import { Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 
 import { useCmsContext } from "../lib/context.js";
 import { CmsGroupContext } from "../lib/group-context.js";
+import { addItem, makeDefaultItem, moveItem, removeItem } from "../lib/list-ops.js";
 
 /**
  * @import { ItemSchema } from "../lib/schemas.js"
@@ -122,15 +123,13 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   }
 
   const defaultItem = makeDefaultItem(itemSchema);
-  const onAdd = () => setItems([...items, makeDefaultItem(itemSchema)]);
+  const onAdd = () => setItems(addItem(items, itemSchema));
   /** @param {number} i */
-  const onRemove = (i) => setItems(items.filter((_, idx) => idx !== i));
+  const onRemove = (i) => setItems(removeItem(items, i));
   /** @param {number} i @param {-1|1} dir */
   const onMove = (i, dir) => {
-    const j = i + dir;
-    if (j < 0 || j >= items.length) return;
-    const next = items.slice();
-    [next[i], next[j]] = [next[j], next[i]];
+    const next = moveItem(items, i, dir);
+    if (next === items) return;
     setItems(next);
   };
 
@@ -254,23 +253,6 @@ function GhostAddSlot({ children, onAdd }) {
       </div>
     </div>
   );
-}
-
-/**
- * Build a fresh item object using the schema's `defaultValue`s. Deep clone
- * via JSON so two new items don't share references when mutated.
- *
- * @param {ItemSchema} itemSchema
- */
-function makeDefaultItem(itemSchema) {
-  /** @type {Record<string, *>} */
-  const out = {};
-  for (const [key, field] of Object.entries(itemSchema ?? {})) {
-    out[key] = field.defaultValue == null
-      ? field.defaultValue
-      : JSON.parse(JSON.stringify(field.defaultValue));
-  }
-  return out;
 }
 
 // ---------------------------------------------------------------------------

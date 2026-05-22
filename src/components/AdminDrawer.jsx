@@ -24,24 +24,22 @@
  * is layout + state only.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { usePathname } from "next/navigation";
-import { ChevronsLeft, ChevronDown, Check, Undo2, LogOut, Plus, Trash2, ChevronUp } from "lucide-react";
+import { ChevronsLeft, ChevronDown, Check, Undo2, LogOut } from "lucide-react";
 
 import { useCmsContext } from "../lib/context.js";
-import { useCmsAdmin } from "../hooks/use-cms-admin.js";
+import { useCmsSave } from "../hooks/use-cms-save.js";
 import { CmsApiError } from "../lib/api-client.js";
-import { addItem, moveItem, removeItem } from "../lib/list-ops.js";
 
-import { FieldEditor } from "./editors/FieldEditor.jsx";
+import { BlockCard, resetBlock } from "./AdminBlockCard.jsx";
 
 import {
   PANEL_WIDTH,
   PANEL_TRANSITION,
   ACCENT,
   TEXT_MUTED,
-  TYPE_STYLES,
   STATUS_SAVED,
   STATUS_FAILED,
   panelStyle,
@@ -68,21 +66,12 @@ import {
   groupCountStyle,
   groupBodyStyle,
   listStyle,
-  blockCardStyle,
-  blockHeaderStyle,
-  gripStyle,
-  gripDotStyle,
-  blockPathStyle,
-  blockBodyStyle,
-  dirtyChipStyle,
-  blockResetStyle,
   emptyStateStyle,
   panelFooterStyle,
   dirtyInlineStyle,
   footerActionsStyle,
   iconActionStyle,
   iconActionPrimaryStyle,
-  typeChipStyle,
   handleButtonStyle,
   handleIconStyle,
   footerStyle,
@@ -99,7 +88,7 @@ import {
 } from "./admin-drawer-styles.js";
 
 /**
- * @import { BlockResponse, BlockType, UpdateBlockItem } from "../lib/schemas.js"
+ * @import { BlockResponse } from "../lib/schemas.js"
  */
 
 export function AdminDrawer() {
@@ -118,7 +107,10 @@ export function AdminDrawer() {
     onSignOut,
     draftSyncStatus,
   } = useCmsContext();
-  const { savePage, isSaving, error } = useCmsAdmin();
+  const {
+    dirtyCount, isSaving, error,
+    save: onSaveAll, discard: onDiscardAll,
+  } = useCmsSave();
   const pathname = usePathname() ?? "/";
 
   // Split the blocks map into page-scoped and globally-scoped lists. Each
@@ -193,70 +185,6 @@ export function AdminDrawer() {
       return next;
     });
   }, [activeBlock, blocks, pathname, isDrawerOpen, setDrawerOpen]);
-
-  // Build the list of dirty updates. A block is "dirty" if its effective
-  // value (local draft, else server-side `draftValue`) differs from the
-  // published `block.value`. JSON.stringify works for both primitives and
-  // our small `{src, alt}` / `{href, label}` shapes.
-  //
-  // Local edits always win over server-side drafts - if the admin opened
-  // the page with a backend draft and then typed something, only their
-  // typed value is publish-worthy. The `seen` set dedupes when both layers
-  // exist for the same block.
-  /** @type {UpdateBlockItem[]} */
-  const dirtyUpdates = useMemo(() => {
-    /** @type {Set<string>} */
-    const seen = new Set();
-    /** @type {UpdateBlockItem[]} */
-    const out = [];
-    for (const [blockPath, value] of drafts) {
-      const block = blocks.get(blockPath);
-      if (!block) continue;
-      if (JSON.stringify(value) === JSON.stringify(block.value)) continue;
-      out.push({ blockPath, value, version: block.version });
-      seen.add(blockPath);
-    }
-    for (const block of blocks.values()) {
-      if (block.draftValue == null) continue;
-      if (seen.has(block.blockPath)) continue;
-      // Backend's auto-clean already filters draft===published, but be
-      // defensive in case a stale optimistic update reaches us first.
-      if (JSON.stringify(block.draftValue) === JSON.stringify(block.value)) continue;
-      out.push({
-        blockPath: block.blockPath,
-        value: block.draftValue,
-        version: block.version,
-      });
-    }
-    return out;
-  }, [drafts, blocks]);
-
-  const dirtyCount = dirtyUpdates.length;
-
-  const onSaveAll = async () => {
-    if (dirtyCount === 0) return;
-    try {
-      await savePage(dirtyUpdates);
-      for (const u of dirtyUpdates) clearDraft(u.blockPath);
-      setActiveBlock(null);
-    } catch {
-      // Error surfaced via useCmsAdmin().error - keep drafts intact so the
-      // user can retry / inspect.
-    }
-  };
-
-  const onDiscardAll = () => {
-    // Wipe local edits, then queue published values for any block that
-    // still has a server-side draft. The autosave effect picks those up
-    // 2s later and (because each value === published) the backend
-    // auto-cleans the corresponding Redis entries on receipt.
-    clearDrafts();
-    for (const block of blocks.values()) {
-      if (block.draftValue != null) {
-        setDraft(block.blockPath, block.value);
-      }
-    }
-  };
 
   const isConflict = error instanceof CmsApiError && error.isConflict;
   const isForbidden = error instanceof CmsApiError && error.isForbidden;
@@ -676,118 +604,6 @@ function chunkBlocksByPrefix(blocks) {
 }
 
 // ---------------------------------------------------------------------------
-// Block card
-// ---------------------------------------------------------------------------
-
-/**
- * @param {{
- *   block: BlockResponse,
- *   draft: *,
- *   hasDraft: boolean,
- *   isActive: boolean,
- *   onChange: (value: *) => void,
- *   onReset: () => void,
- *   onFocus: () => void,
- *   itemSchema: import("../lib/schemas.js").ItemSchema | null,
- * }} props
- */
-function BlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema }) {
-  const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
-  // Editor renders the local draft if mid-edit, else the backend-side
-  // overlay (`block.draftValue`), else the published value.
-  const effective = block.draftValue ?? block.value;
-  const value = hasDraft ? draft : effective;
-  // "Dirty" = anything in this block diverges from `block.value` (the
-  // published version). Covers both local edits and server-side drafts.
-  const isDirty = hasDraft
-    ? JSON.stringify(draft) !== JSON.stringify(block.value)
-    : block.draftValue != null;
-
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    if (isActive) {
-      setIsOpen(true);
-    }
-  }, [isActive]);
-
-  useEffect(() => {
-    if (isActive && ref.current) {
-      ref.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }, [isActive]);
-
-  const handleHeaderClick = () => {
-    setIsOpen(!isOpen);
-    if (!isOpen) {
-      onFocus();
-    }
-  };
-
-  return (
-    <div
-      ref={ref}
-      className={isActive ? "skylab-cms-block-card skylab-cms-block-card-active" : "skylab-cms-block-card"}
-      style={blockCardStyle}
-    >
-      <div 
-        style={{ ...blockHeaderStyle, cursor: "pointer", userSelect: "none" }}
-        onClick={handleHeaderClick}
-      >
-        <span style={gripStyle} aria-hidden="true">
-          <span style={gripDotStyle} /><span style={gripDotStyle} />
-          <span style={gripDotStyle} /><span style={gripDotStyle} />
-          <span style={gripDotStyle} /><span style={gripDotStyle} />
-        </span>
-        <span style={blockPathStyle} title={block.blockPath}>
-          {block.blockPath}
-        </span>
-        
-        {isDirty ? (
-          <button type="button"
-            onClick={(e) => { e.stopPropagation(); onReset(); }}
-            className="skylab-cms-icon-button"
-            style={blockResetStyle}
-            aria-label="Bu bloğun değişikliklerini geri al"
-            title="Geri al"
-          >
-            <Undo2 size={13} />
-          </button>
-        ) : null}
-
-        <motion.span
-          initial={false}
-          animate={{ rotate: isOpen ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-          style={{ display: "inline-flex", color: TEXT_MUTED }}
-        >
-          <ChevronDown size={14} />
-        </motion.span>
-        <TypeChip type={block.blockType} />
-      </div>
-      
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.32, 0.72, 0.18, 1] }}
-            style={{ overflow: "hidden" }}
-            onMouseDown={onFocus}
-          >
-            <div style={blockBodyStyle}>
-              {renderEditor(block, value, onChange, itemSchema)}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Save bar (global dirty banner + actions)
 // ---------------------------------------------------------------------------
 
@@ -890,42 +706,8 @@ function PanelFooter({ userInfo, onSignOut }) {
 }
 
 // ---------------------------------------------------------------------------
-// Type chip
-// ---------------------------------------------------------------------------
-
-/** @param {{ type: BlockType }} props */
-function TypeChip({ type }) {
-  const styles = TYPE_STYLES[type] ?? TYPE_STYLES.Text;
-
-  return (
-    <span style={typeChipStyle}>
-      {styles.label}
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Per-block undo. When a server-side draft exists, clearing the local
- * entry alone wouldn't reach the backend; instead we set the local draft
- * to the published value and let the autosave overwrite the Redis draft
- * (backend then auto-cleans because draft===published). When there's no
- * server-side draft, removing the local entry is enough.
- *
- * @param {BlockResponse} block
- * @param {(blockPath: string, value: *) => void} setDraft
- * @param {(blockPath: string) => void} clearDraft
- */
-function resetBlock(block, setDraft, clearDraft) {
-  if (block.draftValue != null) {
-    setDraft(block.blockPath, block.value);
-  } else {
-    clearDraft(block.blockPath);
-  }
-}
 
 /**
  * `/about/team` → `[{label:"Anasayfa"}, {label:"About"}, {label:"Team"}]`.
@@ -945,299 +727,3 @@ function pathnameToBreadcrumbs(pathname) {
   }
   return crumbs;
 }
-
-/**
- * @param {BlockResponse} block
- * @param {*} value
- * @param {(value: *) => void} onChange
- * @param {import("../lib/schemas.js").ItemSchema | null} itemSchema
- */
-function renderEditor(block, value, onChange, itemSchema) {
-  if (block.blockType === "List") {
-    return <ListEditor value={value} onChange={onChange} itemSchema={itemSchema} />;
-  }
-  const primitive = FieldEditor({ blockType: block.blockType, value, onChange });
-  if (primitive) return primitive;
-  // DataSource and anything else the SDK doesn't know how to edit inline.
-  return (
-    <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
-      <code>{block.blockType}</code> tipi için inline editör henüz yok.
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// List editor
-// ---------------------------------------------------------------------------
-
-/**
- * Editor for `List`-typed blocks. Mirrors the inline page UI: per-item
- * controls (move up/down, delete) plus an "+ Add" button. Each item is
- * rendered as a sub-card whose body is the per-field editor stack
- * (Text/Image/Link/etc.) keyed by the registered itemSchema.
- *
- * `itemSchema` arrives via the AdminDrawer's CmsContext registry - it's
- * populated when an `<EditableList>` mounts on the page. Without it we
- * render a hint instead of editors so the admin sees why and the data
- * isn't lost.
- *
- * @param {{
- *   value: *,
- *   onChange: (value: *) => void,
- *   itemSchema: import("../lib/schemas.js").ItemSchema | null,
- * }} props
- */
-function ListEditor({ value, onChange, itemSchema }) {
-  /** @type {Record<string, *>[]} */
-  const items = Array.isArray(value) ? value : [];
-
-  if (!itemSchema) {
-    return (
-      <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
-        Bu liste için <code>itemSchema</code> bulunamadı. Sayfada{" "}
-        <code>&lt;EditableList&gt;</code> render ediliyor mu?
-      </div>
-    );
-  }
-
-  /** @param {Record<string, *>[]} next */
-  const setItems = (next) => onChange(next);
-
-  const onAdd = () => setItems(addItem(items, itemSchema));
-
-  /** @param {number} i */
-  const onRemove = (i) => setItems(removeItem(items, i));
-
-  /** @param {number} i @param {-1|1} dir */
-  const onMove = (i, dir) => {
-    const next = moveItem(items, i, dir);
-    if (next === items) return;
-    setItems(next);
-  };
-
-  /** @param {number} i @param {string} fieldKey @param {*} fieldValue */
-  const onFieldChange = (i, fieldKey, fieldValue) => {
-    const next = items.slice();
-    next[i] = { ...next[i], [fieldKey]: fieldValue };
-    setItems(next);
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {items.length === 0 ? (
-        <div style={emptyStateStyle}>
-          Liste boş. "+ Öğe ekle" butonuyla başlayabilirsin.
-        </div>
-      ) : null}
-
-      {items.map((item, i) => (
-        <ListItemCard
-          key={i}
-          index={i}
-          total={items.length}
-          item={item}
-          itemSchema={itemSchema}
-          onFieldChange={(k, v) => onFieldChange(i, k, v)}
-          onRemove={() => onRemove(i)}
-          onMoveUp={i > 0 ? () => onMove(i, -1) : null}
-          onMoveDown={i < items.length - 1 ? () => onMove(i, 1) : null}
-        />
-      ))}
-
-      <button
-        type="button"
-        onClick={onAdd}
-        style={listAddButtonStyle}
-        className="skylab-cms-icon-action"
-      >
-        <Plus size={13} />
-        <span>Öğe ekle</span>
-      </button>
-    </div>
-  );
-}
-
-/**
- * @param {{
- *   index: number,
- *   total: number,
- *   item: Record<string, *>,
- *   itemSchema: import("../lib/schemas.js").ItemSchema,
- *   onFieldChange: (fieldKey: string, value: *) => void,
- *   onRemove: () => void,
- *   onMoveUp: (() => void) | null,
- *   onMoveDown: (() => void) | null,
- * }} props
- */
-function ListItemCard({ index, total, item, itemSchema, onFieldChange, onRemove, onMoveUp, onMoveDown }) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <div style={listItemCardStyle}>
-      <div
-        style={{ ...listItemHeaderStyle, cursor: "pointer", userSelect: "none" }}
-        onClick={() => setIsOpen((v) => !v)}
-      >
-        <span style={listItemIndexStyle}>#{index + 1} / {total}</span>
-
-        <div style={{ display: "inline-flex", gap: 2, marginLeft: "auto" }}>
-          {onMoveUp ? (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
-              style={listItemIconStyle}
-              title="Yukarı taşı"
-              aria-label="Yukarı taşı"
-            >
-              <ChevronUp size={12} />
-            </button>
-          ) : null}
-          {onMoveDown ? (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
-              style={listItemIconStyle}
-              title="Aşağı taşı"
-              aria-label="Aşağı taşı"
-            >
-              <ChevronDown size={12} />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            style={listItemDangerStyle}
-            title="Sil"
-            aria-label="Sil"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
-
-        <motion.span
-          initial={false}
-          animate={{ rotate: isOpen ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-          style={{ display: "inline-flex", color: TEXT_MUTED, marginLeft: 4 }}
-        >
-          <ChevronDown size={13} />
-        </motion.span>
-      </div>
-
-      <AnimatePresence initial={false}>
-        {isOpen ? (
-          <motion.div
-            key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.32, 0.72, 0.18, 1] }}
-            style={{ overflow: "hidden" }}
-          >
-            <div style={listItemBodyStyle}>
-              {Object.entries(itemSchema).map(([key, field]) => {
-                const editor = FieldEditor({
-                  blockType: field.blockType,
-                  value: item[key],
-                  onChange: (v) => onFieldChange(key, v),
-                });
-                return (
-                  <div key={key} style={listFieldStyle}>
-                    <div style={listFieldLabelStyle}>{key}</div>
-                    {editor ?? (
-                      <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
-                        <code>{field.blockType}</code> tipi list itemschema'sında desteklenmiyor.
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-// ---- List-editor styles ---------------------------------------------------
-
-const listItemCardStyle = /** @type {React.CSSProperties} */ ({
-  border: "1px solid rgba(201,184,150,0.12)",
-  borderRadius: 6,
-  background: "rgba(201,184,150,0.03)",
-});
-
-const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  padding: "8px 10px",
-  fontSize: 12,
-  color: TEXT_MUTED,
-});
-
-const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
-  fontFamily: "ui-monospace, 'SF Mono', monospace",
-  fontSize: 11,
-  color: ACCENT,
-  letterSpacing: "0.04em",
-});
-
-const listItemIconStyle = /** @type {React.CSSProperties} */ ({
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: 22,
-  height: 22,
-  border: "none",
-  background: "transparent",
-  color: TEXT_MUTED,
-  borderRadius: 4,
-  cursor: "pointer",
-  padding: 0,
-});
-
-const listItemDangerStyle = /** @type {React.CSSProperties} */ ({
-  ...listItemIconStyle,
-  color: "#e26464",
-});
-
-const listItemBodyStyle = /** @type {React.CSSProperties} */ ({
-  padding: "8px 10px 12px",
-  display: "flex",
-  flexDirection: "column",
-  gap: 10,
-  borderTop: "1px solid rgba(201,184,150,0.08)",
-});
-
-const listFieldStyle = /** @type {React.CSSProperties} */ ({
-  display: "flex",
-  flexDirection: "column",
-  gap: 4,
-});
-
-const listFieldLabelStyle = /** @type {React.CSSProperties} */ ({
-  fontSize: 10,
-  fontWeight: 600,
-  color: TEXT_MUTED,
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-});
-
-const listAddButtonStyle = /** @type {React.CSSProperties} */ ({
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-  padding: "8px 12px",
-  background: "transparent",
-  border: "1px dashed rgba(201,184,150,0.35)",
-  borderRadius: 6,
-  color: ACCENT,
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: "pointer",
-  letterSpacing: "0.02em",
-});
-

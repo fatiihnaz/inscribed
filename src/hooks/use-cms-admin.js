@@ -24,8 +24,6 @@ import { updateContent, CmsApiError } from "../lib/api-client.js";
  * @property {(blocks: UpdateBlockItem[]) => Promise<UpdatePageResponse>} savePage
  * @property {boolean} isSaving
  * @property {CmsApiError|Error|null} error
- * @property {UpdatePageResponse|null} lastResult
- * @property {boolean} canSave  False when not admin.
  */
 
 /**
@@ -38,11 +36,6 @@ export function useCmsAdmin() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(/** @type {Error|null} */ (null));
-  const [lastResult, setLastResult] = useState(
-    /** @type {UpdatePageResponse|null} */ (null),
-  );
-
-  const canSave = isAdmin;
 
   const savePage = useCallback(
     /**
@@ -50,7 +43,7 @@ export function useCmsAdmin() {
      * @returns {Promise<UpdatePageResponse>}
      */
     async (updates) => {
-      if (!canSave) {
+      if (!isAdmin) {
         const err = new Error("Cannot save: not in admin mode");
         setError(err);
         throw err;
@@ -98,7 +91,6 @@ export function useCmsAdmin() {
           { updated: 0, unchanged: 0 },
         );
 
-        setLastResult(result);
         triggerRefetch();
 
         // Drop ISR cache for every slug we wrote to. Page slug + global
@@ -123,7 +115,7 @@ export function useCmsAdmin() {
         setIsSaving(false);
       }
     },
-    [canSave, isAdmin, config, blocks, pathname, triggerRefetch, onAfterSave, getAccessToken],
+    [isAdmin, config, blocks, pathname, triggerRefetch, onAfterSave, getAccessToken],
   );
 
   const save = useCallback(
@@ -138,5 +130,5 @@ export function useCmsAdmin() {
     [savePage],
   );
 
-  return { save, savePage, isSaving, error, lastResult, canSave };
+  return { save, savePage, isSaving, error };
 }

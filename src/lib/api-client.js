@@ -47,10 +47,6 @@ export class CmsApiError extends Error {
     return this.status === 409;
   }
 
-  get isNotFound() {
-    return this.status === 404;
-  }
-
   get isForbidden() {
     return this.status === 403;
   }
@@ -64,7 +60,6 @@ function baseHeaders(config) {
   /** @type {Record<string, string>} */
   const headers = { "Content-Type": "application/json" };
   if (config.clientId) headers["X-CMS-Client-Id"] = config.clientId;
-  if (config.clientSecret) headers["X-CMS-Client-Secret"] = config.clientSecret;
   return headers;
 }
 
@@ -277,7 +272,6 @@ export function uploadImage(config, file, onProgress, accessToken) {
 
     xhr.open("POST", target);
     if (config.clientId) xhr.setRequestHeader("X-CMS-Client-Id", config.clientId);
-    if (config.clientSecret) xhr.setRequestHeader("X-CMS-Client-Secret", config.clientSecret);
     if (accessToken) xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
     xhr.send(body);
   });

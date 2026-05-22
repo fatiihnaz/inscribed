@@ -246,12 +246,14 @@ function renderBlock(blockType, value, props) {
     }
     case "Image":
       return <img {...rest} src={value.src} alt={value.alt ?? ""} />;
-    case "Link":
+    case "Link": {
+      const href = safeHref(value.href);
       return (
-        <a {...rest} href={value.href}>
+        <a {...rest} href={href}>
           {value.label ?? value.href}
         </a>
       );
+    }
     default: {
       // Group / DataSource have no inline rendering - those payloads are
       // consumed by code, not laid out here.
@@ -272,5 +274,18 @@ function renderBlock(blockType, value, props) {
 function renderPlaceholder(as, rest) {
   const Tag = as ?? "span";
   return <Tag {...rest}>{EMPTY_PLACEHOLDER}</Tag>;
+}
+
+// Block `javascript:`, `data:`, `vbscript:` etc. on Link blocks: an admin
+// pasting a hostile URL would otherwise execute it for every public visitor
+// who clicks the link. Whitelist common schemes + relative/anchor forms;
+// anything else falls back to "" so the anchor renders inert.
+const HREF_ALLOWED = /^(https?:|mailto:|tel:|\/|#|\.\/|\.\.\/)/i;
+
+/** @param {*} href */
+function safeHref(href) {
+  if (typeof href !== "string") return "";
+  const trimmed = href.trim();
+  return HREF_ALLOWED.test(trimmed) ? trimmed : "";
 }
 

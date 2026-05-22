@@ -16,6 +16,7 @@ import { CmsContext } from "../lib/context.js";
 import { createCmsConfig } from "../lib/config.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
 import { updateDraft } from "../lib/api-client.js";
+import { stableStringify } from "../lib/stable-stringify.js";
 import { useCmsContent } from "../hooks/use-cms-content.js";
 
 /**
@@ -30,7 +31,7 @@ const AdminDrawer = dynamic(
 
 /**
  * @param {Object} props
- * @param {CmsConfig | { baseUrl: string, clientId?: string, clientSecret?: string }} props.config
+ * @param {CmsConfig | { baseUrl: string, clientId?: string }} props.config
  * @param {string|null} [props.userSub]
  * @param {boolean} [props.isAdmin]
  * @param {BlockResponse[]} [props.initialBlocks]   Server-fetched blocks for the active page; eliminates the SSR fallback flicker by seeding the blocks map before first paint.
@@ -161,16 +162,6 @@ export function CmsProvider({
 
   const onSignOutRef = useRef(onSignOut ?? null);
   onSignOutRef.current = onSignOut ?? null;
-
-  const setBlocks = useCallback(
-    /**
-     * @param {(prev: Map<string, BlockResponse>) => Map<string, BlockResponse>} updater
-     */
-    (updater) => {
-      setBlocksState((prev) => updater(prev));
-    },
-    [],
-  );
 
   const triggerRefetch = useCallback(() => {
     setRefetchToken((n) => n + 1);
@@ -329,7 +320,7 @@ export function CmsProvider({
         const block = currentBlocks.get(blockPath);
         if (!block) continue;
         const effective = block.draftValue ?? block.value;
-        if (JSON.stringify(value) === JSON.stringify(effective)) continue;
+        if (stableStringify(value) === stableStringify(effective)) continue;
         const slug = block._slug ?? currentPathname;
         const list = bySlug.get(slug) ?? [];
         list.push({ blockPath, value, version: block.version });
@@ -377,11 +368,11 @@ export function CmsProvider({
             const cur = nextMap.get(sent.blockPath);
             if (!cur) continue;
             const matchesPublished =
-              JSON.stringify(sent.value) === JSON.stringify(cur.value);
+              stableStringify(sent.value) === stableStringify(cur.value);
             const newDraftValue = matchesPublished ? null : sent.value;
             if (
-              JSON.stringify(cur.draftValue ?? null) ===
-              JSON.stringify(newDraftValue)
+              stableStringify(cur.draftValue ?? null) ===
+              stableStringify(newDraftValue)
             ) {
               continue;
             }
@@ -415,7 +406,7 @@ export function CmsProvider({
       isAdmin,
       userSub,
       blocks,
-      setBlocks,
+      setBlocks: setBlocksState,
       drafts,
       setDraft,
       clearDraft,
@@ -440,7 +431,6 @@ export function CmsProvider({
       isAdmin,
       userSub,
       blocks,
-      setBlocks,
       drafts,
       setDraft,
       clearDraft,

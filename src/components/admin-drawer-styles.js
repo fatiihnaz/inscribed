@@ -353,20 +353,6 @@ export const blockBodyStyle = {
   gap: 10,
 };
 
-export const dirtyChipStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  fontSize: 10,
-  padding: "2px 7px",
-  borderRadius: 4,
-  background: "rgba(201, 184, 150, 0.10)",
-  color: ACCENT,
-  border: "1px solid rgba(201, 184, 150, 0.25)",
-  fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace",
-  flexShrink: 0,
-};
-
 export const blockResetStyle = {
   width: 22,
   height: 22,

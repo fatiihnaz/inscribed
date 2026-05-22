@@ -101,10 +101,14 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   }, [fullPath, itemSchema, registerItemSchema, unregisterItemSchema]);
 
   const block = blocks.get(fullPath);
+  // Mirror EditableRegion's precedence: local draft (live typing) > backend
+  // draft overlay (own work after navigation/refetch) > published value.
+  // Without this, navigating away and back leaves the admin's saved-but-
+  // unpublished list rendering as the published value.
   const raw = drafts.has(fullPath)
     ? drafts.get(fullPath)
     : block
-      ? block.value
+      ? (block.draftValue ?? block.value)
       : undefined;
   /** @type {Record<string, *>[]} */
   const items = Array.isArray(raw) ? raw : [];

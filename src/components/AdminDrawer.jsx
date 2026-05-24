@@ -103,6 +103,7 @@ export function AdminDrawer() {
     isDrawerOpen,
     setDrawerOpen,
     itemSchemas,
+    collectionBindings,
     userInfo,
     onSignOut,
     draftSyncStatus,
@@ -118,6 +119,12 @@ export function AdminDrawer() {
   // (header/footer/site-wide) is shown in a separate section so it's
   // obvious which block lives where. Blocks without `_slug` are treated
   // as page-scoped (legacy fetches that haven't been re-fetched yet).
+  //
+  // CollectionItem bindings (registered at runtime by `<CollectionItem>`)
+  // are synthesised into the page list as Collection-typed blocks so
+  // they flow through the same BlockCard pipeline. Region bindings
+  // (no slug) are skipped here - they'll feed Commit 2's per-collection
+  // drawer tabs instead.
   const { pageBlockList, globalBlockList } = useMemo(() => {
     /** @type {BlockResponse[]} */
     const pages = [];
@@ -130,8 +137,22 @@ export function AdminDrawer() {
     }
     pages.sort((a, b) => a.sortOrder - b.sortOrder);
     globals.sort((a, b) => a.sortOrder - b.sortOrder);
+
+    let nextSort = pages.length > 0 ? pages[pages.length - 1].sortOrder + 1 : 1;
+    for (const [blockPath, binding] of collectionBindings) {
+      if (!binding.slug) continue;
+      pages.push(/** @type {BlockResponse} */ ({
+        blockPath,
+        blockType: "Collection",
+        value: binding,
+        version: 0,
+        sortOrder: nextSort++,
+        _slug: pathname,
+      }));
+    }
+
     return { pageBlockList: pages, globalBlockList: globals };
-  }, [blocks, pathname]);
+  }, [blocks, pathname, collectionBindings]);
 
   // Top-level tab state. "page" shows the current page's blocks; "global"
   // shows shared blocks (header/footer/site-wide). Switches automatically

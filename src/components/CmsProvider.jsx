@@ -15,7 +15,7 @@ import { usePathname } from "next/navigation";
 import { CmsContext } from "../lib/context.js";
 import { createCmsConfig } from "../lib/config.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
-import { updateDraft } from "../lib/api-client.js";
+import { updateDraft, fetchMyCollections } from "../lib/api-client.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 import { useCmsContent } from "../hooks/use-cms-content.js";
 
@@ -101,6 +101,62 @@ export function CmsProvider({
     },
     [],
   );
+
+  // Registry of `<CollectionItem>` / `<CollectionRegion>` bindings.
+  // Collections don't live in the manifest (no CMS block namespace), so
+  // the drawer learns about them via this runtime registry. State-based
+  // (new Map identity on each change) so consumers' useMemo deps
+  // recompute naturally when bindings come or go.
+  const [collectionBindings, setCollectionBindings] = useState(
+    /** @returns {Map<string, { collection: string, slug?: string }>} */
+    () => new Map(),
+  );
+
+  const registerCollectionBinding = useCallback(
+    /** @param {string} blockPath @param {{ collection: string, slug?: string }} binding */
+    (blockPath, binding) => {
+      setCollectionBindings((prev) => {
+        const existing = prev.get(blockPath);
+        if (
+          existing &&
+          existing.collection === binding.collection &&
+          existing.slug === binding.slug
+        ) {
+          return prev;
+        }
+        const next = new Map(prev);
+        next.set(blockPath, binding);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const unregisterCollectionBinding = useCallback(
+    /** @param {string} blockPath */
+    (blockPath) => {
+      setCollectionBindings((prev) => {
+        if (!prev.has(blockPath)) return prev;
+        const next = new Map(prev);
+        next.delete(blockPath);
+        return next;
+      });
+    },
+    [],
+  );
+
+  // /cms/collections/me state - effect fires further down (after
+  // `stableGetAccessToken` is declared) so the drawer's per-Collection
+  // cards (and future per-Collection tabs) share a single round-trip
+  // instead of each mounting its own fetch.
+  const [myCollectionsState, setMyCollectionsState] = useState(
+    /** @returns {{ data: import("../lib/schemas.js").MyCollectionResponse[], isLoading: boolean, error: Error|null }} */
+    () => ({ data: [], isLoading: false, error: null }),
+  );
+  const [myCollectionsToken, setMyCollectionsToken] = useState(0);
+  const refetchMyCollections = useCallback(() => {
+    setMyCollectionsToken((n) => n + 1);
+  }, []);
 
   // Sync the blocks map when `initialBlocks` arrives with new content (e.g.
   // when client-side navigation triggers a server re-render of `<CmsPage>`
@@ -236,6 +292,32 @@ export function CmsProvider({
     },
     [],
   );
+
+  // Provider-level /me fetch (state declared earlier). One request per
+  // session per admin; collected re-fetches go through `refetchMyCollections`.
+  useEffect(() => {
+    if (!isAdmin) {
+      setMyCollectionsState({ data: [], isLoading: false, error: null });
+      return undefined;
+    }
+    let cancelled = false;
+    setMyCollectionsState((s) => ({ ...s, isLoading: true, error: null }));
+    (async () => {
+      try {
+        const token = await stableGetAccessToken();
+        const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
+        const data = await fetchMyCollections(normalizedConfig, init);
+        if (cancelled) return;
+        setMyCollectionsState({ data, isLoading: false, error: null });
+      } catch (err) {
+        if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.error("[skylab-cms] fetchMyCollections failed:", err);
+        setMyCollectionsState({ data: [], isLoading: false, error: /** @type {Error} */ (err) });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [normalizedConfig, isAdmin, stableGetAccessToken, myCollectionsToken]);
 
   const stableOnSignOut = useCallback(() => {
     const fn = onSignOutRef.current;
@@ -418,6 +500,13 @@ export function CmsProvider({
       itemSchemas: itemSchemasRef.current,
       registerItemSchema,
       unregisterItemSchema,
+      collectionBindings,
+      registerCollectionBinding,
+      unregisterCollectionBinding,
+      myCollections: myCollectionsState.data,
+      myCollectionsLoading: myCollectionsState.isLoading,
+      myCollectionsError: myCollectionsState.error,
+      refetchMyCollections,
       onAfterSave: stableOnAfterSave,
       getAccessToken: stableGetAccessToken,
       draftSyncStatus,
@@ -442,6 +531,11 @@ export function CmsProvider({
       itemSchemasVersion,
       registerItemSchema,
       unregisterItemSchema,
+      collectionBindings,
+      registerCollectionBinding,
+      unregisterCollectionBinding,
+      myCollectionsState,
+      refetchMyCollections,
       stableOnAfterSave,
       stableGetAccessToken,
       draftSyncStatus,

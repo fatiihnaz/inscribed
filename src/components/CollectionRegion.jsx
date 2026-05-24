@@ -19,6 +19,10 @@
  *   </CollectionRegion>
  */
 
+import { useContext, useEffect } from "react";
+
+import { useCmsContext } from "../lib/context.js";
+import { CmsGroupContext } from "../lib/group-context.js";
 import { useCollection } from "../hooks/use-collection.js";
 
 /**
@@ -52,7 +56,19 @@ import { useCollection } from "../hooks/use-collection.js";
  * @param {CollectionRegionProps} props
  */
 // eslint-disable-next-line no-unused-vars
-export function CollectionRegion({ blockPath: _bp, collection, scope: _scope, children }) {
+export function CollectionRegion({ blockPath, collection, scope: _scope, children }) {
+  const { registerCollectionBinding, unregisterCollectionBinding } = useCmsContext();
+  const groupPrefix = useContext(CmsGroupContext);
+  const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
+
+  // List binding (no slug). Commit 2 will read this to open a dedicated
+  // Collection tab in the drawer. Until then it sits in the registry
+  // unused by the Page tab.
+  useEffect(() => {
+    registerCollectionBinding(fullPath, { collection });
+    return () => unregisterCollectionBinding(fullPath);
+  }, [fullPath, collection, registerCollectionBinding, unregisterCollectionBinding]);
+
   const { items, isLoading, error, refetch } = useCollection(collection);
   return /** @type {*} */ (children(items, { isLoading, error, refetch }));
 }

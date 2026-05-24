@@ -13,7 +13,7 @@ import { createContext, useContext } from "react";
 
 /**
  * @import { CmsConfig } from "./config.js"
- * @import { BlockResponse, ItemSchema } from "./schemas.js"
+ * @import { BlockResponse, ItemSchema, MyCollectionResponse } from "./schemas.js"
  */
 
 /**
@@ -39,6 +39,25 @@ import { createContext, useContext } from "react";
  *   atomic editors). Unregistered on unmount; key is the list's blockPath.
  * @property {(blockPath: string, schema: ItemSchema) => void} registerItemSchema
  * @property {(blockPath: string) => void} unregisterItemSchema
+ * @property {Map<string, { collection: string, slug?: string }>} collectionBindings
+ *   Runtime registry populated by `<CollectionItem>` and `<CollectionRegion>`
+ *   when they mount. Collections don't live in the CMS block namespace
+ *   (no manifest sync, no `/cms/content` payload), so this is how the
+ *   AdminDrawer learns about the bindings rendered on the current page.
+ *   Key is the binding's full blockPath (with any `<CmsGroup>` prefix
+ *   applied); slug is set for `<CollectionItem>` and omitted for
+ *   `<CollectionRegion>` (list bindings).
+ * @property {(blockPath: string, binding: { collection: string, slug?: string }) => void} registerCollectionBinding
+ * @property {(blockPath: string) => void} unregisterCollectionBinding
+ * @property {MyCollectionResponse[]} myCollections
+ *   Response of `GET /cms/collections/me`, fetched once per session by
+ *   the provider when `isAdmin === true` (empty array for public
+ *   visitors). All admin drawer surfaces (Collection block cards,
+ *   future per-collection tabs) read schemas from here so we don't
+ *   re-fetch /me per card.
+ * @property {boolean} myCollectionsLoading
+ * @property {Error|null} myCollectionsError
+ * @property {() => void} refetchMyCollections   Bump-token style; the provider re-runs the /me effect.
  * @property {((slug: string) => void | Promise<void>) | null} onAfterSave  Called after a successful save (typically a Server Action that calls `revalidateTag(cmsCacheTag(slug))`).
  * @property {(() => Promise<string>) | null} getAccessToken  Returns the current user's JWT access token; added as `Authorization: Bearer {token}` on write requests. Null in public/demo mode.
  * @property {"idle"|"saving"|"saved"|"failed"} draftSyncStatus

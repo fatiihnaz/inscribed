@@ -24,16 +24,18 @@
  * is layout + state only.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { usePathname } from "next/navigation";
-import { ChevronsLeft, ChevronDown, Check, Undo2, LogOut } from "lucide-react";
+import { ChevronsLeft, ChevronDown, ChevronLeft, ChevronRight, Check, Undo2, LogOut } from "lucide-react";
 
 import { useCmsContext } from "../lib/context.js";
 import { useCmsSave } from "../hooks/use-cms-save.js";
+import { useMyCollections } from "../hooks/use-my-collections.js";
 import { CmsApiError } from "../lib/api-client.js";
 
 import { BlockCard, resetBlock } from "./AdminBlockCard.jsx";
+import { AdminCollectionRegionPanel } from "./AdminCollectionRegionPanel.jsx";
 
 import {
   PANEL_WIDTH,
@@ -57,6 +59,8 @@ import {
   statusDotStyle,
   statusLabelStyle,
   tabBarStyle,
+  tabBarScrollStyle,
+  tabBarChevronStyle,
   tabButtonStyle,
   tabButtonActiveStyle,
   tabCountBadgeStyle,
@@ -104,10 +108,12 @@ export function AdminDrawer() {
     setDrawerOpen,
     itemSchemas,
     collectionBindings,
+    collectionListCache,
     userInfo,
     onSignOut,
     draftSyncStatus,
   } = useCmsContext();
+  const myCollections = useMyCollections().collections;
   const {
     dirtyCount, isSaving, error,
     save: onSaveAll, discard: onDiscardAll,
@@ -154,10 +160,50 @@ export function AdminDrawer() {
     return { pageBlockList: pages, globalBlockList: globals };
   }, [blocks, pathname, collectionBindings]);
 
-  // Top-level tab state. "page" shows the current page's blocks; "global"
-  // shows shared blocks (header/footer/site-wide). Switches automatically
-  // when an EditableRegion belonging to the other tab is clicked.
-  const [activeTab, setActiveTab] = useState(/** @type {"page"|"global"} */ ("page"));
+  // Tab list. Always: "page", "global". Plus: one tab per collection
+  // with a `<CollectionRegion>` binding on the current page that the
+  // user has access to (per /me). Tab IDs use `"collection:{key}"` so
+  // the JSX switch downstream can route them.
+  const regionTabs = useMemo(() => {
+    /** @type {Set<string>} */
+    const pageRegions = new Set();
+    for (const [, binding] of collectionBindings) {
+      if (binding.slug) continue; // skip Item bindings (they live on Page tab)
+      pageRegions.add(binding.collection);
+    }
+    /** @type {{ id: string, label: string, count: number, key: string }[]} */
+    const out = [];
+    for (const my of myCollections) {
+      if (!pageRegions.has(my.collectionKey)) continue;
+      const cached = collectionListCache.get(my.collectionKey);
+      out.push({
+        id: `collection:${my.collectionKey}`,
+        label: my.collectionKey,
+        count: cached?.items.length ?? 0,
+        key: my.collectionKey,
+      });
+    }
+    return out;
+  }, [collectionBindings, myCollections, collectionListCache]);
+
+  const allTabs = useMemo(
+    () => [
+      { id: "page", label: "Sayfa", count: pageBlockList.length },
+      { id: "global", label: "Genel", count: globalBlockList.length },
+      ...regionTabs,
+    ],
+    [pageBlockList.length, globalBlockList.length, regionTabs],
+  );
+
+  const [activeTab, setActiveTab] = useState(/** @type {string} */ ("page"));
+
+  // If the active tab disappears (e.g. navigating away from a page that
+  // had a Region binding), fall back to "page" so the user isn't stuck
+  // staring at a blank pane.
+  useEffect(() => {
+    if (allTabs.some((t) => t.id === activeTab)) return;
+    setActiveTab("page");
+  }, [allTabs, activeTab]);
 
   // Per-group collapse state. Storing the *closed* set (not open) means new
   // groups arriving via discovery default to expanded - which is what users
@@ -229,28 +275,33 @@ export function AdminDrawer() {
           />
 
           <TabBar
+            tabs={allTabs}
             activeTab={activeTab}
             onChange={setActiveTab}
-            pageCount={pageBlockList.length}
-            globalCount={globalBlockList.length}
           />
 
-          <GroupedBlockList
-            blockList={activeTab === "page" ? pageBlockList : globalBlockList}
-            drafts={drafts}
-            setDraft={setDraft}
-            clearDraft={clearDraft}
-            activeBlockPath={activeBlock}
-            onFocus={setActiveBlock}
-            itemSchemas={itemSchemas}
-            closedGroups={closedGroups}
-            onToggleGroup={toggleGroup}
-            emptyHint={
-              activeTab === "page"
-                ? "Bu sayfada düzenlenebilir blok yok. Yeni bloklar eklemek için manifest sync'ini çalıştır."
-                : "Henüz scope=\"global\" işaretli blok yok."
-            }
-          />
+          {activeTab === "page" || activeTab === "global" ? (
+            <GroupedBlockList
+              blockList={activeTab === "page" ? pageBlockList : globalBlockList}
+              drafts={drafts}
+              setDraft={setDraft}
+              clearDraft={clearDraft}
+              activeBlockPath={activeBlock}
+              onFocus={setActiveBlock}
+              itemSchemas={itemSchemas}
+              closedGroups={closedGroups}
+              onToggleGroup={toggleGroup}
+              emptyHint={
+                activeTab === "page"
+                  ? "Bu sayfada düzenlenebilir blok yok. Yeni bloklar eklemek için manifest sync'ini çalıştır."
+                  : "Henüz scope=\"global\" işaretli blok yok."
+              }
+            />
+          ) : activeTab.startsWith("collection:") ? (
+            <AdminCollectionRegionPanel
+              collectionKey={activeTab.slice("collection:".length)}
+            />
+          ) : null}
 
           {error ? (
             <div style={isConflict ? conflictStyle : errorStyle}>
@@ -392,40 +443,118 @@ function PanelHeader({ breadcrumbs, dirty, draftSyncStatus }) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Tab bar with horizontal-scroll overflow. Chevron buttons appear on
+ * either side when the tab row doesn't fit; the active tab scrolls
+ * itself into view on change. Native scroll still works for wheel /
+ * touchpad / touch.
+ *
  * @param {{
- *   activeTab: "page" | "global",
- *   onChange: (tab: "page" | "global") => void,
- *   pageCount: number,
- *   globalCount: number,
+ *   tabs: { id: string, label: string, count: number }[],
+ *   activeTab: string,
+ *   onChange: (tab: string) => void,
  * }} props
  */
-function TabBar({ activeTab, onChange, pageCount, globalCount }) {
+function TabBar({ tabs, activeTab, onChange }) {
+  const scrollRef = useRef(/** @type {HTMLDivElement|null} */ (null));
+  const [overflow, setOverflow] = useState({ left: false, right: false });
+
+  const measure = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // 1px slack so floating-point widths don't keep the right chevron
+    // armed when there's nothing actually clipped.
+    setOverflow({
+      left: el.scrollLeft > 0,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
+    });
+  }, []);
+
+  // Re-measure on tab list / container size changes.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tabs, measure]);
+
+  // Keep the active tab visible after a change (e.g. clicking a clipped
+  // tab on the right edge, or auto-switch from a page click). Layout
+  // effect so the scroll happens before the user sees the new state.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const btn = el.querySelector(`[data-tab-id="${CSS.escape(activeTab)}"]`);
+    if (btn instanceof HTMLElement) {
+      // `nearest` avoids jerky scrolls when the tab is already visible.
+      btn.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+    }
+    // measure after scroll settles
+    requestAnimationFrame(measure);
+  }, [activeTab, measure]);
+
+  const nudge = (dir) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * el.clientWidth * 0.7, behavior: "smooth" });
+  };
+
   return (
-    <div style={tabBarStyle} role="tablist">
-      <TabButton
-        label="Sayfa"
-        count={pageCount}
-        active={activeTab === "page"}
-        onClick={() => onChange("page")}
-      />
-      <TabButton
-        label="Genel"
-        count={globalCount}
-        active={activeTab === "global"}
-        onClick={() => onChange("global")}
-      />
+    <div style={tabBarStyle}>
+      <button
+        type="button"
+        onClick={() => nudge(-1)}
+        disabled={!overflow.left}
+        className="skylab-cms-tabbar-chevron"
+        style={tabBarChevronStyle}
+        aria-label="Önceki sekmeler"
+        tabIndex={overflow.left ? 0 : -1}
+      >
+        <ChevronLeft size={14} />
+      </button>
+      <div
+        ref={scrollRef}
+        role="tablist"
+        className="skylab-cms-tabbar-scroll"
+        style={tabBarScrollStyle}
+        onScroll={measure}
+      >
+        {tabs.map((tab) => (
+          <TabButton
+            key={tab.id}
+            id={tab.id}
+            label={tab.label}
+            count={tab.count}
+            active={activeTab === tab.id}
+            onClick={() => onChange(tab.id)}
+          />
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => nudge(1)}
+        disabled={!overflow.right}
+        className="skylab-cms-tabbar-chevron"
+        style={tabBarChevronStyle}
+        aria-label="Sonraki sekmeler"
+        tabIndex={overflow.right ? 0 : -1}
+      >
+        <ChevronRight size={14} />
+      </button>
     </div>
   );
 }
 
 /**
- * @param {{ label: string, count: number, active: boolean, onClick: () => void }} props
+ * @param {{ id: string, label: string, count: number, active: boolean, onClick: () => void }} props
  */
-function TabButton({ label, count, active, onClick }) {
+function TabButton({ id, label, count, active, onClick }) {
   return (
     <button
       type="button"
       role="tab"
+      data-tab-id={id}
       aria-selected={active}
       onClick={onClick}
       style={active ? { ...tabButtonStyle, ...tabButtonActiveStyle } : tabButtonStyle}

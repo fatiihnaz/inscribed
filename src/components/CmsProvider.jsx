@@ -15,7 +15,7 @@ import { usePathname } from "next/navigation";
 import { CmsContext } from "../lib/context.js";
 import { createCmsConfig } from "../lib/config.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
-import { updateDraft, fetchMyCollections } from "../lib/api-client.js";
+import { updateDraft, fetchMyCollections, fetchCollectionItem, fetchCollection } from "../lib/api-client.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 import { useCmsContent } from "../hooks/use-cms-content.js";
 
@@ -158,6 +158,83 @@ export function CmsProvider({
     setMyCollectionsToken((n) => n + 1);
   }, []);
 
+  // Shared collection-item cache. Keyed by `"{collectionKey}:{slug}"`.
+  // `useCollectionItem` consumers read entries directly; the request /
+  // update / invalidate callbacks below mutate the map (new identity
+  // each change so consumer useMemo deps recompute).
+  const [collectionItemCache, setCollectionItemCache] = useState(
+    /** @returns {Map<string, import("../lib/context.js").CollectionItemCacheEntry>} */
+    () => new Map(),
+  );
+  // In-flight promises - lives in a ref so concurrent `requestCollectionItem`
+  // calls dedupe to a single fetch without going through state updates.
+  const inFlightCollectionItems = useRef(
+    /** @type {Map<string, Promise<void>>} */ (new Map()),
+  );
+
+  // List cache for `useCollection(key)`. Keyed by collection key.
+  const [collectionListCache, setCollectionListCache] = useState(
+    /** @returns {Map<string, import("../lib/context.js").CollectionListCacheEntry>} */
+    () => new Map(),
+  );
+  const inFlightCollectionLists = useRef(
+    /** @type {Map<string, Promise<void>>} */ (new Map()),
+  );
+
+  const updateCollectionItem = useCallback(
+    /** @param {string} key @param {string} slug @param {import("../lib/schemas.js").CollectionItemResponse} item */
+    (key, slug, item) => {
+      const cacheKey = `${key}:${slug}`;
+      setCollectionItemCache((prev) => {
+        const next = new Map(prev);
+        next.set(cacheKey, { item, isLoading: false, error: null });
+        return next;
+      });
+      // Mirror into the list cache: replace the matching row if present,
+      // append if missing (covers POST-create when the new slug isn't in
+      // the cached list yet). Lists not in cache are left alone.
+      setCollectionListCache((prev) => {
+        const entry = prev.get(key);
+        if (!entry) return prev;
+        const idx = entry.items.findIndex((row) => row.slug === slug);
+        const items = entry.items.slice();
+        if (idx === -1) items.push(item);
+        else items[idx] = item;
+        const next = new Map(prev);
+        next.set(key, { ...entry, items });
+        return next;
+      });
+    },
+    [],
+  );
+
+  const invalidateCollectionItem = useCallback(
+    /** @param {string} key @param {string} slug */
+    (key, slug) => {
+      const cacheKey = `${key}:${slug}`;
+      setCollectionItemCache((prev) => {
+        if (!prev.has(cacheKey)) return prev;
+        const next = new Map(prev);
+        next.delete(cacheKey);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const invalidateCollectionList = useCallback(
+    /** @param {string} key */
+    (key) => {
+      setCollectionListCache((prev) => {
+        if (!prev.has(key)) return prev;
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
+    },
+    [],
+  );
+
   // Sync the blocks map when `initialBlocks` arrives with new content (e.g.
   // when client-side navigation triggers a server re-render of `<CmsPage>`
   // for a new slug). `useState`'s lazy init only runs once on mount, so
@@ -291,6 +368,131 @@ export function CmsProvider({
       return fn();
     },
     [],
+  );
+
+  // Cache-aware collection item fetch. Cache hit -> no-op; in-flight
+  // request for the same (key, slug) -> piggyback on the existing
+  // promise; otherwise fire fetch and write the result into the cache.
+  const requestCollectionItem = useCallback(
+    /** @param {string} key @param {string} slug @param {boolean} [force] @returns {Promise<void>} */
+    async (key, slug, force = false) => {
+      const cacheKey = `${key}:${slug}`;
+      const cached = collectionItemCache.get(cacheKey);
+      if (!force && cached && !cached.error) return;
+
+      const existing = inFlightCollectionItems.current.get(cacheKey);
+      if (existing && !force) return existing;
+
+      setCollectionItemCache((prev) => {
+        const next = new Map(prev);
+        const prior = prev.get(cacheKey);
+        next.set(cacheKey, {
+          item: prior?.item ?? null,
+          isLoading: true,
+          error: null,
+        });
+        return next;
+      });
+
+      const promise = (async () => {
+        try {
+          const token = await stableGetAccessToken();
+          const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
+          const item = await fetchCollectionItem(normalizedConfig, key, slug, init);
+          setCollectionItemCache((prev) => {
+            const next = new Map(prev);
+            next.set(cacheKey, { item, isLoading: false, error: null });
+            return next;
+          });
+        } catch (err) {
+          // 404 is normal control-flow for single-item reads; skip the
+          // log noise but surface the error on the entry.
+          if (!(err && /** @type {*} */ (err).isNotFound)) {
+            // eslint-disable-next-line no-console
+            console.error(`[skylab-cms] fetchCollectionItem(${key}/${slug}) failed:`, err);
+          }
+          setCollectionItemCache((prev) => {
+            const next = new Map(prev);
+            next.set(cacheKey, {
+              item: null,
+              isLoading: false,
+              error: /** @type {Error} */ (err),
+            });
+            return next;
+          });
+        } finally {
+          inFlightCollectionItems.current.delete(cacheKey);
+        }
+      })();
+
+      inFlightCollectionItems.current.set(cacheKey, promise);
+      return promise;
+    },
+    [collectionItemCache, normalizedConfig, stableGetAccessToken],
+  );
+
+  const requestCollectionList = useCallback(
+    /** @param {string} key @param {boolean} [force] @returns {Promise<void>} */
+    async (key, force = false) => {
+      const cached = collectionListCache.get(key);
+      if (!force && cached && !cached.error) return;
+
+      const existing = inFlightCollectionLists.current.get(key);
+      if (existing && !force) return existing;
+
+      setCollectionListCache((prev) => {
+        const next = new Map(prev);
+        const prior = prev.get(key);
+        next.set(key, {
+          items: prior?.items ?? [],
+          isLoading: true,
+          error: null,
+        });
+        return next;
+      });
+
+      const promise = (async () => {
+        try {
+          const token = await stableGetAccessToken();
+          const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
+          const items = await fetchCollection(normalizedConfig, key, init);
+          setCollectionListCache((prev) => {
+            const next = new Map(prev);
+            next.set(key, { items, isLoading: false, error: null });
+            return next;
+          });
+          // Seed the item cache from the list payload - the response
+          // already carries each row's full `data`, so per-item fetches
+          // (`useCollectionItem` mounting for each row in a Region tab)
+          // become cache hits and don't issue redundant GETs.
+          setCollectionItemCache((prev) => {
+            const next = new Map(prev);
+            for (const item of items) {
+              next.set(`${key}:${item.slug}`, { item, isLoading: false, error: null });
+            }
+            return next;
+          });
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error(`[skylab-cms] fetchCollection(${key}) failed:`, err);
+          setCollectionListCache((prev) => {
+            const next = new Map(prev);
+            next.set(key, {
+              items: [],
+              isLoading: false,
+              error: /** @type {Error} */ (err),
+            });
+            return next;
+          });
+        } finally {
+          inFlightCollectionLists.current.delete(key);
+        }
+      })();
+
+      inFlightCollectionLists.current.set(key, promise);
+      return promise;
+    },
+    [collectionListCache, normalizedConfig, stableGetAccessToken],
   );
 
   // Provider-level /me fetch (state declared earlier). One request per
@@ -507,6 +709,13 @@ export function CmsProvider({
       myCollectionsLoading: myCollectionsState.isLoading,
       myCollectionsError: myCollectionsState.error,
       refetchMyCollections,
+      collectionItemCache,
+      requestCollectionItem,
+      updateCollectionItem,
+      invalidateCollectionItem,
+      collectionListCache,
+      requestCollectionList,
+      invalidateCollectionList,
       onAfterSave: stableOnAfterSave,
       getAccessToken: stableGetAccessToken,
       draftSyncStatus,
@@ -536,6 +745,13 @@ export function CmsProvider({
       unregisterCollectionBinding,
       myCollectionsState,
       refetchMyCollections,
+      collectionItemCache,
+      requestCollectionItem,
+      updateCollectionItem,
+      invalidateCollectionItem,
+      collectionListCache,
+      requestCollectionList,
+      invalidateCollectionList,
       stableOnAfterSave,
       stableGetAccessToken,
       draftSyncStatus,

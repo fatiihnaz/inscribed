@@ -13,7 +13,21 @@ import { createContext, useContext } from "react";
 
 /**
  * @import { CmsConfig } from "./config.js"
- * @import { BlockResponse, ItemSchema, MyCollectionResponse } from "./schemas.js"
+ * @import { BlockResponse, ItemSchema, MyCollectionResponse, CollectionItemResponse } from "./schemas.js"
+ */
+
+/**
+ * @typedef {Object} CollectionItemCacheEntry
+ * @property {CollectionItemResponse | null} item
+ * @property {boolean} isLoading
+ * @property {Error | null} error
+ */
+
+/**
+ * @typedef {Object} CollectionListCacheEntry
+ * @property {CollectionItemResponse[]} items
+ * @property {boolean} isLoading
+ * @property {Error | null} error
  */
 
 /**
@@ -58,6 +72,31 @@ import { createContext, useContext } from "react";
  * @property {boolean} myCollectionsLoading
  * @property {Error|null} myCollectionsError
  * @property {() => void} refetchMyCollections   Bump-token style; the provider re-runs the /me effect.
+ * @property {Map<string, CollectionItemCacheEntry>} collectionItemCache
+ *   Shared cache for `useCollectionItem`. Key is `"{key}:{slug}"`. Both
+ *   the page-side `<CollectionItem>` and the drawer-side
+ *   `AdminCollectionItemCard` read from this map, so a save in the drawer
+ *   propagates to the page without a second fetch (and two surfaces
+ *   mounted at once for the same item only fire one request).
+ * @property {(key: string, slug: string, force?: boolean) => Promise<void>} requestCollectionItem
+ *   Ensure the cache holds a fresh entry for `(key, slug)`. Cache hit ->
+ *   no-op (unless `force === true`). Concurrent calls for the same pair
+ *   are deduped via an in-flight promise table.
+ * @property {(key: string, slug: string, item: CollectionItemResponse) => void} updateCollectionItem
+ *   Write a freshly-saved item straight into the cache, bypassing a
+ *   refetch. Called by the drawer's save handler so the page-side
+ *   `<CollectionItem>` re-renders with the new version instantly.
+ * @property {(key: string, slug: string) => void} invalidateCollectionItem
+ *   Drop the cache entry; the next consumer mount triggers a fresh fetch.
+ * @property {Map<string, CollectionListCacheEntry>} collectionListCache
+ *   Shared cache for `useCollection(key)`. Mirrors `collectionItemCache`
+ *   for list reads so a Region panel in the drawer and a
+ *   `<CollectionRegion>` on the page share a single round-trip.
+ *   Updates to `collectionItemCache` (e.g. after a save) automatically
+ *   patch the matching row in this list cache so admin surfaces don't
+ *   drift apart.
+ * @property {(key: string, force?: boolean) => Promise<void>} requestCollectionList
+ * @property {(key: string) => void} invalidateCollectionList
  * @property {((slug: string) => void | Promise<void>) | null} onAfterSave  Called after a successful save (typically a Server Action that calls `revalidateTag(cmsCacheTag(slug))`).
  * @property {(() => Promise<string>) | null} getAccessToken  Returns the current user's JWT access token; added as `Authorization: Bearer {token}` on write requests. Null in public/demo mode.
  * @property {"idle"|"saving"|"saved"|"failed"} draftSyncStatus

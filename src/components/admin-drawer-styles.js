@@ -175,11 +175,38 @@ export const statusLabelStyle = {
 // Tab bar
 // ---------------------------------------------------------------------------
 
+// Wraps the scroll container + edge chevron buttons. The actual tab
+// row uses `tabBarScrollStyle` (scrollable) and lives inside the
+// `.skylab-cms-tabbar-scroll` class so panelCss can hide its scrollbar.
 export const tabBarStyle = {
   display: "flex",
-  gap: 4,
+  alignItems: "stretch",
   padding: "0 14px",
   borderBottom: `1px solid ${BORDER_SOFT}`,
+  position: "relative",
+};
+
+export const tabBarScrollStyle = {
+  display: "flex",
+  gap: 4,
+  flex: 1,
+  overflowX: "auto",
+  scrollBehavior: "smooth",
+};
+
+export const tabBarChevronStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 22,
+  marginBottom: -1,
+  background: "transparent",
+  border: 0,
+  color: TEXT_MUTED,
+  cursor: "pointer",
+  padding: 0,
+  fontFamily: "inherit",
+  flexShrink: 0,
 };
 
 export const tabButtonStyle = {
@@ -617,6 +644,23 @@ export const COLLECTION_CARD_ACTIVE_BORDER = "1px solid rgba(140, 130, 210, 0.55
 // ---------------------------------------------------------------------------
 
 export const panelCss = `
+  .skylab-cms-tabbar-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .skylab-cms-tabbar-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  .skylab-cms-tabbar-chevron {
+    transition: color 120ms ease;
+  }
+  .skylab-cms-tabbar-chevron:hover:not(:disabled) {
+    color: ${ACCENT};
+  }
+  .skylab-cms-tabbar-chevron:disabled {
+    opacity: 0;
+    pointer-events: none;
+  }
   .skylab-cms-block-card {
     transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
   }

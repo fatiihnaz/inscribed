@@ -31,44 +31,63 @@ import { useCollection } from "../hooks/use-collection.js";
  */
 
 /**
- * @typedef {Object} CollectionRegionMeta
- * @property {boolean} isLoading
- * @property {CmsApiError|Error|null} error
- * @property {() => Promise<void>} refetch
+ * @typedef {Object} CollectionRegionProps
+ * @property {string} blockPath
+ *   Identifier for the binding inside the page; the drawer uses it to
+ *   disambiguate when the same collection is referenced multiple times.
+ * @property {string} collection
+ *   Backend collection key (e.g. "Teams", "News").
+ * @property {Record<string, *>} [filter]
+ *   Filter object forwarded to the API as query keys. Each key must
+ *   match a filterable schema field on the collection or the request
+ *   returns 400. Pass a memoised reference for the most efficient
+ *   re-render behaviour, but inline literals are also fine - the hook
+ *   layer dedupes by `stableStringify`.
+ * @property {number} [limit]   Page size (default 50, max 100, min 1).
+ * @property {number} [offset]  Pagination offset (default 0).
+ * @property {"global"} [scope]
+ *   Discovery-only marker; runtime ignores it.
+ * @property {(items: CollectionItemResponse[], meta: CollectionRegionMeta) => React.ReactNode} children
  */
 
 /**
- * @typedef {Object} CollectionRegionProps
- * @property {string} blockPath
- *   Discovery-time identifier. Lets the AdminDrawer disambiguate when the
- *   same collection is referenced from multiple slots on a page. Runtime
- *   no-op.
- * @property {string} collection
- *   Backend collection key (e.g. "Teams", "News"). Case-insensitive at the
- *   API level. Must be a static literal for discovery.
- * @property {"global"} [scope]
- *   Discovery-only. Set when the region lives in shared UI (header/footer)
- *   so the manifest tracks it under the global slug.
- * @property {(items: CollectionItemResponse[], meta: CollectionRegionMeta) => React.ReactNode} children
+ * @typedef {Object} CollectionRegionMeta
+ * @property {boolean} isLoading
+ * @property {import("../lib/api-client.js").CmsApiError | Error | null} error
+ * @property {() => Promise<void>} refetch
+ * @property {number} total
+ * @property {number} offset
+ * @property {number} limit
  */
 
 /**
  * @param {CollectionRegionProps} props
  */
 // eslint-disable-next-line no-unused-vars
-export function CollectionRegion({ blockPath, collection, scope: _scope, children }) {
+export function CollectionRegion({ blockPath, collection, filter, limit, offset, scope: _scope, children }) {
   const { registerCollectionBinding, unregisterCollectionBinding } = useCmsContext();
   const groupPrefix = useContext(CmsGroupContext);
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 
-  // List binding (no slug). Commit 2 will read this to open a dedicated
-  // Collection tab in the drawer. Until then it sits in the registry
-  // unused by the Page tab.
+  // Drawer's per-collection panel reads this binding to mirror the same
+  // filter window in its own sub-section ("filter parity").
   useEffect(() => {
-    registerCollectionBinding(fullPath, { collection });
+    /** @type {{ collection: string, filter?: Record<string, *>, limit?: number, offset?: number }} */
+    const binding = { collection };
+    if (filter) binding.filter = filter;
+    if (typeof limit === "number") binding.limit = limit;
+    if (typeof offset === "number") binding.offset = offset;
+    registerCollectionBinding(fullPath, binding);
     return () => unregisterCollectionBinding(fullPath);
-  }, [fullPath, collection, registerCollectionBinding, unregisterCollectionBinding]);
+  }, [fullPath, collection, filter, limit, offset, registerCollectionBinding, unregisterCollectionBinding]);
 
-  const { items, isLoading, error, refetch } = useCollection(collection);
-  return /** @type {*} */ (children(items, { isLoading, error, refetch }));
+  /** @type {import("../lib/schemas.js").CollectionListParams | undefined} */
+  const params = filter || typeof limit === "number" || typeof offset === "number"
+    ? { ...(filter ? { filter } : {}), ...(typeof limit === "number" ? { limit } : {}), ...(typeof offset === "number" ? { offset } : {}) }
+    : undefined;
+
+  const { items, total, offset: gotOffset, limit: gotLimit, isLoading, error, refetch } = useCollection(collection, params);
+  return /** @type {*} */ (
+    children(items, { isLoading, error, refetch, total, offset: gotOffset, limit: gotLimit })
+  );
 }

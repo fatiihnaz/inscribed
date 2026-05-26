@@ -146,30 +146,48 @@ export async function fetchContent(config, slug, init) {
 }
 
 /**
- * `GET /cms/collections/{key}` - all items in a collection (e.g. "Teams",
- * "News"). Requires a Bearer token with `cms:access` role; pass it via
- * `init.headers.Authorization`. Server-side callers typically wire this
- * through `getCmsCollection` which attaches the service-credentials token
- * automatically.
+ * `GET /cms/collections/{key}` - paged list of items. Optional `params`
+ * encodes filter fields (spread as query keys) + `offset` / `limit`.
+ * Unknown or non-filterable fields trigger 400; type mismatches (e.g.
+ * `featured=maybe` for a Bool) also 400.
  *
  * @param {CmsConfig} config
  * @param {string} key
+ * @param {import("./schemas.js").CollectionListParams} [params]
  * @param {RequestInit} [init]
- * @returns {Promise<import("./schemas.js").CollectionItemResponse[]>}
+ * @returns {Promise<import("./schemas.js").PagedListResponse<import("./schemas.js").CollectionItemResponse>>}
  */
-export async function fetchCollection(config, key, init) {
-  const response = await fetch(
-    `${config.baseUrl}/cms/collections/${encodeURIComponent(key)}`,
-    {
-      ...init,
-      method: "GET",
-      headers: { ...baseHeaders(config), ...(init?.headers ?? {}) },
-    },
-  );
+export async function fetchCollection(config, key, params, init) {
+  const url = new URL(`${config.baseUrl}/cms/collections/${encodeURIComponent(key)}`);
+  if (params) {
+    if (params.filter) {
+      for (const [k, v] of Object.entries(params.filter)) {
+        if (v == null) continue;
+        url.searchParams.set(k, String(v));
+      }
+    }
+    if (typeof params.offset === "number") url.searchParams.set("offset", String(params.offset));
+    if (typeof params.limit === "number") url.searchParams.set("limit", String(params.limit));
+  }
+  const response = await fetch(url.toString(), {
+    ...init,
+    method: "GET",
+    headers: { ...baseHeaders(config), ...(init?.headers ?? {}) },
+  });
   if (!response.ok) throw await toApiError(response);
-  return /** @type {import("./schemas.js").CollectionItemResponse[]} */ (
-    await response.json()
-  );
+  const body = await response.json();
+  // Backends that haven't shipped the envelope yet still return the raw
+  // array. Coerce to the paged shape so everything downstream
+  // (provider cache, useCollection consumers) sees a uniform contract.
+  if (Array.isArray(body)) {
+    return /** @type {import("./schemas.js").PagedListResponse<import("./schemas.js").CollectionItemResponse>} */ ({
+      items: body,
+      total: body.length,
+      offset: params?.offset ?? 0,
+      limit: params?.limit ?? body.length,
+    });
+  }
+  return /** @type {import("./schemas.js").PagedListResponse<import("./schemas.js").CollectionItemResponse>} */ (body);
 }
 
 /**

@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { CmsContext } from "../lib/context.js";
 import { createCmsConfig } from "../lib/config.js";
@@ -113,15 +113,18 @@ export function CmsProvider({
   );
 
   const registerCollectionBinding = useCallback(
-    /** @param {string} blockPath @param {{ collection: string, slug?: string }} binding */
+    /**
+     * @param {string} blockPath
+     * @param {{ collection: string, slug?: string, filter?: Record<string, *>, limit?: number, offset?: number }} binding
+     */
     (blockPath, binding) => {
       setCollectionBindings((prev) => {
         const existing = prev.get(blockPath);
-        if (
-          existing &&
-          existing.collection === binding.collection &&
-          existing.slug === binding.slug
-        ) {
+        // Compare via stableStringify so consumers passing inline filter
+        // objects (`filter={{ featured: true }}`) don't churn the
+        // registry every render. The drawer's tab discovery and panel
+        // sub-section grouping both depend on stable identity here.
+        if (existing && stableStringify(existing) === stableStringify(binding)) {
           return prev;
         }
         const next = new Map(prev);
@@ -190,19 +193,22 @@ export function CmsProvider({
         next.set(cacheKey, { item, isLoading: false, error: null });
         return next;
       });
-      // Mirror into the list cache: replace the matching row if present,
-      // append if missing (covers POST-create when the new slug isn't in
-      // the cached list yet). Lists not in cache are left alone.
+      // List cache invalidation across every (filter, offset, limit)
+      // window for this collection: a filtered view may have its row
+      // set change in ways we can't patch in-place (item entered or
+      // left the filter, new total, page boundary shifts). Subscribers
+      // re-fetch their specific window on next render.
+      const listPrefix = `${key}|`;
       setCollectionListCache((prev) => {
-        const entry = prev.get(key);
-        if (!entry) return prev;
-        const idx = entry.items.findIndex((row) => row.slug === slug);
-        const items = entry.items.slice();
-        if (idx === -1) items.push(item);
-        else items[idx] = item;
+        let mutated = false;
         const next = new Map(prev);
-        next.set(key, { ...entry, items });
-        return next;
+        for (const k of prev.keys()) {
+          if (k.startsWith(listPrefix)) {
+            next.delete(k);
+            mutated = true;
+          }
+        }
+        return mutated ? next : prev;
       });
     },
     [],
@@ -223,13 +229,30 @@ export function CmsProvider({
   );
 
   const invalidateCollectionList = useCallback(
-    /** @param {string} key */
-    (key) => {
+    /**
+     * @param {string} key
+     * @param {import("../lib/schemas.js").CollectionListParams} [params]
+     */
+    (key, params) => {
       setCollectionListCache((prev) => {
-        if (!prev.has(key)) return prev;
+        if (params) {
+          const cacheKey = `${key}|${stableStringify(params)}`;
+          if (!prev.has(cacheKey)) return prev;
+          const next = new Map(prev);
+          next.delete(cacheKey);
+          return next;
+        }
+        // No params: drop every window for this collection.
+        const prefix = `${key}|`;
+        let mutated = false;
         const next = new Map(prev);
-        next.delete(key);
-        return next;
+        for (const k of prev.keys()) {
+          if (k.startsWith(prefix)) {
+            next.delete(k);
+            mutated = true;
+          }
+        }
+        return mutated ? next : prev;
       });
     },
     [],
@@ -249,21 +272,25 @@ export function CmsProvider({
   }, [initialBlocks]);
 
   // Backstop: the root layout's `<CmsPage>` is preserved across client-side
-  // navigation, so its `initialBlocks` prop frequently does NOT update even
-  // when the URL changes. Watch the pathname directly: drop stale blocks +
-  // any open edit, then bump `refetchToken` to force `useCmsContent` to
-  // pull fresh data for the new slug. Without this, navigating from / to
-  // /gecekodu leaves the admin panel showing the home page's blocks.
+  // navigation, so its `initialBlocks` prop doesn't update on its own when
+  // the URL changes. `router.refresh()` forces Next.js to re-render the
+  // layout's server components — `getCmsPageBlocks` runs again with the
+  // new pathname (via the middleware-set `x-pathname` header), the fresh
+  // `initialBlocks` flow back through this provider's prop, and the
+  // `initialBlocks` watcher above seeds the blocks map. This works for
+  // public visitors too because the server fetch uses the service token,
+  // not the user's session — so we don't need a client-side fetch path
+  // (which would 401 anonymous traffic).
   const pathname = usePathname();
+  const router = useRouter();
   const lastPathnameRef = useRef(pathname);
   useEffect(() => {
     if (pathname === lastPathnameRef.current) return;
     lastPathnameRef.current = pathname;
-    setBlocksState(new Map());
     setActiveBlock(null);
     setDraftsState(new Map());
-    setRefetchToken((n) => n + 1);
-  }, [pathname]);
+    router.refresh();
+  }, [pathname, router]);
 
   // Drop drafts for blocks that no longer exist (e.g. after a manifest sync
   // that removed the block). Pathname-change drafts are already cleared by
@@ -432,19 +459,29 @@ export function CmsProvider({
   );
 
   const requestCollectionList = useCallback(
-    /** @param {string} key @param {boolean} [force] @returns {Promise<void>} */
-    async (key, force = false) => {
-      const cached = collectionListCache.get(key);
+    /**
+     * @param {string} key
+     * @param {import("../lib/schemas.js").CollectionListParams} [params]
+     * @param {boolean} [force]
+     * @returns {Promise<void>}
+     */
+    async (key, params, force = false) => {
+      const paramsKey = stableStringify(params ?? {});
+      const cacheKey = `${key}|${paramsKey}`;
+      const cached = collectionListCache.get(cacheKey);
       if (!force && cached && !cached.error) return;
 
-      const existing = inFlightCollectionLists.current.get(key);
+      const existing = inFlightCollectionLists.current.get(cacheKey);
       if (existing && !force) return existing;
 
       setCollectionListCache((prev) => {
         const next = new Map(prev);
-        const prior = prev.get(key);
-        next.set(key, {
+        const prior = prev.get(cacheKey);
+        next.set(cacheKey, {
           items: prior?.items ?? [],
+          total: prior?.total ?? 0,
+          offset: prior?.offset ?? params?.offset ?? 0,
+          limit: prior?.limit ?? params?.limit ?? 0,
           isLoading: true,
           error: null,
         });
@@ -455,10 +492,17 @@ export function CmsProvider({
         try {
           const token = await stableGetAccessToken();
           const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
-          const items = await fetchCollection(normalizedConfig, key, init);
+          const response = await fetchCollection(normalizedConfig, key, params, init);
           setCollectionListCache((prev) => {
             const next = new Map(prev);
-            next.set(key, { items, isLoading: false, error: null });
+            next.set(cacheKey, {
+              items: response.items,
+              total: response.total,
+              offset: response.offset,
+              limit: response.limit,
+              isLoading: false,
+              error: null,
+            });
             return next;
           });
           // Seed the item cache from the list payload - the response
@@ -467,7 +511,7 @@ export function CmsProvider({
           // become cache hits and don't issue redundant GETs.
           setCollectionItemCache((prev) => {
             const next = new Map(prev);
-            for (const item of items) {
+            for (const item of response.items) {
               next.set(`${key}:${item.slug}`, { item, isLoading: false, error: null });
             }
             return next;
@@ -477,19 +521,22 @@ export function CmsProvider({
           console.error(`[skylab-cms] fetchCollection(${key}) failed:`, err);
           setCollectionListCache((prev) => {
             const next = new Map(prev);
-            next.set(key, {
+            next.set(cacheKey, {
               items: [],
+              total: 0,
+              offset: params?.offset ?? 0,
+              limit: params?.limit ?? 0,
               isLoading: false,
               error: /** @type {Error} */ (err),
             });
             return next;
           });
         } finally {
-          inFlightCollectionLists.current.delete(key);
+          inFlightCollectionLists.current.delete(cacheKey);
         }
       })();
 
-      inFlightCollectionLists.current.set(key, promise);
+      inFlightCollectionLists.current.set(cacheKey, promise);
       return promise;
     },
     [collectionListCache, normalizedConfig, stableGetAccessToken],
@@ -772,6 +819,13 @@ export function CmsProvider({
 
   return (
     <CmsContext.Provider value={value}>
+      {/* Admin-only client refetch: `useCmsContent` GETs `/cms/content`
+          with the user's Bearer so post-save `triggerRefetch` (and the
+          draft autosave roundtrip) can pull fresh versions into the
+          editor's view without a navigation. Public visitors don't
+          mount this — soft-nav refreshes go through `router.refresh()`
+          above, which re-runs the layout server-side with the service
+          token. */}
       {isAdmin ? <ContentLoader /> : null}
       <div
         style={{

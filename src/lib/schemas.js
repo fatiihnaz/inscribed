@@ -96,11 +96,39 @@
  * @property {string} label
  * @property {boolean} required
  * @property {boolean} readOnly
+ * @property {boolean} filterable
+ *   When true, the field can be used as a query-string filter against
+ *   `GET /cms/collections/{key}?{field}={value}`. Backend rejects
+ *   filtering on non-filterable fields with 400. UI uses this to gate
+ *   which fields surface in filter pickers.
  * @property {string[] | null} options   When non-empty, render as a select regardless of `type`.
  * @property {string | null} help
  *
  * @typedef {Object} CollectionSchema
  * @property {CollectionFieldDescriptor[]} fields
+ */
+
+/**
+ * Envelope returned by paginated list endpoints (currently
+ * `GET /cms/collections/{key}` with optional filter + offset/limit).
+ *
+ * @template T
+ * @typedef {Object} PagedListResponse
+ * @property {T[]} items
+ * @property {number} total    Total matching rows across the entire collection (not just this page).
+ * @property {number} offset
+ * @property {number} limit
+ */
+
+/**
+ * @typedef {Object} CollectionListParams
+ * @property {Record<string, *>} [filter]
+ *   Plain object - each key is a filterable field name on the
+ *   collection's schema; values are serialised as `String(value)` into
+ *   the query string. Booleans become `"true"`/`"false"`. Unknown or
+ *   non-filterable fields trigger 400 at the backend.
+ * @property {number} [offset]   Default 0.
+ * @property {number} [limit]    Default 50, max 100, min 1.
  */
 
 /**

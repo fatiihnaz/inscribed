@@ -24,8 +24,15 @@ import { createContext, useContext } from "react";
  */
 
 /**
+ * Single page of `useCollection` data. Each (collection, params) tuple
+ * has its own entry so the same collection viewed through different
+ * filter / pagination windows doesn't share state.
+ *
  * @typedef {Object} CollectionListCacheEntry
  * @property {CollectionItemResponse[]} items
+ * @property {number} total
+ * @property {number} offset
+ * @property {number} limit
  * @property {boolean} isLoading
  * @property {Error | null} error
  */
@@ -53,15 +60,17 @@ import { createContext, useContext } from "react";
  *   atomic editors). Unregistered on unmount; key is the list's blockPath.
  * @property {(blockPath: string, schema: ItemSchema) => void} registerItemSchema
  * @property {(blockPath: string) => void} unregisterItemSchema
- * @property {Map<string, { collection: string, slug?: string }>} collectionBindings
+ * @property {Map<string, { collection: string, slug?: string, filter?: Record<string, *>, limit?: number, offset?: number }>} collectionBindings
  *   Runtime registry populated by `<CollectionItem>` and `<CollectionRegion>`
  *   when they mount. Collections don't live in the CMS block namespace
  *   (no manifest sync, no `/cms/content` payload), so this is how the
  *   AdminDrawer learns about the bindings rendered on the current page.
  *   Key is the binding's full blockPath (with any `<CmsGroup>` prefix
  *   applied); slug is set for `<CollectionItem>` and omitted for
- *   `<CollectionRegion>` (list bindings).
- * @property {(blockPath: string, binding: { collection: string, slug?: string }) => void} registerCollectionBinding
+ *   `<CollectionRegion>` (list bindings). Region bindings additionally
+ *   carry the filter / limit / offset the page is using so the drawer
+ *   can mirror its data (filter parity).
+ * @property {(blockPath: string, binding: { collection: string, slug?: string, filter?: Record<string, *>, limit?: number, offset?: number }) => void} registerCollectionBinding
  * @property {(blockPath: string) => void} unregisterCollectionBinding
  * @property {MyCollectionResponse[]} myCollections
  *   Response of `GET /cms/collections/me`, fetched once per session by
@@ -89,14 +98,17 @@ import { createContext, useContext } from "react";
  * @property {(key: string, slug: string) => void} invalidateCollectionItem
  *   Drop the cache entry; the next consumer mount triggers a fresh fetch.
  * @property {Map<string, CollectionListCacheEntry>} collectionListCache
- *   Shared cache for `useCollection(key)`. Mirrors `collectionItemCache`
- *   for list reads so a Region panel in the drawer and a
- *   `<CollectionRegion>` on the page share a single round-trip.
- *   Updates to `collectionItemCache` (e.g. after a save) automatically
- *   patch the matching row in this list cache so admin surfaces don't
- *   drift apart.
- * @property {(key: string, force?: boolean) => Promise<void>} requestCollectionList
- * @property {(key: string) => void} invalidateCollectionList
+ *   Shared cache for `useCollection(key, params?)`. Keyed by
+ *   `"{key}|{stableStringify(params ?? {})}"` so different filter /
+ *   offset / limit windows of the same collection live as separate
+ *   entries. A save on any row in the collection invalidates every
+ *   entry for that key (filtered views may include or exclude the
+ *   changed row in ways we can't reliably patch in-place, so a
+ *   refetch is the safe move).
+ * @property {(key: string, params?: import("./schemas.js").CollectionListParams, force?: boolean) => Promise<void>} requestCollectionList
+ * @property {(key: string, params?: import("./schemas.js").CollectionListParams) => void} invalidateCollectionList
+ *   With `params`: drop only that cache entry. Without `params`: drop
+ *   every entry for the given collection (used after item save).
  * @property {((slug: string) => void | Promise<void>) | null} onAfterSave  Called after a successful save (typically a Server Action that calls `revalidateTag(cmsCacheTag(slug))`).
  * @property {(() => Promise<string>) | null} getAccessToken  Returns the current user's JWT access token; added as `Authorization: Bearer {token}` on write requests. Null in public/demo mode.
  * @property {"idle"|"saving"|"saved"|"failed"} draftSyncStatus

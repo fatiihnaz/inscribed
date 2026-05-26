@@ -18,9 +18,10 @@
  * 401 surface through `error`.
  */
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import { useCmsContext } from "../lib/context.js";
+import { stableStringify } from "../lib/stable-stringify.js";
 
 /**
  * @import { CollectionItemResponse } from "../lib/schemas.js"
@@ -30,6 +31,9 @@ import { useCmsContext } from "../lib/context.js";
 /**
  * @typedef {Object} UseCollectionResult
  * @property {CollectionItemResponse[]} items
+ * @property {number} total
+ * @property {number} offset
+ * @property {number} limit
  * @property {boolean} isLoading
  * @property {CmsApiError|Error|null} error
  * @property {() => Promise<void>} refetch
@@ -37,22 +41,37 @@ import { useCmsContext } from "../lib/context.js";
 
 /**
  * @param {string} key  Backend collection key, e.g. "Teams" or "News".
+ * @param {import("../lib/schemas.js").CollectionListParams} [params]
+ *   Optional filter + offset + limit. Each (key, params) tuple has its
+ *   own cache entry, so the same hook called with different params
+ *   from sibling components fires its own fetch (still deduped per
+ *   identical params via the in-flight table).
  * @returns {UseCollectionResult}
  */
-export function useCollection(key) {
+export function useCollection(key, params) {
   const { collectionListCache, requestCollectionList } = useCmsContext();
-  const entry = collectionListCache.get(key);
+
+  // Stabilise the params identity so consumers passing inline literals
+  // (`{ filter: { featured: true } }`) don't re-trigger the effect on
+  // every render. The serialised form doubles as our cache key.
+  const paramsKey = stableStringify(params ?? {});
+  const stableParams = useMemo(() => params, [paramsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cacheKey = `${key}|${paramsKey}`;
+  const entry = collectionListCache.get(cacheKey);
 
   useEffect(() => {
-    requestCollectionList(key);
-  }, [key, requestCollectionList]);
+    requestCollectionList(key, stableParams);
+  }, [key, stableParams, requestCollectionList]);
 
   const refetch = useCallback(async () => {
-    await requestCollectionList(key, true);
-  }, [key, requestCollectionList]);
+    await requestCollectionList(key, stableParams, true);
+  }, [key, stableParams, requestCollectionList]);
 
   return {
     items: entry?.items ?? [],
+    total: entry?.total ?? 0,
+    offset: entry?.offset ?? params?.offset ?? 0,
+    limit: entry?.limit ?? params?.limit ?? 0,
     // No entry yet = fetch about to fire; treat as loading.
     isLoading: entry ? entry.isLoading : true,
     error: entry?.error ?? null,

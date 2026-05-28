@@ -169,6 +169,16 @@ export function CmsProvider({
     /** @returns {Map<string, import("../lib/context.js").CollectionItemCacheEntry>} */
     () => new Map(),
   );
+  // Mirror of `collectionItemCache` for `requestCollectionItem`'s dedup
+  // check. Keeps the callback's `useCallback` deps free of the cache
+  // itself - otherwise every cache mutation (every keystroke's draft
+  // autosave, every undo, every publish) would recreate the callback,
+  // re-trigger every `useCollectionItem` consumer's effect, and churn
+  // their `refetch` identity.
+  const collectionItemCacheRef = useRef(collectionItemCache);
+  useEffect(() => {
+    collectionItemCacheRef.current = collectionItemCache;
+  }, [collectionItemCache]);
   // In-flight promises - lives in a ref so concurrent `requestCollectionItem`
   // calls dedupe to a single fetch without going through state updates.
   const inFlightCollectionItems = useRef(
@@ -225,6 +235,14 @@ export function CmsProvider({
     /** @returns {Map<string, import("../lib/context.js").CollectionListCacheEntry>} */
     () => new Map(),
   );
+  // Same ref-mirror pattern as `collectionItemCacheRef`: keep the cache
+  // out of `requestCollectionList`'s `useCallback` deps so list-cache
+  // churn (e.g. a publish invalidating windows) doesn't recreate the
+  // callback and storm every list consumer.
+  const collectionListCacheRef = useRef(collectionListCache);
+  useEffect(() => {
+    collectionListCacheRef.current = collectionListCache;
+  }, [collectionListCache]);
   const inFlightCollectionLists = useRef(
     /** @type {Map<string, Promise<void>>} */ (new Map()),
   );
@@ -252,6 +270,41 @@ export function CmsProvider({
             next.delete(k);
             mutated = true;
           }
+        }
+        return mutated ? next : prev;
+      });
+    },
+    [],
+  );
+
+  // Optimistic in-place patch: replaces the cached item AND the matching
+  // row inside every list-cache window for this collection, without
+  // invalidating those windows. Use for draft autosave / undo where the
+  // filter membership doesn't change (filters apply to published `data`,
+  // not `draftData`), so a refetch storm on every keystroke is wasteful
+  // and racy - the list refetch would re-seed the item cache from the
+  // server's not-yet-cleaned-up state, fighting our optimistic update.
+  const patchCollectionItem = useCallback(
+    /** @param {string} key @param {string} slug @param {import("../lib/schemas.js").CollectionItemResponse} item */
+    (key, slug, item) => {
+      const cacheKey = `${key}:${slug}`;
+      setCollectionItemCache((prev) => {
+        const next = new Map(prev);
+        next.set(cacheKey, { item, isLoading: false, error: null });
+        return next;
+      });
+      const listPrefix = `${key}|`;
+      setCollectionListCache((prev) => {
+        let mutated = false;
+        const next = new Map(prev);
+        for (const [k, entry] of prev.entries()) {
+          if (!k.startsWith(listPrefix)) continue;
+          const idx = entry.items.findIndex((r) => r.slug === slug);
+          if (idx < 0) continue;
+          const items = entry.items.slice();
+          items[idx] = item;
+          next.set(k, { ...entry, items });
+          mutated = true;
         }
         return mutated ? next : prev;
       });
@@ -450,7 +503,7 @@ export function CmsProvider({
     /** @param {string} key @param {string} slug @param {boolean} [force] @returns {Promise<void>} */
     async (key, slug, force = false) => {
       const cacheKey = `${key}:${slug}`;
-      const cached = collectionItemCache.get(cacheKey);
+      const cached = collectionItemCacheRef.current.get(cacheKey);
       if (!force && cached && !cached.error) return;
 
       const existing = inFlightCollectionItems.current.get(cacheKey);
@@ -501,7 +554,7 @@ export function CmsProvider({
       inFlightCollectionItems.current.set(cacheKey, promise);
       return promise;
     },
-    [collectionItemCache, normalizedConfig, stableGetAccessToken],
+    [normalizedConfig, stableGetAccessToken],
   );
 
   const requestCollectionList = useCallback(
@@ -514,7 +567,7 @@ export function CmsProvider({
     async (key, params, force = false) => {
       const paramsKey = stableStringify(params ?? {});
       const cacheKey = `${key}|${paramsKey}`;
-      const cached = collectionListCache.get(cacheKey);
+      const cached = collectionListCacheRef.current.get(cacheKey);
       if (!force && cached && !cached.error) return;
 
       const existing = inFlightCollectionLists.current.get(cacheKey);
@@ -585,7 +638,7 @@ export function CmsProvider({
       inFlightCollectionLists.current.set(cacheKey, promise);
       return promise;
     },
-    [collectionListCache, normalizedConfig, stableGetAccessToken],
+    [normalizedConfig, stableGetAccessToken],
   );
 
   // Provider-level /me fetch (state declared earlier). One request per
@@ -805,6 +858,7 @@ export function CmsProvider({
       collectionItemCache,
       requestCollectionItem,
       updateCollectionItem,
+      patchCollectionItem,
       invalidateCollectionItem,
       collectionListCache,
       requestCollectionList,
@@ -845,6 +899,7 @@ export function CmsProvider({
       collectionItemCache,
       requestCollectionItem,
       updateCollectionItem,
+      patchCollectionItem,
       invalidateCollectionItem,
       collectionListCache,
       requestCollectionList,

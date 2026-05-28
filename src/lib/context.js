@@ -95,6 +95,16 @@ import { createContext, useContext } from "react";
  *   Write a freshly-saved item straight into the cache, bypassing a
  *   refetch. Called by the drawer's save handler so the page-side
  *   `<CollectionItem>` re-renders with the new version instantly.
+ *   Invalidates every list-cache window for the key, so filtered views
+ *   pick up filter-membership changes via refetch.
+ * @property {(key: string, slug: string, item: CollectionItemResponse) => void} patchCollectionItem
+ *   In-place patch for draft autosave / undo: writes the item into the
+ *   item cache AND replaces the matching row inside every list-cache
+ *   window for the key, without invalidating those windows. Safe when
+ *   the row's filter membership can't change (filters apply to published
+ *   `data`, not `draftData`). Avoids a refetch storm on every keystroke
+ *   and the race where the list refetch re-seeds the item cache from
+ *   the server's not-yet-cleaned-up draft state.
  * @property {(key: string, slug: string) => void} invalidateCollectionItem
  *   Drop the cache entry; the next consumer mount triggers a fresh fetch.
  * @property {Map<string, *>} collectionDrafts

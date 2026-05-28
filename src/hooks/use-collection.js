@@ -59,9 +59,16 @@ export function useCollection(key, params) {
   const cacheKey = `${key}|${paramsKey}`;
   const entry = collectionListCache.get(cacheKey);
 
+  // Presence flag triggers a refetch when an invalidation (e.g. a sibling
+  // `updateCollectionItem` publish) drops this window's entry. Without it,
+  // `requestCollectionList` is stable across cache mutations (intentional,
+  // to keep consumer effects from churning on every keystroke), so the
+  // effect wouldn't re-fire on its own and the empty cache would never
+  // refill until the consumer remounted.
+  const hasEntry = collectionListCache.has(cacheKey);
   useEffect(() => {
     requestCollectionList(key, stableParams);
-  }, [key, stableParams, requestCollectionList]);
+  }, [key, stableParams, hasEntry, requestCollectionList]);
 
   const refetch = useCallback(async () => {
     await requestCollectionList(key, stableParams, true);
@@ -138,12 +145,17 @@ export function useCollectionItem(key, slug, options) {
   const cacheKey = `${key}:${slug}`;
   const entry = collectionItemCache.get(cacheKey);
 
-  // Trigger a fetch when the key/slug pair changes. `requestCollectionItem`
-  // dedupes against cache hits + in-flight requests, so two consumers
-  // mounted simultaneously share a single round-trip.
+  // Trigger a fetch when the key/slug pair changes, or when an external
+  // `invalidateCollectionItem` drops the entry. The presence flag is
+  // needed because `requestCollectionItem` is stable across cache
+  // mutations (so consumer effects don't churn on every draft autosave),
+  // so without it the dropped entry would never refill until remount.
+  // `requestCollectionItem` itself dedupes against cache hits + in-flight
+  // requests, so two consumers mounted simultaneously share one round-trip.
+  const hasEntry = collectionItemCache.has(cacheKey);
   useEffect(() => {
     requestCollectionItem(key, slug);
-  }, [key, slug, requestCollectionItem]);
+  }, [key, slug, hasEntry, requestCollectionItem]);
 
   const refetch = useCallback(async () => {
     await requestCollectionItem(key, slug, true);

@@ -85,6 +85,7 @@ export function useCollectionEditor(collection, slug) {
     config,
     getAccessToken,
     updateCollectionItem,
+    patchCollectionItem,
     setCollectionDraft,
     clearCollectionDraft,
   } = useCmsContext();
@@ -123,11 +124,18 @@ export function useCollectionEditor(collection, slug) {
   // across reloads; fall back to the published data otherwise. Re-seed
   // on refetch / cache update so the form reflects the latest server
   // state (e.g. after a successful save clears the draft).
+  //
+  // Skip the reseed when the baseline already matches `lastSyncedRef`:
+  // that means the cache change is the one our own autosave just made,
+  // and reseeding would clobber any keystrokes the user typed after the
+  // PUT fired.
   useEffect(() => {
     if (!schema) return;
     const baseline = item?.draftData ?? item?.data ?? {};
+    const serialized = stableStringify(baseline);
+    if (serialized === lastSyncedRef.current) return;
     setValues(seedValues(schema.fields, baseline));
-    lastSyncedRef.current = stableStringify(baseline);
+    lastSyncedRef.current = serialized;
   }, [schema, item]);
 
   useEffect(() => () => {
@@ -192,6 +200,13 @@ export function useCollectionEditor(collection, slug) {
         }
         if (cancelled) return;
         lastSyncedRef.current = serialized;
+        // Reflect the just-saved draft in the cache so `hasDraft` flips
+        // on immediately (badge + dirty rail) without waiting for an F5.
+        // In-place patch so list windows don't refetch and overwrite
+        // this with the server's pre-cleanup state on virtual rows.
+        if (!isVirtualNow && item) {
+          patchCollectionItem(collection, slug, { ...item, draftData: payload });
+        }
         flashDraftStatus("saved");
       } catch (err) {
         if (cancelled) return;
@@ -258,18 +273,36 @@ export function useCollectionEditor(collection, slug) {
     });
   };
 
-  // Revert local edits to the published baseline. We don't call the
-  // draft DELETE endpoint - resetting the form to `item.data` makes the
-  // autosave effect PUT the published payload back, and the backend
-  // auto-clears the draft slot when draft === published (mirrors the
-  // content-block discard flow). Clearing the live overlay
-  // synchronously means page-side consumers snap back to the published
-  // view before the autosave round-trip even fires.
+  // Revert local edits to the published baseline. Optimistically clears
+  // `draftData` on the cached item so `hasDraft` flips off (badge + dirty
+  // icon disappear) the moment the user clicks Geri al. The seeding
+  // effect then reseeds `values` + `lastSyncedRef` from `item.data`, so
+  // the autosave effect's next pass is a no-op (no re-overlay, no PUT).
+  // Backend cleanup is a fire-and-forget PUT of the published payload:
+  // there's no draft DELETE endpoint, but the backend auto-clears its
+  // Redis slot when draft === published.
   const undoDraft = () => {
-    if (!schema) return;
-    setError(null);
-    setValues(seedValues(schema.fields, item?.data ?? {}));
     clearCollectionDraft(collection, slug);
+    if (!schema || !item || item.draftData == null) return;
+    setError(null);
+    const publishedData = item.data;
+    // In-place patch (not `updateCollectionItem`) so list windows don't
+    // refetch and re-seed the item cache from the server's still-dirty
+    // state before the cleanup PUT below lands.
+    patchCollectionItem(collection, slug, { ...item, draftData: null });
+    if (item.version === 0) return;
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
+        await saveCollectionItemDraft(
+          config, collection, slug, { data: publishedData }, init,
+        );
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[skylab-cms] collection undo draft cleanup failed:", err);
+      }
+    })();
   };
 
   return {

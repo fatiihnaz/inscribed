@@ -17,6 +17,7 @@ import { createCmsConfig } from "../lib/config.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
 import { updateDraft, fetchMyCollections, fetchCollectionItem, fetchCollection } from "../lib/api-client.js";
 import { stableStringify } from "../lib/stable-stringify.js";
+import { createStore } from "../lib/store.js";
 import { useCmsContent } from "../hooks/use-cms-content.js";
 
 /**
@@ -78,12 +79,23 @@ export function CmsProvider({
   );
   const [refetchToken, setRefetchToken] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  // Per-blockPath unsaved edits. Lives here (rather than in AdminDrawer) so
-  // EditableRegion can read live draft values for inline preview while the
-  // user types. Cleared on save / discard / navigation.
-  const [drafts, setDraftsState] = useState(
-    /** @returns {Map<string, *>} */ (() => new Map()),
+  // Per-blockPath unsaved edits (live-preview overlay while the admin types).
+  // Lives in an external store, NOT React state, for the same reason as the
+  // collection state above: keeping it in the context value re-rendered every
+  // <EditableRegion> / <EditableList> on the page on every keystroke. With the
+  // store, page-side consumers subscribe to their own blockPath via
+  // `useStoreSelector`, so typing in one region only re-renders that region.
+  // Cleared on save / discard / navigation. `setDraftsState` keeps the old
+  // `setState(value | prev => next)` shape - the store no-ops when the updater
+  // returns the same reference - so every existing call site is untouched.
+  const contentDraftsStoreRef = useRef(
+    /** @type {import("../lib/store.js").Store<Map<string, *>> | null} */ (null),
   );
+  if (contentDraftsStoreRef.current === null) {
+    contentDraftsStoreRef.current = createStore(new Map());
+  }
+  const contentDraftsStore = contentDraftsStoreRef.current;
+  const setDraftsState = contentDraftsStore.set;
 
   // Registry of <EditableList> itemSchemas so the AdminDrawer can render
   // List editors. Lives in a ref + a forced rerender counter rather than
@@ -169,38 +181,75 @@ export function CmsProvider({
     setMyCollectionsToken((n) => n + 1);
   }, []);
 
-  // Shared collection-item cache. Keyed by `"{collectionKey}:{slug}"`.
-  // `useCollectionItem` consumers read entries directly; the request /
-  // update / invalidate callbacks below mutate the map (new identity
-  // each change so consumer useMemo deps recompute).
-  const [collectionItemCache, setCollectionItemCache] = useState(
-    /** @returns {Map<string, import("../lib/context.js").CollectionItemCacheEntry>} */
-    () => new Map(),
+  // High-churn collection state - the item cache, the list cache, and the
+  // live-edit draft overlays - lives in an external store (lib/store.js),
+  // NOT React state, so it can stay out of the context `value`. React
+  // context has no per-field subscription: any change to the context value
+  // re-renders every consumer. Keeping these maps here meant a keystroke in
+  // one row's editor re-rendered every <CollectionItem> / <CollectionRegion>
+  // on the page. With the store, a write notifies subscribers directly (the
+  // provider never re-renders) and each consumer reads a narrow slice via
+  // `useStoreSelector`, so typing in one row only re-renders the consumers
+  // that read that row.
+  //
+  // Slices: `itemCache` + `drafts` keyed by `"{key}:{slug}"`, `listCache`
+  // keyed by `"{key}|{stableStringify(params)}"`. The `drafts` overlay is
+  // the live-preview payload the open editor pushes on every keystroke
+  // (before the debounced server-side autosave); page-side hooks read it
+  // back through `useCollectionItem` / `useCollection`.
+  const collectionStoreRef = useRef(
+    /** @type {import("../lib/store.js").Store<{ itemCache: Map<string, import("../lib/context.js").CollectionItemCacheEntry>, listCache: Map<string, import("../lib/context.js").CollectionListCacheEntry>, drafts: Map<string, *> }> | null} */
+    (null),
   );
-  // Mirror of `collectionItemCache` for `requestCollectionItem`'s dedup
-  // check. Keeps the callback's `useCallback` deps free of the cache
-  // itself - otherwise every cache mutation (every keystroke's draft
-  // autosave, every undo, every publish) would recreate the callback,
-  // re-trigger every `useCollectionItem` consumer's effect, and churn
-  // their `refetch` identity.
-  const collectionItemCacheRef = useRef(collectionItemCache);
-  useEffect(() => {
-    collectionItemCacheRef.current = collectionItemCache;
-  }, [collectionItemCache]);
-  // In-flight promises - lives in a ref so concurrent `requestCollectionItem`
-  // calls dedupe to a single fetch without going through state updates.
-  const inFlightCollectionItems = useRef(
-    /** @type {Map<string, Promise<void>>} */ (new Map()),
+  if (collectionStoreRef.current === null) {
+    collectionStoreRef.current = createStore({
+      itemCache: new Map(),
+      listCache: new Map(),
+      drafts: new Map(),
+    });
+  }
+  const collectionStore = collectionStoreRef.current;
+
+  // Per-slice setters that preserve the old `setState(prev => next)`
+  // contract: the updater gets the current map and returns the next one (or
+  // the same reference to signal "no change", which the store treats as a
+  // no-op). Names match the former useState setters so every call site
+  // below is untouched.
+  const setCollectionItemCache = useCallback(
+    /** @param {(prev: Map<string, import("../lib/context.js").CollectionItemCacheEntry>) => Map<string, import("../lib/context.js").CollectionItemCacheEntry>} updater */
+    (updater) => {
+      collectionStore.set((s) => {
+        const itemCache = updater(s.itemCache);
+        return itemCache === s.itemCache ? s : { ...s, itemCache };
+      });
+    },
+    [collectionStore],
+  );
+  const setCollectionListCache = useCallback(
+    /** @param {(prev: Map<string, import("../lib/context.js").CollectionListCacheEntry>) => Map<string, import("../lib/context.js").CollectionListCacheEntry>} updater */
+    (updater) => {
+      collectionStore.set((s) => {
+        const listCache = updater(s.listCache);
+        return listCache === s.listCache ? s : { ...s, listCache };
+      });
+    },
+    [collectionStore],
+  );
+  const setCollectionDraftsState = useCallback(
+    /** @param {Map<string, *> | ((prev: Map<string, *>) => Map<string, *>)} updater */
+    (updater) => {
+      collectionStore.set((s) => {
+        const drafts = typeof updater === "function" ? updater(s.drafts) : updater;
+        return drafts === s.drafts ? s : { ...s, drafts };
+      });
+    },
+    [collectionStore],
   );
 
-  // Live-preview overlay for collection editors. Editor pushes the
-  // current form payload here on every keystroke (synchronously, before
-  // the debounced server-side autosave); page-side hooks read it back
-  // through `useCollectionItem` / `useCollection`. Mirrors the `drafts`
-  // map for content blocks - cleared on publish, undo, or pathname
-  // change so soft-nav doesn't leak stale overlays.
-  const [collectionDrafts, setCollectionDraftsState] = useState(
-    /** @returns {Map<string, *>} */ (() => new Map()),
+  // In-flight promises - lives in a ref so concurrent `requestCollectionItem`
+  // calls dedupe to a single fetch without going through a state update.
+  const inFlightCollectionItems = useRef(
+    /** @type {Map<string, Promise<void>>} */ (new Map()),
   );
 
   const setCollectionDraft = useCallback(
@@ -238,19 +287,6 @@ export function CmsProvider({
     setCollectionDraftsState((prev) => (prev.size === 0 ? prev : new Map()));
   }, []);
 
-  // List cache for `useCollection(key)`. Keyed by collection key.
-  const [collectionListCache, setCollectionListCache] = useState(
-    /** @returns {Map<string, import("../lib/context.js").CollectionListCacheEntry>} */
-    () => new Map(),
-  );
-  // Same ref-mirror pattern as `collectionItemCacheRef`: keep the cache
-  // out of `requestCollectionList`'s `useCallback` deps so list-cache
-  // churn (e.g. a publish invalidating windows) doesn't recreate the
-  // callback and storm every list consumer.
-  const collectionListCacheRef = useRef(collectionListCache);
-  useEffect(() => {
-    collectionListCacheRef.current = collectionListCache;
-  }, [collectionListCache]);
   const inFlightCollectionLists = useRef(
     /** @type {Map<string, Promise<void>>} */ (new Map()),
   );
@@ -511,7 +547,7 @@ export function CmsProvider({
     /** @param {string} key @param {string} slug @param {boolean} [force] @returns {Promise<void>} */
     async (key, slug, force = false) => {
       const cacheKey = `${key}:${slug}`;
-      const cached = collectionItemCacheRef.current.get(cacheKey);
+      const cached = collectionStore.get().itemCache.get(cacheKey);
       if (!force && cached && !cached.error) return;
 
       const existing = inFlightCollectionItems.current.get(cacheKey);
@@ -547,8 +583,13 @@ export function CmsProvider({
           }
           setCollectionItemCache((prev) => {
             const next = new Map(prev);
+            const prior = prev.get(cacheKey);
+            // Keep the last good item on a failed (re)fetch - a transient
+            // network blip on a force-refetch shouldn't blank already-
+            // rendered content. Mirror the loading path, which also
+            // preserves `prior?.item`; only the error flag changes.
             next.set(cacheKey, {
-              item: null,
+              item: prior?.item ?? null,
               isLoading: false,
               error: /** @type {Error} */ (err),
             });
@@ -575,7 +616,7 @@ export function CmsProvider({
     async (key, params, force = false) => {
       const paramsKey = stableStringify(params ?? {});
       const cacheKey = `${key}|${paramsKey}`;
-      const cached = collectionListCacheRef.current.get(cacheKey);
+      const cached = collectionStore.get().listCache.get(cacheKey);
       if (!force && cached && !cached.error) return;
 
       const existing = inFlightCollectionLists.current.get(cacheKey);
@@ -619,7 +660,16 @@ export function CmsProvider({
           setCollectionItemCache((prev) => {
             const next = new Map(prev);
             for (const item of response.items) {
-              next.set(`${key}:${item.slug}`, { item, isLoading: false, error: null });
+              const itemKey = `${key}:${item.slug}`;
+              // Don't clobber a row the admin is actively editing: an open
+              // editor reads the raw item cache (overlayDrafts: false), so
+              // re-seeding from the server's view here would reset its
+              // baseline mid-edit and the editor's seeding effect would
+              // wipe unsaved keystrokes. A live local draft (set on every
+              // change before autosave even fires) is the signal that an
+              // editor is open on this slug.
+              if (collectionStore.get().drafts.has(itemKey)) continue;
+              next.set(itemKey, { item, isLoading: false, error: null });
             }
             return next;
           });
@@ -628,11 +678,16 @@ export function CmsProvider({
           console.error(`[skylab-cms] fetchCollection(${key}) failed:`, err);
           setCollectionListCache((prev) => {
             const next = new Map(prev);
+            const prior = prev.get(cacheKey);
+            // Keep the last good page on a failed (re)fetch so a transient
+            // error doesn't empty an already-rendered list/Region. Mirror
+            // the loading path's `prior` preservation; surface the failure
+            // through `error` only.
             next.set(cacheKey, {
-              items: [],
-              total: 0,
-              offset: params?.offset ?? 0,
-              limit: params?.limit ?? 0,
+              items: prior?.items ?? [],
+              total: prior?.total ?? 0,
+              offset: prior?.offset ?? params?.offset ?? 0,
+              limit: prior?.limit ?? params?.limit ?? 0,
               isLoading: false,
               error: /** @type {Error} */ (err),
             });
@@ -736,11 +791,26 @@ export function CmsProvider({
     };
   }, []);
 
+  // Content drafts live in `contentDraftsStore` now, so a write doesn't
+  // re-render the provider - this effect can't use `[drafts]` as its trigger
+  // anymore. Instead we subscribe to the store and (re-)arm the debounce on
+  // each change: every edit clears the pending timer and starts a fresh 1s
+  // countdown, so a successful PUT only fires 1s after the last keystroke.
+  const autosaveTimerRef = useRef(
+    /** @type {ReturnType<typeof setTimeout>|null} */ (null),
+  );
   useEffect(() => {
-    if (!isAdminRef.current) return;
-    if (drafts.size === 0) return;
+    const armDebounce = () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+      if (!isAdminRef.current) return;
+      if (contentDraftsStore.get().size === 0) return;
 
-    const timer = setTimeout(async () => {
+      autosaveTimerRef.current = setTimeout(async () => {
+      autosaveTimerRef.current = null;
+      const drafts = contentDraftsStore.get();
       const currentBlocks = blocksRef.current;
       const currentPathname = draftPathnameRef.current ?? "/";
       const currentConfig = draftConfigRef.current;
@@ -833,10 +903,15 @@ export function CmsProvider({
       } else {
         flashDraftStatus("saved");
       }
-    }, 1000);
+      }, 1000);
+    };
 
-    return () => clearTimeout(timer);
-  }, [drafts, stableGetAccessToken, flashDraftStatus]);
+    const unsubscribe = contentDraftsStore.subscribe(armDebounce);
+    return () => {
+      unsubscribe();
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [contentDraftsStore, stableGetAccessToken, flashDraftStatus]);
 
   // Silent server-draft cleanup for the discard path. Fires a PUT with
   // each block's published value (the only knob the API gives us for
@@ -921,7 +996,11 @@ export function CmsProvider({
       userSub,
       blocks,
       setBlocks: setBlocksState,
-      drafts,
+      // Live-edit drafts are NOT in the value: they live in
+      // `contentDraftsStore` (stable ref) and consumers subscribe to their
+      // own blockPath via `useStoreSelector`, so a keystroke doesn't
+      // re-render every <EditableRegion> on the page.
+      contentDraftsStore,
       setDraft,
       clearDraft,
       clearDrafts,
@@ -942,15 +1021,17 @@ export function CmsProvider({
       myCollectionsLoading: myCollectionsState.isLoading,
       myCollectionsError: myCollectionsState.error,
       refetchMyCollections,
-      collectionItemCache,
+      // The item/list caches and draft overlays are NOT in the value: they
+      // live in `collectionStore` (a stable ref) and consumers subscribe to
+      // narrow slices via `useStoreSelector`. This is what keeps a keystroke
+      // in one row's editor from re-rendering every collection consumer.
+      collectionStore,
       requestCollectionItem,
       updateCollectionItem,
       patchCollectionItem,
       invalidateCollectionItem,
-      collectionListCache,
       requestCollectionList,
       invalidateCollectionList,
-      collectionDrafts,
       setCollectionDraft,
       clearCollectionDraft,
       clearCollectionDrafts,
@@ -967,7 +1048,7 @@ export function CmsProvider({
       isAdmin,
       userSub,
       blocks,
-      drafts,
+      contentDraftsStore,
       setDraft,
       clearDraft,
       clearDrafts,
@@ -985,15 +1066,13 @@ export function CmsProvider({
       unregisterCollectionBinding,
       myCollectionsState,
       refetchMyCollections,
-      collectionItemCache,
+      collectionStore,
       requestCollectionItem,
       updateCollectionItem,
       patchCollectionItem,
       invalidateCollectionItem,
-      collectionListCache,
       requestCollectionList,
       invalidateCollectionList,
-      collectionDrafts,
       setCollectionDraft,
       clearCollectionDraft,
       clearCollectionDrafts,

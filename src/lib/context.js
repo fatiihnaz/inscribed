@@ -46,7 +46,13 @@ import { createContext, useContext } from "react";
  * @property {string|null} userSub
  * @property {Map<string, BlockResponse>} blocks
  * @property {(updater: (prev: Map<string, BlockResponse>) => Map<string, BlockResponse>) => void} setBlocks
- * @property {Map<string, *>} drafts                 Per-blockPath unsaved edits; EditableRegion reads these for live preview while admins type.
+ * @property {import("./store.js").Store<Map<string, *>>} contentDraftsStore
+ *   External store of per-blockPath unsaved edits (live-preview overlay
+ *   while admins type), kept OUT of this value so a keystroke doesn't
+ *   re-render every consumer. `<EditableRegion>` / `<EditableList>`
+ *   subscribe to their own blockPath via `useStoreSelector`; the drawer and
+ *   `useCmsSave` subscribe to the whole map. Cleared on save / discard /
+ *   navigation.
  * @property {(blockPath: string, value: *) => void} setDraft
  * @property {(blockPath: string) => void} clearDraft
  * @property {() => void} clearDrafts
@@ -95,12 +101,25 @@ import { createContext, useContext } from "react";
  * @property {boolean} myCollectionsLoading
  * @property {Error|null} myCollectionsError
  * @property {() => void} refetchMyCollections   Bump-token style; the provider re-runs the /me effect.
- * @property {Map<string, CollectionItemCacheEntry>} collectionItemCache
- *   Shared cache for `useCollectionItem`. Key is `"{key}:{slug}"`. Both
- *   the page-side `<CollectionItem>` and the drawer-side
- *   `AdminCollectionEditor` read from this map, so a save in the drawer
- *   propagates to the page without a second fetch (and two surfaces
- *   mounted at once for the same item only fire one request).
+ * @property {import("./store.js").Store<{ itemCache: Map<string, CollectionItemCacheEntry>, listCache: Map<string, CollectionListCacheEntry>, drafts: Map<string, *> }>} collectionStore
+ *   External store holding the high-churn collection state, kept OUT of
+ *   this context value so a write doesn't re-render every consumer (React
+ *   context has no per-field subscription). Slices:
+ *   - `itemCache` - shared cache for `useCollectionItem`, keyed
+ *     `"{key}:{slug}"`. Both the page-side `<CollectionItem>` and the
+ *     drawer-side `AdminCollectionEditor` read it, so a save in the drawer
+ *     propagates to the page without a second fetch (and two surfaces
+ *     mounted at once for the same item fire one request).
+ *   - `listCache` - shared cache for `useCollection(key, params?)`, keyed
+ *     `"{key}|{stableStringify(params ?? {})}"` so different filter /
+ *     offset / limit windows live as separate entries.
+ *   - `drafts` - per-(collection, slug) in-progress local edits from open
+ *     editors, keyed `"{key}:{slug}"`; the live-preview payload the editor
+ *     pushes on every keystroke (before the debounced server autosave).
+ *     `useCollectionItem` / `useCollection` overlay it onto `item.data` so
+ *     page-side consumers see edits live. Cleared on publish, "undo", and
+ *     pathname change (so soft-nav doesn't leak stale overlays).
+ *   Consumers read narrow slices via `useStoreSelector(collectionStore, ...)`.
  * @property {(key: string, slug: string, force?: boolean) => Promise<void>} requestCollectionItem
  *   Ensure the cache holds a fresh entry for `(key, slug)`. Cache hit ->
  *   no-op (unless `force === true`). Concurrent calls for the same pair
@@ -121,27 +140,9 @@ import { createContext, useContext } from "react";
  *   the server's not-yet-cleaned-up draft state.
  * @property {(key: string, slug: string) => void} invalidateCollectionItem
  *   Drop the cache entry; the next consumer mount triggers a fresh fetch.
- * @property {Map<string, *>} collectionDrafts
- *   Per-(collection, slug) in-progress local edits from open drawer
- *   editors. Key is `"{key}:{slug}"`, value is the full payload the
- *   editor would publish right now. Mirrors the `drafts` map for
- *   content blocks: `useCollectionItem` / `useCollection` overlay it
- *   onto `item.data` so page-side `<CollectionItem>` / `<CollectionRegion>`
- *   consumers see admin edits live while they're being typed - before
- *   the debounced server-side draft autosave even fires. Cleared on
- *   successful publish, on user-initiated "undo", and on pathname
- *   change (so soft-nav doesn't leak stale overlays).
  * @property {(key: string, slug: string, payload: *) => void} setCollectionDraft
  * @property {(key: string, slug: string) => void} clearCollectionDraft
  * @property {() => void} clearCollectionDrafts
- * @property {Map<string, CollectionListCacheEntry>} collectionListCache
- *   Shared cache for `useCollection(key, params?)`. Keyed by
- *   `"{key}|{stableStringify(params ?? {})}"` so different filter /
- *   offset / limit windows of the same collection live as separate
- *   entries. A save on any row in the collection invalidates every
- *   entry for that key (filtered views may include or exclude the
- *   changed row in ways we can't reliably patch in-place, so a
- *   refetch is the safe move).
  * @property {(key: string, params?: import("./schemas.js").CollectionListParams, force?: boolean) => Promise<void>} requestCollectionList
  * @property {(key: string, params?: import("./schemas.js").CollectionListParams) => void} invalidateCollectionList
  *   With `params`: drop only that cache entry. Without `params`: drop

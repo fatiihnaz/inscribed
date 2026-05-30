@@ -28,6 +28,7 @@ import { cloneElement, useContext, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 
 import { useCmsContext } from "../lib/context.js";
+import { useStoreSelector } from "../lib/store.js";
 import { CmsGroupContext } from "../lib/group-context.js";
 
 /**
@@ -83,7 +84,7 @@ const BLOCK_TAGS = new Set([
 // computed below.
 // eslint-disable-next-line no-unused-vars
 export function EditableRegion({ blockPath, as, blockType: _bt, defaultValue: _dv, scope: _scope, ...rest }) {
-  const { isAdmin, blocks, drafts, activeBlock, setActiveBlock } = useCmsContext();
+  const { isAdmin, blocks, contentDraftsStore, activeBlock, setActiveBlock } = useCmsContext();
   const groupPrefix = useContext(CmsGroupContext);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -93,14 +94,21 @@ export function EditableRegion({ blockPath, as, blockType: _bt, defaultValue: _d
   // lookup must match. Top-level (no enclosing group) is a no-op.
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 
+  // Subscribe to just this block's draft. A keystroke in another region
+  // leaves both selectors' outputs unchanged, so `useStoreSelector` bails
+  // and this region doesn't re-render. Two selectors (presence + value) so
+  // an explicit empty/null local draft is distinguishable from "no draft".
+  const hasLocalDraft = useStoreSelector(contentDraftsStore, (m) => m.has(fullPath));
+  const localDraft = useStoreSelector(contentDraftsStore, (m) => m.get(fullPath));
+
   const block = blocks.get(fullPath);
   const blockType = block ? block.blockType : null;
   // Live preview: prefer the unsaved local draft when the admin is mid-edit,
   // then the backend-side draft overlay (`block.draftValue`), then the
-  // published `block.value`. `drafts.has` (not `??`) so an explicit
-  // empty/null local draft still wins.
-  const value = drafts.has(fullPath)
-    ? drafts.get(fullPath)
+  // published `block.value`. `has` (not `??`) so an explicit empty/null
+  // local draft still wins.
+  const value = hasLocalDraft
+    ? localDraft
     : block
       ? (block.draftValue ?? block.value)
       : undefined;

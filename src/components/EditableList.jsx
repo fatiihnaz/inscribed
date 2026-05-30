@@ -42,6 +42,7 @@ import { Fragment, useContext, useEffect, useState } from "react";
 import { Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 
 import { useCmsContext } from "../lib/context.js";
+import { useStoreSelector } from "../lib/store.js";
 import { CmsGroupContext } from "../lib/group-context.js";
 import { addItem, makeDefaultItem, moveItem, removeItem } from "../lib/list-ops.js";
 
@@ -81,7 +82,7 @@ const PANEL_BORDER    = "1px solid rgba(255,255,255,0.10)";
 export function EditableList({ blockPath, itemSchema, children, defaultValue, scope }) {
   void defaultValue; void scope; // discovery-only
   const {
-    isAdmin, blocks, drafts, setDraft,
+    isAdmin, blocks, contentDraftsStore, setDraft,
     registerItemSchema, unregisterItemSchema,
   } = useCmsContext();
   const groupPrefix = useContext(CmsGroupContext);
@@ -100,13 +101,19 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
     return () => unregisterItemSchema(fullPath);
   }, [fullPath, itemSchema, registerItemSchema, unregisterItemSchema]);
 
+  // Subscribe to just this list's draft slice (see EditableRegion for the
+  // two-selector presence/value rationale) so typing in one list doesn't
+  // re-render sibling lists.
+  const hasLocalDraft = useStoreSelector(contentDraftsStore, (m) => m.has(fullPath));
+  const localDraft = useStoreSelector(contentDraftsStore, (m) => m.get(fullPath));
+
   const block = blocks.get(fullPath);
   // Mirror EditableRegion's precedence: local draft (live typing) > backend
   // draft overlay (own work after navigation/refetch) > published value.
   // Without this, navigating away and back leaves the admin's saved-but-
   // unpublished list rendering as the published value.
-  const raw = drafts.has(fullPath)
-    ? drafts.get(fullPath)
+  const raw = hasLocalDraft
+    ? localDraft
     : block
       ? (block.draftValue ?? block.value)
       : undefined;

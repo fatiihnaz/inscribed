@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 
 import { useCmsContext } from "../lib/context.js";
+import { useStoreSelector } from "../lib/store.js";
 import { useCmsSave } from "../hooks/use-cms-save.js";
 import { useMyCollections } from "../hooks/use-my-collections.js";
 import { CmsApiError } from "../lib/api-client.js";
@@ -133,20 +134,26 @@ export function AdminDrawer() {
     activeCollectionItem,
     setActiveCollectionItem,
     blocks,
-    drafts,
+    contentDraftsStore,
     setDraft,
     clearDraft,
     isDrawerOpen,
     setDrawerOpen,
     itemSchemas,
     collectionBindings,
-    collectionListCache,
-    collectionItemCache,
-    collectionDrafts,
+    collectionStore,
     userInfo,
     onSignOut,
     draftSyncStatus,
   } = useCmsContext();
+  // The drawer aggregates across the whole collection + content draft state
+  // (dirty counts, bindings mirror, changes panel), so it subscribes to the
+  // full slices rather than a per-row view. It's a single admin surface, not
+  // page-side fan-out, so re-rendering on every write is expected and cheap.
+  const collectionListCache = useStoreSelector(collectionStore, (s) => s.listCache);
+  const collectionItemCache = useStoreSelector(collectionStore, (s) => s.itemCache);
+  const collectionDrafts = useStoreSelector(collectionStore, (s) => s.drafts);
+  const drafts = useStoreSelector(contentDraftsStore, (m) => m);
   const myCollections = useMyCollections().collections;
   const {
     dirtyCount, isSaving, error,

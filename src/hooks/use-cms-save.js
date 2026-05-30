@@ -16,6 +16,7 @@
 import { useCallback, useMemo } from "react";
 
 import { useCmsContext } from "../lib/context.js";
+import { useStoreSelector } from "../lib/store.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
 
@@ -38,8 +39,12 @@ import { useCmsAdmin } from "./use-cms-admin.js";
  */
 export function useCmsSave() {
   const {
-    blocks, drafts, clearDraft, clearDrafts, discardServerDrafts, setActiveBlock,
+    blocks, contentDraftsStore, clearDraft, clearDrafts, discardServerDrafts, setActiveBlock,
   } = useCmsContext();
+  // Whole-map subscription: the save orchestration aggregates every dirty
+  // blockPath, so it re-renders on any content-draft change (it drives the
+  // drawer's live dirty count). Fine for a single admin surface.
+  const drafts = useStoreSelector(contentDraftsStore, (m) => m);
   const { savePage, isSaving, error } = useCmsAdmin();
 
   // A block is "dirty" if its effective value (local draft, else server-side

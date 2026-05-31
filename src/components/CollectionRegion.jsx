@@ -27,7 +27,7 @@ import { useCollection } from "../hooks/use-collection.js";
 
 /**
  * @import { CollectionItemResponse } from "../lib/schemas.js"
- * @import { CmsApiError } from "../lib/api-client.js"
+ * @import { CmsApiError } from "../lib/errors.js"
  */
 
 /**
@@ -53,7 +53,7 @@ import { useCollection } from "../hooks/use-collection.js";
 /**
  * @typedef {Object} CollectionRegionMeta
  * @property {boolean} isLoading
- * @property {import("../lib/api-client.js").CmsApiError | Error | null} error
+ * @property {import("../lib/errors.js").CmsApiError | Error | null} error
  * @property {() => Promise<void>} refetch
  * @property {number} total
  * @property {number} offset

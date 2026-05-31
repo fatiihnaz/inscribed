@@ -12,7 +12,7 @@ import { useCallback, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../lib/context.js";
-import { updateContent, CmsApiError } from "../lib/api-client.js";
+import { CmsApiError } from "../lib/errors.js";
 
 /**
  * @import { UpdateBlockItem, UpdatePageResponse, BlockResponse } from "../lib/schemas.js"
@@ -71,10 +71,9 @@ export function useCmsAdmin() {
         const groups = [...bySlug.entries()];
         const responses = await Promise.all(
           groups.map(([slug, slugUpdates]) =>
-            updateContent(
-              config,
+            config.transport.updateContent(
               { slug, blocks: slugUpdates },
-              accessToken || undefined,
+              { accessToken: accessToken || undefined },
             ),
           ),
         );

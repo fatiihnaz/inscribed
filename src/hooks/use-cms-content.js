@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../lib/context.js";
-import { fetchContent, CmsApiError } from "../lib/api-client.js";
+import { CmsApiError } from "../lib/errors.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
 
 /**
@@ -52,7 +52,6 @@ export function useCmsContent() {
     (async () => {
       try {
         const token = await getAccessToken();
-        const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
 
         // Refetch the page slug + the global slug in parallel so a
         // header/footer save reflects on every page after triggerRefetch
@@ -63,9 +62,9 @@ export function useCmsContent() {
           : null;
 
         const [pageResponse, globalResponse] = await Promise.all([
-          fetchContent(config, slug, init),
+          config.transport.getContent(slug, { accessToken: token }),
           globalSlug
-            ? fetchContent(config, globalSlug, init).catch(() => ({ slug: globalSlug, blocks: [] }))
+            ? config.transport.getContent(globalSlug, { accessToken: token }).catch(() => ({ slug: globalSlug, blocks: [] }))
             : Promise.resolve({ slug: "", blocks: [] }),
         ]);
         if (cancelled) return;

@@ -21,11 +21,7 @@ import { ChevronDown, Undo2 } from "lucide-react";
 import { useCmsContext } from "../lib/context.js";
 import { useCollection } from "../hooks/use-collection.js";
 import { useMyCollections } from "../hooks/use-my-collections.js";
-import {
-  createCollectionItem,
-  saveCollectionNewDraft,
-  CmsApiError,
-} from "../lib/api-client.js";
+import { CmsApiError } from "../lib/errors.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 
 const DRAFT_DEBOUNCE_MS = 1000;
@@ -448,9 +444,8 @@ function CreateForm({ collectionKey, schema }) {
     const timer = setTimeout(async () => {
       try {
         const token = await getAccessToken();
-        const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
         setDraftStatus("saving");
-        await saveCollectionNewDraft(config, collectionKey, { data: payload }, init);
+        await config.transport.saveCollectionNewDraft(collectionKey, { data: payload }, { accessToken: token });
         if (cancelled) return;
         lastSyncedRef.current = serialized;
         flashDraftStatus("saved");
@@ -490,12 +485,10 @@ function CreateForm({ collectionKey, schema }) {
     startTransition(async () => {
       try {
         const token = await getAccessToken();
-        const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
-        const created = await createCollectionItem(
-          config,
+        const created = await config.transport.createCollectionItem(
           collectionKey,
           { data: buildPayload(schema.fields, values) },
-          init,
+          { accessToken: token },
         );
         updateCollectionItem(collectionKey, created.slug, created);
         reset();

@@ -14,8 +14,8 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { CmsContext } from "../lib/context.js";
 import { createCmsConfig } from "../lib/config.js";
+import { createRestTransport } from "../defaults/transport.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
-import { updateDraft, fetchMyCollections, fetchCollectionItem, fetchCollection } from "../lib/api-client.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 import { createStore } from "../lib/store.js";
 import { useCmsContent } from "../hooks/use-cms-content.js";
@@ -38,6 +38,7 @@ const AdminDrawer = dynamic(
  * @param {BlockResponse[]} [props.initialBlocks]   Server-fetched blocks for the active page; eliminates the SSR fallback flicker by seeding the blocks map before first paint.
  * @param {(slug: string) => void | Promise<void>} [props.onAfterSave]   Server Action invoked after a successful save (typically calls `revalidateTag(cmsCacheTag(slug))` to drop stale ISR data).
  * @param {() => Promise<string>} [props.getAccessToken]   Returns the current user's JWT access token; added as `Authorization: Bearer {token}` on write requests. Omit in public/demo mode.
+ * @param {import("../lib/transport.js").CmsTransport} [props.transport]   Custom client-side data-access adapter. Defaults to the REST transport built from `config`. Injected here (not via `config`) because it holds functions, which can't cross the RSC boundary as a serialized prop.
  * @param {{ name: string|null, email: string|null, image: string|null } | null} [props.userInfo]   Identity for the admin panel footer. Null in public/demo mode.
  * @param {() => void} [props.onSignOut]   Invoked by the admin panel's logout button.
  * @param {React.ReactNode} props.children
@@ -49,14 +50,27 @@ export function CmsProvider({
   initialBlocks,
   onAfterSave,
   getAccessToken,
+  transport,
   userInfo = null,
   onSignOut,
   children,
 }) {
-  // Accept either a raw `{ baseUrl }` shape or a pre-built CmsConfig.
-  const normalizedConfig = useMemo(
+  // `config` arrives as serializable data (it crosses the RSC boundary as a
+  // prop, e.g. from `createCmsPage`). The transport holds functions, so it
+  // can't ride along on that prop - we build it here on the client and
+  // augment it onto the config the rest of the tree reads through context,
+  // where it never has to be serialized. Pass a custom `transport` prop to
+  // override; otherwise the default REST adapter targets `config.baseUrl`.
+  const baseConfig = useMemo(
     () => "baseUrl" in config && Object.isFrozen(config) ? /** @type {CmsConfig} */ (config) : createCmsConfig(config),
     [config],
+  );
+  const normalizedConfig = useMemo(
+    () => ({
+      ...baseConfig,
+      transport: transport ?? baseConfig.transport ?? createRestTransport(baseConfig),
+    }),
+    [baseConfig, transport],
   );
 
   // Seed the blocks map from `initialBlocks` so EditableRegion has real
@@ -567,8 +581,7 @@ export function CmsProvider({
       const promise = (async () => {
         try {
           const token = await stableGetAccessToken();
-          const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
-          const item = await fetchCollectionItem(normalizedConfig, key, slug, init);
+          const item = await normalizedConfig.transport.getCollectionItem(key, slug, { accessToken: token });
           setCollectionItemCache((prev) => {
             const next = new Map(prev);
             next.set(cacheKey, { item, isLoading: false, error: null });
@@ -639,8 +652,7 @@ export function CmsProvider({
       const promise = (async () => {
         try {
           const token = await stableGetAccessToken();
-          const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
-          const response = await fetchCollection(normalizedConfig, key, params, init);
+          const response = await normalizedConfig.transport.getCollection(key, params, { accessToken: token });
           setCollectionListCache((prev) => {
             const next = new Map(prev);
             next.set(cacheKey, {
@@ -716,8 +728,7 @@ export function CmsProvider({
     (async () => {
       try {
         const token = await stableGetAccessToken();
-        const init = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
-        const data = await fetchMyCollections(normalizedConfig, init);
+        const data = await normalizedConfig.transport.getMyCollections({ accessToken: token });
         if (cancelled) return;
         setMyCollectionsState({ data, isLoading: false, error: null });
       } catch (err) {
@@ -847,10 +858,9 @@ export function CmsProvider({
           const next = previous
             .catch(() => {})
             .then(() =>
-              updateDraft(
-                currentConfig,
+              currentConfig.transport.updateDraft(
                 { slug, blocks: blocksForSlug },
-                accessToken,
+                { accessToken },
               ),
             );
           inFlightDraftPerSlug.current.set(slug, next);
@@ -972,10 +982,9 @@ export function CmsProvider({
           const next = previous
             .catch(() => {})
             .then(() =>
-              updateDraft(
-                currentConfig,
+              currentConfig.transport.updateDraft(
                 { slug, blocks: blocksForSlug },
-                accessToken,
+                { accessToken },
               ),
             )
             .catch((err) => {

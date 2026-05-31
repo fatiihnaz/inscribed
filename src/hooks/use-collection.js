@@ -26,7 +26,7 @@ import { stableStringify } from "../lib/stable-stringify.js";
 
 /**
  * @import { CollectionItemResponse } from "../lib/schemas.js"
- * @import { CmsApiError } from "../lib/api-client.js"
+ * @import { CmsApiError } from "../lib/errors.js"
  */
 
 /**

@@ -10,7 +10,7 @@
  * set in the environment.
  */
 
-import { fetchContent, syncManifest } from "../lib/api-client.js";
+import { createRestTransport } from "../defaults/transport.js";
 
 import { getClientCredentialsToken } from "./service-token.js";
 
@@ -54,7 +54,14 @@ export function cmsCacheTag(slug) {
  */
 export async function getCmsContent(config, slug, options) {
   const accessToken = options?.accessToken ?? await getClientCredentialsToken();
-  return fetchContent(config, slug, buildCacheInit(slug, options, accessToken));
+  const transport = config.transport ?? createRestTransport(config);
+  return transport.getContent(slug, {
+    accessToken,
+    cache: {
+      revalidate: options?.revalidate ?? false,
+      tags: [cmsCacheTag(slug), ...(options?.tags ?? [])],
+    },
+  });
 }
 
 /**
@@ -120,7 +127,8 @@ export async function getCmsPageBlocks(config, slug, options) {
  * @returns {Promise<SyncResultResponse>}
  */
 export function syncCmsManifest(config, request, accessToken) {
-  return syncManifest(config, request, accessToken);
+  const transport = config.transport ?? createRestTransport(config);
+  return transport.syncManifest(request, { accessToken });
 }
 
 /**
@@ -138,6 +146,7 @@ export async function syncAll(manifests, options) {
   const config = {
     baseUrl: options?.baseUrl ?? process.env.CMS_URL ?? "http://localhost:5000",
   };
+  const transport = createRestTransport(config);
 
   let accessToken = "";
   try {
@@ -151,7 +160,7 @@ export async function syncAll(manifests, options) {
   let failed = 0;
   for (const manifest of manifests) {
     try {
-      const result = await syncManifest(config, manifest, accessToken || undefined);
+      const result = await transport.syncManifest(manifest, { accessToken: accessToken || undefined });
       console.log(
         `[cms-sync] ${manifest.slug}  created=${result.created} deleted=${result.deleted} unchanged=${result.unchanged}`,
       );
@@ -172,24 +181,5 @@ export async function syncAll(manifests, options) {
       `[cms-sync] ${failed}/${manifests.length} slug(s) failed - backend at ${config.baseUrl} reachable?`,
     );
   }
-}
-
-// ---------------------------------------------------------------------------
-// Cache init builders
-// ---------------------------------------------------------------------------
-
-/**
- * @param {string} slug
- * @param {GetCmsContentOptions | undefined} options
- * @param {string} accessToken
- * @returns {RequestInit}
- */
-function buildCacheInit(slug, options, accessToken) {
-  const revalidate = options?.revalidate ?? false;
-  const tags = [cmsCacheTag(slug), ...(options?.tags ?? [])];
-  return /** @type {RequestInit} */ ({
-    next: { revalidate, tags },
-    ...(accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : {}),
-  });
 }
 

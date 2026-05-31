@@ -3,6 +3,17 @@
  *
  * Both server-side helpers and client-side hooks read this shape; keep it
  * free of browser-only types so it can be created in either environment.
+ *
+ * Note: `createCmsConfig` returns ONLY serializable data so the result can be
+ * passed as a prop across the React Server -> Client boundary (e.g. by
+ * `createCmsPage`). The `transport` (which holds functions) is NOT stored
+ * here - it would break RSC serialization. It is resolved at the use site
+ * instead: the client `CmsProvider` builds/augments it into the context
+ * config, and server helpers fall back to `createRestTransport(config)`.
+ */
+
+/**
+ * @import { CmsTransport } from "./transport.js"
  */
 
 /**
@@ -15,10 +26,15 @@
  *   parallel with the page slug on every render and merged into the same
  *   blocks map, so a header/footer/site-wide block edited on any page
  *   reflects everywhere. Default: "__global".
+ * @property {CmsTransport} [transport]
+ *   The data-access seam (see `transport.js`). Not set by `createCmsConfig`
+ *   (it isn't serializable); the client provider augments it in and server
+ *   helpers default it to the REST adapter. Present on the config the core
+ *   actually reads at runtime.
  */
 
 /**
- * Normalize and freeze a config object.
+ * Normalize and freeze a serializable config object.
  *
  * @param {Object} opts
  * @param {string} opts.baseUrl

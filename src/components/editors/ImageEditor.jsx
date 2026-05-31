@@ -4,7 +4,6 @@ import { useCallback, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { useCmsContext } from "../../lib/context.js";
-import { uploadImage } from "../../lib/api-client.js";
 import { fieldStyle, labelStyle, labelTextStyle } from "./styles.js";
 
 const ACCENT = "#c9b896";
@@ -47,7 +46,10 @@ export function ImageEditor({ value, onChange }) {
       setUploadState({ progress: 0 });
       try {
         const token = (await getAccessToken?.()) ?? null;
-        const result = await uploadImage(config, file, (p) => setUploadState({ progress: p }), token);
+        const result = await config.transport.uploadImage(file, {
+          onProgress: (p) => setUploadState({ progress: p }),
+          accessToken: token,
+        });
         const url = result?.data?.url;
         if (!url) throw new Error("CDN cevabında url bulunamadı");
         onChange({ src: url, alt });

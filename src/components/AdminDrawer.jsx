@@ -43,7 +43,7 @@ import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { useCmsSave } from "../hooks/use-cms-save.js";
 import { useMyCollections } from "../hooks/use-my-collections.js";
-import { CmsApiError } from "../lib/api-client.js";
+import { CmsApiError } from "../lib/errors.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 
 import { BlockCard, resetBlock } from "./AdminBlockCard.jsx";

@@ -35,5 +35,5 @@ export { useCountdown } from "./hooks/use-countdown.js";
 export { useCollection, useCollectionItem } from "./hooks/use-collection.js";
 
 export { createCmsConfig } from "./lib/config.js";
-export { CmsApiError } from "./lib/api-client.js";
+export { CmsApiError } from "./lib/errors.js";
 export { getBlock, getBlockValue, groupBlocksByPrefix, indexBlocksByPath } from "./lib/blocks.js";

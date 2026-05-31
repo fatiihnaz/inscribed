@@ -84,7 +84,7 @@ export function useCmsContent() {
       } catch (err) {
         if (cancelled) return;
         // eslint-disable-next-line no-console
-        console.error("[skylab-cms] fetchContent failed:", err);
+        console.error("[inkly] fetchContent failed:", err);
         setState({ blocks: [], isLoading: false, error: /** @type {Error} */ (err) });
       }
     })();

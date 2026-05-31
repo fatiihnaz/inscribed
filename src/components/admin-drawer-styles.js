@@ -345,7 +345,7 @@ export const toolbarStyle = {
   padding: "10px 16px 6px",
 };
 
-// Base background + box-shadow set in CSS (`.skylab-cms-search`) so the
+// Base background + box-shadow set in CSS (`.inkly-search`) so the
 // `:focus-within` rule can swap them.
 export const searchWrapStyle = {
   position: "relative",
@@ -368,7 +368,7 @@ export const searchInputStyle = {
   fontFamily: "inherit",
 };
 
-// Base color + background live on `.skylab-cms-search-clear` so the
+// Base color + background live on `.inkly-search-clear` so the
 // hover rule can swap them.
 export const searchClearStyle = {
   border: 0,
@@ -482,9 +482,9 @@ export const listStyle = {
 
 // Base structural styles only. The card's surface fill, border ring,
 // hover state, dirty rail, and active accents all live on the
-// `.skylab-cms-block-card` CSS class (see `panelCss`) so the variant
-// classes (`.is-dirty`, `.skylab-cms-block-card-active`,
-// `.skylab-cms-block-card-collection-active`) can override them —
+// `.inkly-block-card` CSS class (see `panelCss`) so the variant
+// classes (`.is-dirty`, `.inkly-block-card-active`,
+// `.inkly-block-card-collection-active`) can override them —
 // inline styles would otherwise win over CSS.
 export const blockCardStyle = {
   borderRadius: RADIUS,
@@ -546,7 +546,7 @@ export const dirtyDotStyle = {
   flexShrink: 0,
 };
 
-// Base color + background live on `.skylab-cms-icon-button` so the
+// Base color + background live on `.inkly-icon-button` so the
 // hover rule can swap them.
 export const blockResetStyle = {
   width: 22,
@@ -790,7 +790,7 @@ export const userEmailStyle = {
   textOverflow: "ellipsis",
 };
 
-// Base color + background live on `.skylab-cms-logout` so the hover
+// Base color + background live on `.inkly-logout` so the hover
 // rule can swap them.
 export const signOutButtonStyle = {
   width: 26,
@@ -869,187 +869,187 @@ export const panelCss = `
     :root { interpolate-size: allow-keywords; }
   }
 
-  .skylab-cms-tabbar-scroll {
+  .inkly-tabbar-scroll {
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
-  .skylab-cms-tabbar-scroll::-webkit-scrollbar { display: none; }
+  .inkly-tabbar-scroll::-webkit-scrollbar { display: none; }
 
-  .skylab-cms-tabbar-chevron {
+  .inkly-tabbar-chevron {
     transition: color 120ms ease;
   }
-  .skylab-cms-tabbar-chevron:hover:not(:disabled) { color: ${ACCENT}; }
-  .skylab-cms-tabbar-chevron:disabled { opacity: 0; pointer-events: none; }
+  .inkly-tabbar-chevron:hover:not(:disabled) { color: ${ACCENT}; }
+  .inkly-tabbar-chevron:disabled { opacity: 0; pointer-events: none; }
 
-  .skylab-cms-tab:hover { color: ${TEXT}; }
+  .inkly-tab:hover { color: ${TEXT}; }
 
-  .skylab-cms-search {
+  .inkly-search {
     background: ${SURFACE_1};
     box-shadow: inset 0 0 0 1px ${HAIRLINE};
     transition: box-shadow 140ms ease, background 140ms ease;
   }
-  .skylab-cms-search:focus-within {
+  .inkly-search:focus-within {
     background: ${SURFACE_2};
     box-shadow: inset 0 0 0 1px ${BORDER_FOCUS};
   }
-  .skylab-cms-search input::placeholder { color: ${TEXT_FAINT}; }
-  .skylab-cms-search input[type="search"]::-webkit-search-cancel-button,
-  .skylab-cms-search input[type="search"]::-webkit-search-decoration { display: none; }
-  .skylab-cms-search-clear {
+  .inkly-search input::placeholder { color: ${TEXT_FAINT}; }
+  .inkly-search input[type="search"]::-webkit-search-cancel-button,
+  .inkly-search input[type="search"]::-webkit-search-decoration { display: none; }
+  .inkly-search-clear {
     background: transparent;
     color: ${TEXT_FAINT};
     transition: color 140ms ease;
   }
-  .skylab-cms-search-clear:hover { color: ${TEXT}; }
+  .inkly-search-clear:hover { color: ${TEXT}; }
 
   /* Block card — inset shadow as border. Base surface + ring set here
      so the dirty / active CSS variants can override them (inline styles
      would otherwise win). */
-  .skylab-cms-block-card {
+  .inkly-block-card {
     background: ${SURFACE_1};
     box-shadow: inset 0 0 0 1px ${HAIRLINE};
     transition: box-shadow 160ms ease, background 160ms ease;
   }
-  .skylab-cms-block-card:hover { box-shadow: inset 0 0 0 1px ${BORDER}; }
+  .inkly-block-card:hover { box-shadow: inset 0 0 0 1px ${BORDER}; }
   /* Collection lane cards (Page-tab Collection blocks + Region-tab item
      cards) keep a faint pink-purple ring in their idle state so the
      whole Collection lane reads as one visual family even before the
      user opens anything. Hover stays on the shared base rule so dirty
      and active state rules below can still win on source order — a
      collection-specific :hover would beat them via specificity. */
-  .skylab-cms-block-card.skylab-cms-block-card-collection {
+  .inkly-block-card.inkly-block-card-collection {
     box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
   }
-  .skylab-cms-block-card.is-dirty {
+  .inkly-block-card.is-dirty {
     box-shadow: inset 0 0 0 1px ${ACCENT_LINE}, inset 2px 0 0 ${ACCENT};
   }
-  .skylab-cms-block-card.skylab-cms-block-card-collection.is-dirty {
+  .inkly-block-card.inkly-block-card-collection.is-dirty {
     box-shadow: inset 0 0 0 1px ${COLLECTION_LINE}, inset 2px 0 0 ${COLLECTION_ACCENT};
   }
   /* Active rules use a compound selector so they match the (0,2,0)
-     specificity of \`.skylab-cms-block-card.is-dirty\` — and come after
+     specificity of \`.inkly-block-card.is-dirty\` — and come after
      it in source order so an open + dirty card lands on the active
      accent (sage for regular blocks, pink-purple for Collection lanes)
      instead of the dirty rail. */
-  .skylab-cms-block-card.skylab-cms-block-card-active {
+  .inkly-block-card.inkly-block-card-active {
     box-shadow: inset 0 0 0 1px ${BORDER_HI}, inset 3px 0 0 ${ACCENT};
     background: ${SURFACE_2};
   }
-  .skylab-cms-block-card.skylab-cms-block-card-collection-active {
+  .inkly-block-card.inkly-block-card-collection-active {
     box-shadow: inset 0 0 0 1px ${BORDER_HI}, inset 3px 0 0 ${COLLECTION_ACCENT};
     background: ${SURFACE_2};
   }
 
   /* Body collapse — height:0 ↔ height:auto via interpolate-size. */
-  .skylab-cms-collapse {
+  .inkly-collapse {
     height: 0;
     overflow: hidden;
     transition: height 240ms cubic-bezier(0.32, 0.72, 0.18, 1);
   }
-  .skylab-cms-collapse.is-open { height: auto; }
+  .inkly-collapse.is-open { height: auto; }
 
   /* Reset (Undo) icon-buttons */
-  .skylab-cms-icon-button {
+  .inkly-icon-button {
     background: transparent;
     color: ${TEXT_MUTED};
     transition: color 140ms ease, background-color 140ms ease, filter 140ms ease;
   }
-  .skylab-cms-icon-button:hover:not(:disabled) {
+  .inkly-icon-button:hover:not(:disabled) {
     color: ${ACCENT};
     background-color: ${ACCENT_SOFT};
   }
-  .skylab-cms-icon-button:disabled {
+  .inkly-icon-button:disabled {
     opacity: 0.4;
     cursor: not-allowed;
   }
 
   /* Status bar buttons */
-  .skylab-cms-btn-primary {
+  .inkly-btn-primary {
     background: ${TEXT_HI};
     color: ${BG};
     transition: background 140ms ease, color 140ms ease;
   }
-  .skylab-cms-btn-primary:hover:not(:disabled) { background: ${ACCENT}; }
-  .skylab-cms-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .inkly-btn-primary:hover:not(:disabled) { background: ${ACCENT}; }
+  .inkly-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .skylab-cms-btn-ghost {
+  .inkly-btn-ghost {
     background: transparent;
     color: ${TEXT_MID};
     box-shadow: inset 0 0 0 1px ${HAIRLINE};
     transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
   }
-  .skylab-cms-btn-ghost:hover:not(:disabled) {
+  .inkly-btn-ghost:hover:not(:disabled) {
     color: ${TEXT_HI};
     box-shadow: inset 0 0 0 1px ${BORDER};
     background: ${SURFACE_1};
   }
-  .skylab-cms-btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+  .inkly-btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* Handle */
-  .skylab-cms-handle {
+  .inkly-handle {
     color: ${TEXT_MUTED};
     transition: color 200ms ease;
   }
-  .skylab-cms-handle:focus-visible { outline: none; }
-  .skylab-cms-handle:hover, .skylab-cms-handle:focus-visible { color: ${TEXT_HI}; }
-  .skylab-cms-handle-slide {
+  .inkly-handle:focus-visible { outline: none; }
+  .inkly-handle:hover, .inkly-handle:focus-visible { color: ${TEXT_HI}; }
+  .inkly-handle-slide {
     transition: transform 220ms cubic-bezier(0.32, 0.72, 0.18, 1), filter 200ms ease;
     will-change: transform, filter;
   }
-  .skylab-cms-handle:hover .skylab-cms-handle-slide,
-  .skylab-cms-handle:focus-visible .skylab-cms-handle-slide {
+  .inkly-handle:hover .inkly-handle-slide,
+  .inkly-handle:focus-visible .inkly-handle-slide {
     transform: translateX(var(--slide-x, 3px));
     filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
   }
 
   /* Sign-out */
-  .skylab-cms-logout {
+  .inkly-logout {
     background: transparent;
     color: ${TEXT_MUTED};
     transition: color 140ms ease, background-color 140ms ease;
   }
-  .skylab-cms-logout:hover:not(:disabled) {
+  .inkly-logout:hover:not(:disabled) {
     color: ${STATUS_DANGER};
     background-color: rgba(232,132,152,0.10);
   }
-  .skylab-cms-logout:disabled { opacity: 0.4; cursor: not-allowed; }
+  .inkly-logout:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* Form inputs (used by editors + CollectionFieldsForm) */
-  input.skylab-cms-field, textarea.skylab-cms-field, select.skylab-cms-field {
+  input.inkly-field, textarea.inkly-field, select.inkly-field {
     transition: box-shadow 140ms ease, background-color 140ms ease;
   }
-  input.skylab-cms-field:focus, textarea.skylab-cms-field:focus, select.skylab-cms-field:focus {
+  input.inkly-field:focus, textarea.inkly-field:focus, select.inkly-field:focus {
     background-color: ${SURFACE_2};
     box-shadow: inset 0 0 0 1px ${BORDER_FOCUS};
   }
-  input.skylab-cms-field::placeholder, textarea.skylab-cms-field::placeholder {
+  input.inkly-field::placeholder, textarea.inkly-field::placeholder {
     color: ${TEXT_FAINT};
   }
 
   ul[data-cms-list]::-webkit-scrollbar { display: none; }
 
   /* Status dot pulse for the saving state */
-  @keyframes skylab-cms-status-pulse {
+  @keyframes inkly-status-pulse {
     0%, 100% { opacity: 1; }
     50%      { opacity: 0.45; }
   }
-  .skylab-cms-status-pulse { animation: skylab-cms-status-pulse 1100ms ease-in-out infinite; }
+  .inkly-status-pulse { animation: inkly-status-pulse 1100ms ease-in-out infinite; }
 
   /* Load more / Create form / Region cards reuse these patterns. */
-  .skylab-cms-load-more { transition: color 140ms ease, border-color 140ms ease, background 140ms ease; }
-  .skylab-cms-load-more:hover:not(:disabled) {
+  .inkly-load-more { transition: color 140ms ease, border-color 140ms ease, background 140ms ease; }
+  .inkly-load-more:hover:not(:disabled) {
     color: ${TEXT};
     border-color: ${BORDER_HI};
     background: ${SURFACE_1};
   }
-  .skylab-cms-load-more:disabled { opacity: 0.5; cursor: progress; }
+  .inkly-load-more:disabled { opacity: 0.5; cursor: progress; }
 
-  .skylab-cms-text-button { transition: color 140ms ease, background-color 140ms ease; }
-  .skylab-cms-text-button:hover:not(:disabled) {
+  .inkly-text-button { transition: color 140ms ease, background-color 140ms ease; }
+  .inkly-text-button:hover:not(:disabled) {
     color: ${TEXT_HI};
     background-color: ${SURFACE_1};
   }
-  .skylab-cms-text-button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .inkly-text-button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  .skylab-cms-create-card { transition: background 140ms ease, box-shadow 140ms ease; }
+  .inkly-create-card { transition: background 140ms ease, box-shadow 140ms ease; }
 `;

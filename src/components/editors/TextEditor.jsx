@@ -17,7 +17,7 @@ export function TextEditor({ value, onChange }) {
     <label style={labelStyle}>
       <span style={labelTextStyle}>Metin</span>
       <textarea
-        className="skylab-cms-field"
+        className="inkly-field"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         rows={4}

@@ -26,7 +26,7 @@ export function DateEditor({ value, onChange }) {
           type="datetime-local"
           value={localValue}
           onChange={(e) => onChange(localToIso(e.target.value))}
-          className="skylab-cms-field"
+          className="inkly-field"
           style={{ ...fieldStyle, colorScheme: "dark" }}
         />
       </label>

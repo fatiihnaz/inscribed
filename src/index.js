@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * @file Public client-side API for `@skylab/cms`.
+ * @file Public client-side API for `inkly`.
  *
- * Server-only helpers live at `@skylab/cms/server` (see `src/server/`).
+ * Server-only helpers live at `inkly/server` (see `src/server/`).
  * Anything re-exported here ends up in the client bundle of the consuming
  * Next.js app, so keep server-only code out.
  *

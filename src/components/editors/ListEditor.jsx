@@ -95,7 +95,7 @@ export function ListEditor({ value, onChange, itemSchema }) {
         type="button"
         onClick={onAdd}
         style={listAddButtonStyle}
-        className="skylab-cms-icon-action"
+        className="inkly-icon-action"
       >
         <Plus size={13} />
         <span>Öğe ekle</span>

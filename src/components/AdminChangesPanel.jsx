@@ -146,7 +146,7 @@ function CollectionDraftCard({ collectionKey, count, onGoToCollection }) {
     boxShadow: `inset 0 0 0 1px ${HAIRLINE}, inset 2px 0 0 ${meta.color}`,
   };
   return (
-    <div className="skylab-cms-block-card" style={cardStyle}>
+    <div className="inkly-block-card" style={cardStyle}>
       <div style={blockHeaderStyle}>
         <span
           aria-hidden="true"
@@ -164,7 +164,7 @@ function CollectionDraftCard({ collectionKey, count, onGoToCollection }) {
         <button
           type="button"
           onClick={() => onGoToCollection(collectionKey)}
-          className="skylab-cms-icon-button"
+          className="inkly-icon-button"
           style={goToButtonStyle}
           aria-label={`${collectionKey} koleksiyonunu aç`}
           title="Koleksiyonu aç"
@@ -214,7 +214,7 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
     boxShadow: `inset 0 0 0 1px ${HAIRLINE}, inset 2px 0 0 ${meta.color}`,
   };
   return (
-    <div className="skylab-cms-block-card" style={cardStyle}>
+    <div className="inkly-block-card" style={cardStyle}>
       <div style={blockHeaderStyle}>
         <span
           aria-hidden="true"
@@ -229,7 +229,7 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
         <button
           type="button"
           onClick={() => onGoToBlock(block)}
-          className="skylab-cms-icon-button"
+          className="inkly-icon-button"
           style={goToButtonStyle}
           aria-label={`${block.blockPath} bloğunu düzenle`}
           title="Bu bloğu düzenle"

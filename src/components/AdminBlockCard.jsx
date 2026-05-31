@@ -9,7 +9,7 @@
  * tiny mono type label, chevron. The grip has been retired — the type
  * icon now carries the same visual hook with real information.
  *
- * Body slides open/closed via `.skylab-cms-collapse` (height 0 ↔ auto
+ * Body slides open/closed via `.inkly-collapse` (height 0 ↔ auto
  * via `interpolate-size`). Collection bodies stay mounted across
  * collapse so the inner `useCollectionItem` fetch isn't replayed
  * every time the card is reopened.
@@ -92,7 +92,7 @@ export function BlockCard(props) {
  */
 function InvalidCollectionCard({ block }) {
   return (
-    <div className="skylab-cms-block-card" style={blockCardStyle}>
+    <div className="inkly-block-card" style={blockCardStyle}>
       <div style={blockHeaderStyle}>
         <TypeIcon type={block.blockType} />
         <span style={blockPathStyle} title={block.blockPath}>
@@ -166,7 +166,7 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
         onReset={onReset}
       />
       <div
-        className={`skylab-cms-collapse${isOpen ? " is-open" : ""}`}
+        className={`inkly-collapse${isOpen ? " is-open" : ""}`}
         aria-hidden={!isOpen}
         onMouseDown={onFocus}
       >
@@ -227,7 +227,7 @@ function CollectionBlockCard({ block, collection, slug, isActive, onFocus }) {
         onReset={editor.undoDraft}
       />
       <div
-        className={`skylab-cms-collapse${isOpen ? " is-open" : ""}`}
+        className={`inkly-collapse${isOpen ? " is-open" : ""}`}
         aria-hidden={!isOpen}
         onMouseDown={onFocus}
       >
@@ -248,10 +248,10 @@ function CollectionBlockCard({ block, collection, slug, isActive, onFocus }) {
  * @param {{ isActive: boolean, isDirty: boolean, isCollection: boolean }} args
  */
 function cardClassName({ isActive, isDirty, isCollection }) {
-  const parts = ["skylab-cms-block-card"];
-  if (isCollection) parts.push("skylab-cms-block-card-collection");
+  const parts = ["inkly-block-card"];
+  if (isCollection) parts.push("inkly-block-card-collection");
   if (isDirty) parts.push("is-dirty");
-  if (isActive) parts.push(isCollection ? "skylab-cms-block-card-collection-active" : "skylab-cms-block-card-active");
+  if (isActive) parts.push(isCollection ? "inkly-block-card-collection-active" : "inkly-block-card-active");
   return parts.join(" ");
 }
 
@@ -310,7 +310,7 @@ function CardHeader({ block, isOpen, isDirty, isCollection, onHeaderClick, onRes
               onReset();
             }
           }}
-          className="skylab-cms-icon-button"
+          className="inkly-icon-button"
           style={blockResetStyle}
           aria-label="Bu bloğun değişikliklerini geri al"
           title="Geri al"

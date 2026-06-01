@@ -61,6 +61,11 @@ const PATHNAME_HEADER = "x-pathname";
  *   (so public visitors get rendered content without a user session). Default:
  *   no token. Inject e.g. a Keycloak client-credentials provider here. It is
  *   used server-side only and never passed to the client `Provider`.
+ * @property {import("../lib/transport.js").CmsTransport} [transport]
+ *   Custom data-access transport for the SSR content fetch. Server-only -
+ *   like `getServiceToken` it never crosses to the client, so to use a custom
+ *   transport client-side too you must ALSO pass it to your provider
+ *   (`<CmsProvider transport={...}>`). Default: REST against `config.baseUrl`.
  * @property {*} Provider
  *   The CMS provider component - typically `NextAuthCmsProvider` from
  *   `inkly/auth/client`, or your own wrapper. The provider receives
@@ -97,6 +102,7 @@ export function createCmsPage(options) {
     Provider,
     config,
     getServiceToken,
+    transport,
     getSession = publicAuth.getSession,
     deriveAdmin = publicAuth.deriveAdmin,
     deriveUserSub = publicAuth.deriveUserSub,
@@ -120,13 +126,18 @@ export function createCmsPage(options) {
     ? /** @type {import("../lib/config.js").CmsConfig} */ (config)
     : createCmsConfig(config);
 
-  // Server-only view of the config: the service token may hold secrets and
-  // must never reach the client, so it rides on a separate object used only
-  // for the SSR fetch below. The `normalizedConfig` passed to <Provider>
-  // stays serializable (no functions, no secrets).
-  const serverConfig = getServiceToken
-    ? { ...normalizedConfig, getServiceToken }
-    : normalizedConfig;
+  // Server-only view of the config: the service token (may hold secrets) and
+  // a custom transport (holds functions) must never reach the client, so they
+  // ride on a separate object used only for the SSR fetch below. The
+  // `normalizedConfig` passed to <Provider> stays serializable.
+  const serverConfig =
+    getServiceToken || transport
+      ? {
+          ...normalizedConfig,
+          ...(getServiceToken ? { getServiceToken } : {}),
+          ...(transport ? { transport } : {}),
+        }
+      : normalizedConfig;
 
   return async function CmsPage({ slug, children }) {
     const resolvedSlug = slug ?? (await resolveSlugFromHeaders());

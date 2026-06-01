@@ -1,0 +1,214 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`discoverManifests > discovers blocks, scopes, groups and DFS order across an app tree > manifests 1`] = `
+[
+  {
+    "blocks": [
+      {
+        "blockPath": "header.logo",
+        "blockType": "Image",
+        "defaultValue": {
+          "src": "",
+        },
+        "sortOrder": 1,
+      },
+    ],
+    "slug": "__global",
+  },
+  {
+    "blocks": [
+      {
+        "blockPath": "about.body",
+        "blockType": "RichText",
+        "defaultValue": "",
+        "sortOrder": 1,
+      },
+      {
+        "blockPath": "shared.meta",
+        "blockType": "Text",
+        "defaultValue": "m",
+        "sortOrder": 2,
+      },
+      {
+        "blockPath": "shared.cta",
+        "blockType": "Text",
+        "defaultValue": "x",
+        "sortOrder": 3,
+      },
+    ],
+    "slug": "/about",
+  },
+  {
+    "blocks": [
+      {
+        "blockPath": "hero.title",
+        "blockType": "Text",
+        "defaultValue": "Welcome",
+        "sortOrder": 1,
+      },
+      {
+        "blockPath": "hero.subtitle",
+        "blockType": "Text",
+        "defaultValue": "sub",
+        "sortOrder": 2,
+      },
+      {
+        "blockPath": "hero.cards",
+        "blockType": "List",
+        "defaultValue": [],
+        "itemSchema": {
+          "count": {
+            "blockType": "Number",
+            "defaultValue": 0,
+          },
+          "title": {
+            "blockType": "Text",
+            "defaultValue": "",
+          },
+        },
+        "sortOrder": 3,
+      },
+      {
+        "blockPath": "cta.label",
+        "blockType": "Text",
+        "defaultValue": "Buy",
+        "sortOrder": 4,
+      },
+      {
+        "blockPath": "shared.meta",
+        "blockType": "Text",
+        "defaultValue": "m",
+        "sortOrder": 5,
+      },
+      {
+        "blockPath": "shared.cta",
+        "blockType": "Text",
+        "defaultValue": "x",
+        "sortOrder": 6,
+      },
+      {
+        "blockPath": "deep.note",
+        "blockType": "Text",
+        "defaultValue": "",
+        "sortOrder": 7,
+      },
+    ],
+    "slug": "/home",
+  },
+]
+`;
+
+exports[`discoverManifests > discovers blocks, scopes, groups and DFS order across an app tree > warnings 1`] = `[]`;
+
+exports[`discoverManifests > emits warnings for non-static / malformed declarations > manifests 1`] = `
+[
+  {
+    "blocks": [
+      {
+        "blockPath": "ok.region",
+        "blockType": "Text",
+        "defaultValue": "ok",
+        "sortOrder": 1,
+      },
+      {
+        "blockPath": "a.e",
+        "blockType": "Text",
+        "defaultValue": "x",
+        "sortOrder": 2,
+      },
+      {
+        "blockPath": "a.g",
+        "blockType": "Text",
+        "defaultValue": "x",
+        "sortOrder": 3,
+      },
+    ],
+    "slug": "/bad",
+  },
+]
+`;
+
+exports[`discoverManifests > emits warnings for non-static / malformed declarations > warnings 1`] = `
+[
+  {
+    "file": "bad.jsx",
+    "loc": {
+      "column": 6,
+      "line": 13,
+    },
+    "message": "<EditableRegion> needs a static blockPath string. Skipping discovery for this region.",
+  },
+  {
+    "file": "bad.jsx",
+    "loc": {
+      "column": 6,
+      "line": 15,
+    },
+    "message": "<EditableRegion blockPath="a.b"> is missing a static blockType prop. Skipping.",
+  },
+  {
+    "file": "bad.jsx",
+    "loc": {
+      "column": 6,
+      "line": 17,
+    },
+    "message": "<EditableRegion blockPath="a.c"> is missing a static defaultValue prop. Skipping.",
+  },
+  {
+    "file": "bad.jsx",
+    "loc": {
+      "column": 6,
+      "line": 19,
+    },
+    "message": "<EditableRegion> needs a static blockPath string. Skipping discovery for this region.",
+  },
+  {
+    "file": "bad.jsx",
+    "loc": {
+      "column": 6,
+      "line": 22,
+    },
+    "message": "<EditableList blockPath="a.d"> is missing or has a non-static itemSchema. Each field must be a plain object with literal blockType + defaultValue.",
+  },
+  {
+    "file": "bad.jsx",
+    "loc": {
+      "column": 6,
+      "line": 25,
+    },
+    "message": "<EditableRegion blockPath="a.e"> has unsupported scope="weird". Treating as page-scoped. Only "global" is recognized today.",
+  },
+  {
+    "file": "bad.jsx",
+    "loc": {
+      "column": 6,
+      "line": 28,
+    },
+    "message": "<CmsGroup> needs a static string \`name\` prop. Treating as a transparent wrapper - blockPaths inside won't be prefixed.",
+  },
+  {
+    "file": "bad.jsx",
+    "loc": {
+      "column": 7,
+      "line": 33,
+    },
+    "message": "useCmsBlock("a.h", ...) metadata must be a static object literal. Skipping.",
+  },
+  {
+    "file": "bad.jsx",
+    "loc": {
+      "column": 7,
+      "line": 35,
+    },
+    "message": "useCmsBlock("a.i", ...) metadata is missing blockType or defaultValue. Skipping.",
+  },
+  {
+    "file": "bad.jsx",
+    "loc": {
+      "column": 0,
+      "line": 41,
+    },
+    "message": "withCms() called with a non-literal slug - skipping. Pass a string literal so the manifest discovery can statically resolve it.",
+  },
+]
+`;

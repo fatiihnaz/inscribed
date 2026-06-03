@@ -29,7 +29,7 @@ and most "where should this go?" questions answer themselves.
 - **Vendor-neutral core.** The core depends on no backend and no auth library.
   Anything backend- or auth-specific goes behind an injection seam with a default
   in `src/defaults/`. If you find yourself importing a vendor SDK into `src/lib/`
-  or `src/components/`, stop — it belongs behind a seam.
+  or `src/components/`, stop; it belongs behind a seam.
 - **The RSC boundary is sacred.** Functions can't be serialized across the React
   Server → Client boundary. Config objects that cross it (props) must stay
   serializable; anything holding functions (transport, service token) is resolved
@@ -66,7 +66,7 @@ package into a consuming Next.js project (`npm link`, a workspace, or a local
 
 ```
 src/
-  index.js              # `inscribed` — client entry ("use client" lives here)
+  index.js              # `inscribed` (client entry, "use client" lives here)
   components/           # React components (EditableRegion, drawer UI, ...)
   hooks/                # client hooks (useCmsContent, useCollection, ...)
   lib/                  # framework-agnostic logic + JSDoc typedefs
@@ -113,7 +113,7 @@ npm run dev        # watch mode
 ### Directive caveats (important)
 
 tsup/esbuild **drops inner-file `"use client"` / `"use server"` directives** when
-bundling — only the **entry file's top-level directive survives**. Consequences:
+bundling; only the **entry file's top-level directive survives**. Consequences:
 
 - `src/index.js` must keep its top-level `"use client"`. Every transitive `.jsx`
   it bundles becomes part of one Client Component bundle.
@@ -121,7 +121,7 @@ bundling — only the **entry file's top-level directive survives**. Consequence
   each export as a Server Action.
 - A directive only survives across a **package entry boundary**. This is why, for
   example, `createCmsPage` takes `Provider` and `onAfterSave` as options instead
-  of importing them — importing a `"use client"` provider or `"use server"` action
+  of importing them: importing a `"use client"` provider or `"use server"` action
   into the server entry would strip its directive during bundling.
 
 `react`, `react-dom`, `next`, and the native `oxc-parser` are marked
@@ -134,16 +134,16 @@ resolved from the consumer's `node_modules` at runtime).
 `tsconfig.json` (`allowJs`, `declaration`, `emitDeclarationOnly`). There is no
 hand-written TypeScript.
 
-- Annotate public API with accurate JSDoc — it _is_ the published type surface.
+- Annotate public API with accurate JSDoc, since it _is_ the published type surface.
 - Use `@typedef`, `@param`, `@returns`, and `@import { X } from "..."` for shared
   shapes. `src/lib/schemas.js` holds the backend request/response typedefs;
   reference them rather than redefining shapes inline.
-- `checkJs` is currently off, but write JSDoc as if it were on — incorrect
+- `checkJs` is currently off, but write JSDoc as if it were on; incorrect
   annotations ship as incorrect types.
 
 ## Testing
 
-Tests run on [Vitest](https://vitest.dev/) in a Node environment (no DOM yet —
+Tests run on [Vitest](https://vitest.dev/) in a Node environment (no DOM yet;
 the current suite covers pure logic and the transport contract).
 
 ```bash
@@ -170,7 +170,7 @@ npm run test:watch # watch mode
   Client Component must be serializable. Resolve function-bearing seams at the use
   site.
 - **Discovery metadata must be static literals.** `blockType`, `defaultValue`,
-  and `itemSchema` are read by the AST scanner — it can't evaluate variables or
+  and `itemSchema` are read by the AST scanner, so it can't evaluate variables or
   imports.
 
 ## Working with the seams
@@ -185,7 +185,7 @@ Three injection seams keep the core vendor-neutral. Each is a contract in
 | Auth adapter | `auth.js` (`CmsAuthAdapter`) | `auth.js` (`publicAuth`) |
 
 When you add a feature that needs to talk to a backend, route it through the
-transport — don't `fetch` directly from a component or hook. The REST adapter in
+transport; don't `fetch` directly from a component or hook. The REST adapter in
 `defaults/transport.js` is the **only** place that knows concrete endpoint shapes,
 headers (`X-CMS-Client-Id`), and `CmsApiError` mapping.
 
@@ -212,7 +212,7 @@ Keep the method's options shape consistent: `(…, opts?)` where `opts` is
 ## Commit conventions
 
 We use **[Conventional Commits](https://www.conventionalcommits.org/)** with small,
-atomic commits — one logical change per commit, with a clean message.
+atomic commits: one logical change per commit, with a clean message.
 
 ```
 <type>: <imperative summary>
@@ -250,7 +250,7 @@ with a feature.
 
 `prepublishOnly` runs the build, and only `dist`, `LICENSE`, and `COPYING` are
 published (see `files` in `package.json`). Releases bump the version per semver
-(pre-1.0: breaking changes may land in minor bumps — see commit conventions).
+(pre-1.0: breaking changes may land in minor bumps; see commit conventions).
 
 ## License of contributions
 

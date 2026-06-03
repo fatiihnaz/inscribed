@@ -6,7 +6,7 @@
 **Inline-editing CMS SDK for Next.js App Router.**
 
 inscribed lets you mark up regions of your existing React tree as editable, then edit
-them in place from an admin drawer — no separate CMS dashboard, no content
+them in place from an admin drawer allowing no separate CMS dashboard and no content
 modelling ceremony. The content you author in JSX _is_ the schema. A discovery
 step walks your `app/` directory, registers every editable region with your
 backend, and the same components render live content for visitors and an
@@ -32,6 +32,7 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
   - [Lists](#lists)
   - [Collections](#collections)
   - [Editing & drafts](#editing--drafts)
+  - [Access control](#access-control)
   - [Caching & revalidation](#caching--revalidation)
 - [Architecture: the seams](#architecture-the-seams)
 - [Bring your own backend](#bring-your-own-backend)
@@ -51,7 +52,7 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
   `<EditableList>`, `<CmsGroup>`. The structure of your components is the
   content schema.
 - **Static discovery.** A CLI (`cms-sync`) AST-scans your `app/` directory and
-  registers a manifest of every region with your backend — idempotent, fits in a
+  registers a manifest of every region with your backend. It is idempotent, fits in a
   `predev` / `prebuild` hook.
 - **Rich content types.** Text, RichText (Tiptap), Image, Link, Date, repeatable
   Lists, and read-only Collection bindings.
@@ -92,7 +93,7 @@ editing is wired separately once auth is in place (see
 
 ### 1. Create a config
 
-`createCmsConfig` returns a plain, serializable object — it is safe to pass across
+`createCmsConfig` returns a plain, serializable object and it is safe to pass across
 the Server → Client boundary.
 
 ```js
@@ -140,7 +141,7 @@ export const CmsPage = createCmsPage({
   config: cmsConfig,
   Provider: CmsProvider,
   // Public read-only by default. Add getSession / deriveAdmin / onAfterSave
-  // and a getServiceToken provider to enable editing — see "Editing & drafts".
+  // and a getServiceToken provider to enable editing - see "Editing & drafts".
 });
 ```
 
@@ -173,7 +174,7 @@ export default function Home() {
 }
 ```
 
-`blockType` and `defaultValue` are **discovery-time metadata** — read by the sync
+`blockType` and `defaultValue` are **discovery-time metadata** read by the sync
 CLI, ignored at runtime. They tell inscribed what kind of editor to show and what to
 seed the database row with.
 
@@ -193,7 +194,7 @@ into your scripts so it stays in sync with the code:
 ```
 
 That's the full read path: visitors get server-rendered, ISR-cacheable content.
-Editing is the same components plus an auth adapter — covered next.
+Editing is the same components plus an auth adapter covered next.
 
 ---
 
@@ -214,7 +215,7 @@ static discovery step turns those declarations into a backend manifest.
   row seeded from `defaultValue`; removed regions are pruned.
 
 Because discovery reads the JSX statically, `blockType` and `defaultValue` must
-be **plain literals** — the scanner can't evaluate variables or imports.
+be **plain literals**, the scanner can't evaluate variables or imports.
 
 You can also register a read-only block that has no `<EditableRegion>` on the
 page by passing discovery metadata to `useCmsBlock(path, { blockType, defaultValue })`.
@@ -235,14 +236,14 @@ A **block** is a single editable value addressed by a dot-notation `blockPath`
 | `Collection`| `{ collection, slug? }` binding (read-only) | n/a (see [Collections](#collections)) |
 
 For full control over rendering, read a block directly from a Client Component
-with `useCmsBlock(blockPath)` — it returns the raw `value`, `version`, and an
+with `useCmsBlock(blockPath)`, it returns the raw `value`, `version`, and an
 `update()` callback.
 
 ### Groups
 
 `<CmsGroup name="hero">` prefixes the `blockPath` of every descendant region.
 A `<EditableRegion blockPath="title">` inside it reads/writes `hero.title`.
-Groups nest (dot-joined), and discovery applies the exact same prefix — so you
+Groups nest (dot-joined), and discovery applies the exact same prefix so you
 never repeat the group name in each path. In admin mode the group also draws a
 labelled outline so editors can see section boundaries.
 
@@ -277,8 +278,8 @@ export function Team() {
 }
 ```
 
-> `<EditableList>` (and the Collection components below) use a render-prop —
-> a function child — so they must live in a `"use client"` component. Wrap the
+> `<EditableList>` (and the Collection components below) use a render-prop,
+> a function child, so they must live in a `"use client"` component. Wrap the
 > usage and import that wrapper into your server page.
 
 ### Collections
@@ -288,8 +289,8 @@ outside the page (e.g. all News articles, all Teams). The page **binds** to a
 collection and renders its items; editing happens in that collection's own admin
 surface, not inline.
 
-- `<CollectionRegion collection="News" filter={...} limit={...}>` — render a list.
-- `<CollectionItem collection="News" slug="q1-notes">` — render one item.
+- `<CollectionRegion collection="News" filter={...} limit={...}>` to render a list.
+- `<CollectionItem collection="News" slug="q1-notes">` to render one item.
 
 Both take a render-prop receiving the resolved items plus `{ isLoading, error,
 refetch, ... }`. Items are fetched at render time and cached under
@@ -301,7 +302,7 @@ and `useCollectionItem` expose the same data directly.
 Editing turns on when the provider knows the visitor is an admin and how to get
 their access token. Two pieces:
 
-1. **Server side** — give `createCmsPage` an auth adapter so it can resolve the
+1. **Server side:** give `createCmsPage` an auth adapter so it can resolve the
    session and decide `isAdmin`:
 
    ```jsx
@@ -315,7 +316,7 @@ their access token. Two pieces:
    });
    ```
 
-2. **Client side** — `CmsProvider` needs `getAccessToken` to attach a Bearer
+2. **Client side:** `CmsProvider` needs `getAccessToken` to attach a Bearer
    token to write requests. Since that's a client concern, wrap `CmsProvider` in
    a thin `"use client"` component that supplies it from your session:
 
@@ -333,14 +334,44 @@ their access token. Two pieces:
 Once enabled, admins get the inline overlay and a side drawer. Edits **autosave
 as drafts** (debounced ~1s to the draft endpoint) while a live preview overlays
 the page; **publishing** is an explicit save in the drawer. Discarding clears the
-server draft. inscribed itself depends on **no auth library** — these are all
+server draft. inscribed itself depends on **no auth library**; these are all
 injected callbacks, with a public read-only default.
+
+### Access control
+
+By default every `<EditableRegion>` is editable by anyone whose session satisfies
+`isAdmin`. Two props let you narrow that further on a per-region basis without
+touching the provider or the auth layer:
+
+| Prop | Type | Default | Behaviour |
+| ---- | ---- | ------- | --------- |
+| `editable` | `boolean` | `true` | When `false`, the region renders read-only even for admins. The hover/click overlay is suppressed; the content still renders normally for all visitors. |
+| `visible` | `boolean` | `true` | When `false`, forces non-editable regardless of `editable` or the context `isAdmin`. Intended for future drawer-level visibility control; currently has the same runtime effect as `editable={false}`. |
+
+`visible={false}` overrides `editable`: a region that isn't visible to the admin
+panel is never editable either.
+
+The props carry no role logic themselves. Compute the boolean however your app
+resolves roles and pass it in:
+
+```jsx
+// Derive canEdit from your auth context / session
+const canEdit = userRoles.includes("CONTENT_EDITOR");
+
+<EditableRegion
+  blockPath="hero.title"
+  blockType="Text"
+  defaultValue="Welcome"
+  as="h1"
+  editable={canEdit}
+/>
+```
 
 ### Caching & revalidation
 
 Server reads (`getCmsPageBlocks`) are ISR-cacheable and tagged `cms-{slug}`.
 After an admin publishes, call `revalidateCmsSlug(slug)` (a Server Action from
-`inscribed/actions`) — pass it as `onAfterSave` and stale visitor content is dropped
+`inscribed/actions`); pass it as `onAfterSave` and stale visitor content is dropped
 on the next request. The global slug (header/footer/site-wide blocks) is fetched
 in parallel and merged into the same blocks map, so a shared block edited on any
 page reflects everywhere.
@@ -363,7 +394,7 @@ A guiding constraint: **functions can't cross the React Server → Client
 boundary.** That's why `createCmsConfig` returns only serializable data and the
 transport is resolved at the *use site* on each side (the client provider builds
 it; server helpers default it). Inject a custom transport separately on the
-server (at the call site) and client (the `transport` prop) — a single transport
+server (at the call site) and client (the `transport` prop); a single transport
 object can't be shared across the boundary.
 
 The token/auth seam is orthogonal to transport: the transport attaches whatever
@@ -394,7 +425,7 @@ To target a backend other than the reference REST API, implement the
 
 Every method receives an options object: `{ accessToken?, cache?, signal? }`.
 Attach `accessToken` to your request as a Bearer (or however your backend
-expects) — **don't** generate it. `cache` is an opaque hint (`{ revalidate, tags }`);
+expects); **don't** generate it. `cache` is an opaque hint (`{ revalidate, tags }`);
 the REST default maps it onto Next.js' `fetch(..., { next })` extension.
 
 ```js
@@ -419,14 +450,14 @@ export function createMyTransport({ baseUrl }) {
 Inject it on **both** sides:
 
 ```jsx
-// client — pass to your provider
+// client: pass to your provider
 <CmsProvider config={cmsConfig} transport={createMyTransport({ baseUrl })}>
   {children}
 </CmsProvider>
 ```
 
 ```js
-// server — pass at the call site (server-only objects can carry functions)
+// server: pass at the call site (server-only objects can carry functions)
 import { getCmsPageBlocks } from "inscribed/server";
 
 const transport = createMyTransport({ baseUrl });
@@ -452,7 +483,7 @@ bundle:
 | `inscribed/actions` | Server Action | `revalidateCmsSlug` |
 
 Import `inscribed/server` and `inscribed/page` only from Server Components, route
-handlers, or build scripts — never from a Client Component.
+handlers, or build scripts, never from a Client Component.
 
 ## CLI: `cms-sync`
 
@@ -474,7 +505,7 @@ Environment:
 ```
 
 The service token for `POST /cms/sync` (and optional failure diagnostics) comes
-from an optional `cms.config.js` in the project root — the CLI is a plain Node
+from an optional `cms.config.js` in the project root; the CLI is a plain Node
 binary, so it loads that module rather than receiving props:
 
 ```js
@@ -486,7 +517,7 @@ export const onSyncError = (err) => { /* ... */ };  // optional
 ## TypeScript
 
 inscribed is written in JavaScript with JSDoc and ships generated `.d.ts`
-declarations for every entry point — you get full type information and editor
+declarations for every entry point, so you get full type information and editor
 autocomplete with no extra setup. Public types such as `CmsTransport`,
 `CmsConfig`, and `BlockType` are importable:
 

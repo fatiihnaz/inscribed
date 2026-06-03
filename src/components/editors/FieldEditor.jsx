@@ -35,15 +35,16 @@ import { DateEditor } from "./DateEditor.jsx";
  *   blockType: BlockType | string,
  *   value: *,
  *   onChange: (value: *) => void,
+ *   disabled?: boolean,
  * }} props
  */
-export function FieldEditor({ blockType, value, onChange }) {
+export function FieldEditor({ blockType, value, onChange, disabled }) {
   switch (blockType) {
-    case "Text":     return <TextEditor value={value ?? ""} onChange={onChange} />;
-    case "RichText": return <RichTextEditor value={value ?? ""} onChange={onChange} />;
-    case "Image":    return <ImageEditor value={value} onChange={onChange} />;
-    case "Link":     return <LinkEditor value={value} onChange={onChange} />;
-    case "Date":     return <DateEditor value={value} onChange={onChange} />;
+    case "Text":     return <TextEditor value={value ?? ""} onChange={onChange} disabled={disabled} />;
+    case "RichText": return <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} />;
+    case "Image":    return <ImageEditor value={value} onChange={onChange} disabled={disabled} />;
+    case "Link":     return <LinkEditor value={value} onChange={onChange} disabled={disabled} />;
+    case "Date":     return <DateEditor value={value} onChange={onChange} disabled={disabled} />;
     default:         return null;
   }
 }

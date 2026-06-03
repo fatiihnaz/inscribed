@@ -4,7 +4,7 @@
  * @file Date block editor. Value shape: ISO 8601 string, e.g. "2026-08-15T18:00:00.000Z".
  */
 
-import { fieldStyle, labelStyle, labelTextStyle } from "./styles.js";
+import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./styles.js";
 
 const TEXT_MUTED = "rgba(255,255,255,0.30)";
 const ACCENT = "#c9b896";
@@ -13,8 +13,9 @@ const ACCENT = "#c9b896";
  * @param {Object} props
  * @param {string|null|undefined} props.value  ISO 8601 string
  * @param {(value: string) => void} props.onChange
+ * @param {boolean} [props.disabled]
  */
-export function DateEditor({ value, onChange }) {
+export function DateEditor({ value, onChange, disabled }) {
   const localValue = isoToLocal(value);
   const remaining = value ? calcRemaining(value) : null;
 
@@ -27,7 +28,8 @@ export function DateEditor({ value, onChange }) {
           value={localValue}
           onChange={(e) => onChange(localToIso(e.target.value))}
           className="inscribed-field"
-          style={{ ...fieldStyle, colorScheme: "dark" }}
+          disabled={disabled}
+          style={{ ...fieldStyle, colorScheme: "dark", ...(disabled ? fieldDisabledStyle : null) }}
         />
       </label>
 

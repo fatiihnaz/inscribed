@@ -55,8 +55,9 @@ const EMPTY_DOC_HTML = "<p></p>";
  * @param {Object} props
  * @param {string} props.value
  * @param {(value: string) => void} props.onChange
+ * @param {boolean} [props.disabled]
  */
-export function RichTextEditor({ value, onChange }) {
+export function RichTextEditor({ value, onChange, disabled }) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -69,6 +70,7 @@ export function RichTextEditor({ value, onChange }) {
       }),
     ],
     content: value || "",
+    editable: !disabled,
     immediatelyRender: false,
     editorProps: {
       attributes: {
@@ -93,12 +95,20 @@ export function RichTextEditor({ value, onChange }) {
     editor.commands.setContent(incoming || "", false);
   }, [editor, value]);
 
+  // `editable` is only read at init, so toggle it imperatively when the
+  // read-only state changes — this strips the contenteditable affordance
+  // off the ProseMirror surface so the value shows but can't be typed into.
+  useEffect(() => {
+    if (!editor) return;
+    editor.setEditable(!disabled);
+  }, [editor, disabled]);
+
   return (
     <label style={labelStyle}>
       <span style={labelTextStyle}>Zengin Metin</span>
       <style>{rteCss}</style>
       <div className="inscribed-rte-shell" style={shellStyle}>
-        <Toolbar editor={editor} />
+        <Toolbar editor={editor} disabled={disabled} />
         <div style={contentWrapStyle}>
           <EditorContent editor={editor} />
         </div>
@@ -108,11 +118,22 @@ export function RichTextEditor({ value, onChange }) {
 }
 
 /**
- * @param {{ editor: import("@tiptap/react").Editor | null }} props
+ * @param {{ editor: import("@tiptap/react").Editor | null, disabled?: boolean }} props
  */
-function Toolbar({ editor }) {
+function Toolbar({ editor, disabled }) {
   if (!editor) {
     return <div style={{ ...toolbarStyle, minHeight: 34 }} />;
+  }
+
+  // Read-only: keep the toolbar in the layout for visual continuity but
+  // make it inert — no clicks reach the (now non-editable) document.
+  if (disabled) {
+    return (
+      <div
+        style={{ ...toolbarStyle, minHeight: 34, opacity: 0.4, pointerEvents: "none" }}
+        aria-disabled="true"
+      />
+    );
   }
 
   const handleLink = () => {

@@ -140,6 +140,7 @@ export function AdminDrawer() {
     isDrawerOpen,
     setDrawerOpen,
     itemSchemas,
+    editorVisibility,
     collectionBindings,
     collectionStore,
     userInfo,
@@ -178,6 +179,10 @@ export function AdminDrawer() {
     const dirty = new Map();
 
     for (const block of blocks.values()) {
+      // `visible={false}` regions register as "hidden" — drop them from the
+      // drawer entirely (no card, no count, no dirty contribution).
+      if (editorVisibility.get(block.blockPath) === "hidden") continue;
+
       const slug = block._slug ?? pathname;
       (slug === pathname ? pages : globals).push(block);
 
@@ -204,7 +209,7 @@ export function AdminDrawer() {
     }
 
     return { pageBlockList: pages, globalBlockList: globals, dirtyByPath: dirty };
-  }, [blocks, pathname, collectionBindings, drafts]);
+  }, [blocks, pathname, collectionBindings, drafts, editorVisibility]);
 
   // Tab list. Always: "page", "global". Plus: one tab per collection
   // with a `<CollectionRegion>` binding on the current page that the
@@ -557,6 +562,7 @@ export function AdminDrawer() {
                 activeBlockPath={activeBlock}
                 onFocus={setActiveBlock}
                 itemSchemas={itemSchemas}
+                editorVisibility={editorVisibility}
                 closedGroups={closedGroups}
                 onToggleGroup={toggleGroup}
                 dirtyByPath={dirtyByPath}
@@ -1082,6 +1088,7 @@ function Toolbar({ value, onChange }) {
  *   activeBlockPath: string | null,
  *   onFocus: (blockPath: string | null) => void,
  *   itemSchemas: Map<string, import("../lib/schemas.js").ItemSchema>,
+ *   editorVisibility: Map<string, "hidden"|"readonly">,
  *   closedGroups: Set<string>,
  *   onToggleGroup: (group: string) => void,
  *   dirtyByPath: Map<string, boolean>,
@@ -1090,7 +1097,7 @@ function Toolbar({ value, onChange }) {
  */
 function GroupedBlockList({
   blockList, drafts, setDraft, clearDraft, activeBlockPath, onFocus,
-  itemSchemas, closedGroups, onToggleGroup, dirtyByPath, emptyHint,
+  itemSchemas, editorVisibility, closedGroups, onToggleGroup, dirtyByPath, emptyHint,
 }) {
   const chunks = useMemo(() => chunkBlocksByPrefix(blockList), [blockList]);
 
@@ -1112,6 +1119,7 @@ function GroupedBlockList({
                   onReset={() => resetBlock(chunk.block, setDraft, clearDraft)}
                   onFocus={() => onFocus(chunk.block.blockPath)}
                   itemSchema={itemSchemas.get(chunk.block.blockPath) ?? null}
+                  readOnly={editorVisibility.get(chunk.block.blockPath) === "readonly"}
                 />
               </li>
             ) : (
@@ -1125,6 +1133,7 @@ function GroupedBlockList({
                   activeBlockPath={activeBlockPath}
                   onFocus={onFocus}
                   itemSchemas={itemSchemas}
+                  editorVisibility={editorVisibility}
                   dirty={chunk.blocks.some((b) => dirtyByPath.get(b.blockPath))}
                   isOpen={!closedGroups.has(chunk.name)}
                   onToggle={() => onToggleGroup(chunk.name)}
@@ -1148,6 +1157,7 @@ function GroupedBlockList({
  *   activeBlockPath: string | null,
  *   onFocus: (blockPath: string | null) => void,
  *   itemSchemas: Map<string, import("../lib/schemas.js").ItemSchema>,
+ *   editorVisibility: Map<string, "hidden"|"readonly">,
  *   dirty: boolean,
  *   isOpen: boolean,
  *   onToggle: () => void,
@@ -1155,7 +1165,7 @@ function GroupedBlockList({
  */
 function GroupCard({
   groupName, blocks, drafts, setDraft, clearDraft, activeBlockPath, onFocus,
-  itemSchemas, dirty, isOpen, onToggle,
+  itemSchemas, editorVisibility, dirty, isOpen, onToggle,
 }) {
   return (
     <div style={groupCardStyle}>
@@ -1197,6 +1207,7 @@ function GroupCard({
                   onReset={() => resetBlock(block, setDraft, clearDraft)}
                   onFocus={() => onFocus(block.blockPath)}
                   itemSchema={itemSchemas.get(block.blockPath) ?? null}
+                  readOnly={editorVisibility.get(block.blockPath) === "readonly"}
                 />
               ))}
             </div>

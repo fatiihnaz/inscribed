@@ -21,7 +21,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Undo2 } from "lucide-react";
+import { ChevronDown, Undo2, Lock } from "lucide-react";
 
 import { stableStringify } from "../lib/stable-stringify.js";
 
@@ -59,6 +59,7 @@ import {
  *   onReset: () => void,
  *   onFocus: () => void,
  *   itemSchema: ItemSchema | null,
+ *   readOnly?: boolean,
  * }} props
  */
 export function BlockCard(props) {
@@ -122,18 +123,22 @@ function InvalidCollectionCard({ block }) {
  *   onReset: () => void,
  *   onFocus: () => void,
  *   itemSchema: ItemSchema | null,
+ *   readOnly?: boolean,
  * }} props
  */
-function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema }) {
+function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema, readOnly }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
 
   // Editor reads the local draft if mid-edit, else the server-side
   // overlay (`block.draftValue`), else the published value.
   const effective = block.draftValue ?? block.value;
   const value = hasDraft ? draft : effective;
-  const isDirty = hasDraft
+  // A read-only block can't be edited, so it never carries local dirty
+  // state worth surfacing — suppress the dot/reset/rail so the card reads
+  // as a passive, locked view instead of an editable one.
+  const isDirty = !readOnly && (hasDraft
     ? stableStringify(draft) !== stableStringify(block.value)
-    : block.draftValue != null;
+    : block.draftValue != null);
 
   const [isOpen, setIsOpen] = useState(false);
 
@@ -162,6 +167,7 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
         block={block}
         isOpen={isOpen}
         isDirty={isDirty}
+        readOnly={readOnly}
         onHeaderClick={handleHeaderClick}
         onReset={onReset}
       />
@@ -171,7 +177,7 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
         onMouseDown={onFocus}
       >
         <div style={blockBodyStyle}>
-          {renderEditor(block, value, onChange, itemSchema)}
+          {renderEditor(block, value, onChange, itemSchema, readOnly)}
         </div>
       </div>
     </div>
@@ -265,11 +271,12 @@ function cardClassName({ isActive, isDirty, isCollection }) {
  *   isOpen: boolean,
  *   isDirty: boolean,
  *   isCollection?: boolean,
+ *   readOnly?: boolean,
  *   onHeaderClick: () => void,
  *   onReset: () => void,
  * }} props
  */
-function CardHeader({ block, isOpen, isDirty, isCollection, onHeaderClick, onReset }) {
+function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, onHeaderClick, onReset }) {
   const meta = TYPE_META[block.blockType] ?? TYPE_META.Text;
   return (
     <button
@@ -316,6 +323,16 @@ function CardHeader({ block, isOpen, isDirty, isCollection, onHeaderClick, onRes
           title="Geri al"
         >
           <Undo2 size={13} />
+        </span>
+      ) : null}
+
+      {readOnly ? (
+        <span
+          style={{ display: "inline-flex", color: TEXT_MUTED }}
+          title="Salt okunur (editable={false})"
+          aria-label="Salt okunur"
+        >
+          <Lock size={12} />
         </span>
       ) : null}
 
@@ -381,12 +398,13 @@ export function resetBlock(block, setDraft, clearDraft) {
  * @param {*} value
  * @param {(value: *) => void} onChange
  * @param {ItemSchema | null} itemSchema
+ * @param {boolean} [readOnly]
  */
-function renderEditor(block, value, onChange, itemSchema) {
+function renderEditor(block, value, onChange, itemSchema, readOnly) {
   if (block.blockType === "List") {
-    return <ListEditor value={value} onChange={onChange} itemSchema={itemSchema} />;
+    return <ListEditor value={value} onChange={onChange} itemSchema={itemSchema} disabled={readOnly} />;
   }
-  const primitive = FieldEditor({ blockType: block.blockType, value, onChange });
+  const primitive = FieldEditor({ blockType: block.blockType, value, onChange, disabled: readOnly });
   if (primitive) return primitive;
   return (
     <div style={{ color: TEXT_MUTED, fontSize: 12 }}>

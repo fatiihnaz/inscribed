@@ -80,6 +80,17 @@ import { createContext, useContext } from "react";
  *   atomic editors). Unregistered on unmount; key is the list's blockPath.
  * @property {(blockPath: string, schema: ItemSchema) => void} registerItemSchema
  * @property {(blockPath: string) => void} unregisterItemSchema
+ * @property {Map<string, "hidden"|"readonly">} editorVisibility
+ *   Registry populated by `<EditableRegion>` instances whose `visible` /
+ *   `editable` prop overrides the default admin gate. These props live in
+ *   page-side JSX (runtime only — they're not in the manifest or the
+ *   `/cms/content` blocks map), so this is how the AdminDrawer learns about
+ *   them. `"hidden"` (from `visible={false}`) drops the block from the
+ *   drawer entirely; `"readonly"` (from `editable={false}`) keeps the card
+ *   but renders it locked. Key is the block's full path (with any
+ *   `<CmsGroup>` prefix applied). Unregistered on unmount.
+ * @property {(blockPath: string, mode: "hidden"|"readonly") => void} registerEditorVisibility
+ * @property {(blockPath: string) => void} unregisterEditorVisibility
  * @property {Map<string, { collection: string, slug?: string, filter?: Record<string, *>, limit?: number, offset?: number }>} collectionBindings
  *   Runtime registry populated by `<CollectionItem>` and `<CollectionRegion>`
  *   when they mount. Collections don't live in the CMS block namespace

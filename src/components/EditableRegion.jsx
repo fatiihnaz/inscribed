@@ -24,7 +24,7 @@
  * client component instead - that hook still exposes the raw value.
  */
 
-import { cloneElement, useContext, useState } from "react";
+import { cloneElement, useContext, useEffect, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 
 import { useCmsContext } from "../lib/context.js";
@@ -59,12 +59,16 @@ import { CmsGroupContext } from "../lib/group-context.js";
  *   global blocks under the same keys.
  * @property {boolean} [editable]
  *   Override the context-level `isAdmin` gate for this region. When
- *   `false`, the region renders read-only even for admins. Omit (or
- *   `true`) to fall back to the default `isAdmin` behaviour.
+ *   `false`, the region renders read-only on the page (no inline edit
+ *   affordance) AND its drawer card is locked - the block still appears
+ *   in the admin drawer with its value, but every editor field is
+ *   disabled. Omit (or `true`) for the default `isAdmin` behaviour.
  * @property {boolean} [visible]
- *   When `false`, forces non-editable regardless of `editable` or
- *   `isAdmin`. Intended for drawer-level visibility control; content
- *   still renders to the page, edit affordance is suppressed.
+ *   When `false`, the region is removed from the admin drawer entirely
+ *   (no card, no count) and renders read-only on the page. Content still
+ *   ships to the public DOM - this only hides the *editing* surface, for
+ *   blocks an admin should never touch through the drawer. Takes
+ *   precedence over `editable`.
  */
 
 const RING_HOVER   = "0 0 0 1.5px rgba(201,184,150,0.30)";
@@ -92,7 +96,10 @@ const BLOCK_TAGS = new Set([
 // computed below.
 // eslint-disable-next-line no-unused-vars
 export function EditableRegion({ blockPath, as, editable, visible, blockType: _bt, defaultValue: _dv, scope: _scope, ...rest }) {
-  const { isAdmin, blocks, contentDraftsStore, activeBlock, setActiveBlock } = useCmsContext();
+  const {
+    isAdmin, blocks, contentDraftsStore, activeBlock, setActiveBlock,
+    registerEditorVisibility, unregisterEditorVisibility,
+  } = useCmsContext();
   const groupPrefix = useContext(CmsGroupContext);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -101,6 +108,18 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   // already-prefixed string (e.g. "footer.copyright") - the runtime
   // lookup must match. Top-level (no enclosing group) is a no-op.
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
+
+  // Surface the `visible` / `editable` overrides to the drawer's registry.
+  // `visible={false}` wins (drops the card entirely); `editable={false}`
+  // locks it. Only admins mount the drawer, so public visitors skip the
+  // registration churn. Re-runs (and cleans up) whenever the mode or path
+  // changes, and unregisters on unmount.
+  const visibilityMode = visible === false ? "hidden" : editable === false ? "readonly" : null;
+  useEffect(() => {
+    if (!isAdmin || !visibilityMode) return undefined;
+    registerEditorVisibility(fullPath, visibilityMode);
+    return () => unregisterEditorVisibility(fullPath);
+  }, [isAdmin, fullPath, visibilityMode, registerEditorVisibility, unregisterEditorVisibility]);
 
   // Subscribe to just this block's draft. A keystroke in another region
   // leaves both selectors' outputs unchanged, so `useStoreSelector` bails

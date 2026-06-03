@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { useCmsContext } from "../../lib/context.js";
-import { fieldStyle, labelStyle, labelTextStyle } from "./styles.js";
+import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./styles.js";
 
 const ACCENT = "#c9b896";
 const BORDER = "rgba(255,255,255,0.10)";
@@ -22,8 +22,9 @@ const TEXT_FAINT = "rgba(255,255,255,0.25)";
  * @param {Object} props
  * @param {ImageValue|null|undefined} props.value
  * @param {(value: ImageValue) => void} props.onChange
+ * @param {boolean} [props.disabled]
  */
-export function ImageEditor({ value, onChange }) {
+export function ImageEditor({ value, onChange, disabled }) {
   const { config, getAccessToken } = useCmsContext();
   const src = value?.src ?? "";
   const alt = value?.alt ?? "";
@@ -82,9 +83,9 @@ export function ImageEditor({ value, onChange }) {
       {/* Drop zone / preview */}
       <div
         style={{ position: "relative", borderRadius: 10 }}
-        onDrop={onDrop}
-        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-        onDragLeave={() => setIsDragging(false)}
+        onDrop={disabled ? undefined : onDrop}
+        onDragOver={disabled ? undefined : (e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={disabled ? undefined : () => setIsDragging(false)}
       >
         {src && !isUploading ? (
           <div style={{ position: "relative" }}>
@@ -132,7 +133,9 @@ export function ImageEditor({ value, onChange }) {
               )}
             </AnimatePresence>
 
-            {/* Replace button */}
+            {/* Replace button — hidden in read-only mode so the image
+                stays a passive preview with no edit affordance. */}
+            {!disabled && (
             <button
               type="button"
               className="inscribed-img-replace"
@@ -159,6 +162,28 @@ export function ImageEditor({ value, onChange }) {
               <UploadIcon size={11} color="currentColor" />
               Değiştir
             </button>
+            )}
+          </div>
+        ) : disabled ? (
+          /* Read-only empty state: a passive placeholder, never an
+             interactive dropzone — there's no image to show and no way
+             to add one. */
+          <div
+            style={{
+              width: "100%",
+              minHeight: 112,
+              border: `1.5px dashed ${BORDER}`,
+              borderRadius: 10,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "16px 14px",
+              fontSize: 11,
+              color: TEXT_FAINT,
+              background: "rgba(255,255,255,0.02)",
+            }}
+          >
+            Görsel yok
           </div>
         ) : (
           /* Empty upload zone */
@@ -297,7 +322,8 @@ export function ImageEditor({ value, onChange }) {
           onChange={(e) => patch({ src: e.target.value })}
           placeholder="https://..."
           className="inscribed-field"
-          style={fieldStyle}
+          disabled={disabled}
+          style={disabled ? { ...fieldStyle, ...fieldDisabledStyle } : fieldStyle}
         />
       </label>
 
@@ -309,7 +335,8 @@ export function ImageEditor({ value, onChange }) {
           value={alt}
           onChange={(e) => patch({ alt: e.target.value })}
           className="inscribed-field"
-          style={fieldStyle}
+          disabled={disabled}
+          style={disabled ? { ...fieldStyle, ...fieldDisabledStyle } : fieldStyle}
         />
       </label>
 
@@ -317,8 +344,10 @@ export function ImageEditor({ value, onChange }) {
         ref={inputRef}
         type="file"
         accept="image/*"
+        disabled={disabled}
         style={{ display: "none" }}
         onChange={(e) => {
+          if (disabled) return;
           const file = e.target.files?.[0];
           if (file) handleFile(file);
           e.target.value = "";

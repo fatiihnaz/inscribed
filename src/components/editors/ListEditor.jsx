@@ -32,9 +32,10 @@ import { FieldEditor } from "./FieldEditor.jsx";
  *   value: *,
  *   onChange: (value: *) => void,
  *   itemSchema: ItemSchema | null,
+ *   disabled?: boolean,
  * }} props
  */
-export function ListEditor({ value, onChange, itemSchema }) {
+export function ListEditor({ value, onChange, itemSchema, disabled }) {
   /** @type {Record<string, *>[]} */
   const items = Array.isArray(value) ? value : [];
 
@@ -84,6 +85,7 @@ export function ListEditor({ value, onChange, itemSchema }) {
           total={items.length}
           item={item}
           itemSchema={itemSchema}
+          disabled={disabled}
           onFieldChange={(k, v) => onFieldChange(i, k, v)}
           onRemove={() => onRemove(i)}
           onMoveUp={i > 0 ? () => onMove(i, -1) : null}
@@ -91,15 +93,18 @@ export function ListEditor({ value, onChange, itemSchema }) {
         />
       ))}
 
-      <button
-        type="button"
-        onClick={onAdd}
-        style={listAddButtonStyle}
-        className="inscribed-icon-action"
-      >
-        <Plus size={13} />
-        <span>Öğe ekle</span>
-      </button>
+      {/* No "add item" affordance in read-only mode. */}
+      {!disabled && (
+        <button
+          type="button"
+          onClick={onAdd}
+          style={listAddButtonStyle}
+          className="inscribed-icon-action"
+        >
+          <Plus size={13} />
+          <span>Öğe ekle</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -110,13 +115,14 @@ export function ListEditor({ value, onChange, itemSchema }) {
  *   total: number,
  *   item: Record<string, *>,
  *   itemSchema: ItemSchema,
+ *   disabled?: boolean,
  *   onFieldChange: (fieldKey: string, value: *) => void,
  *   onRemove: () => void,
  *   onMoveUp: (() => void) | null,
  *   onMoveDown: (() => void) | null,
  * }} props
  */
-function ListItemCard({ index, total, item, itemSchema, onFieldChange, onRemove, onMoveUp, onMoveDown }) {
+function ListItemCard({ index, total, item, itemSchema, disabled, onFieldChange, onRemove, onMoveUp, onMoveDown }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -127,6 +133,9 @@ function ListItemCard({ index, total, item, itemSchema, onFieldChange, onRemove,
       >
         <span style={listItemIndexStyle}>#{index + 1} / {total}</span>
 
+        {/* Reorder / delete controls are edit affordances — omitted in
+            read-only mode, leaving the item header as a passive view. */}
+        {!disabled && (
         <div style={{ display: "inline-flex", gap: 2, marginLeft: "auto" }}>
           {onMoveUp ? (
             <button
@@ -160,12 +169,13 @@ function ListItemCard({ index, total, item, itemSchema, onFieldChange, onRemove,
             <Trash2 size={12} />
           </button>
         </div>
+        )}
 
         <motion.span
           initial={false}
           animate={{ rotate: isOpen ? 180 : 0 }}
           transition={{ duration: 0.2 }}
-          style={{ display: "inline-flex", color: TEXT_MUTED, marginLeft: 4 }}
+          style={{ display: "inline-flex", color: TEXT_MUTED, marginLeft: disabled ? "auto" : 4 }}
         >
           <ChevronDown size={13} />
         </motion.span>
@@ -187,6 +197,7 @@ function ListItemCard({ index, total, item, itemSchema, onFieldChange, onRemove,
                   blockType: field.blockType,
                   value: item[key],
                   onChange: (v) => onFieldChange(key, v),
+                  disabled,
                 });
                 return (
                   <div key={key} style={listFieldStyle}>

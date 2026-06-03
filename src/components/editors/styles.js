@@ -31,3 +31,11 @@ export const fieldStyle = {
   color: "rgba(255,255,255,0.96)",
   outline: "none",
 };
+
+// Merged on top of `fieldStyle` for read-only (`editable={false}`) blocks.
+// Dims the field and swaps the caret for a not-allowed cursor so the lock
+// reads at the field level, not just the card header.
+export const fieldDisabledStyle = {
+  opacity: 0.55,
+  cursor: "not-allowed",
+};

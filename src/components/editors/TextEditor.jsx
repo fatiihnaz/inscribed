@@ -5,14 +5,15 @@
  * works out of the box; switch to `<input>` if you need a single line.
  */
 
-import { fieldStyle, labelStyle, labelTextStyle } from "./styles.js";
+import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./styles.js";
 
 /**
  * @param {Object} props
  * @param {string} props.value
  * @param {(value: string) => void} props.onChange
+ * @param {boolean} [props.disabled]
  */
-export function TextEditor({ value, onChange }) {
+export function TextEditor({ value, onChange, disabled }) {
   return (
     <label style={labelStyle}>
       <span style={labelTextStyle}>Metin</span>
@@ -21,7 +22,8 @@ export function TextEditor({ value, onChange }) {
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         rows={4}
-        style={{ ...fieldStyle, resize: "vertical" }}
+        disabled={disabled}
+        style={{ ...fieldStyle, resize: "vertical", ...(disabled ? fieldDisabledStyle : null) }}
       />
     </label>
   );

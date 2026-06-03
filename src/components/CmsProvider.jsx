@@ -182,6 +182,42 @@ export function CmsProvider({
     [],
   );
 
+  // Registry of per-region editor-visibility overrides from `<EditableRegion>`'s
+  // `visible` / `editable` props. Those props are page-side runtime metadata
+  // (not in the manifest/blocks map), so this is how the drawer learns to
+  // hide or lock a block. State-based (new Map identity per change) so the
+  // drawer's block-list useMemo recomputes naturally when overrides come/go.
+  const [editorVisibility, setEditorVisibility] = useState(
+    /** @returns {Map<string, "hidden"|"readonly">} */
+    () => new Map(),
+  );
+
+  const registerEditorVisibility = useCallback(
+    /** @param {string} blockPath @param {"hidden"|"readonly"} mode */
+    (blockPath, mode) => {
+      setEditorVisibility((prev) => {
+        if (prev.get(blockPath) === mode) return prev;
+        const next = new Map(prev);
+        next.set(blockPath, mode);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const unregisterEditorVisibility = useCallback(
+    /** @param {string} blockPath */
+    (blockPath) => {
+      setEditorVisibility((prev) => {
+        if (!prev.has(blockPath)) return prev;
+        const next = new Map(prev);
+        next.delete(blockPath);
+        return next;
+      });
+    },
+    [],
+  );
+
   // /cms/collections/me state - effect fires further down (after
   // `stableGetAccessToken` is declared) so the drawer's per-Collection
   // cards (and future per-Collection tabs) share a single round-trip
@@ -1054,6 +1090,9 @@ export function CmsProvider({
       itemSchemas: itemSchemasRef.current,
       registerItemSchema,
       unregisterItemSchema,
+      editorVisibility,
+      registerEditorVisibility,
+      unregisterEditorVisibility,
       collectionBindings,
       registerCollectionBinding,
       unregisterCollectionBinding,
@@ -1101,6 +1140,9 @@ export function CmsProvider({
       itemSchemasVersion,
       registerItemSchema,
       unregisterItemSchema,
+      editorVisibility,
+      registerEditorVisibility,
+      unregisterEditorVisibility,
       collectionBindings,
       registerCollectionBinding,
       unregisterCollectionBinding,

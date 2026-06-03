@@ -428,8 +428,10 @@ export function AdminDrawer() {
       setLastSavedAt(
         `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
       );
+    } else if (draftSyncStatus === "idle" && dirtyCount === 0) {
+      setLastSavedAt(null);
     }
-  }, [draftSyncStatus]);
+  }, [draftSyncStatus, dirtyCount]);
 
   // Transient "Veri kaydedildi" pulse for the header pill: fires after a
   // successful publish (`onSaveAll`) and clears itself a few seconds later
@@ -716,16 +718,7 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
   /** @type {{ state: string, bg: string, glow: string, pulse: boolean, label: React.ReactNode, title: string }} */
   let view;
 
-  if (isSyncing) {
-    view = {
-      state: "saving",
-      bg: STATUS_WARN,
-      glow: `0 0 5px ${STATUS_WARN}66`,
-      pulse: true,
-      label: "Kaydediliyor…",
-      title: "Taslak şu anda kaydediliyor",
-    };
-  } else if (isFailed) {
+  if (isFailed) {
     view = {
       state: "failed",
       bg: STATUS_DANGER,
@@ -749,18 +742,42 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       title: "Tüm değişiklikler yayınlandı",
     };
   } else if (lastSavedAt) {
+    // Hold the label text steady during re-saves — only the dot pulses
+    // and changes colour. The timestamp slides vertically when it
+    // changes (new minute); same value → no animation (key unchanged).
     view = {
-      state: `saved:${lastSavedAt}`,
-      bg: STATUS_OK,
-      glow: `0 0 5px ${STATUS_OK}66`,
-      pulse: false,
+      state: "saved",
+      bg: isSyncing ? STATUS_WARN : STATUS_OK,
+      glow: isSyncing ? `0 0 5px ${STATUS_WARN}66` : `0 0 5px ${STATUS_OK}66`,
+      pulse: isSyncing,
       label: (
         <>
           Taslak kayıtlı
-          <span style={headerPillTimeStyle}>{lastSavedAt}</span>
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={lastSavedAt}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.14, ease: [0.32, 0.72, 0.18, 1] }}
+              style={{ ...headerPillTimeStyle, display: "inline-block" }}
+            >
+              {lastSavedAt}
+            </motion.span>
+          </AnimatePresence>
         </>
       ),
       title: `Taslak en son ${lastSavedAt}'de kaydedildi`,
+    };
+  } else if (isSyncing) {
+    // First save ever — no prior timestamp to anchor to.
+    view = {
+      state: "saving",
+      bg: STATUS_WARN,
+      glow: `0 0 5px ${STATUS_WARN}66`,
+      pulse: true,
+      label: "Kaydediliyor…",
+      title: "Taslak şu anda kaydediliyor",
     };
   } else if (dirty) {
     view = {
@@ -792,7 +809,8 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       style={{ ...headerPillStyle, transformOrigin: "center", overflow: "hidden" }}
       title={view.title}
     >
-      <span
+      <motion.span
+        layout
         className={view.pulse ? "inscribed-status-pulse" : undefined}
         style={{ ...headerPillDotStyle, background: view.bg, boxShadow: view.glow }}
       />
@@ -822,7 +840,7 @@ const headerPillStyle = /** @type {React.CSSProperties} */ ({
   // state's height — only the horizontal axis animates as the label
   // appears/disappears, no vertical jitter on the header.
   minHeight: 22,
-  padding: "0 10px",
+  padding: "0 8px",
   borderRadius: 99,
   background: "rgba(255,255,255,0.025)",
   boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",

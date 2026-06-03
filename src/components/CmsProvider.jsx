@@ -510,6 +510,7 @@ export function CmsProvider({
   );
 
   const clearDrafts = useCallback(() => {
+    discardGenRef.current += 1;
     setDraftsState((prev) => (prev.size === 0 ? prev : new Map()));
   }, []);
 
@@ -810,6 +811,11 @@ export function CmsProvider({
   const autosaveTimerRef = useRef(
     /** @type {ReturnType<typeof setTimeout>|null} */ (null),
   );
+  // Incremented on every explicit discard so the in-flight autosave PUT
+  // can detect that a discard happened while it was awaiting and skip
+  // the "Taslak kaydedildi" flash (which would be wrong — the user just
+  // threw those drafts away).
+  const discardGenRef = useRef(0);
   useEffect(() => {
     const armDebounce = () => {
       if (autosaveTimerRef.current) {
@@ -821,6 +827,7 @@ export function CmsProvider({
 
       autosaveTimerRef.current = setTimeout(async () => {
       autosaveTimerRef.current = null;
+      const genAtDispatch = discardGenRef.current;
       const drafts = contentDraftsStore.get();
       const currentBlocks = blocksRef.current;
       const currentPathname = draftPathnameRef.current ?? "/";
@@ -847,8 +854,18 @@ export function CmsProvider({
       }
       if (bySlug.size === 0) return;
 
+      // If every block being PUT has value === published (all resets to
+      // baseline, e.g. per-block undo), treat it as a silent backend
+      // cleanup — no "Kaydediliyor / Taslak kaydedildi" flash.
+      const isAllReset = [...bySlug.values()].every((blocksForSlug) =>
+        blocksForSlug.every((item) => {
+          const b = currentBlocks.get(item.blockPath);
+          return b == null || stableStringify(item.value) === stableStringify(b.value);
+        }),
+      );
+
       const accessToken = (await stableGetAccessToken()) || undefined;
-      setDraftSyncStatus("saving");
+      if (!isAllReset) setDraftSyncStatus("saving");
 
       const slugEntries = [...bySlug.entries()];
       const results = await Promise.allSettled(
@@ -867,6 +884,15 @@ export function CmsProvider({
           return next;
         }),
       );
+
+      // Global discard during PUT: skip the optimistic draftValue update
+      // entirely — `discardServerDrafts` already nullified draftValue
+      // optimistically, so applying our stale sent-values here would
+      // briefly re-populate it and fight the discard.
+      if (discardGenRef.current !== genAtDispatch) {
+        setDraftSyncStatus("idle");
+        return;
+      }
 
       // Optimistically reflect the backend's post-write state in the
       // local blocks map: each block we just PUT now has draftValue
@@ -909,7 +935,12 @@ export function CmsProvider({
             console.warn("[inscribed] draft autosave failed:", r.reason);
           }
         }
-        flashDraftStatus("failed");
+        if (!isAllReset) flashDraftStatus("failed");
+        return;
+      }
+
+      if (isAllReset) {
+        setDraftSyncStatus("idle");
       } else {
         flashDraftStatus("saved");
       }

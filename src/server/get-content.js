@@ -158,7 +158,7 @@ export async function syncAll(manifests, options) {
     accessToken = await getServiceToken();
   } catch (err) {
     throw new Error(
-      `[cms-sync] Failed to obtain service token: ${err instanceof Error ? err.message : String(err)}`,
+      `[inscribed-sync] Failed to obtain service token: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 
@@ -167,7 +167,7 @@ export async function syncAll(manifests, options) {
     try {
       const result = await transport.syncManifest(manifest, { accessToken: accessToken || undefined });
       console.log(
-        `[cms-sync] ${manifest.slug}  created=${result.created} deleted=${result.deleted} unchanged=${result.unchanged}`,
+        `[inscribed-sync] ${manifest.slug}  created=${result.created} deleted=${result.deleted} unchanged=${result.unchanged}`,
       );
     } catch (err) {
       failed += 1;
@@ -177,13 +177,13 @@ export async function syncAll(manifests, options) {
           : err instanceof Error
             ? err.message
             : String(err);
-      console.error(`[cms-sync] ${manifest.slug}  FAILED: ${detail}`);
+      console.error(`[inscribed-sync] ${manifest.slug}  FAILED: ${detail}`);
     }
   }
 
   if (failed > 0) {
     throw new Error(
-      `[cms-sync] ${failed}/${manifests.length} slug(s) failed - backend at ${config.baseUrl} reachable?`,
+      `[inscribed-sync] ${failed}/${manifests.length} slug(s) failed - backend at ${config.baseUrl} reachable?`,
     );
   }
 }

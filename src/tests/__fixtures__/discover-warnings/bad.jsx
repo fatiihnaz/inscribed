@@ -13,7 +13,7 @@ function Bad() {
       <EditableRegion blockType="Text" defaultValue="x" />
       {/* missing blockType */}
       <EditableRegion blockPath="a.b" defaultValue="x" />
-      {/* missing defaultValue */}
+      {/* missing defaultValue -> warns but still syncs, seeded with "" */}
       <EditableRegion blockPath="a.c" blockType="Text" />
       {/* non-literal blockPath */}
       <EditableRegion blockPath={slugVar} blockType="Text" defaultValue="x" />

@@ -1,6 +1,6 @@
 {
   "name": "inscribed",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Inline-editing CMS SDK for Next.js App Router projects",
   "keywords": [
     "cms",
@@ -61,13 +61,16 @@
     "prepublishOnly": "npm test && npm run build"
   },
   "dependencies": {
+    "@skylab-kulubu/inscribed-auth": "^0.1.0",
     "@tiptap/extension-link": "^2.10.0",
     "@tiptap/pm": "^2.10.0",
     "@tiptap/react": "^2.10.0",
     "@tiptap/starter-kit": "^2.10.0",
     "framer-motion": "^11.11.0",
+    "inscribed": "^1.1.1",
     "isomorphic-dompurify": "^2.18.0",
     "lucide-react": "^1.14.0",
+    "next-auth": "^4.24.14",
     "oxc-parser": "^0.134.0"
   },
   "peerDependencies": {
@@ -78,9 +81,9 @@
   "devDependencies": {
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
-    "next": "^15.0.0",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0",
+    "next": "^15.5.19",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
     "vitest": "^4.1.8"

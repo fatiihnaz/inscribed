@@ -111,16 +111,22 @@ exports[`discoverManifests > emits warnings for non-static / malformed declarati
         "sortOrder": 1,
       },
       {
+        "blockPath": "a.c",
+        "blockType": "Text",
+        "defaultValue": "",
+        "sortOrder": 2,
+      },
+      {
         "blockPath": "a.e",
         "blockType": "Text",
         "defaultValue": "x",
-        "sortOrder": 2,
+        "sortOrder": 3,
       },
       {
         "blockPath": "a.g",
         "blockType": "Text",
         "defaultValue": "x",
-        "sortOrder": 3,
+        "sortOrder": 4,
       },
     ],
     "slug": "/bad",
@@ -152,7 +158,7 @@ exports[`discoverManifests > emits warnings for non-static / malformed declarati
       "column": 6,
       "line": 17,
     },
-    "message": "<EditableRegion blockPath="a.c"> is missing a static defaultValue prop. Skipping.",
+    "message": "<EditableRegion blockPath="a.c"> has no static defaultValue prop. Syncing with an empty string (""); set a static defaultValue to seed initial content.",
   },
   {
     "file": "bad.jsx",

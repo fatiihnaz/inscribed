@@ -276,7 +276,7 @@ async function analyzeFile(filePath) {
   const { program, errors } = parseSync(filePath, source, { lang });
   if (errors.length > 0) {
     throw new Error(
-      `[cms-discover] Failed to parse ${path.relative(process.cwd(), filePath)}: ${errors[0].message}`,
+      `[inscribed-discover] Failed to parse ${path.relative(process.cwd(), filePath)}: ${errors[0].message}`,
     );
   }
 
@@ -413,8 +413,11 @@ async function analyzeFile(filePath) {
 
 /**
  * Pull a static `<EditableRegion>` declaration into the file analysis.
- * Required props: blockPath, blockType, defaultValue. Anything missing
- * yields a warning and the region is skipped. `groupPrefix` is the joined
+ * Required props: blockPath, blockType. A missing static defaultValue is
+ * tolerated - the region still syncs, seeded with an empty string (""), and a
+ * warning is emitted (an empty value renders as the placeholder until an admin
+ * fills it). A missing blockPath/blockType still yields a warning and skips the
+ * region (without a type there's nothing to sync). `groupPrefix` is the joined
  * stack of enclosing `<CmsGroup>` names; when non-empty it's prepended to
  * the blockPath so the manifest matches what the runtime context lookup
  * produces.
@@ -455,16 +458,15 @@ function handleEditableRegion(openingNode, filePath, analysis, warnings, groupPr
     warnings.push({
       file: filePath,
       loc: locOf(openingNode, locator),
-      message: `<EditableRegion blockPath="${blockPath}"> is missing a static defaultValue prop. Skipping.`,
+      message: `<EditableRegion blockPath="${blockPath}"> has no static defaultValue prop. Syncing with an empty string (""); set a static defaultValue to seed initial content.`,
     });
-    return;
   }
 
   /** @type {DiscoveredRegion} */
   const region = {
     blockPath,
     blockType: /** @type {BlockType} */ (blockType),
-    defaultValue: props.defaultValue,
+    defaultValue: hasDefault ? props.defaultValue : "",
   };
   const scope = readScopeProp(props, openingNode, blockPath, filePath, warnings, locator);
   if (scope) region.scope = scope;

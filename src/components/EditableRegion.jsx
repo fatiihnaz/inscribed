@@ -47,9 +47,10 @@ import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "
  *   no DB row, which means the region renders the empty placeholder forever.
  * @property {*} [defaultValue]
  *   Discovery-time metadata. The `defaultValue` written to the DB on first
- *   sync. Same caveat as `blockType` - omit and the region won't be synced.
- *   Must be a static literal in the JSX (the AST scanner can't evaluate
- *   expressions or imported values).
+ *   sync. Must be a static literal in the JSX (the AST scanner can't evaluate
+ *   expressions or imported values). Omit it and the region is still synced -
+ *   seeded with an empty string ("") and a discovery warning - so it renders
+ *   the empty placeholder until an admin fills it.
  * @property {"global"} [scope]
  *   Discovery-time marker. Set to `"global"` for region declared inside
  *   shared UI (header, footer, site-wide settings). The discovery script

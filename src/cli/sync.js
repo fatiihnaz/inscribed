@@ -59,17 +59,17 @@ for (const w of warnings) {
   const where = w.loc
     ? `${path.relative(process.cwd(), w.file)}:${w.loc.line}:${w.loc.column}`
     : path.relative(process.cwd(), w.file);
-  console.warn(`[cms-discover] ${where}\n  ${w.message}`);
+  console.warn(`[inscribed-discover] ${where}\n  ${w.message}`);
 }
 
 if (manifests.length === 0) {
   console.warn(
-    `[cms-discover] No <EditableRegion> declarations found under ${path.relative(process.cwd(), appRoot)}. Nothing to sync.`,
+    `[inscribed-discover] No <EditableRegion> declarations found under ${path.relative(process.cwd(), appRoot)}. Nothing to sync.`,
   );
 }
 
 for (const m of manifests) {
-  console.log(`[cms-discover] ${m.slug}  ${m.blocks.length} block(s)`);
+  console.log(`[inscribed-discover] ${m.slug}  ${m.blocks.length} block(s)`);
 }
 
 if (args.dryRun) {
@@ -99,7 +99,7 @@ function parseArgs(argv) {
     else if (a === "--dry-run") out.dryRun = true;
     else if (a === "--help" || a === "-h") out.help = true;
     else {
-      console.error(`[cms-sync] Unknown argument: ${a}`);
+      console.error(`[inscribed-sync] Unknown argument: ${a}`);
       console.error(`Run \`cms-sync --help\` for usage.`);
       process.exit(2);
     }
@@ -165,7 +165,7 @@ async function loadProjectConfig(cwd) {
       return await import(pathToFileURL(p).href);
     } catch (err) {
       console.error(
-        `[cms-sync] Failed to load ${name}: ${err instanceof Error ? err.message : String(err)}`,
+        `[inscribed-sync] Failed to load ${name}: ${err instanceof Error ? err.message : String(err)}`,
       );
       process.exit(1);
     }

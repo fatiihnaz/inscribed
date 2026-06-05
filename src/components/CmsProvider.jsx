@@ -91,6 +91,13 @@ export function CmsProvider({
   const [activeCollectionItem, setActiveCollectionItem] = useState(
     /** @type {{ key: string, slug: string } | null} */ (null),
   );
+  // Drawer-side "open this list row" signal — the List-block analogue of
+  // `activeCollectionItem`. Set when a page-side `<EditableList>` item is
+  // clicked; the matching `ListItemCard` reads it, expands, scrolls into
+  // view, then clears it so it only fires once.
+  const [activeListItem, setActiveListItem] = useState(
+    /** @type {{ path: string, index: number } | null} */ (null),
+  );
   const [refetchToken, setRefetchToken] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   // Per-blockPath unsaved edits (live-preview overlay while the admin types).
@@ -1085,6 +1092,8 @@ export function CmsProvider({
       setActiveBlock: setActiveBlockGuarded,
       activeCollectionItem,
       setActiveCollectionItem,
+      activeListItem,
+      setActiveListItem,
       refetchToken,
       triggerRefetch,
       itemSchemas: itemSchemasRef.current,
@@ -1135,6 +1144,7 @@ export function CmsProvider({
       activeBlock,
       setActiveBlockGuarded,
       activeCollectionItem,
+      activeListItem,
       refetchToken,
       triggerRefetch,
       itemSchemasVersion,

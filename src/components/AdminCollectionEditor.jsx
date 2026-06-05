@@ -451,6 +451,7 @@ export function AdminCollectionEditor({ editor, showMetaRow = true }) {
             type="button"
             onClick={save}
             disabled={disabled}
+            className="inscribed-btn-collection"
             style={saveButtonStyle}
           >
             {isPending ? "Kaydediliyor…" : "Kaydet"}
@@ -642,9 +643,7 @@ const errorStyle = /** @type {React.CSSProperties} */ ({
 const saveButtonStyle = /** @type {React.CSSProperties} */ ({
   marginLeft: "auto",
   padding: "7px 14px",
-  background: COLLECTION_ACCENT,
-  color: "#221d18",
-  border: "none",
+  border: 0,
   borderRadius: 6,
   cursor: "pointer",
   fontSize: 12,

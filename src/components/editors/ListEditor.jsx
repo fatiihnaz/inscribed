@@ -14,11 +14,12 @@
  * isn't lost.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Trash2, ChevronUp, ChevronDown } from "../icons.jsx";
 
 import { addItem, moveItem, removeItem } from "../../lib/list-ops.js";
+import { useCmsContext } from "../../lib/context.js";
 import { ACCENT, TEXT_MUTED, emptyStateStyle } from "../admin-drawer-styles.js";
 
 import { FieldEditor } from "./FieldEditor.jsx";
@@ -29,13 +30,14 @@ import { FieldEditor } from "./FieldEditor.jsx";
 
 /**
  * @param {{
+ *   blockPath?: string,
  *   value: *,
  *   onChange: (value: *) => void,
  *   itemSchema: ItemSchema | null,
  *   disabled?: boolean,
  * }} props
  */
-export function ListEditor({ value, onChange, itemSchema, disabled }) {
+export function ListEditor({ blockPath, value, onChange, itemSchema, disabled }) {
   /** @type {Record<string, *>[]} */
   const items = Array.isArray(value) ? value : [];
 
@@ -81,6 +83,7 @@ export function ListEditor({ value, onChange, itemSchema, disabled }) {
       {items.map((item, i) => (
         <ListItemCard
           key={i}
+          blockPath={blockPath}
           index={i}
           total={items.length}
           item={item}
@@ -111,6 +114,7 @@ export function ListEditor({ value, onChange, itemSchema, disabled }) {
 
 /**
  * @param {{
+ *   blockPath?: string,
  *   index: number,
  *   total: number,
  *   item: Record<string, *>,
@@ -122,11 +126,30 @@ export function ListEditor({ value, onChange, itemSchema, disabled }) {
  *   onMoveDown: (() => void) | null,
  * }} props
  */
-function ListItemCard({ index, total, item, itemSchema, disabled, onFieldChange, onRemove, onMoveUp, onMoveDown }) {
+function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onFieldChange, onRemove, onMoveUp, onMoveDown }) {
+  const { activeListItem, setActiveListItem } = useCmsContext();
   const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
+
+  // Page-side click on this list row sets `activeListItem`. When it points
+  // at us, expand and scroll into view, then clear the signal so it fires
+  // once (the user can collapse it again afterwards). Matches RegionItemCard.
+  useEffect(() => {
+    if (!activeListItem) return;
+    if (activeListItem.path !== blockPath) return;
+    if (activeListItem.index !== index) return;
+    setIsOpen(true);
+    setActiveListItem(null);
+    // Wait a frame so the parent List card's collapse has begun laying out
+    // before we scroll, otherwise the target's position is still stale.
+    const raf = requestAnimationFrame(() => {
+      ref.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [activeListItem, blockPath, index, setActiveListItem]);
 
   return (
-    <div style={listItemCardStyle}>
+    <div ref={ref} style={listItemCardStyle}>
       <div
         style={{ ...listItemHeaderStyle, cursor: "pointer", userSelect: "none" }}
         onClick={() => setIsOpen((v) => !v)}

@@ -107,7 +107,7 @@ export const TYPE_META = {
   Link:       { glyph: "↗", color: "rgb(228, 204, 164)", label: "Link" },
   Date:       { glyph: "◷", color: "rgb(184, 222, 214)", label: "Date" },
   List:       { glyph: "≡", color: "rgb(222, 204, 174)", label: "List" },
-  Collection: { glyph: "◫", color: COLLECTION_ACCENT, label: "Coll." },
+  Collection: { glyph: "◫", color: COLLECTION_ACCENT, label: "Item" },
 };
 
 // Legacy alias: TYPE_STYLES had { color, bg, ring, label } per type.
@@ -515,10 +515,10 @@ export const blockPathStyle = {
 };
 
 export const blockTypeLabelStyle = {
-  font: `600 9.5px/1 ${FONT_MONO}`,
+  fontWeight: 500,
+  fontSize: 9.5,
+  lineHeight: 1,
   color: TEXT_FAINT,
-  textTransform: "uppercase",
-  letterSpacing: "0.08em",
   paddingLeft: 2,
 };
 
@@ -962,6 +962,11 @@ export const panelCss = `
     opacity: 0.4;
     cursor: not-allowed;
   }
+  /* Collection undo — hover tints with the collection accent */
+  .inscribed-icon-button-collection:hover:not(:disabled) {
+    color: ${COLLECTION_ACCENT};
+    background-color: ${COLLECTION_SOFT};
+  }
 
   /* Status bar buttons */
   .inscribed-btn-primary {
@@ -969,8 +974,17 @@ export const panelCss = `
     color: ${BG};
     transition: background 140ms ease, color 140ms ease;
   }
-  .inscribed-btn-primary:hover:not(:disabled) { background: ${ACCENT}; }
+  .inscribed-btn-primary:hover:not(:disabled) { background: rgba(255,255,255,0.78); }
   .inscribed-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Solid collection primary (status-bar "Aç") — soft pink fill */
+  .inscribed-btn-collection-solid {
+    background: rgb(231, 214, 233);
+    color: #241c25;
+    transition: background 140ms ease;
+  }
+  .inscribed-btn-collection-solid:hover:not(:disabled) { background: rgb(238, 226, 240); }
+  .inscribed-btn-collection-solid:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .inscribed-btn-ghost {
     background: transparent;
@@ -984,6 +998,18 @@ export const panelCss = `
     background: ${SURFACE_1};
   }
   .inscribed-btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .inscribed-btn-collection {
+    background: ${COLLECTION_SOFT};
+    color: ${COLLECTION_ACCENT};
+    box-shadow: inset 0 0 0 1px rgba(220,195,225,0.42);
+    transition: background 140ms ease, box-shadow 140ms ease;
+  }
+  .inscribed-btn-collection:hover:not(:disabled) {
+    background: rgba(220,195,225,0.17);
+    box-shadow: inset 0 0 0 1px rgba(220,195,225,0.60);
+  }
+  .inscribed-btn-collection:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* Handle */
   .inscribed-handle {

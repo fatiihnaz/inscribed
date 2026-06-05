@@ -93,6 +93,7 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
     isAdmin, blocks, contentDraftsStore, setDraft,
     registerItemSchema, unregisterItemSchema,
     registerEditorVisibility, unregisterEditorVisibility,
+    setActiveBlock, setActiveListItem,
   } = useCmsContext();
   const groupPrefix = useContext(CmsGroupContext);
   const groupVisibility = useContext(CmsGroupVisibilityContext);
@@ -176,6 +177,12 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
       {items.map((item, i) => (
         <AdminItemWrapper
           key={i}
+          onActivate={() => {
+            // Open the List card in the drawer and signal which row to
+            // expand. The card consumes `activeListItem` on render.
+            setActiveBlock(fullPath);
+            setActiveListItem({ path: fullPath, index: i });
+          }}
           onRemove={() => onRemove(i)}
           onMoveUp={i > 0 ? () => onMove(i, -1) : null}
           onMoveDown={i < items.length - 1 ? () => onMove(i, 1) : null}
@@ -194,17 +201,20 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
 /**
  * @param {{
  *   children: React.ReactNode,
+ *   onActivate: () => void,
  *   onRemove: () => void,
  *   onMoveUp: (() => void) | null,
  *   onMoveDown: (() => void) | null,
  * }} props
  */
-function AdminItemWrapper({ children, onRemove, onMoveUp, onMoveDown }) {
+function AdminItemWrapper({ children, onActivate, onRemove, onMoveUp, onMoveDown }) {
   const [isHovered, setIsHovered] = useState(false);
   return (
     <div
+      onClick={onActivate}
       style={{
         position: "relative",
+        cursor: "pointer",
         boxShadow: isHovered ? ITEM_RING : undefined,
         backgroundColor: isHovered ? ITEM_BG : undefined,
         transition: "box-shadow 0.15s ease, background-color 0.2s ease",
@@ -214,7 +224,11 @@ function AdminItemWrapper({ children, onRemove, onMoveUp, onMoveDown }) {
     >
       {children}
       {isHovered ? (
-        <div style={controlsStyle} onMouseDown={(e) => e.stopPropagation()}>
+        <div
+          style={controlsStyle}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
           {onMoveUp ? (
             <button type="button" onClick={onMoveUp} style={iconButtonStyle} title="Yukarı taşı">
               <ChevronUp size={12} />

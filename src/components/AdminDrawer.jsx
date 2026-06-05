@@ -1359,6 +1359,47 @@ const previewCountStyle = /** @type {React.CSSProperties} */ ({
 });
 
 /**
+ * Single-line rolling counter. When `value` changes the old number slides
+ * out and the new one slides in — up when the count rises, down when it
+ * falls (odometer feel). The `overflow: hidden` wrapper masks the digit
+ * as it travels past one line height. `style` carries the text appearance
+ * (colour, weight).
+ *
+ * @param {{ value: number, style?: React.CSSProperties }} props
+ */
+function RollingCount({ value, style }) {
+  const prevRef = useRef(value);
+  const direction = value >= prevRef.current ? 1 : -1;
+  useEffect(() => {
+    prevRef.current = value;
+  }, [value]);
+  return (
+    <span
+      style={{
+        ...style,
+        display: "inline-flex",
+        position: "relative",
+        overflow: "hidden",
+        verticalAlign: "bottom",
+      }}
+    >
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={value}
+          initial={{ y: direction > 0 ? "100%" : "-100%", opacity: 0 }}
+          animate={{ y: "0%", opacity: 1 }}
+          exit={{ y: direction > 0 ? "-100%" : "100%", opacity: 0 }}
+          transition={{ duration: 0.24, ease: [0.32, 0.72, 0.18, 1] }}
+          style={{ display: "inline-block" }}
+        >
+          {value}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
+/**
  * @param {{
  *   dirtyCount: number,
  *   collectionDirtyCount: number,
@@ -1420,22 +1461,22 @@ function StatusBar({
   } else if (isBothDirty) {
     msg = (
       <span style={statusMsgStyle}>
-        <span style={statusMsgEmphasisStyle}>{dirtyCount}</span>
+        <RollingCount value={dirtyCount} style={statusMsgEmphasisStyle} />
         <span style={{ color: TEXT_FAINT, margin: "0 1px" }}>/</span>
-        <span style={{ ...statusMsgEmphasisStyle, color: COLLECTION_ACCENT }}>{collectionDirtyCount}</span>
+        <RollingCount value={collectionDirtyCount} style={{ ...statusMsgEmphasisStyle, color: COLLECTION_ACCENT }} />
         {" "}kaydedilmemiş değişiklik
       </span>
     );
   } else if (isContentDirty) {
     msg = (
       <span style={statusMsgStyle}>
-        <span style={statusMsgEmphasisStyle}>{dirtyCount}</span> kaydedilmemiş değişiklik
+        <RollingCount value={dirtyCount} style={statusMsgEmphasisStyle} /> kaydedilmemiş değişiklik
       </span>
     );
   } else if (isCollectionDirty) {
     msg = (
       <span style={statusMsgStyle}>
-        <span style={{ ...statusMsgEmphasisStyle, color: COLLECTION_ACCENT }}>{collectionDirtyCount}</span>
+        <RollingCount value={collectionDirtyCount} style={{ ...statusMsgEmphasisStyle, color: COLLECTION_ACCENT }} />
         {" "}koleksiyon taslağı
       </span>
     );
@@ -1511,8 +1552,8 @@ function StatusBar({
               key="open-collection"
               type="button"
               onClick={() => onGoToCollection(firstDirtyCollectionTarget)}
-              className="inscribed-btn-primary"
-              style={{ ...btnPrimaryStyle, background: COLLECTION_ACCENT, color: "#241c25" }}
+              className="inscribed-btn-collection-solid"
+              style={btnPrimaryStyle}
               aria-label={`${firstDirtyCollectionTarget.key} / ${firstDirtyCollectionTarget.slug} kaydını aç`}
               title={`${firstDirtyCollectionTarget.key} / ${firstDirtyCollectionTarget.slug} kaydını aç`}
               {...statusActionMotion}

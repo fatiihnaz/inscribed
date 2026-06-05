@@ -326,7 +326,7 @@ function RegionItemCard({ collectionKey, slug, canEdit }) {
                 editor.undoDraft();
               }
             }}
-            className="inscribed-icon-button"
+            className="inscribed-icon-button inscribed-icon-button-collection"
             style={blockResetStyle}
             aria-label="Bu kaydın değişikliklerini geri al"
             title="Geri al"
@@ -543,6 +543,7 @@ function CreateForm({ collectionKey, schema }) {
               type="button"
               onClick={submit}
               disabled={isPending}
+              className="inscribed-btn-collection"
               style={{ ...primaryButtonStyle, marginLeft: "auto" }}
             >
               {isPending ? "Oluşturuluyor…" : "Oluştur"}
@@ -701,9 +702,7 @@ const primaryButtonStyle = /** @type {React.CSSProperties} */ ({
   display: "inline-flex",
   alignItems: "center",
   padding: "7px 14px",
-  background: COLLECTION_ACCENT,
-  color: "#221d18",
-  border: "none",
+  border: 0,
   borderRadius: 7,
   cursor: "pointer",
   font: `600 12px/1 ${FONT_SANS}`,

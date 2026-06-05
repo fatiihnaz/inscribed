@@ -72,6 +72,13 @@ import { createContext, useContext } from "react";
  *   on render and auto-expands. The card clears the signal after honouring
  *   it so re-visiting the same tab later doesn't re-open the row.
  * @property {(target: { key: string, slug: string } | null) => void} setActiveCollectionItem
+ * @property {{ path: string, index: number } | null} activeListItem
+ *   Drawer-side "open this list row" signal, the List-block analogue of
+ *   `activeCollectionItem`. Set when a page-side `<EditableList>` item is
+ *   clicked (alongside `setActiveBlock` for the List card itself); the
+ *   matching `ListItemCard` reads it on render, auto-expands, scrolls into
+ *   view, then clears the signal so it only fires once.
+ * @property {(target: { path: string, index: number } | null) => void} setActiveListItem
  * @property {number} refetchToken      Bumped to force `useCmsContent` to refetch.
  * @property {() => void} triggerRefetch
  * @property {Map<string, ItemSchema>} itemSchemas

@@ -21,7 +21,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Undo2, Lock } from "./icons.jsx";
+import { ChevronDown, Undo2, Lock, List as ListIcon } from "./icons.jsx";
 
 import { stableStringify } from "../lib/stable-stringify.js";
 
@@ -317,7 +317,7 @@ function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, onHeaderCl
               onReset();
             }
           }}
-          className="inscribed-icon-button"
+          className={`inscribed-icon-button${isCollection ? " inscribed-icon-button-collection" : ""}`}
           style={blockResetStyle}
           aria-label="Bu bloğun değişikliklerini geri al"
           title="Geri al"
@@ -359,8 +359,14 @@ function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, onHeaderCl
  *
  * @param {{ type: BlockType }} props
  */
+// Types whose glyph reads poorly as a centered character get a real SVG
+// icon instead (the "≡" glyph sits low in the badge); fall back to the
+// glyph for everything else.
+const TYPE_ICON_OVERRIDES = { List: ListIcon };
+
 function TypeIcon({ type }) {
   const meta = TYPE_META[type] ?? TYPE_META.Text;
+  const Override = TYPE_ICON_OVERRIDES[type];
   return (
     <span
       aria-hidden="true"
@@ -369,7 +375,7 @@ function TypeIcon({ type }) {
         color: meta.color,
       }}
     >
-      {meta.glyph}
+      {Override ? <Override size={13} /> : meta.glyph}
     </span>
   );
 }
@@ -402,7 +408,7 @@ export function resetBlock(block, setDraft, clearDraft) {
  */
 function renderEditor(block, value, onChange, itemSchema, readOnly) {
   if (block.blockType === "List") {
-    return <ListEditor value={value} onChange={onChange} itemSchema={itemSchema} disabled={readOnly} />;
+    return <ListEditor blockPath={block.blockPath} value={value} onChange={onChange} itemSchema={itemSchema} disabled={readOnly} />;
   }
   const primitive = FieldEditor({ blockType: block.blockType, value, onChange, disabled: readOnly });
   if (primitive) return primitive;

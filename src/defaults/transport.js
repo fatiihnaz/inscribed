@@ -179,6 +179,7 @@ export function createRestTransport({ baseUrl, clientId = null, cdnUrl = null })
       if (!res.ok) throw await toApiError(res);
     },
 
+
     async syncManifests(manifests, opts = {}) {
       const res = await fetch(url("/sync"), {
         method: "POST",

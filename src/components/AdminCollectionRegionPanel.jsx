@@ -104,18 +104,18 @@ export function AdminCollectionRegionPanel({ collectionKey }) {
     // pattern each section's inner ul fought for its own scrollbar and
     // the CreateForm got pushed past the visible area on busy pages.
     <section style={paneStyle}>
-      {supportsCreate && meta?.schema ? (
-        // Key on collectionKey so navigating between Collection tabs
-        // remounts the form with fresh state instead of leaking the
-        // previous tab's values / open flag into the new one.
-        <CreateForm
-          key={collectionKey}
-          collectionKey={collectionKey}
-          schema={meta.schema}
-        />
-      ) : null}
-
       <div style={regionScrollStyle}>
+        {supportsCreate && meta?.schema ? (
+          // Key on collectionKey so navigating between Collection tabs
+          // remounts the form with fresh state instead of leaking the
+          // previous tab's values / open flag into the new one.
+          <CreateForm
+            key={collectionKey}
+            collectionKey={collectionKey}
+            schema={meta.schema}
+          />
+        ) : null}
+
         {sections.length === 0 ? (
           <div style={emptyStateStyle}>
             Bu sayfa <code>{collectionKey}</code> için bir region binding'i göstermiyor.
@@ -182,12 +182,13 @@ function RegionSection({ collectionKey, filter, pageLimit, pageOffset, showHeade
 
   useEffect(() => {
     if (isLoading || error) return;
+    const real = items.filter((row) => row.id !== NEW_DRAFT_GUID);
     if (offset === initialOffset) {
-      setAccumulated(items);
+      setAccumulated(real);
     } else {
       setAccumulated((prev) => {
         const seen = new Set(prev.map((row) => row.slug));
-        return [...prev, ...items.filter((row) => !seen.has(row.slug))];
+        return [...prev, ...real.filter((row) => !seen.has(row.slug))];
       });
     }
   }, [items, isLoading, error, offset, initialOffset]);
@@ -381,15 +382,11 @@ function TypeIconCollection() {
  * @param {{ collectionKey: string, schema: import("../lib/schemas.js").CollectionSchema }} props
  */
 function CreateForm({ collectionKey, schema }) {
-  const { config, getAccessToken, updateCollectionItem } = useCmsContext();
+  const { config, getAccessToken, updateCollectionItem, invalidateCollectionList, invalidateCollectionItem } = useCmsContext();
   const [isOpen, setIsOpen] = useState(false);
   const [values, setValues] = useState(() => seedValues(schema.fields, {}));
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [isPending, startTransition] = useTransition();
-  const [draftStatus, setDraftStatus] = useState(
-    /** @type {"idle"|"saving"|"saved"|"failed"} */ ("idle"),
-  );
-
   const { items: unfiltered } = useCollection(collectionKey);
   const draftEntry = useMemo(
     () => unfiltered.find((row) => row.id === NEW_DRAFT_GUID) ?? null,
@@ -398,9 +395,6 @@ function CreateForm({ collectionKey, schema }) {
   const draftData = draftEntry?.draftData ?? null;
 
   const lastSyncedRef = useRef(/** @type {string | null} */ (null));
-  const draftStatusResetRef = useRef(
-    /** @type {ReturnType<typeof setTimeout>|null} */ (null),
-  );
 
   // Seed the form from the backend draft once it arrives. Only seed
   // on the null → object flip so a successful publish (which clears
@@ -416,20 +410,6 @@ function CreateForm({ collectionKey, schema }) {
     setIsOpen(true);
   }, [draftData, schema.fields]);
 
-  useEffect(() => () => {
-    if (draftStatusResetRef.current) clearTimeout(draftStatusResetRef.current);
-  }, []);
-
-  /** @param {"saved"|"failed"} kind */
-  const flashDraftStatus = (kind) => {
-    setDraftStatus(kind);
-    if (draftStatusResetRef.current) clearTimeout(draftStatusResetRef.current);
-    draftStatusResetRef.current = setTimeout(() => {
-      setDraftStatus("idle");
-      draftStatusResetRef.current = null;
-    }, 900);
-  };
-
   useEffect(() => {
     if (!isOpen) return undefined;
     if (isPending) return undefined;
@@ -444,16 +424,13 @@ function CreateForm({ collectionKey, schema }) {
     const timer = setTimeout(async () => {
       try {
         const token = await getAccessToken();
-        setDraftStatus("saving");
         await config.transport.saveCollectionNewDraft(collectionKey, { data: payload }, { accessToken: token });
         if (cancelled) return;
         lastSyncedRef.current = serialized;
-        flashDraftStatus("saved");
       } catch (err) {
         if (cancelled) return;
         // eslint-disable-next-line no-console
         console.warn("[inscribed] collection new-draft autosave failed:", err);
-        flashDraftStatus("failed");
       }
     }, DRAFT_DEBOUNCE_MS);
     return () => {
@@ -470,10 +447,21 @@ function CreateForm({ collectionKey, schema }) {
     seededRef.current = false;
   };
 
-  const undoDraft = () => {
-    setError(null);
-    setValues(seedValues(schema.fields, {}));
+  const deleteDraft = async () => {
+    try {
+      const token = await getAccessToken();
+      const nullData = Object.fromEntries(
+        schema.fields.filter((f) => !f.readOnly).map((f) => [f.name, null]),
+      );
+      await config.transport.saveCollectionNewDraft(collectionKey, { data: nullData }, { accessToken: token });
+      invalidateCollectionList(collectionKey);
+      invalidateCollectionItem(collectionKey, null);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[inscribed] collection new-draft delete failed:", err);
+    }
   };
+
 
   const submit = () => {
     setError(null);
@@ -544,34 +532,20 @@ function CreateForm({ collectionKey, schema }) {
           <div style={createActionsRowStyle}>
             <button
               type="button"
-              onClick={submit}
-              disabled={isPending}
-              style={primaryButtonStyle}
-            >
-              {isPending ? "Oluşturuluyor…" : "Oluştur"}
-            </button>
-            {draftData ? (
-              <button
-                type="button"
-                onClick={undoDraft}
-                disabled={isPending}
-                className="inscribed-icon-button"
-                style={blockResetStyle}
-                aria-label="Form değerlerini sıfırla"
-                title="Form değerlerini sıfırla"
-              >
-                <Undo2 size={13} />
-              </button>
-            ) : null}
-            <span style={draftStatusStyle(draftStatus)}>{draftStatusLabel(draftStatus)}</span>
-            <button
-              type="button"
-              onClick={() => { setIsOpen(false); reset(); }}
+              onClick={() => { setIsOpen(false); reset(); deleteDraft(); }}
               disabled={isPending}
               className="inscribed-btn-ghost"
               style={btnGhostStyle}
             >
               İptal
+            </button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={isPending}
+              style={{ ...primaryButtonStyle, marginLeft: "auto" }}
+            >
+              {isPending ? "Oluşturuluyor…" : "Oluştur"}
             </button>
           </div>
         </div>
@@ -580,28 +554,6 @@ function CreateForm({ collectionKey, schema }) {
   );
 }
 
-/** @param {"idle"|"saving"|"saved"|"failed"} status */
-function draftStatusLabel(status) {
-  if (status === "saving") return "Taslak kaydediliyor…";
-  if (status === "saved") return "Taslak kaydedildi";
-  if (status === "failed") return "Taslak kaydedilemedi";
-  return "";
-}
-
-/** @param {"idle"|"saving"|"saved"|"failed"} status */
-function draftStatusStyle(status) {
-  /** @type {React.CSSProperties} */
-  const base = {
-    marginLeft: "auto",
-    fontSize: 11,
-    fontFamily: FONT_MONO,
-    color: TEXT_MUTED,
-    minHeight: 14,
-  };
-  if (status === "saved") return { ...base, color: "rgb(150, 210, 160)" };
-  if (status === "failed") return { ...base, color: "#ff8b8b" };
-  return base;
-}
 
 // ---- Styles --------------------------------------------------------------
 

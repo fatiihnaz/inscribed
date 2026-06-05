@@ -120,25 +120,30 @@ export async function getCmsPageBlocks(config, slug, options) {
 // ---------------------------------------------------------------------------
 
 /**
- * `POST /cms/sync` - register or update the block manifest for a page.
- * Idempotent. Intended for build-time / deploy-time pipelines.
+ * `POST /cms/sync` - reconcile the *entire* block manifest in one authoritative
+ * call. Pass every slug the app declares; the backend soft-deletes blocks and
+ * slugs absent from `manifests` and restores ones that reappear (with their
+ * existing content). An empty array marks everything deleted. Idempotent.
+ * Intended for build-time / deploy-time pipelines.
  *
  * @param {CmsConfig} config
- * @param {SyncManifestRequest} request
+ * @param {SyncManifestRequest[]} manifests
  * @param {string} [accessToken]
  * @returns {Promise<SyncResultResponse>}
  */
-export function syncCmsManifest(config, request, accessToken) {
+export function syncCmsManifest(config, manifests, accessToken) {
   const transport = config.transport ?? createRestTransport(config);
-  return transport.syncManifest(request, { accessToken });
+  return transport.syncManifests(manifests, { accessToken });
 }
 
 /**
- * Sync all manifests in a single call - for build/deploy pipelines.
- *
- * Obtains a service token once via `getServiceToken` (default: none) and
- * calls `POST /cms/sync` for every manifest. Logs results to console.
- * Throws if any manifest fails.
+ * Reconcile every manifest in a single authoritative call - for build/deploy
+ * pipelines. Obtains a service token once via `getServiceToken` (default: none)
+ * and `POST`s the full `manifests` array to `/cms/sync`. The backend treats it
+ * as the complete desired state: slugs/blocks absent from the array are
+ * soft-deleted, reappearing ones restored. An empty array marks everything
+ * deleted. Logs per-slug counts plus any pruned slugs. Throws on transport
+ * failure.
  *
  * @param {SyncManifestRequest[]} manifests
  * @param {{ baseUrl?: string, getServiceToken?: ServiceTokenProvider }} [options]
@@ -160,28 +165,29 @@ export async function syncAll(manifests, options) {
     );
   }
 
-  let failed = 0;
-  for (const manifest of manifests) {
-    try {
-      const result = await transport.syncManifest(manifest, { accessToken: accessToken || undefined });
-      console.log(
-        `[inscribed-sync] ${manifest.slug}  created=${result.created} deleted=${result.deleted} unchanged=${result.unchanged}`,
-      );
-    } catch (err) {
-      failed += 1;
-      const detail =
-        err && typeof err === "object" && "detail" in err
-          ? /** @type {*} */ (err).detail
-          : err instanceof Error
-            ? err.message
-            : String(err);
-      console.error(`[inscribed-sync] ${manifest.slug}  FAILED: ${detail}`);
-    }
+  let result;
+  try {
+    result = await transport.syncManifests(manifests, { accessToken: accessToken || undefined });
+  } catch (err) {
+    const detail =
+      err && typeof err === "object" && "detail" in err
+        ? /** @type {*} */ (err).detail
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    throw new Error(
+      `[inscribed-sync] reconcile failed: ${detail} - backend at ${config.baseUrl} reachable?`,
+    );
   }
 
-  if (failed > 0) {
-    throw new Error(
-      `[inscribed-sync] ${failed}/${manifests.length} slug(s) failed - backend at ${config.baseUrl} reachable?`,
+  for (const r of result.results ?? []) {
+    console.log(
+      `[inscribed-sync] ${r.slug} | created=${r.created} deleted=${r.deleted} unchanged=${r.unchanged}`,
+    );
+  }
+  if (result.prunedSlugs?.length) {
+    console.log(
+      `[inscribed-sync] pruned ${result.prunedSlugs.length} slug(s): ${result.prunedSlugs.join(", ")}`,
     );
   }
 }

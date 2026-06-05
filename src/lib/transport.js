@@ -56,7 +56,7 @@
  * @property {(key: string, slug: string, payload: { data: * }, opts?: CmsRequestOptions) => Promise<void>} saveCollectionItemDraft
  * @property {(key: string, payload: { slug?: string, data: * }, opts?: CmsRequestOptions) => Promise<void>} saveCollectionNewDraft
  * @property {(file: File, opts?: { onProgress?: (progress: number) => void, accessToken?: string | null }) => Promise<{ data: { url: string } }>} uploadImage
- * @property {(request: SyncManifestRequest, opts?: CmsRequestOptions) => Promise<SyncResultResponse>} syncManifest
+ * @property {(manifests: SyncManifestRequest[], opts?: CmsRequestOptions) => Promise<SyncResultResponse>} syncManifests
  */
 
 export {};

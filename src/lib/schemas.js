@@ -215,7 +215,7 @@
  */
 
 /**
- * Single block in a `POST /cms/sync` manifest.
+ * Single block in a `POST /cms/sync` manifest entry.
  *
  * @typedef {Object} ManifestBlockItem
  * @property {string} blockPath
@@ -226,7 +226,12 @@
  */
 
 /**
- * Full body of `POST /cms/sync`.
+ * One page's manifest entry: a slug and its blocks. The full `POST /cms/sync`
+ * body is an array of these - the *complete, authoritative* set of every slug
+ * the app declares. The backend reconciles against this set: blocks (and whole
+ * slugs) present remotely but absent from the array are soft-deleted; ones that
+ * reappear are restored with their existing content. An empty array therefore
+ * marks every remote slug deleted.
  *
  * @typedef {Object} SyncManifestRequest
  * @property {string} slug
@@ -234,12 +239,22 @@
  */
 
 /**
- * Response of `POST /cms/sync`.
+ * Per-slug reconcile counts within a `POST /cms/sync` response.
+ *
+ * @typedef {Object} SyncSlugResult
+ * @property {string} slug
+ * @property {number} created      Blocks newly inserted.
+ * @property {number} deleted      Blocks soft-deleted (absent from this slug's manifest).
+ * @property {number} unchanged    Blocks already in sync.
+ * @property {number} [restored]   Blocks un-soft-deleted because they reappeared.
+ */
+
+/**
+ * Response of `POST /cms/sync` - a whole-batch reconcile summary.
  *
  * @typedef {Object} SyncResultResponse
- * @property {number} created
- * @property {number} deleted
- * @property {number} unchanged
+ * @property {SyncSlugResult[]} results   Per-slug counts for every slug in the request.
+ * @property {string[]} prunedSlugs       Slugs soft-deleted this run: present remotely, absent from the request.
  */
 
 /**

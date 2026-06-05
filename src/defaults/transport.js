@@ -179,11 +179,11 @@ export function createRestTransport({ baseUrl, clientId = null, cdnUrl = null })
       if (!res.ok) throw await toApiError(res);
     },
 
-    async syncManifest(request, opts = {}) {
+    async syncManifests(manifests, opts = {}) {
       const res = await fetch(url("/sync"), {
         method: "POST",
         headers: headers(opts.accessToken),
-        body: JSON.stringify(request),
+        body: JSON.stringify(manifests),
       });
       if (!res.ok) throw await toApiError(res);
       return /** @type {*} */ (await res.json());

@@ -442,7 +442,7 @@ To target a backend other than the reference REST API, implement the
  * @property {(key, slug, payload, opts?) => Promise<void>}                           saveCollectionItemDraft
  * @property {(key, payload, opts?) => Promise<void>}                                 saveCollectionNewDraft
  * @property {(file, opts?) => Promise<{ data: { url: string } }>}                    uploadImage
- * @property {(request, opts?) => Promise<SyncResultResponse>}                        syncManifest
+ * @property {(manifests, opts?) => Promise<SyncResultResponse>}                      syncManifests
  */
 ```
 
@@ -489,9 +489,12 @@ const blocks = await getCmsPageBlocks({ ...cmsConfig, transport }, slug);
 
 `createCmsPage` also accepts a `transport` option for its server-side SSR fetch.
 
-> **Note:** the `cms-sync` CLI and `syncAll` currently target the REST
-> `POST /cms/sync` shape. A fully custom backend can implement `syncManifest`
-> and call `syncCmsManifest(config, manifest)` from its own pipeline.
+> **Note:** the `cms-sync` CLI and `syncAll` target the REST `POST /cms/sync`
+> shape, which takes the **complete** manifest array and reconciles against it -
+> slugs/blocks absent from the array are soft-deleted, reappearing ones restored
+> (with their content), and an empty array marks everything deleted. A fully
+> custom backend can implement `syncManifests` and call
+> `syncCmsManifest(config, manifests)` from its own pipeline.
 
 ## Package entry points
 

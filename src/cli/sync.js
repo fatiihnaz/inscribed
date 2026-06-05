@@ -64,7 +64,7 @@ for (const w of warnings) {
 
 if (manifests.length === 0) {
   console.warn(
-    `[inscribed-discover] No <EditableRegion> declarations found under ${path.relative(process.cwd(), appRoot)}. Nothing to sync.`,
+    `[inscribed-discover] No <EditableRegion> declarations found under ${path.relative(process.cwd(), appRoot)}. Reconciling with an empty manifest - every remote slug will be marked deleted (soft delete; restored on the next sync that finds them).`,
   );
 }
 

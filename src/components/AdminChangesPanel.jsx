@@ -60,6 +60,11 @@ const DIFF_ADDED = STATUS_OK;
 const DIFF_REMOVED = STATUS_DANGER;
 const DIFF_CHANGED = STATUS_WARN;
 
+// Plain-text block types that diff line-by-line as raw strings. `RichText`
+// is handled separately (it strips HTML first), so it's intentionally not
+// in this set.
+const TEXTY_BLOCK_TYPES = new Set(["Text", "ShortText", "LongText"]);
+
 /**
  * @param {{
  *   blockList: BlockResponse[],
@@ -198,7 +203,7 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
   // so future surfaces (e.g. an inline preview tooltip) can reuse it
   // without a second LCS pass.
   const ops = useMemo(() => {
-    if (block.blockType === "Text" || block.blockType === "RichText") {
+    if (TEXTY_BLOCK_TYPES.has(block.blockType) || block.blockType === "RichText") {
       const a = block.blockType === "RichText" ? stripHtml(prev) : String(prev ?? "");
       const b = block.blockType === "RichText" ? stripHtml(next) : String(next ?? "");
       return diffLines(a, b);
@@ -267,6 +272,8 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
 function DiffContent({ blockType, prev, next, itemSchema, sharedOps }) {
   switch (blockType) {
     case "Text":
+    case "ShortText":
+    case "LongText":
       return (
         <LineDiff
           prev={String(prev ?? "")}
@@ -950,6 +957,8 @@ function SoloValue({ blockType, value, tone }) {
   }
   switch (blockType) {
     case "Text":
+    case "ShortText":
+    case "LongText":
     case "Date":
       return <span style={wrap}>{String(value)}</span>;
     case "RichText":

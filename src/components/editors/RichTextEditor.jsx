@@ -56,8 +56,10 @@ const EMPTY_DOC_HTML = "<p></p>";
  * @param {string} props.value
  * @param {(value: string) => void} props.onChange
  * @param {boolean} [props.disabled]
+ * @param {boolean} [props.hideLabel]  Drop the built-in "Zengin Metin"
+ *   caption when a parent (e.g. `ListEditor`) already labels the field.
  */
-export function RichTextEditor({ value, onChange, disabled }) {
+export function RichTextEditor({ value, onChange, disabled, hideLabel }) {
   const suppressUpdateRef = useRef(true);
 
   const editor = useEditor({
@@ -118,7 +120,7 @@ export function RichTextEditor({ value, onChange, disabled }) {
 
   return (
     <label style={labelStyle}>
-      <span style={labelTextStyle}>Zengin Metin</span>
+      {hideLabel ? null : <span style={labelTextStyle}>Zengin Metin</span>}
       <style>{rteCss}</style>
       <div className="inscribed-rte-shell" style={shellStyle}>
         <Toolbar editor={editor} disabled={disabled} />

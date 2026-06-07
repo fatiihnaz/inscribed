@@ -102,6 +102,8 @@ export const TEXT_SECONDARY= TEXT;
 /** @type {Record<string, { glyph: string, color: string, label: string }>} */
 export const TYPE_META = {
   Text:       { glyph: "Aa", color: "rgb(186, 204, 230)", label: "Text" },
+  ShortText:  { glyph: "Aa", color: "rgb(186, 204, 230)", label: "Short" },
+  LongText:   { glyph: "≡a", color: "rgb(186, 204, 230)", label: "Long" },
   RichText:   { glyph: "¶", color: "rgb(208, 192, 230)", label: "Rich" },
   Image:      { glyph: "▢", color: "rgb(174, 218, 184)", label: "Image" },
   Link:       { glyph: "↗", color: "rgb(228, 204, 164)", label: "Link" },

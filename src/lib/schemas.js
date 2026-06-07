@@ -9,7 +9,12 @@
  * Allowed values for `BlockResponse.blockType`.
  *
  * Value shapes per type:
- *   - Text / RichText : string
+ *   - ShortText / LongText / RichText : string. `ShortText` edits as a
+ *     single-line `<input>`, `LongText` as a multi-line `<textarea>`,
+ *     `RichText` as a formatting editor. `Text` is the legacy alias of
+ *     `LongText` (multi-line) - that was its original behaviour, so existing
+ *     manifests/stored blocks keep their look; prefer the explicit names in
+ *     new code.
  *   - Image           : { src: string, alt: string }
  *   - Link            : { href: string, label: string }
  *   - Date            : ISO 8601 string, e.g. "2026-08-15T18:00:00.000Z". Empty string when unset.
@@ -25,14 +30,15 @@
  *                       in the collection's own admin surface (e.g. team leader
  *                       portal). CMS just surfaces the data here.
  *
- * @typedef {"Text" | "RichText" | "Image" | "Link" | "Date" | "List" | "Collection"} BlockType
+ * @typedef {"Text" | "ShortText" | "LongText" | "RichText" | "Image" | "Link" | "Date" | "List" | "Collection"} BlockType
  */
 
 /**
  * Per-field metadata for a List's item shape. Each entry pairs a leaf block
- * type (Text, Image, ...) with the seed value used when a new list item is
- * inserted. Nested lists (a field whose `blockType` is "List") aren't
- * supported in this iteration.
+ * type (ShortText, LongText, Image, ...) with the seed value used when a
+ * new list item is inserted. Use `ShortText` for single-line fields and
+ * `LongText` for multi-line plain text. Nested lists (a field whose
+ * `blockType` is "List") aren't supported in this iteration.
  *
  * @typedef {Object} ItemSchemaField
  * @property {Exclude<BlockType, "List" | "Collection">} blockType
@@ -88,11 +94,13 @@
  * and by the `/cms/collections/me` envelope. Drives the schema-driven form
  * rendered in the drawer and in admin examples.
  *
- * `ObjectArray` is the only non-scalar: its value is an array of plain
- * objects, each shaped by the descriptor's `itemFields`. The form
- * renders it as a repeatable sub-form (add/remove/reorder).
+ * `ShortText` edits as a single-line `<input>`, `LongText` as a multi-line
+ * `<textarea>`, `RichText` as a formatting editor. `Text` is the legacy
+ * alias of `LongText` (multi-line). `ObjectArray` is the only non-scalar: its value is
+ * an array of plain objects, each shaped by the descriptor's `itemFields`;
+ * the form renders it as a repeatable sub-form (add/remove/reorder).
  *
- * @typedef {"Text" | "RichText" | "Bool" | "Url" | "StringArray" | "Date" | "Number" | "ObjectArray"} CollectionFieldType
+ * @typedef {"Text" | "ShortText" | "LongText" | "RichText" | "Bool" | "Url" | "StringArray" | "Date" | "Number" | "ObjectArray"} CollectionFieldType
  *
  * @typedef {Object} CollectionFieldDescriptor
  * @property {string} name

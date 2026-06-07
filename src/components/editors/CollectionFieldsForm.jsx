@@ -1,9 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 
 import { moveItem, removeItem } from "../../lib/list-ops.js";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "../icons.jsx";
+
+// Lazy so TipTap (a heavy dep) stays out of the package's main-entry
+// bundle: a consumer importing only the page-side pieces (EditableRegion,
+// CollectionItem, …) must not pay ~50KB for an editor they never open. A
+// static import would pull the TipTap chunk into index.js's eager graph
+// (the package sets no `sideEffects`, so tree-shaking wouldn't drop it).
+// It's fetched on demand the first time a RichText field renders — inside
+// the already dynamically-imported drawer.
+const RichTextEditor = lazy(() =>
+  import("./RichTextEditor.jsx").then((m) => ({ default: m.RichTextEditor })),
+);
 
 /**
  * @file `CollectionFieldsForm` - schema-driven form renderer for
@@ -12,8 +23,10 @@ import { ChevronDown, ChevronUp, Plus, Trash2 } from "../icons.jsx";
  * Takes a list of `CollectionFieldDescriptor`s (from
  * `/cms/collections/{key}/schema` or the `/me` envelope) and a values map,
  * renders one input per field. ReadOnly fields are disabled. Bool/Number/
- * Date/Url/StringArray/RichText/Text are supported; an `options` array on
- * a field switches it to a select regardless of `type`. `ObjectArray`
+ * Date/Url/StringArray/RichText plus the plain-text trio — ShortText
+ * (single-line input), LongText (textarea), and the legacy Text alias of
+ * LongText — are supported; an `options` array on a field switches it to
+ * a select regardless of `type`. `ObjectArray`
  * fields render a repeatable sub-form as an accordion — one collapsible
  * card per element, its collapsed header showing a content-derived
  * summary, each card drawing the descriptor's `itemFields` through this
@@ -30,9 +43,12 @@ import { ChevronDown, ChevronUp, Plus, Trash2 } from "../icons.jsx";
  *     per-Collection drawer tabs)
  *   - the example `/admin/collections` page
  *
- * Styling is intentionally neutral (inherits color, plain borders) so it
- * sits comfortably both in the drawer's dark surface and in light admin
- * pages without theming infrastructure.
+ * Scalar inputs are intentionally neutral (inherit color, plain borders)
+ * so they sit comfortably both on the drawer's dark surface and on a light
+ * admin page. The one exception is `RichText`, which renders the drawer's
+ * TipTap editor — that surface is dark-oriented, so a RichText field embedded
+ * on a light page won't theme itself. The real edit path (the drawer) is
+ * dark, so this is fine in practice.
  */
 
 /**
@@ -191,7 +207,10 @@ function FieldInput({ field, value, onChange, disabled }) {
           </div>
         );
 
-      case "RichText":
+      // `Text` is the legacy alias of `LongText` (multi-line textarea) —
+      // that's how it has always rendered, so existing data keeps its look.
+      case "Text":
+      case "LongText":
         return (
           <label style={labelStyle}>
             {labelNode}
@@ -199,15 +218,31 @@ function FieldInput({ field, value, onChange, disabled }) {
             value={value ?? ""}
             onChange={(e) => onChange(e.target.value)}
             disabled={disabled}
-            rows={6}
+            rows={4}
             className="inscribed-field"
-            style={textareaStyle}
+            style={{ ...inputStyle, resize: "vertical", minHeight: 72, lineHeight: 1.5 }}
           />
-          {field.help ? <span style={helpStyle}>{field.help} (HTML kabul edilir)</span> : null}
+          {field.help ? <span style={helpStyle}>{field.help}</span> : null}
         </label>
       );
 
-      case "Text":
+      // RichText reuses the drawer's TipTap editor (same one the block
+      // forms use) for a real formatting surface instead of raw HTML in a
+      // textarea. A <div> wrapper (not <label>) since the editor nests its
+      // own toolbar buttons + contenteditable; `hideLabel` drops its
+      // built-in caption because `labelNode` above already names the field.
+      case "RichText":
+        return (
+          <div style={labelStyle}>
+            {labelNode}
+            <Suspense fallback={<div style={helpStyle}>Editör yükleniyor…</div>}>
+              <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel />
+            </Suspense>
+            {field.help ? <span style={helpStyle}>{field.help}</span> : null}
+          </div>
+        );
+
+      case "ShortText":
       default:
         return (
           <label style={labelStyle}>
@@ -809,14 +844,6 @@ const inputStyle = {
   background: "rgba(127,127,127,0.04)",
   color: "inherit",
   outline: "none",
-};
-const textareaStyle = {
-  ...inputStyle,
-  fontFamily: "ui-monospace, 'SF Mono', monospace",
-  fontSize: 12,
-  lineHeight: 1.5,
-  resize: "vertical",
-  minHeight: 72,
 };
 const checkboxLabelStyle = {
   display: "inline-flex",

@@ -125,6 +125,26 @@ describe("humanizeCollectionError", () => {
   });
 });
 
+describe("ShortText / LongText scalars", () => {
+  const fields = [
+    { name: "title", type: "ShortText", label: "Başlık", required: true, readOnly: false, filterable: false, options: null, help: null, itemFields: null },
+    { name: "body", type: "LongText", label: "Gövde", required: false, readOnly: false, filterable: false, options: null, help: null, itemFields: null },
+  ];
+
+  it("seeds both to an empty string, like Text", () => {
+    expect(seedValues(fields, {})).toEqual({ title: "", body: "" });
+  });
+
+  it("passes values through buildPayload unchanged (newlines preserved)", () => {
+    expect(buildPayload(fields, { title: "Hi", body: "a\nb" })).toEqual({ title: "Hi", body: "a\nb" });
+  });
+
+  it("validates required like any string field", () => {
+    expect(requiredMissing(fields, { title: "", body: "" })).toBe("Başlık");
+    expect(requiredMissing(fields, { title: "Hi", body: "" })).toBeNull();
+  });
+});
+
 describe("singularize", () => {
   it("strips the Turkish plural suffix for the add-button label", () => {
     expect(singularize("Çalışmalar")).toBe("Çalışma");

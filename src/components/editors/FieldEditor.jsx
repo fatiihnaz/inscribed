@@ -31,20 +31,29 @@ import { DateEditor } from "./DateEditor.jsx";
  * `null` lets the caller decide what to show in place of an unsupported
  * editor (a hint, a custom surface, nothing at all).
  *
+ * `hideLabel` is forwarded to the editors that honour it; editors that
+ * don't simply ignore it. The line-length split is type-driven:
+ * `ShortText` edits as a single-line input, `LongText` as a multi-line
+ * textarea. The legacy `Text` alias maps to `LongText` (textarea) since
+ * that was its original behaviour — existing blocks keep their look.
+ *
  * @param {{
  *   blockType: BlockType | string,
  *   value: *,
  *   onChange: (value: *) => void,
  *   disabled?: boolean,
+ *   hideLabel?: boolean,
  * }} props
  */
-export function FieldEditor({ blockType, value, onChange, disabled }) {
+export function FieldEditor({ blockType, value, onChange, disabled, hideLabel }) {
   switch (blockType) {
-    case "Text":     return <TextEditor value={value ?? ""} onChange={onChange} disabled={disabled} />;
-    case "RichText": return <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} />;
-    case "Image":    return <ImageEditor value={value} onChange={onChange} disabled={disabled} />;
-    case "Link":     return <LinkEditor value={value} onChange={onChange} disabled={disabled} />;
-    case "Date":     return <DateEditor value={value} onChange={onChange} disabled={disabled} />;
-    default:         return null;
+    case "ShortText": return <TextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />;
+    case "Text":
+    case "LongText":  return <TextEditor value={value ?? ""} onChange={onChange} disabled={disabled} multiline hideLabel={hideLabel} />;
+    case "RichText":  return <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />;
+    case "Image":     return <ImageEditor value={value} onChange={onChange} disabled={disabled} />;
+    case "Link":      return <LinkEditor value={value} onChange={onChange} disabled={disabled} />;
+    case "Date":      return <DateEditor value={value} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />;
+    default:          return null;
   }
 }

@@ -240,6 +240,8 @@ function isValueEmpty(blockType, value) {
   if (value == null) return true;
   switch (blockType) {
     case "Text":
+    case "ShortText":
+    case "LongText":
     case "RichText":
       return value === "";
     case "Image":
@@ -255,7 +257,8 @@ function isValueEmpty(blockType, value) {
 
 /**
  * Render the block's value as the appropriate HTML element. `as` only
- * applies to Text / RichText - Image and Link have a fixed shape because
+ * applies to the text types (Text/ShortText/LongText/RichText) - Image and
+ * Link have a fixed shape because
  * the editor side (AdminDrawer) saves a `{src,alt}` / `{href,label}`
  * payload that maps cleanly onto `<img>` / `<a>`.
  *
@@ -266,7 +269,9 @@ function isValueEmpty(blockType, value) {
 function renderBlock(blockType, value, props) {
   const { as, ...rest } = props;
   switch (blockType) {
-    case "Text": {
+    case "Text":
+    case "ShortText":
+    case "LongText": {
       const Tag = as ?? "span";
       return <Tag {...rest}>{value}</Tag>;
     }

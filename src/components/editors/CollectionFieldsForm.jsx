@@ -125,16 +125,21 @@ function FieldInput({ field, value, onChange, disabled }) {
   switch (field.type) {
     case "Bool":
       return (
-        <label style={checkboxLabelStyle}>
+        <label style={{ ...switchRowStyle, ...(disabled ? { opacity: 0.5, cursor: "not-allowed" } : null) }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {labelNode}
+            {field.help ? <span style={helpStyle}>{field.help}</span> : null}
+          </div>
           <input
             type="checkbox"
             checked={Boolean(value)}
             onChange={(e) => onChange(e.target.checked)}
             disabled={disabled}
-            style={checkboxStyle}
+            style={switchHiddenInputStyle}
           />
-          {labelNode}
-          {field.help ? <span style={helpStyle}>{field.help}</span> : null}
+          <span style={{ ...switchTrackStyle, ...(Boolean(value) ? switchTrackCheckedStyle : null) }}>
+            <span style={{ ...switchThumbStyle, ...(Boolean(value) ? switchThumbCheckedStyle : null) }} />
+          </span>
         </label>
       );
 
@@ -853,13 +858,41 @@ const checkboxLabelStyle = {
   color: "inherit",
   padding: "2px 0",
 };
-const checkboxStyle = {
-  width: 14,
-  height: 14,
-  margin: 0,
-  accentColor: "rgb(220, 195, 225)",
+const switchRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "6px 0",
   cursor: "pointer",
 };
+const switchTrackStyle = {
+  position: "relative",
+  flexShrink: 0,
+  width: 32,
+  height: 18,
+  borderRadius: 9,
+  background: "rgba(127,127,127,0.25)",
+  transition: "background 160ms ease",
+};
+const switchTrackCheckedStyle = {
+  background: "rgba(200,170,230,0.8)",
+};
+const switchThumbStyle = {
+  position: "absolute",
+  top: 2,
+  left: 2,
+  width: 14,
+  height: 14,
+  borderRadius: "50%",
+  background: "#fff",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+  transition: "left 160ms ease",
+};
+const switchThumbCheckedStyle = {
+  left: 16,
+};
+const switchHiddenInputStyle = { position: "absolute", opacity: 0, width: 0, height: 0 };
 const emptyHintStyle = { color: "currentColor", opacity: 0.6, fontSize: 13 };
 
 const stringArrayShellStyle = { display: "flex", flexDirection: "column", gap: 8 };
@@ -868,12 +901,13 @@ const stringArrayChipStyle = {
   display: "inline-flex",
   alignItems: "center",
   gap: 4,
-  padding: "3px 10px",
-  borderRadius: 99,
+  padding: "3px 5px 3px 10px",
+  borderRadius: 5,
   border: "1px solid rgba(127,127,127,0.25)",
   background: "rgba(127,127,127,0.08)",
   fontSize: 12,
   lineHeight: 1.4,
+  marginTop: -1,
 };
 const stringArrayRemoveStyle = {
   background: "none",
@@ -958,8 +992,9 @@ const objectArrayIndexStyle = {
 const objectArraySummaryStyle = {
   flex: 1,
   minWidth: 0,
-  fontSize: 13,
-  fontWeight: 500,
+  fontSize: 12,
+  fontWeight: 450,
+  marginTop: -1,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",

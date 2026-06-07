@@ -331,8 +331,9 @@ const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
 const listItemSummaryStyle = /** @type {React.CSSProperties} */ ({
   flex: 1,
   minWidth: 0,
-  fontSize: 13,
-  fontWeight: 500,
+  fontSize: 12,
+  fontWeight: 450,
+  marginTop: -1,
   color: "rgba(255,255,255,0.9)",
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -400,6 +401,6 @@ const listAddButtonStyle = /** @type {React.CSSProperties} */ ({
   color: ACCENT,
   fontSize: 12,
   fontWeight: 500,
+  fontFamily: "inherit",
   cursor: "pointer",
-  letterSpacing: "0.02em",
 });

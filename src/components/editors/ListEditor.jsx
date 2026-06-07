@@ -129,7 +129,9 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
 function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onFieldChange, onRemove, onMoveUp, onMoveDown }) {
   const { activeListItem, setActiveListItem } = useCmsContext();
   const [isOpen, setIsOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
+  const summary = listItemSummary(itemSchema, item);
 
   // Page-side click on this list row sets `activeListItem`. When it points
   // at us, expand and scroll into view, then clear the signal so it fires
@@ -149,12 +151,20 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
   }, [activeListItem, blockPath, index, setActiveListItem]);
 
   return (
-    <div ref={ref} style={listItemCardStyle}>
+    <div
+      ref={ref}
+      style={{ ...listItemCardStyle, ...(hovered ? listItemCardHoverStyle : null) }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <div
         style={{ ...listItemHeaderStyle, cursor: "pointer", userSelect: "none" }}
         onClick={() => setIsOpen((v) => !v)}
       >
-        <span style={listItemIndexStyle}>#{index + 1} / {total}</span>
+        <span style={listItemIndexStyle} title={`#${index + 1} / ${total}`}>{index + 1}</span>
+        <span style={summary ? listItemSummaryStyle : listItemSummaryEmptyStyle}>
+          {summary || "Boş öğe"}
+        </span>
 
         {/* Reorder / delete controls are edit affordances — omitted in
             read-only mode, leaving the item header as a passive view. */}
@@ -221,6 +231,10 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
                   value: item[key],
                   onChange: (v) => onFieldChange(key, v),
                   disabled,
+                  // ListEditor already prints the field key as the label
+                  // above each editor, so suppress the editor's own caption
+                  // to avoid a redundant double label.
+                  hideLabel: true,
                 });
                 return (
                   <div key={key} style={listFieldStyle}>
@@ -241,28 +255,95 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
   );
 }
 
+/**
+ * One-line summary for a collapsed list item: the first Text/RichText
+ * field that holds a non-empty string (RichText stripped of tags), so the
+ * header reads like the item ("Ahmet Yılmaz") instead of a bare index.
+ * Mirrors the Collection editor's `itemSummary`, keyed off `blockType`
+ * rather than the collection field `type`. Returns null when there's
+ * nothing usable, letting the caller fall back to a placeholder.
+ *
+ * @param {ItemSchema} itemSchema
+ * @param {Record<string, *> | undefined} item
+ * @returns {string | null}
+ */
+function listItemSummary(itemSchema, item) {
+  if (!item) return null;
+  const TEXTY = new Set(["Text", "ShortText", "LongText", "RichText"]);
+  for (const [key, field] of Object.entries(itemSchema)) {
+    if (!TEXTY.has(field.blockType)) continue;
+    const raw = item[key];
+    if (typeof raw !== "string") continue;
+    const text = (field.blockType === "RichText" ? raw.replace(/<[^>]*>/g, " ") : raw).trim();
+    if (text) return text;
+  }
+  return null;
+}
+
 // ---- Styles ---------------------------------------------------------------
 
+// Border split into longhand props so the hover style can override
+// `borderColor` alone without React's shorthand/longhand-mix warning
+// (which would otherwise leave the border stuck after the first un-hover).
+// Tones stay in the gold/cream family — distinct from the Collection
+// editor's neutral grays — so the two list surfaces read as different.
 const listItemCardStyle = /** @type {React.CSSProperties} */ ({
-  border: "1px solid rgba(201,184,150,0.12)",
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "rgba(201,184,150,0.16)",
   borderRadius: 6,
   background: "rgba(201,184,150,0.03)",
+  overflow: "hidden",
+  transition: "background-color 140ms ease, border-color 140ms ease",
+});
+
+const listItemCardHoverStyle = /** @type {React.CSSProperties} */ ({
+  borderColor: "rgba(201,184,150,0.34)",
+  background: "rgba(201,184,150,0.06)",
 });
 
 const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   alignItems: "center",
   gap: 8,
-  padding: "8px 10px",
+  padding: "7px 8px 7px 9px",
   fontSize: 12,
   color: TEXT_MUTED,
 });
 
+// Gold index chip — same shape as the Collection editor's neutral badge
+// but tinted to keep this surface visually distinct.
 const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
+  flexShrink: 0,
+  width: 20,
+  height: 20,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 5,
   fontFamily: "ui-monospace, 'SF Mono', monospace",
   fontSize: 11,
+  fontWeight: 600,
   color: ACCENT,
-  letterSpacing: "0.04em",
+  background: "rgba(201,184,150,0.12)",
+});
+
+const listItemSummaryStyle = /** @type {React.CSSProperties} */ ({
+  flex: 1,
+  minWidth: 0,
+  fontSize: 13,
+  fontWeight: 500,
+  color: "rgba(255,255,255,0.9)",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
+const listItemSummaryEmptyStyle = /** @type {React.CSSProperties} */ ({
+  ...listItemSummaryStyle,
+  color: TEXT_MUTED,
+  fontWeight: 400,
+  fontStyle: "italic",
 });
 
 const listItemIconStyle = /** @type {React.CSSProperties} */ ({
@@ -307,11 +388,12 @@ const listFieldLabelStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const listAddButtonStyle = /** @type {React.CSSProperties} */ ({
-  display: "inline-flex",
+  display: "flex",
+  width: "100%",
   alignItems: "center",
   justifyContent: "center",
   gap: 6,
-  padding: "8px 12px",
+  padding: "9px 12px",
   background: "transparent",
   border: "1px dashed rgba(201,184,150,0.35)",
   borderRadius: 6,

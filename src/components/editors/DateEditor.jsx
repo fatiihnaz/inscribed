@@ -14,24 +14,32 @@ const ACCENT = "#c9b896";
  * @param {string|null|undefined} props.value  ISO 8601 string
  * @param {(value: string) => void} props.onChange
  * @param {boolean} [props.disabled]
+ * @param {boolean} [props.hideLabel]  Drop the built-in "Tarih ve Saat"
+ *   caption when a parent (e.g. `ListEditor`) already labels the field.
  */
-export function DateEditor({ value, onChange, disabled }) {
+export function DateEditor({ value, onChange, disabled, hideLabel }) {
   const localValue = isoToLocal(value);
   const remaining = value ? calcRemaining(value) : null;
 
+  const input = (
+    <input
+      type="datetime-local"
+      value={localValue}
+      onChange={(e) => onChange(localToIso(e.target.value))}
+      className="inscribed-field"
+      disabled={disabled}
+      style={{ ...fieldStyle, colorScheme: "dark", ...(disabled ? fieldDisabledStyle : null) }}
+    />
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <label style={labelStyle}>
-        <span style={labelTextStyle}>Tarih ve Saat</span>
-        <input
-          type="datetime-local"
-          value={localValue}
-          onChange={(e) => onChange(localToIso(e.target.value))}
-          className="inscribed-field"
-          disabled={disabled}
-          style={{ ...fieldStyle, colorScheme: "dark", ...(disabled ? fieldDisabledStyle : null) }}
-        />
-      </label>
+      {hideLabel ? input : (
+        <label style={labelStyle}>
+          <span style={labelTextStyle}>Tarih ve Saat</span>
+          {input}
+        </label>
+      )}
 
       {remaining !== null && (
         <div style={{

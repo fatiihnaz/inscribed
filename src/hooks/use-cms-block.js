@@ -1,11 +1,9 @@
 "use client";
 
 /**
- * @file `useCmsBlock(blockPath)` - single-block view.
- *
- * Reads from the shared blocks map populated by `useCmsContent`. Returns
- * an `update(value)` callback that handles the version bookkeeping so
- * editors don't have to track it themselves.
+ * @file `useCmsBlock(blockPath)`: single-block view over the shared blocks map
+ * populated by `useCmsContent`. Returns an `update(value)` callback that
+ * handles the version bookkeeping for editors.
  */
 
 import { useCallback } from "react";
@@ -32,10 +30,9 @@ import { useCmsAdmin } from "./use-cms-admin.js";
  * @property {import("../lib/schemas.js").BlockType} blockType
  * @property {*} defaultValue
  *
- * Discovery-time metadata only - the AST-walking manifest scanner reads
- * this second argument to register read-only blocks (no `<EditableRegion>`
- * on the page) into the sync manifest. Runtime ignores it. Pass static
- * literals; the scanner can't evaluate variables or imported values.
+ * Discovery-only metadata: the manifest scanner reads this second arg to
+ * register read-only blocks (no `<EditableRegion>`) into the sync manifest.
+ * Runtime ignores it. Pass static literals; the scanner can't evaluate variables.
  */
 
 /**
@@ -68,9 +65,8 @@ export function useCmsBlock(blockPath, _meta) {
 
   return {
     // Effective value: backend draft overlay wins over published. Callers
-    // that need the underlying published version (e.g. to render an
-    // "unsaved" indicator) can read `block.value` and `block.draftValue`
-    // directly off the returned `block`.
+    // needing the published version can read `block.value` / `block.draftValue`
+    // off the returned `block`.
     value: block ? (block.draftValue ?? block.value) : undefined,
     version: block ? block.version : null,
     blockType: block ? block.blockType : null,

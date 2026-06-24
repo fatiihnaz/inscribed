@@ -1,21 +1,15 @@
 "use client";
 
 /**
- * @file `useCollection(key)` / `useCollectionItem(key, slug)` - client-side
- * fetchers for the global Collections API (`/cms/collections/{key}`).
+ * @file `useCollection(key)` / `useCollectionItem(key, slug)`: client-side
+ * fetchers for the Collections API (`/cms/collections/{key}`).
  *
- * Single-item reads (`useCollectionItem`) route through a provider-level
- * cache: two consumers mounted simultaneously for the same `(key, slug)`
- * share one round-trip, and a successful save through
- * `AdminCollectionEditor` updates the cache directly so the page-side
- * preview re-renders without a fetch. List reads (`useCollection`) still
- * fetch per consumer for now - list caching can land alongside
- * Region-tab work.
+ * Both route through a provider-level cache: consumers sharing a `(key, slug)`
+ * or `(key, params)` window share one round-trip, and a drawer save updates the
+ * cache directly so the page preview re-renders without a fetch.
  *
- * Auth: pulls the current session's access token from `useCmsContext`
- * and forwards it as `Authorization: Bearer`. The Collections endpoint
- * requires `cms:access`; unauthenticated visitors will see the resulting
- * 401 surface through `error`.
+ * Auth: the access token comes from `useCmsContext` as `Authorization: Bearer`.
+ * The endpoint requires `cms:access`, so anonymous visitors get a 401 via `error`.
  */
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -43,31 +37,24 @@ import { stableStringify } from "../lib/stable-stringify.js";
 /**
  * @param {string} key  Backend collection key, e.g. "Teams" or "News".
  * @param {import("../lib/schemas.js").CollectionListParams} [params]
- *   Optional filter + offset + limit. Each (key, params) tuple has its
- *   own cache entry, so the same hook called with different params
- *   from sibling components fires its own fetch (still deduped per
- *   identical params via the in-flight table).
+ *   Optional filter/offset/limit. Each (key, params) tuple is its own cache
+ *   entry; identical params are deduped via the in-flight table.
  * @returns {UseCollectionResult}
  */
 export function useCollection(key, params) {
   const { collectionStore, requestCollectionList } = useCollectionContext();
 
-  // Stabilise the params identity so consumers passing inline literals
-  // (`{ filter: { featured: true } }`) don't re-trigger the effect on
-  // every render. The serialised form doubles as our cache key.
+  // Stabilise params identity so inline literals don't re-trigger the effect
+  // every render. The serialised form doubles as the cache key.
   const paramsKey = stableStringify(params ?? {});
   const stableParams = useMemo(() => params, [paramsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const cacheKey = `${key}|${paramsKey}`;
 
-  // Subscribe to just this window's list entry. The store notifies every
-  // subscriber on any write, but `useStoreSelector` bails out of a
-  // re-render unless our slice's reference changed - so a publish in an
-  // unrelated window, or a keystroke in some other collection, doesn't
-  // re-render this list.
+  // Subscribe to just this window's list entry, so a write to an unrelated
+  // window doesn't re-render this list.
   const entry = useStoreSelector(collectionStore, (s) => s.listCache.get(cacheKey));
-  // Separate boolean selector so the fetch effect re-fires only on a
-  // present <-> absent transition (invalidation drop / refill), not on
-  // every loading->loaded entry-identity change.
+  // Separate boolean selector so the fetch effect re-fires only on a present
+  // <-> absent transition (invalidate/refill), not on every loading->loaded change.
   const hasEntry = useStoreSelector(collectionStore, (s) => s.listCache.has(cacheKey));
   useEffect(() => {
     requestCollectionList(key, stableParams);
@@ -77,10 +64,9 @@ export function useCollection(key, params) {
     await requestCollectionList(key, stableParams, true);
   }, [key, stableParams, requestCollectionList]);
 
-  // Live-edit overlay: page-side consumers should see the admin's
-  // in-progress edits the moment they're typed. Subscribe to the draft map
-  // but bail unless a draft for one of THIS window's current rows changed -
-  // so editing row X only re-renders the lists actually showing X.
+  // Live-edit overlay: show the admin's edits as they type. Subscribe to the
+  // draft map but bail unless a draft for one of this window's rows changed,
+  // so editing row X only re-renders the lists showing X.
   const rowsRef = useRef(/** @type {CollectionItemResponse[] | undefined} */ (undefined));
   rowsRef.current = entry?.items;
   const drafts = useStoreSelector(
@@ -98,10 +84,9 @@ export function useCollection(key, params) {
     },
   );
 
-  // Fall back to `item.draftData` (server-persisted draft) when there's no
-  // local overlay, then to published `item.data`. Always runs - even with
-  // no live drafts, rows may carry `draftData` from the server and we want
-  // that promoted to `data` on first paint.
+  // Overlay precedence per row: local draft, else server `draftData`, else
+  // published `data`. Always runs, since rows may arrive carrying `draftData`
+  // that we want promoted to `data` on first paint.
   const items = useMemo(() => {
     const raw = entry?.items ?? [];
     return raw.map((row) => overlayItem(row, drafts.get(`${key}:${row.slug}`)));
@@ -120,14 +105,12 @@ export function useCollection(key, params) {
 }
 
 /**
- * Apply the live-edit overlay onto an item: a local in-progress draft wins,
- * then the server-persisted `draftData`, then the published `data`. Returns
- * the original reference when nothing changes so `useMemo` / downstream
- * consumers don't see spurious identity churn.
+ * Apply the overlay onto an item: local draft wins, then server `draftData`,
+ * then published `data`. Returns the original reference when nothing changes
+ * so consumers don't see spurious identity churn.
  *
  * @param {CollectionItemResponse} row
- * @param {*} localDraft  The store's `drafts` entry for this row, or
- *   `undefined` when no editor is live-editing it.
+ * @param {*} localDraft  The `drafts` entry for this row, or `undefined`.
  * @returns {CollectionItemResponse}
  */
 function overlayItem(row, localDraft) {
@@ -152,12 +135,10 @@ function overlayItem(row, localDraft) {
  * @param {string} key   Backend collection key.
  * @param {string} slug  Item slug (lowercased server-side).
  * @param {{ overlayDrafts?: boolean }} [options]
- *   `overlayDrafts` defaults to true: page-side consumers see the
- *   admin's live in-progress edits applied to `item.data`. The drawer
- *   editor itself passes `false` so it always reads the raw server-side
- *   item - otherwise the editor would consume its own overlay, the
- *   seeding effect would re-fire on every keystroke, and the autosave
- *   debounce timer would never finish counting down.
+ *   `overlayDrafts` (default true) applies the admin's live edits onto
+ *   `item.data`. The drawer editor passes `false` so it reads the raw item;
+ *   otherwise it would consume its own overlay, re-seed on every keystroke,
+ *   and never let the autosave debounce finish.
  * @returns {UseCollectionItemResult}
  */
 export function useCollectionItem(key, slug, options) {
@@ -165,20 +146,16 @@ export function useCollectionItem(key, slug, options) {
   const { collectionStore, requestCollectionItem } = useCollectionContext();
   const cacheKey = `${key}:${slug}`;
 
-  // Subscribe to just this item's cache entry and its own draft slice. A
-  // write to any other slug leaves both selectors' references untouched, so
-  // `useStoreSelector` bails and this consumer doesn't re-render - typing in
-  // row X only re-renders the consumers reading X.
+  // Subscribe to just this item's cache entry and its own draft slice, so a
+  // write to another slug doesn't re-render this consumer.
   const entry = useStoreSelector(collectionStore, (s) => s.itemCache.get(cacheKey));
   const draft = useStoreSelector(collectionStore, (s) => s.drafts.get(cacheKey));
 
-  // Trigger a fetch when the key/slug pair changes, or when an external
-  // `invalidateCollectionItem` drops the entry. The presence flag is
-  // needed because `requestCollectionItem` is stable across cache
-  // mutations (so consumer effects don't churn on every draft autosave),
-  // so without it the dropped entry would never refill until remount.
-  // `requestCollectionItem` itself dedupes against cache hits + in-flight
-  // requests, so two consumers mounted simultaneously share one round-trip.
+  // Re-fetch on key/slug change or when `invalidateCollectionItem` drops the
+  // entry. The presence flag is what catches that drop: `requestCollectionItem`
+  // is stable across cache mutations, so without it a dropped entry would never
+  // refill until remount. It also dedupes hits + in-flight requests, so
+  // simultaneous consumers share one round-trip.
   const hasEntry = useStoreSelector(collectionStore, (s) => s.itemCache.has(cacheKey));
   useEffect(() => {
     requestCollectionItem(key, slug);

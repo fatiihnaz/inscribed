@@ -1,14 +1,10 @@
 /**
- * @file Default auth adapter: anonymous / public.
+ * @file Default auth adapter: anonymous/public. No session resolver, so every
+ * visitor is a non-admin public user, which is why the CMS renders with zero
+ * auth dependency. Pass your own adapter to `createCmsPage` to enable editing.
  *
- * No session resolver, so every visitor is a non-admin public user - correct
- * for sites without an admin login, and the reason the CMS needs zero auth
- * dependency to render. To enable editing, pass your own adapter into
- * `createCmsPage` (e.g. spread `withCmsAuth(authOptions)` for NextAuth).
- *
- * `deriveAdmin` / `deriveUserSub` are the sensible fallbacks for the case
- * where a consumer overrides only `getSession`: any present session counts as
- * admin and its `user.id` is the subject. See `lib/auth.js` for the contract.
+ * `deriveAdmin` / `deriveUserSub` are the fallbacks when a consumer overrides
+ * only `getSession`: any session counts as admin, its `user.id` as the subject.
  */
 
 /**

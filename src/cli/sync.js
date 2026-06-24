@@ -1,21 +1,18 @@
 #!/usr/bin/env node
 /**
- * @file `cms-sync` CLI - discover blocks and push the manifest to the
- * backend in a single command. Designed to drop into `predev`/`prebuild`
- * scripts so consumers don't carry their own scripts/sync.mjs around.
+ * @file `cms-sync` CLI: discover blocks and push the manifest in one command.
+ * Drop it into `predev`/`prebuild` so consumers don't keep their own sync script:
  *
  *   "scripts": {
  *     "predev":   "cms-sync",
  *     "prebuild": "cms-sync"
  *   }
  *
- * Reads `.env.local` from the working directory, walks `app/` for
- * `<EditableRegion>` and `useCmsBlock(..., metadata)` declarations, then
- * calls `syncAll`.
+ * Reads `.env.local`, walks `app/` for `<EditableRegion>` and
+ * `useCmsBlock(..., metadata)` declarations, then calls `syncAll`.
  *
- * The service token for `POST /cms/sync` (and any failure diagnostics) comes
- * from an optional `cms.config.js` in the project root - the CLI is a plain
- * Node binary, so it loads that module instead of receiving function props:
+ * Being a plain Node binary, it can't receive function props, so the service
+ * token and failure hook come from an optional `cms.config.js`:
  *
  *   // cms.config.js
  *   export const getServiceToken = async () => "...";   // default: no token
@@ -130,8 +127,8 @@ Project config (optional, ./cms.config.js):
 }
 
 /**
- * Lightweight `.env` loader. Doesn't depend on `dotenv` so the package's
- * runtime footprint stays small. Existing process.env values win.
+ * Lightweight `.env` loader, so the package doesn't pull in `dotenv`. Existing
+ * process.env values win.
  *
  * @param {string} filePath
  */

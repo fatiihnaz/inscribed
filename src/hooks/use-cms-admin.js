@@ -1,11 +1,9 @@
 "use client";
 
 /**
- * @file `useCmsAdmin()` - write-side hook.
- *
- * Wraps `PUT /cms/content`. Disabled (returns errors) when `isAdmin` is
- * false or `userSub` is null. On a successful save, triggers a refetch so
- * other hooks see the new versions without manual coordination.
+ * @file `useCmsAdmin()`: write-side hook wrapping `PUT /cms/content`. Errors
+ * out when not admin. A successful save triggers a refetch so other hooks pick
+ * up the new versions automatically.
  */
 
 import { useCallback, useState } from "react";
@@ -53,11 +51,9 @@ export function useCmsAdmin() {
       try {
         const accessToken = await getAccessToken();
 
-        // Group updates by their source slug. A block may live on the page
-        // slug or the global slug (header/footer); each must PUT to the
-        // matching slug or the backend won't recognise it. Most pages have
-        // a single group; the multi-PUT path only kicks in when an admin
-        // edits both a page block and a header/footer in one batch.
+        // Group updates by source slug. A block lives on either the page or
+        // the global slug, and must PUT to its own slug. The multi-PUT path
+        // only kicks in when one batch edits both a page block and a global one.
         /** @type {Map<string, UpdateBlockItem[]>} */
         const bySlug = new Map();
         for (const update of updates) {
@@ -78,8 +74,7 @@ export function useCmsAdmin() {
           ),
         );
 
-        // Aggregate the per-slug counts so callers see one totals object
-        // instead of an array. The shape stays identical to the legacy
+        // Aggregate per-slug counts into one totals object, same shape as a
         // single-PUT response.
         /** @type {UpdatePageResponse} */
         const result = responses.reduce(
@@ -92,9 +87,8 @@ export function useCmsAdmin() {
 
         triggerRefetch();
 
-        // Drop ISR cache for every slug we wrote to. Page slug + global
-        // slug are independent cache tags; a header save shouldn't leave
-        // stale page renders cached, and vice versa.
+        // Drop ISR cache for every slug we wrote. Page and global slugs are
+        // independent tags, so a header save must not leave page renders stale.
         for (const [slug] of groups) {
           try {
             await onAfterSave(slug);

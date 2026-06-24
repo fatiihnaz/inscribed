@@ -1,16 +1,11 @@
 /**
- * @file Default transport: talks to the reference `/cms/*` REST API.
+ * @file Default transport against the reference `/cms/*` REST API, wired in by
+ * `createCmsConfig` when the caller injects no `transport`. The only place that
+ * knows the concrete endpoints, headers, and `CmsApiError` mapping; swap it out
+ * via `createCmsConfig({ transport })` (see the `CmsTransport` contract).
  *
- * This is the implementation `createCmsConfig` wires in when the caller
- * doesn't inject their own `transport`. It is the ONLY place that knows the
- * concrete endpoint shapes, headers (`X-CMS-Client-Id`), and how to turn an
- * HTTP error into a `CmsApiError`. Swap the whole thing out via
- * `createCmsConfig({ transport })` to target a different backend - the core
- * only ever sees the `CmsTransport` contract (see `lib/transport.js`).
- *
- * No React, no framework coupling. Safe to import from server components,
- * route handlers, or client hooks. `uploadImage` uses `XMLHttpRequest` (for
- * progress events) so it is browser-only; every other method is `fetch`.
+ * No framework coupling. `uploadImage` is browser-only (`XMLHttpRequest`, for
+ * progress events); every other method is `fetch`.
  */
 
 import { CmsApiError, toApiError } from "../lib/errors.js";
@@ -91,9 +86,8 @@ export function createRestTransport({ baseUrl, clientId = null, cdnUrl = null })
       });
       if (!res.ok) throw await toApiError(res);
       const body = await res.json();
-      // Backends that haven't shipped the envelope yet still return the raw
-      // array. Coerce to the paged shape so everything downstream sees a
-      // uniform contract.
+      // Older backends return a raw array; coerce it to the paged shape so
+      // downstream always sees one contract.
       if (Array.isArray(body)) {
         return /** @type {PagedListResponse<CollectionItemResponse>} */ ({
           items: body,

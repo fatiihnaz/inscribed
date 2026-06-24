@@ -1,12 +1,10 @@
 "use client";
 
 /**
- * @file `useCmsContent()` - fetch the current page's blocks.
- *
- * Slug is resolved automatically from `usePathname()`; consumers don't pass
- * it. Result is also pushed into the shared `CmsContext` blocks map so
- * `useCmsBlock` and `EditableRegion` can read derived values without their
- * own fetches. Re-runs when `refetchToken` changes (bumped by saves).
+ * @file `useCmsContent()`: fetch the current page's blocks. Slug comes from
+ * `usePathname()`. The result also lands in the shared `CmsContext` blocks map
+ * so `useCmsBlock` / `EditableRegion` read it without their own fetches.
+ * Re-runs when `refetchToken` changes (bumped by saves).
  */
 
 import { useEffect, useState } from "react";
@@ -37,9 +35,9 @@ export function useCmsContent() {
   const { config, blocks: seedBlocks, setBlocks, refetchToken, triggerRefetch, getAccessToken } = useCmsContext();
   const slug = usePathname() ?? "/";
 
-  // Seed from the provider's blocks map (populated by `initialBlocks` on the
-  // server) so the first render exposes the SSR-fetched content rather than
-  // an empty array while the (admin-only) refetch is in flight.
+  // Seed from the provider's blocks map (set from `initialBlocks` on the
+  // server) so the first render shows SSR content, not an empty array while
+  // the admin-only refetch is in flight.
   const [state, setState] = useState(
     /** @returns {{ blocks: BlockResponse[], isLoading: boolean, error: Error|null }} */
     () => ({ blocks: Array.from(seedBlocks.values()), isLoading: false, error: null }),
@@ -53,10 +51,9 @@ export function useCmsContent() {
       try {
         const token = await getAccessToken();
 
-        // Refetch the page slug + the global slug in parallel so a
-        // header/footer save reflects on every page after triggerRefetch
-        // bumps. Each block is stamped with its source slug so the save
-        // layer can PUT it back to the right place.
+        // Refetch page + global slug in parallel so a header/footer save shows
+        // on every page. Each block is stamped with its source slug for the
+        // save layer.
         const globalSlug = config.globalSlug && config.globalSlug !== slug
           ? config.globalSlug
           : null;

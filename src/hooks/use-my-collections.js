@@ -13,7 +13,7 @@
  * eligibility).
  */
 
-import { useCmsContext } from "../lib/context.js";
+import { useCollectionContext } from "../lib/collection-context.js";
 
 /**
  * @import { MyCollectionResponse } from "../lib/schemas.js"
@@ -36,7 +36,7 @@ export function useMyCollections() {
     myCollectionsLoading,
     myCollectionsError,
     refetchMyCollections,
-  } = useCmsContext();
+  } = useCollectionContext();
   return {
     collections: myCollections,
     isLoading: myCollectionsLoading,

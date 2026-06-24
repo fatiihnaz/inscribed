@@ -27,6 +27,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { useCmsContext } from "../lib/context.js";
+import { useCollectionContext } from "../lib/collection-context.js";
 import { useCollectionItem } from "../hooks/use-collection.js";
 import { useMyCollections } from "../hooks/use-my-collections.js";
 import { CmsApiError } from "../lib/errors.js";
@@ -91,14 +92,13 @@ const DRAFT_DEBOUNCE_MS = 1000;
  * @returns {CollectionEditorState}
  */
 export function useCollectionEditor(collection, slug) {
+  const { config, getAccessToken } = useCmsContext();
   const {
-    config,
-    getAccessToken,
     updateCollectionItem,
     patchCollectionItem,
     setCollectionDraft,
     clearCollectionDraft,
-  } = useCmsContext();
+  } = useCollectionContext();
   const { collections: my, isLoading: meLoading, error: meError } = useMyCollections();
   // Read raw server-side item: the editor must not consume its own
   // live-edit overlay, otherwise the seeding effect would re-fire on

@@ -3,6 +3,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: {
     index: "src/index.js",
+    collections: "src/collections.js",
     server: "src/server/get-content.js",
     actions: "src/server/actions.js",
     page: "src/server/cms-page.jsx",

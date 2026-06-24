@@ -19,6 +19,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronDown, Undo2 } from "./icons.jsx";
 
 import { useCmsContext } from "../lib/context.js";
+import { useCollectionContext } from "../lib/collection-context.js";
 import { useCollection } from "../hooks/use-collection.js";
 import { useMyCollections } from "../hooks/use-my-collections.js";
 import { CmsApiError } from "../lib/errors.js";
@@ -73,7 +74,7 @@ const DEFAULT_DRAWER_PAGE_SIZE = 50;
  * @param {{ collectionKey: string }} props
  */
 export function AdminCollectionRegionPanel({ collectionKey }) {
-  const { collectionBindings } = useCmsContext();
+  const { collectionBindings } = useCollectionContext();
   const { collections: my } = useMyCollections();
 
   const meta = my.find((c) => c.collectionKey === collectionKey) ?? null;
@@ -273,7 +274,7 @@ function RegionHeader({ filter, loaded, total }) {
  * @param {{ collectionKey: string, slug: string, canEdit: boolean }} props
  */
 function RegionItemCard({ collectionKey, slug, canEdit }) {
-  const { activeCollectionItem, setActiveCollectionItem } = useCmsContext();
+  const { activeCollectionItem, setActiveCollectionItem } = useCollectionContext();
   const [isOpen, setIsOpen] = useState(false);
   const editor = useCollectionEditor(collectionKey, slug);
   const isDirty = editor.hasDraft && editor.canEdit;
@@ -388,7 +389,8 @@ function TypeIconCollection() {
  * @param {{ collectionKey: string, schema: import("../lib/schemas.js").CollectionSchema }} props
  */
 function CreateForm({ collectionKey, schema }) {
-  const { config, getAccessToken, updateCollectionItem, invalidateCollectionList, invalidateCollectionItem } = useCmsContext();
+  const { config, getAccessToken } = useCmsContext();
+  const { updateCollectionItem, invalidateCollectionList, invalidateCollectionItem } = useCollectionContext();
   const [isOpen, setIsOpen] = useState(false);
   const [values, setValues] = useState(() => seedValues(schema.fields, {}));
   const [error, setError] = useState(/** @type {string | null} */ (null));

@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import { useCmsContext } from "../lib/context.js";
+import { useCollectionContext } from "../lib/collection-context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 
@@ -50,7 +50,7 @@ import { stableStringify } from "../lib/stable-stringify.js";
  * @returns {UseCollectionResult}
  */
 export function useCollection(key, params) {
-  const { collectionStore, requestCollectionList } = useCmsContext();
+  const { collectionStore, requestCollectionList } = useCollectionContext();
 
   // Stabilise the params identity so consumers passing inline literals
   // (`{ filter: { featured: true } }`) don't re-trigger the effect on
@@ -162,7 +162,7 @@ function overlayItem(row, localDraft) {
  */
 export function useCollectionItem(key, slug, options) {
   const overlayDrafts = options?.overlayDrafts ?? true;
-  const { collectionStore, requestCollectionItem } = useCmsContext();
+  const { collectionStore, requestCollectionItem } = useCollectionContext();
   const cacheKey = `${key}:${slug}`;
 
   // Subscribe to just this item's cache entry and its own draft slice. A

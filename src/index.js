@@ -19,21 +19,11 @@ export { CmsProvider } from "./components/CmsProvider.jsx";
 export { EditableRegion } from "./components/EditableRegion.jsx";
 export { EditableList } from "./components/EditableList.jsx";
 export { CmsGroup } from "./components/CmsGroup.jsx";
-export { CollectionRegion } from "./components/CollectionRegion.jsx";
-export { CollectionItem } from "./components/CollectionItem.jsx";
-export {
-  CollectionFieldsForm,
-  seedValues,
-  buildPayload,
-  requiredMissing,
-  humanizeCollectionError,
-} from "./components/editors/CollectionFieldsForm.jsx";
 
 export { useCmsContent } from "./hooks/use-cms-content.js";
 export { useCmsAdmin } from "./hooks/use-cms-admin.js";
 export { useCmsBlock } from "./hooks/use-cms-block.js";
 export { useCountdown } from "./hooks/use-countdown.js";
-export { useCollection, useCollectionItem } from "./hooks/use-collection.js";
 
 export { createCmsConfig } from "./lib/config.js";
 export { CmsApiError } from "./lib/errors.js";

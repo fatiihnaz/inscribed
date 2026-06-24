@@ -40,6 +40,7 @@ import {
 } from "./icons.jsx";
 
 import { useCmsContext } from "../lib/context.js";
+import { useCollectionContext } from "../lib/collection-context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { useCmsSave } from "../hooks/use-cms-save.js";
 import { useMyCollections } from "../hooks/use-my-collections.js";
@@ -131,8 +132,6 @@ export function AdminDrawer() {
   const {
     activeBlock,
     setActiveBlock,
-    activeCollectionItem,
-    setActiveCollectionItem,
     blocks,
     contentDraftsStore,
     setDraft,
@@ -141,12 +140,19 @@ export function AdminDrawer() {
     setDrawerOpen,
     itemSchemas,
     editorVisibility,
-    collectionBindings,
-    collectionStore,
     userInfo,
     onSignOut,
     draftSyncStatus,
   } = useCmsContext();
+  // Collection state lives in its own context/provider (mounted by
+  // CmsProvider). The throwing reader is safe here because the drawer only
+  // renders inside CmsProvider, which always wraps it in CollectionProvider.
+  const {
+    activeCollectionItem,
+    setActiveCollectionItem,
+    collectionBindings,
+    collectionStore,
+  } = useCollectionContext();
   // The drawer aggregates across the whole collection + content draft state
   // (dirty counts, bindings mirror, changes panel), so it subscribes to the
   // full slices rather than a per-row view. It's a single admin surface, not

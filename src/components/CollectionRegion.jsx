@@ -21,7 +21,7 @@
 
 import { useContext, useEffect } from "react";
 
-import { useCmsContext } from "../lib/context.js";
+import { useCollectionContext } from "../lib/collection-context.js";
 import { CmsGroupContext } from "../lib/group-context.js";
 import { useCollection } from "../hooks/use-collection.js";
 
@@ -65,7 +65,7 @@ import { useCollection } from "../hooks/use-collection.js";
  */
 // eslint-disable-next-line no-unused-vars
 export function CollectionRegion({ blockPath, collection, filter, limit, offset, scope: _scope, children }) {
-  const { registerCollectionBinding, unregisterCollectionBinding } = useCmsContext();
+  const { registerCollectionBinding, unregisterCollectionBinding } = useCollectionContext();
   const groupPrefix = useContext(CmsGroupContext);
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 

@@ -1,6 +1,6 @@
 {
   "name": "inscribed",
-  "version": "1.4.3",
+  "version": "2.0.0",
   "description": "Inline-editing CMS SDK for Next.js App Router projects",
   "keywords": [
     "cms",
@@ -34,6 +34,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./collections": {
+      "types": "./dist/collections.d.ts",
+      "import": "./dist/collections.js"
     },
     "./server": {
       "types": "./dist/server.d.ts",

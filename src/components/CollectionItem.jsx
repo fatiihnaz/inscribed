@@ -30,6 +30,7 @@
 import { useContext, useEffect, useState } from "react";
 
 import { useCmsContext } from "../lib/context.js";
+import { useCollectionContext } from "../lib/collection-context.js";
 import { CmsGroupContext } from "../lib/group-context.js";
 import { useCollectionItem } from "../hooks/use-collection.js";
 
@@ -61,13 +62,8 @@ import { useCollectionItem } from "../hooks/use-collection.js";
  */
 // eslint-disable-next-line no-unused-vars
 export function CollectionItem({ blockPath, collection, slug, scope: _scope, children }) {
-  const {
-    isAdmin,
-    activeBlock,
-    setActiveBlock,
-    registerCollectionBinding,
-    unregisterCollectionBinding,
-  } = useCmsContext();
+  const { isAdmin, activeBlock, setActiveBlock } = useCmsContext();
+  const { registerCollectionBinding, unregisterCollectionBinding } = useCollectionContext();
   const groupPrefix = useContext(CmsGroupContext);
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 

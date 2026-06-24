@@ -300,13 +300,23 @@ outside the page (e.g. all News articles, all Teams). The page **binds** to a
 collection and renders its items; editing happens in that collection's own admin
 surface, not inline.
 
+The collection layer is an **opt-in capability** with its own entry point — import
+it from `inscribed/collections`, not `inscribed`, so apps that don't use
+collections never pull it into their bundle:
+
+```jsx
+import { CollectionRegion, CollectionItem } from "inscribed/collections";
+```
+
 - `<CollectionRegion collection="News" filter={...} limit={...}>` to render a list.
 - `<CollectionItem collection="News" slug="q1-notes">` to render one item.
 
 Both take a render-prop receiving the resolved items plus `{ isLoading, error,
 refetch, ... }`. Items are fetched at render time and cached under
 `cms-collection-{key}`, independent of the page slug. The hooks `useCollection`
-and `useCollectionItem` expose the same data directly.
+and `useCollectionItem` (also from `inscribed/collections`) expose the same data
+directly. The `<CollectionProvider>` that backs them is mounted for you inside
+`<CmsProvider>`, so the components and hooks work without extra wiring.
 
 Editing a collection item is schema-driven: the backend's `/schema` describes each
 field's `type`, and the exported `<CollectionFieldsForm>` renders one input per
@@ -514,7 +524,8 @@ bundle:
 
 | Import | Side | Highlights |
 | ------ | ---- | ---------- |
-| `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `CmsGroup`, `CollectionRegion`, `CollectionItem`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCollection`, `useCollectionItem`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
+| `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
+| `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `useCollection`, `useCollectionItem`, `useMyCollections`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
 | `inscribed/server` | server only | `getCmsContent`, `getCmsPageBlocks`, `syncCmsManifest`, `syncAll`, `cmsCacheTag` |
 | `inscribed/page` | server only | `createCmsPage` |
 | `inscribed/actions` | Server Action | `revalidateCmsSlug` |

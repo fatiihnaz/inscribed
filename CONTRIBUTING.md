@@ -67,10 +67,13 @@ package into a consuming Next.js project (`npm link`, a workspace, or a local
 ```
 src/
   index.js              # `inscribed` (client entry, "use client" lives here)
-  components/           # React components (EditableRegion, drawer UI, ...)
-  hooks/                # client hooks (useCmsContent, useCollection, ...)
+  collections.js        # `inscribed/collections` (opt-in collection entry, "use client")
+  components/           # React components (EditableRegion, drawer UI, CollectionProvider, ...)
+  hooks/                # client hooks (useCmsContent, useCmsBlock, useCollection, ...)
   lib/                  # framework-agnostic logic + JSDoc typedefs
     config.js           #   createCmsConfig (serializable config)
+    context.js          #   CmsContext (core block state)
+    collection-context.js #   CollectionContext (opt-in collection state, separate from core)
     transport.js        #   CmsTransport contract (typedef only)
     service-token.js    #   ServiceTokenProvider contract
     auth.js             #   CmsAuthAdapter contract
@@ -100,6 +103,7 @@ in `tsup.config.js` and mirror the `exports` map in `package.json`:
 | Entry | Source | Published as |
 | ----- | ------ | ------------ |
 | `index`    | `src/index.js`            | `inscribed` |
+| `collections` | `src/collections.js`   | `inscribed/collections` |
 | `server`   | `src/server/get-content.js` | `inscribed/server` |
 | `actions`  | `src/server/actions.js`   | `inscribed/actions` |
 | `page`     | `src/server/cms-page.jsx` | `inscribed/page` |

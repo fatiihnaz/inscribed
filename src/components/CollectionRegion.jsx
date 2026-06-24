@@ -1,14 +1,10 @@
 "use client";
 
 /**
- * @file `<CollectionRegion>` - render-prop primitive for a whole collection
- * (e.g. all Teams, all News). The CMS is read-only here; writes happen in
- * the collection's own admin surface.
- *
- * Discovery picks the JSX up via the AST scanner and emits a Collection
- * block into the manifest so the AdminDrawer can show "this page reads
- * from collection X". Runtime ignores the blockPath - it fetches by
- * `collection` directly through `useCollection`.
+ * @file `<CollectionRegion>`: render-prop primitive for a whole collection
+ * (all Teams, all News). Read-only here; writes happen in the collection's own
+ * admin surface. Discovery emits a Collection block so the drawer shows the
+ * binding; runtime fetches by `collection` through `useCollection`.
  *
  *   <CollectionRegion blockPath="news.list" collection="News">
  *     {(items, { isLoading, error }) => (
@@ -33,16 +29,14 @@ import { useCollection } from "../hooks/use-collection.js";
 /**
  * @typedef {Object} CollectionRegionProps
  * @property {string} blockPath
- *   Identifier for the binding inside the page; the drawer uses it to
- *   disambiguate when the same collection is referenced multiple times.
+ *   Binding identifier; lets the drawer disambiguate repeated references to
+ *   the same collection.
  * @property {string} collection
  *   Backend collection key (e.g. "Teams", "News").
  * @property {Record<string, *>} [filter]
- *   Filter object forwarded to the API as query keys. Each key must
- *   match a filterable schema field on the collection or the request
- *   returns 400. Pass a memoised reference for the most efficient
- *   re-render behaviour, but inline literals are also fine - the hook
- *   layer dedupes by `stableStringify`.
+ *   Filter forwarded to the API as query keys. Each must be a filterable
+ *   schema field or the request 400s. Inline literals are fine; the hook
+ *   dedupes by `stableStringify`.
  * @property {number} [limit]   Page size (default 50, max 100, min 1).
  * @property {number} [offset]  Pagination offset (default 0).
  * @property {"global"} [scope]
@@ -69,8 +63,8 @@ export function CollectionRegion({ blockPath, collection, filter, limit, offset,
   const groupPrefix = useContext(CmsGroupContext);
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 
-  // Drawer's per-collection panel reads this binding to mirror the same
-  // filter window in its own sub-section ("filter parity").
+  // The drawer's per-collection panel reads this binding to mirror the same
+  // filter window ("filter parity").
   useEffect(() => {
     /** @type {{ collection: string, filter?: Record<string, *>, limit?: number, offset?: number }} */
     const binding = { collection };

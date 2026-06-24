@@ -1,18 +1,11 @@
 "use client";
 
 /**
- * @file Provider that owns the collection-namespace state.
- *
- * Split out of `CmsProvider` so the core block editor doesn't depend on the
- * collection layer. Mounted *inside* `<CmsProvider>` (it reads `config`,
- * `isAdmin`, and `getAccessToken` back out of `CmsContext`), and supplies the
- * item/list cache store, the bindings registry, the `/me` schemas, and the
- * request/draft handlers through `CollectionContext`.
- *
- * Today `CmsProvider` mounts this automatically, so existing apps need no
- * changes. In a future major it becomes opt-in (imported from
- * `inscribed/collections`), at which point collection-free apps tree-shake
- * this whole module out.
+ * @file Provider owning the collection-namespace state, split out of
+ * `CmsProvider` so the core block editor doesn't depend on this layer. Mounts
+ * inside `<CmsProvider>` (reads `config`/`isAdmin`/`getAccessToken` from
+ * `CmsContext`) and supplies the cache store, bindings registry, `/me` schemas,
+ * and request/draft handlers through `CollectionContext`.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -31,25 +24,19 @@ import { stableStringify } from "../lib/stable-stringify.js";
  * @param {{ children: React.ReactNode }} props
  */
 export function CollectionProvider({ children }) {
-  // Core seams the collection layer needs: the transport ("how to talk to
-  // the backend"), the admin gate (drives the /me fetch), and the stable
-  // access-token getter (forwarded as Bearer on every request). All three
-  // are stable references coming off the memoised CmsContext value.
+  // Seams from CmsContext: transport, the admin gate (drives the /me fetch),
+  // and the access-token getter (forwarded as Bearer on every request).
   const { config, isAdmin, getAccessToken } = useCmsContext();
 
-  // Drawer-side "open this row" signal for collection region tabs. When the
-  // StatusBar's "Aç" jump targets a specific (key, slug), the RegionItemCard
-  // reads this and auto-expands itself on next render, then clears it so
-  // subsequent collection-tab visits don't re-open.
+  // Drawer-side "open this row" signal: set by the StatusBar's "Aç" jump, read
+  // once by the matching RegionItemCard to auto-expand.
   const [activeCollectionItem, setActiveCollectionItem] = useState(
     /** @type {{ key: string, slug: string } | null} */ (null),
   );
 
-  // Registry of `<CollectionItem>` / `<CollectionRegion>` bindings.
-  // Collections don't live in the manifest (no CMS block namespace), so
-  // the drawer learns about them via this runtime registry. State-based
-  // (new Map identity on each change) so consumers' useMemo deps
-  // recompute naturally when bindings come or go.
+  // Registry of `<CollectionItem>` / `<CollectionRegion>` bindings. Collections
+  // aren't in the manifest, so the drawer learns them via this runtime registry.
+  // State-based so consumer useMemos recompute when bindings come and go.
   const [collectionBindings, setCollectionBindings] = useState(
     /** @returns {Map<string, { collection: string, slug?: string }>} */
     () => new Map(),
@@ -63,10 +50,8 @@ export function CollectionProvider({ children }) {
     (blockPath, binding) => {
       setCollectionBindings((prev) => {
         const existing = prev.get(blockPath);
-        // Compare via stableStringify so consumers passing inline filter
-        // objects (`filter={{ featured: true }}`) don't churn the
-        // registry every render. The drawer's tab discovery and panel
-        // sub-section grouping both depend on stable identity here.
+        // Compare via stableStringify so inline filter objects don't churn the
+        // registry every render (the drawer's tab discovery relies on stability).
         if (existing && stableStringify(existing) === stableStringify(binding)) {
           return prev;
         }
@@ -91,9 +76,8 @@ export function CollectionProvider({ children }) {
     [],
   );
 
-  // /cms/collections/me state - effect fires further down so the drawer's
-  // per-Collection cards and per-Collection tabs share a single round-trip
-  // instead of each mounting its own fetch.
+  // /cms/collections/me state. The fetch (further down) runs once so the
+  // drawer's cards and tabs share one round-trip instead of each fetching.
   const [myCollectionsState, setMyCollectionsState] = useState(
     /** @returns {{ data: import("../lib/schemas.js").MyCollectionResponse[], isLoading: boolean, error: Error|null }} */
     () => ({ data: [], isLoading: false, error: null }),
@@ -103,16 +87,9 @@ export function CollectionProvider({ children }) {
     setMyCollectionsToken((n) => n + 1);
   }, []);
 
-  // High-churn collection state - the item cache, the list cache, and the
-  // live-edit draft overlays - lives in an external store (lib/store.js),
-  // NOT React state, so it can stay out of the context `value`. React
-  // context has no per-field subscription: any change to the context value
-  // re-renders every consumer. Keeping these maps here meant a keystroke in
-  // one row's editor re-rendered every <CollectionItem> / <CollectionRegion>
-  // on the page. With the store, a write notifies subscribers directly (the
-  // provider never re-renders) and each consumer reads a narrow slice via
-  // `useStoreSelector`, so typing in one row only re-renders the consumers
-  // that read that row.
+  // High-churn state (item cache, list cache, draft overlays) lives in an
+  // external store, not React state, so it stays out of the context value and a
+  // write only re-renders the consumers reading that slice. (See lib/store.js.)
   const collectionStoreRef = useRef(
     /** @type {import("../lib/store.js").Store<{ itemCache: Map<string, CollectionItemCacheEntry>, listCache: Map<string, CollectionListCacheEntry>, drafts: Map<string, *> }> | null} */
     (null),
@@ -126,10 +103,8 @@ export function CollectionProvider({ children }) {
   }
   const collectionStore = collectionStoreRef.current;
 
-  // Per-slice setters that preserve the old `setState(prev => next)`
-  // contract: the updater gets the current map and returns the next one (or
-  // the same reference to signal "no change", which the store treats as a
-  // no-op).
+  // Per-slice setters preserving the `setState(prev => next)` contract;
+  // returning the same reference is a no-op in the store.
   const setCollectionItemCache = useCallback(
     /** @param {(prev: Map<string, CollectionItemCacheEntry>) => Map<string, CollectionItemCacheEntry>} updater */
     (updater) => {
@@ -161,8 +136,8 @@ export function CollectionProvider({ children }) {
     [collectionStore],
   );
 
-  // In-flight promises - lives in a ref so concurrent `requestCollectionItem`
-  // calls dedupe to a single fetch without going through a state update.
+  // In-flight promises in a ref so concurrent `requestCollectionItem` calls
+  // dedupe to one fetch without a state update.
   const inFlightCollectionItems = useRef(
     /** @type {Map<string, Promise<void>>} */ (new Map()),
   );
@@ -215,11 +190,9 @@ export function CollectionProvider({ children }) {
         next.set(cacheKey, { item, isLoading: false, error: null });
         return next;
       });
-      // List cache invalidation across every (filter, offset, limit)
-      // window for this collection: a filtered view may have its row
-      // set change in ways we can't patch in-place (item entered or
-      // left the filter, new total, page boundary shifts). Subscribers
-      // re-fetch their specific window on next render.
+      // Invalidate every list window for this collection: a save can change a
+      // filtered view's row set in ways we can't patch (membership, total, page
+      // boundaries), so subscribers re-fetch their window on next render.
       const listPrefix = `${key}|`;
       setCollectionListCache((prev) => {
         let mutated = false;
@@ -236,13 +209,10 @@ export function CollectionProvider({ children }) {
     [],
   );
 
-  // Optimistic in-place patch: replaces the cached item AND the matching
-  // row inside every list-cache window for this collection, without
-  // invalidating those windows. Use for draft autosave / undo where the
-  // filter membership doesn't change (filters apply to published `data`,
-  // not `draftData`), so a refetch storm on every keystroke is wasteful
-  // and racy - the list refetch would re-seed the item cache from the
-  // server's not-yet-cleaned-up state, fighting our optimistic update.
+  // Optimistic in-place patch: replace the cached item and the matching row in
+  // every list window, without invalidating them. For draft autosave/undo,
+  // where filter membership can't change (filters apply to published `data`),
+  // so a per-keystroke refetch storm is wasteful and would race our update.
   const patchCollectionItem = useCallback(
     /** @param {string} key @param {string} slug @param {import("../lib/schemas.js").CollectionItemResponse} item */
     (key, slug, item) => {
@@ -315,9 +285,8 @@ export function CollectionProvider({ children }) {
     [],
   );
 
-  // Cache-aware collection item fetch. Cache hit -> no-op; in-flight
-  // request for the same (key, slug) -> piggyback on the existing
-  // promise; otherwise fire fetch and write the result into the cache.
+  // Cache-aware item fetch: cache hit is a no-op, an in-flight request for the
+  // same (key, slug) is piggybacked, else fetch and cache the result.
   const requestCollectionItem = useCallback(
     /** @param {string} key @param {string} slug @param {boolean} [force] @returns {Promise<void>} */
     async (key, slug, force = false) => {
@@ -358,10 +327,8 @@ export function CollectionProvider({ children }) {
           setCollectionItemCache((prev) => {
             const next = new Map(prev);
             const prior = prev.get(cacheKey);
-            // Keep the last good item on a failed (re)fetch - a transient
-            // network blip on a force-refetch shouldn't blank already-
-            // rendered content. Mirror the loading path, which also
-            // preserves `prior?.item`; only the error flag changes.
+            // Keep the last good item on a failed (re)fetch so a transient blip
+            // doesn't blank already-rendered content; only the error flag changes.
             next.set(cacheKey, {
               item: prior?.item ?? null,
               isLoading: false,
@@ -426,21 +393,15 @@ export function CollectionProvider({ children }) {
             });
             return next;
           });
-          // Seed the item cache from the list payload - the response
-          // already carries each row's full `data`, so per-item fetches
-          // (`useCollectionItem` mounting for each row in a Region tab)
-          // become cache hits and don't issue redundant GETs.
+          // Seed the item cache from the list payload (each row carries full
+          // `data`), so per-row `useCollectionItem` mounts hit the cache.
           setCollectionItemCache((prev) => {
             const next = new Map(prev);
             for (const item of response.items) {
               const itemKey = `${key}:${item.slug}`;
-              // Don't clobber a row the admin is actively editing: an open
-              // editor reads the raw item cache (overlayDrafts: false), so
-              // re-seeding from the server's view here would reset its
-              // baseline mid-edit and the editor's seeding effect would
-              // wipe unsaved keystrokes. A live local draft (set on every
-              // change before autosave even fires) is the signal that an
-              // editor is open on this slug.
+              // Don't clobber a row being edited: an open editor reads the raw
+              // cache, so re-seeding would reset its baseline mid-edit. A live
+              // draft is the signal that an editor is open on this slug.
               if (collectionStore.get().drafts.has(itemKey)) continue;
               next.set(itemKey, { item, isLoading: false, error: null });
             }
@@ -452,10 +413,8 @@ export function CollectionProvider({ children }) {
           setCollectionListCache((prev) => {
             const next = new Map(prev);
             const prior = prev.get(cacheKey);
-            // Keep the last good page on a failed (re)fetch so a transient
-            // error doesn't empty an already-rendered list/Region. Mirror
-            // the loading path's `prior` preservation; surface the failure
-            // through `error` only.
+            // Keep the last good page on a failed (re)fetch so a transient error
+            // doesn't empty an already-rendered list; only the error flag changes.
             next.set(cacheKey, {
               items: prior?.items ?? [],
               total: prior?.total ?? 0,
@@ -477,8 +436,8 @@ export function CollectionProvider({ children }) {
     [config, getAccessToken],
   );
 
-  // Provider-level /me fetch. One request per session per admin; collected
-  // re-fetches go through `refetchMyCollections`.
+  // Provider-level /me fetch: one request per admin session; re-fetches go
+  // through `refetchMyCollections`.
   useEffect(() => {
     if (!isAdmin) {
       setMyCollectionsState({ data: [], isLoading: false, error: null });
@@ -502,9 +461,8 @@ export function CollectionProvider({ children }) {
     return () => { cancelled = true; };
   }, [config, isAdmin, getAccessToken, myCollectionsToken]);
 
-  // Soft-nav cleanup: drop live-edit draft overlays when the route changes
-  // so a stale overlay doesn't leak onto a different page's collection rows.
-  // (The core block drafts are cleared by CmsProvider's own pathname effect.)
+  // Soft-nav cleanup: drop draft overlays on route change so a stale one
+  // doesn't leak onto another page's rows.
   const pathname = usePathname();
   const lastPathnameRef = useRef(pathname);
   useEffect(() => {
@@ -524,10 +482,8 @@ export function CollectionProvider({ children }) {
       myCollectionsLoading: myCollectionsState.isLoading,
       myCollectionsError: myCollectionsState.error,
       refetchMyCollections,
-      // The item/list caches and draft overlays are NOT in the value: they
-      // live in `collectionStore` (a stable ref) and consumers subscribe to
-      // narrow slices via `useStoreSelector`. This is what keeps a keystroke
-      // in one row's editor from re-rendering every collection consumer.
+      // Caches and draft overlays aren't in the value; they live in
+      // `collectionStore` so a keystroke doesn't re-render every consumer.
       collectionStore,
       requestCollectionItem,
       updateCollectionItem,

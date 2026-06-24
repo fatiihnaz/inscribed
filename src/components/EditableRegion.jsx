@@ -1,27 +1,17 @@
 "use client";
 
 /**
- * @file `<EditableRegion>` declarative primitive for editable content.
+ * @file `<EditableRegion>`: declarative primitive for editable content.
  *
- * Server-component-safe: takes only serializable props (no render-prop
- * function), so a server `app/page.jsx` can drop one in next to a
- * `getCmsContent()` call. The element to render is chosen from the block's
- * `blockType`; consumers customise the wrapper element via `as` and forward
- * any additional HTML props (className, style, target, etc.).
+ * Server-component-safe (serializable props only, no render-prop), so it drops
+ * straight into a server `app/page.jsx`. The element is chosen from the block's
+ * `blockType`; `as` overrides the wrapper tag and extra HTML props pass through.
  *
- * Empty / missing blocks render a single placeholder character ("-") inside
- * the chosen element so layout doesn't collapse and admins still have a
- * visible click target. There's deliberately no `fallback` prop - keeping
- * the empty state uniform across the app makes "this region has no content
- * yet" instantly recognisable.
+ * Empty/missing blocks render a single placeholder char so layout doesn't
+ * collapse and admins keep a click target. Public mode is a transparent
+ * passthrough; admin mode adds a click handler and hover/active outline.
  *
- * Public mode is a transparent passthrough - the rendered element is what
- * ships to the DOM. Admin mode adds a `data-block` attribute, click handler,
- * and hover/active outline so editors can find the region.
- *
- * Power users who need full control over rendering (conditional layouts,
- * derived values, etc.) should reach for `useCmsBlock(blockPath)` from a
- * client component instead - that hook still exposes the raw value.
+ * For full control over rendering, use `useCmsBlock(blockPath)` instead.
  */
 
 import { cloneElement, useContext, useEffect, useState } from "react";
@@ -41,36 +31,21 @@ import { ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
  * @property {string} blockPath
  * @property {string} [as]   Wrapper tag for Text / RichText (default: "span" / "div"). Ignored for Image and Link when the block has a value.
  * @property {import("../lib/schemas.js").BlockType} [blockType]
- *   Discovery-time metadata. Read by the manifest discovery script (AST scan
- *   of `<EditableRegion>` JSX), not by the runtime. The script needs both
- *   `blockType` and `defaultValue` to produce a `ManifestBlockItem`. Omit and
- *   the discovery script will skip this region with a warning - which means
- *   no DB row, which means the region renders the empty placeholder forever.
+ *   Discovery-only metadata (read by the manifest scanner, not runtime). The
+ *   scanner needs `blockType` + `defaultValue` to emit a block; omit it and the
+ *   region is skipped with a warning, so it has no DB row and stays empty.
  * @property {*} [defaultValue]
- *   Discovery-time metadata. The `defaultValue` written to the DB on first
- *   sync. Must be a static literal in the JSX (the AST scanner can't evaluate
- *   expressions or imported values). Omit it and the region is still synced -
- *   seeded with an empty string ("") and a discovery warning - so it renders
- *   the empty placeholder until an admin fills it.
+ *   Discovery-only: the value seeded into the DB on first sync. Must be a static
+ *   literal. Omit it and the region still syncs, seeded with "" plus a warning.
  * @property {"global"} [scope]
- *   Discovery-time marker. Set to `"global"` for region declared inside
- *   shared UI (header, footer, site-wide settings). The discovery script
- *   writes such regions to the `globalSlug` manifest entry instead of
- *   any page slug, so the same block backs every page. Runtime ignores
- *   this prop - the merged blocks map already contains both page and
- *   global blocks under the same keys.
+ *   Discovery-only. `"global"` writes the region to the `globalSlug` manifest
+ *   entry (for header/footer/site-wide UI) so one block backs every page.
  * @property {boolean} [editable]
- *   Override the context-level `isAdmin` gate for this region. When
- *   `false`, the region renders read-only on the page (no inline edit
- *   affordance) AND its drawer card is locked - the block still appears
- *   in the admin drawer with its value, but every editor field is
- *   disabled. Omit (or `true`) for the default `isAdmin` behaviour.
+ *   When `false`, the region is read-only on the page and its drawer card is
+ *   locked (still shown, fields disabled). Default follows `isAdmin`.
  * @property {boolean} [visible]
- *   When `false`, the region is removed from the admin drawer entirely
- *   (no card, no count) and renders read-only on the page. Content still
- *   ships to the public DOM - this only hides the *editing* surface, for
- *   blocks an admin should never touch through the drawer. Takes
- *   precedence over `editable`.
+ *   When `false`, the region is dropped from the drawer entirely and read-only
+ *   on the page; content still ships to the public DOM. Wins over `editable`.
  */
 
 const RING_HOVER   = `0 0 0 1.5px color-mix(in srgb, ${ACCENT} 30%, transparent)`;
@@ -91,11 +66,8 @@ const BLOCK_TAGS = new Set([
 /**
  * @param {EditableRegionProps & Record<string, *>} props
  */
-// `blockType` / `defaultValue` / `scope` are discovery-only metadata read
-// by the AST scanner, not by the runtime. They're destructured under
-// aliases so (a) they don't leak into ...rest (which would dump them onto
-// DOM nodes) and (b) they don't shadow the local `blockType` const
-// computed below.
+// `blockType` / `defaultValue` / `scope` are discovery-only; aliased here so
+// they don't leak into ...rest (onto DOM nodes) or shadow the local `blockType`.
 // eslint-disable-next-line no-unused-vars
 export function EditableRegion({ blockPath, as, editable, visible, blockType: _bt, defaultValue: _dv, scope: _scope, ...rest }) {
   const {
@@ -106,19 +78,11 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   const groupVisibility = useContext(CmsGroupVisibilityContext);
   const [isHovered, setIsHovered] = useState(false);
 
-  // Auto-prefix the blockPath when wrapped in a `<CmsGroup>`. Discovery
-  // applies the same rule statically so the manifest entry's path is the
-  // already-prefixed string (e.g. "footer.copyright") - the runtime
-  // lookup must match. Top-level (no enclosing group) is a no-op.
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 
-  // Surface the `visible` / `editable` overrides to the drawer's registry.
-  // `visible={false}` wins (drops the card entirely); `editable={false}`
-  // locks it. An enclosing `<CmsGroup visible/editable>` folds in here too —
-  // most restrictive wins, so a region can tighten the section's mode but
-  // not loosen it. Only admins mount the drawer, so public visitors skip
-  // the registration churn. Re-runs (and cleans up) whenever the mode or
-  // path changes, and unregisters on unmount.
+  // Register the `visible`/`editable` override with the drawer, folding in any
+  // enclosing group mode (most restrictive wins; a region can tighten but not
+  // loosen). Admin-only, so public visitors skip the churn.
   const ownMode = visible === false ? "hidden" : editable === false ? "readonly" : null;
   const visibilityMode = strongerVisibility(groupVisibility, ownMode);
   useEffect(() => {
@@ -127,32 +91,21 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
     return () => unregisterEditorVisibility(fullPath);
   }, [isAdmin, fullPath, visibilityMode, registerEditorVisibility, unregisterEditorVisibility]);
 
-  // Subscribe to just this block's draft. A keystroke in another region
-  // leaves both selectors' outputs unchanged, so `useStoreSelector` bails
-  // and this region doesn't re-render. Two selectors (presence + value) so
-  // an explicit empty/null local draft is distinguishable from "no draft".
+  // Subscribe to just this block's draft, so a keystroke elsewhere doesn't
+  // re-render us. Two selectors (presence + value) so an explicit empty/null
+  // draft is distinguishable from "no draft".
   const hasLocalDraft = useStoreSelector(contentDraftsStore, (m) => m.has(fullPath));
   const localDraft = useStoreSelector(contentDraftsStore, (m) => m.get(fullPath));
 
   const block = blocks.get(fullPath);
   const blockType = block ? block.blockType : null;
-  // Live preview: prefer the unsaved local draft when the admin is mid-edit,
-  // then the backend-side draft overlay (`block.draftValue`), then the
-  // published `block.value`. `has` (not `??`) so an explicit empty/null
-  // local draft still wins.
-  const value = hasLocalDraft
-    ? localDraft
-    : block
-      ? (block.draftValue ?? block.value)
-      : undefined;
+  const value = hasLocalDraft ? localDraft : block ? (block.draftValue ?? block.value) : undefined;
   const empty = isValueEmpty(blockType, value);
 
   const rendered = empty
     ? renderPlaceholder(as, rest)
     : renderBlock(blockType, value, { as, ...rest });
 
-  // Read-only on the page for any resolved mode (own prop or inherited
-  // from a `<CmsGroup>`): no click target, hover ring, or chip.
   if (!isAdmin || visibilityMode) return rendered;
 
   const isActive = activeBlock === fullPath;
@@ -203,10 +156,6 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
           style={{
             position: "absolute",
             top: 0,
-            // Pull the chip out by the hover/active ring's outer thickness
-            // (1.5px on hover, 2px on active) so its right edge lines up
-            // with the ring instead of leaving a sliver of hover-tint
-            // background showing past the chip.
             right: isActive ? -2 : -1.5,
             transform: "translateY(-100%)",
             background: BG_RAISED,
@@ -257,11 +206,8 @@ function isValueEmpty(blockType, value) {
 }
 
 /**
- * Render the block's value as the appropriate HTML element. `as` only
- * applies to the text types (Text/ShortText/LongText/RichText) - Image and
- * Link have a fixed shape because
- * the editor side (AdminDrawer) saves a `{src,alt}` / `{href,label}`
- * payload that maps cleanly onto `<img>` / `<a>`.
+ * Render the block's value as the right HTML element. `as` applies only to the
+ * text types; Image and Link have fixed `{src,alt}` / `{href,label}` shapes.
  *
  * @param {BlockType|null} blockType
  * @param {*} value
@@ -278,13 +224,9 @@ function renderBlock(blockType, value, props) {
     }
     case "RichText": {
       const Tag = as ?? "div";
-      // RichText values are HTML strings produced by Tiptap. Sanitise on
-      // every render (SSR + client) so an admin pasting hostile markup
-      // can only XSS themselves while in the editor - public visitors
-      // never see <script>, event handlers, or javascript: URLs.
-      // `isomorphic-dompurify` swaps in jsdom on the Node side
-      // automatically; on the client it's a thin wrapper around the
-      // standard DOMPurify build.
+      // RichText is a Tiptap-produced HTML string. Sanitise on every render
+      // (SSR + client) so hostile pasted markup can't XSS public visitors.
+      // `isomorphic-dompurify` uses jsdom on Node, DOMPurify on the client.
       return (
         <Tag
           {...rest}
@@ -303,8 +245,6 @@ function renderBlock(blockType, value, props) {
       );
     }
     default: {
-      // Group / DataSource have no inline rendering - those payloads are
-      // consumed by code, not laid out here.
       const Tag = as ?? "span";
       return <Tag {...rest}>{typeof value === "string" ? value : null}</Tag>;
     }
@@ -312,9 +252,8 @@ function renderBlock(blockType, value, props) {
 }
 
 /**
- * Single placeholder shape for every empty / missing block. Always uses
- * `as` (or `<span>` if not provided) so img/anchor src-less rendering
- * is avoided - those would produce broken DOM nodes.
+ * Single placeholder for every empty/missing block. Always renders `as` (or
+ * `<span>`) to avoid broken src-less `<img>`/`<a>` nodes.
  *
  * @param {string|undefined} as
  * @param {Record<string, *>} rest
@@ -324,10 +263,8 @@ function renderPlaceholder(as, rest) {
   return <Tag {...rest}>{EMPTY_PLACEHOLDER}</Tag>;
 }
 
-// Block `javascript:`, `data:`, `vbscript:` etc. on Link blocks: an admin
-// pasting a hostile URL would otherwise execute it for every public visitor
-// who clicks the link. Whitelist common schemes + relative/anchor forms;
-// anything else falls back to "" so the anchor renders inert.
+// Block `javascript:`/`data:`/`vbscript:` URLs on Link blocks: whitelist
+// common schemes + relative/anchor forms, anything else becomes "" (inert).
 const HREF_ALLOWED = /^(https?:|mailto:|tel:|\/|#|\.\/|\.\.\/)/i;
 
 /** @param {*} href */

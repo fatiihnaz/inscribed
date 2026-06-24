@@ -1,11 +1,9 @@
 "use client";
 
 /**
- * @file Top-level provider that owns CMS context state.
- *
- * Mount once near the root (e.g. in `app/layout.jsx`). Holds the blocks
- * map, active-block selection, and the refetch token. Admin-only UI
- * (the drawer) is lazy-loaded so public visitors don't pay for it.
+ * @file Top-level provider owning CMS context state. Mount once near the root.
+ * Holds the blocks map, active-block selection, draft autosave, and the refetch
+ * token. The admin drawer is lazy-loaded so public visitors don't pay for it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -37,11 +35,11 @@ const AdminDrawer = dynamic(
  * @param {CmsConfig | { baseUrl: string, clientId?: string }} props.config
  * @param {string|null} [props.userSub]
  * @param {boolean} [props.isAdmin]
- * @param {BlockResponse[]} [props.initialBlocks]   Server-fetched blocks for the active page; eliminates the SSR fallback flicker by seeding the blocks map before first paint.
- * @param {(slug: string) => void | Promise<void>} [props.onAfterSave]   Server Action invoked after a successful save (typically calls `revalidateTag(cmsCacheTag(slug))` to drop stale ISR data).
- * @param {() => Promise<string>} [props.getAccessToken]   Returns the current user's JWT access token; added as `Authorization: Bearer {token}` on write requests. Omit in public/demo mode.
- * @param {import("../lib/transport.js").CmsTransport} [props.transport]   Custom client-side data-access adapter. Defaults to the REST transport built from `config`. Injected here (not via `config`) because it holds functions, which can't cross the RSC boundary as a serialized prop.
- * @param {{ name: string|null, email: string|null, image: string|null } | null} [props.userInfo]   Identity for the admin panel footer. Null in public/demo mode.
+ * @param {BlockResponse[]} [props.initialBlocks]   Server-fetched blocks, seeded into the map before first paint to avoid SSR flicker.
+ * @param {(slug: string) => void | Promise<void>} [props.onAfterSave]   Server Action run after a save, typically `revalidateTag(cmsCacheTag(slug))`.
+ * @param {() => Promise<string>} [props.getAccessToken]   Returns the user's JWT, added as `Authorization: Bearer` on writes. Omit in public mode.
+ * @param {import("../lib/transport.js").CmsTransport} [props.transport]   Custom client transport. Defaults to REST from `config`. Passed here, not via `config`, because it holds functions that can't cross the RSC boundary.
+ * @param {{ name: string|null, email: string|null, image: string|null } | null} [props.userInfo]   Identity for the admin panel footer. Null in public mode.
  * @param {() => void} [props.onSignOut]   Invoked by the admin panel's logout button.
  * @param {React.ReactNode} props.children
  */
@@ -57,12 +55,9 @@ export function CmsProvider({
   onSignOut,
   children,
 }) {
-  // `config` arrives as serializable data (it crosses the RSC boundary as a
-  // prop, e.g. from `createCmsPage`). The transport holds functions, so it
-  // can't ride along on that prop - we build it here on the client and
-  // augment it onto the config the rest of the tree reads through context,
-  // where it never has to be serialized. Pass a custom `transport` prop to
-  // override; otherwise the default REST adapter targets `config.baseUrl`.
+  // `config` arrives serializable across the RSC boundary. The transport holds
+  // functions, so we build it here on the client and augment it onto the config
+  // the tree reads through context. A custom `transport` prop overrides it.
   const baseConfig = useMemo(
     () => "baseUrl" in config && Object.isFrozen(config) ? /** @type {CmsConfig} */ (config) : createCmsConfig(config),
     [config],
@@ -75,17 +70,12 @@ export function CmsProvider({
     [baseConfig, transport],
   );
 
-  // Theme overrides ride along on the serializable config as a normalized
-  // subset (see `theme.js`). Emit them once here as a `:root` block of
-  // `--ins-*` custom properties; every visual token reads them with a baked
-  // default fallback, so an empty theme emits nothing and the stock palette
-  // shows through. Lives at the provider root (not the drawer) so page-side
-  // editing affordances pick the vars up too.
+  // Emit the theme overrides once as a `:root` block of `--ins-*` vars. At the
+  // provider root (not the drawer) so page-side affordances pick them up too.
   const themeCss = useMemo(() => buildThemeCss(baseConfig.theme), [baseConfig.theme]);
 
-  // Seed the blocks map from `initialBlocks` so EditableRegion has real
-  // values to render during SSR and on first client paint. Subsequent
-  // updates flow through `useCmsContent` (refetch on mount) and saves.
+  // Seed the blocks map from `initialBlocks` so EditableRegion renders real
+  // values during SSR and first paint. Later updates flow through `useCmsContent`.
   const [blocks, setBlocksState] = useState(
     /** @returns {Map<string, BlockResponse>} */
     () => indexBlocksByPath(initialBlocks ?? []),
@@ -93,25 +83,17 @@ export function CmsProvider({
   const [activeBlock, setActiveBlock] = useState(
     /** @type {string|null} */ (null),
   );
-  // Drawer-side "open this list row" signal — the List-block analogue of
-  // `activeCollectionItem`. Set when a page-side `<EditableList>` item is
-  // clicked; the matching `ListItemCard` reads it, expands, scrolls into
-  // view, then clears it so it only fires once.
+  // Drawer-side "open this list row" signal, set when a page-side
+  // `<EditableList>` item is clicked; the matching card reads it once.
   const [activeListItem, setActiveListItem] = useState(
     /** @type {{ path: string, index: number } | null} */ (null),
   );
   const [refetchToken, setRefetchToken] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  // Per-blockPath unsaved edits (live-preview overlay while the admin types).
-  // Lives in an external store, NOT React state, for the same reason as the
-  // collection store (now in `CollectionProvider`): keeping it in the context
-  // value re-rendered every
-  // <EditableRegion> / <EditableList> on the page on every keystroke. With the
-  // store, page-side consumers subscribe to their own blockPath via
-  // `useStoreSelector`, so typing in one region only re-renders that region.
-  // Cleared on save / discard / navigation. `setDraftsState` keeps the old
-  // `setState(value | prev => next)` shape - the store no-ops when the updater
-  // returns the same reference - so every existing call site is untouched.
+  // Per-blockPath unsaved edits (live-preview overlay). In an external store,
+  // not React state, so a keystroke only re-renders the region subscribed to
+  // that blockPath instead of every region on the page. `setDraftsState` keeps
+  // the `setState(value | prev => next)` shape, so call sites are untouched.
   const contentDraftsStoreRef = useRef(
     /** @type {import("../lib/store.js").Store<Map<string, *>> | null} */ (null),
   );
@@ -121,10 +103,9 @@ export function CmsProvider({
   const contentDraftsStore = contentDraftsStoreRef.current;
   const setDraftsState = contentDraftsStore.set;
 
-  // Registry of <EditableList> itemSchemas so the AdminDrawer can render
-  // List editors. Lives in a ref + a forced rerender counter rather than
-  // setState - register/unregister fires inside child useEffects, which
-  // would otherwise schedule a parent setState mid-commit and warn.
+  // Registry of <EditableList> itemSchemas for the drawer's List editors. A
+  // ref + rerender counter, not setState: register/unregister fires inside
+  // child useEffects, which would otherwise warn about a setState mid-commit.
   const itemSchemasRef = useRef(/** @type {Map<string, ItemSchema>} */ (new Map()));
   const [itemSchemasVersion, setItemSchemasVersion] = useState(0);
 
@@ -146,11 +127,10 @@ export function CmsProvider({
     [],
   );
 
-  // Registry of per-region editor-visibility overrides from `<EditableRegion>`'s
-  // `visible` / `editable` props. Those props are page-side runtime metadata
-  // (not in the manifest/blocks map), so this is how the drawer learns to
-  // hide or lock a block. State-based (new Map identity per change) so the
-  // drawer's block-list useMemo recomputes naturally when overrides come/go.
+  // Registry of editor-visibility overrides from `<EditableRegion>`'s
+  // `visible`/`editable` props (runtime-only, not in the manifest), so the
+  // drawer learns to hide/lock a block. State-based so its block-list useMemo
+  // recomputes when overrides come and go.
   const [editorVisibility, setEditorVisibility] = useState(
     /** @returns {Map<string, "hidden"|"readonly">} */
     () => new Map(),
@@ -182,10 +162,9 @@ export function CmsProvider({
     [],
   );
 
-  // Sync the blocks map when `initialBlocks` arrives with new content (e.g.
-  // when client-side navigation triggers a server re-render of `<CmsPage>`
-  // for a new slug). `useState`'s lazy init only runs once on mount, so
-  // without this the panel would show stale blocks after navigation.
+  // Re-seed the blocks map when `initialBlocks` arrives with new content (e.g.
+  // navigation re-renders `<CmsPage>` for a new slug). Lazy init only runs once
+  // on mount, so without this the panel would show stale blocks.
   const initialBlocksRef = useRef(initialBlocks);
   useEffect(() => {
     if (initialBlocks === initialBlocksRef.current) return;
@@ -195,16 +174,12 @@ export function CmsProvider({
     setDraftsState(new Map());
   }, [initialBlocks]);
 
-  // Backstop: the root layout's `<CmsPage>` is preserved across client-side
-  // navigation, so its `initialBlocks` prop doesn't update on its own when
-  // the URL changes. `router.refresh()` forces Next.js to re-render the
-  // layout's server components — `getCmsPageBlocks` runs again with the
-  // new pathname (via the middleware-set `x-pathname` header), the fresh
-  // `initialBlocks` flow back through this provider's prop, and the
-  // `initialBlocks` watcher above seeds the blocks map. This works for
-  // public visitors too because the server fetch uses the service token,
-  // not the user's session — so we don't need a client-side fetch path
-  // (which would 401 anonymous traffic).
+  // Backstop: a root-layout `<CmsPage>` survives client navigation, so its
+  // `initialBlocks` prop doesn't update on URL change. `router.refresh()`
+  // re-runs the layout's server components, `getCmsPageBlocks` fetches for the
+  // new pathname (via the `x-pathname` header), and the fresh blocks flow back
+  // through the watcher above. Works for public visitors too, since the server
+  // fetch uses the service token, not the user session.
   const pathname = usePathname();
   const router = useRouter();
   const lastPathnameRef = useRef(pathname);
@@ -217,8 +192,7 @@ export function CmsProvider({
   }, [pathname, router]);
 
   // Drop drafts for blocks that no longer exist (e.g. after a manifest sync
-  // that removed the block). Pathname-change drafts are already cleared by
-  // the effect above; this catches the manifest-sync case.
+  // removed one). Pathname-change drafts are already cleared above.
   useEffect(() => {
     setDraftsState((prev) => {
       if (prev.size === 0) return prev;
@@ -235,9 +209,8 @@ export function CmsProvider({
     });
   }, [blocks]);
 
-  // Stash callbacks in refs so changes to the props don't bust the
-  // memoised context value (server actions are stable references in
-  // practice, but refs guarantee no spurious re-renders).
+  // Stash callbacks in refs so prop changes don't bust the memoised context
+  // value (and thus don't spuriously re-render consumers).
   const onAfterSaveRef = useRef(onAfterSave ?? null);
   onAfterSaveRef.current = onAfterSave ?? null;
 
@@ -285,14 +258,12 @@ export function CmsProvider({
     /** @param {boolean} open */
     (open) => {
       setIsDrawerOpen(open);
-      // Closing the panel cancels any in-progress edit so the next time it
-      // opens the user lands back on the block list, not on stale draft state.
+      // Closing cancels the in-progress edit so reopening lands on the block list.
       if (!open) setActiveBlock(null);
     },
     [],
   );
 
-  // Public-mode visitors should not be able to enter edit state at all.
   const setActiveBlockGuarded = useCallback(
     /** @param {string|null} blockPath */
     (blockPath) => {
@@ -329,12 +300,9 @@ export function CmsProvider({
 
   // ---- Draft autosave (PUT /cms/draft, 1s after last edit) ---------------
   //
-  // Every keystroke updates `drafts`, which retriggers the debounce effect
-  // below; after 1s of silence we group the dirty edits by slug and PUT each
-  // group. Reads block/version/config/pathname through refs so unrelated
-  // re-renders (refetch, theme changes, ...) don't reset the timer - only a
-  // genuine `drafts` mutation does. A backend `updateContent` clears the
-  // overlay automatically, so there's no explicit cleanup path here.
+  // Each edit re-arms a 1s debounce; on fire we group dirty edits by slug and
+  // PUT each. Block/version/config/pathname are read through refs so unrelated
+  // re-renders don't reset the timer, only a real `drafts` mutation does.
 
   const [draftSyncStatus, setDraftSyncStatus] = useState(
     /** @type {"idle"|"saving"|"saved"|"failed"} */ ("idle"),
@@ -349,18 +317,16 @@ export function CmsProvider({
   const draftConfigRef = useRef(normalizedConfig);
   draftConfigRef.current = normalizedConfig;
 
-  // Per-slug request chain. A fast typist can leave the previous PUT in
-  // flight when the next debounce fires; chaining each slug's request onto
-  // its predecessor guarantees the backend sees them in commit order and
-  // an older draft can never clobber a newer one. Across slugs we still
-  // parallelise (page + global header save independently).
+  // Per-slug request chain: a fast typist can leave the previous PUT in flight,
+  // so chaining each slug's request onto its predecessor keeps the backend in
+  // commit order and stops an older draft clobbering a newer one. Different
+  // slugs still save in parallel.
   const inFlightDraftPerSlug = useRef(
     /** @type {Map<string, Promise<void>>} */ (new Map()),
   );
 
-  // Pulse-and-reset for the panel status dot. After a saved/failed signal
-  // we drop back to idle ~1.2s later so the green/pink flash is purely
-  // transient and the dot returns to its dirty/clean baseline.
+  // Pulse-and-reset for the status dot: drop back to idle ~0.9s after a
+  // saved/failed signal so the flash is transient.
   const draftStatusResetRef = useRef(
     /** @type {ReturnType<typeof setTimeout>|null} */ (null),
   );
@@ -383,18 +349,13 @@ export function CmsProvider({
     };
   }, []);
 
-  // Content drafts live in `contentDraftsStore` now, so a write doesn't
-  // re-render the provider - this effect can't use `[drafts]` as its trigger
-  // anymore. Instead we subscribe to the store and (re-)arm the debounce on
-  // each change: every edit clears the pending timer and starts a fresh 1s
-  // countdown, so a successful PUT only fires 1s after the last keystroke.
+  // Drafts live in the store, so this effect subscribes (rather than depending
+  // on `[drafts]`) and re-arms the debounce on each change.
   const autosaveTimerRef = useRef(
     /** @type {ReturnType<typeof setTimeout>|null} */ (null),
   );
-  // Incremented on every explicit discard so the in-flight autosave PUT
-  // can detect that a discard happened while it was awaiting and skip
-  // the "Taslak kaydedildi" flash (which would be wrong — the user just
-  // threw those drafts away).
+  // Bumped on every discard so an in-flight autosave PUT can tell a discard
+  // happened mid-await and skip the (now-wrong) "saved" flash.
   const discardGenRef = useRef(0);
   useEffect(() => {
     const armDebounce = () => {
@@ -414,12 +375,9 @@ export function CmsProvider({
       const currentConfig = draftConfigRef.current;
 
       // Skip entries that no longer differ from the effective value
-      // (`draftValue ?? value`): typing the same characters back to a
-      // saved draft, or the block being removed by a refetch. The
-      // comparison MUST be against the effective value so an undo
-      // (local draft set to published while a server draft exists)
-      // still sends a request - that's how the backend draft gets
-      // cleared.
+      // (`draftValue ?? value`). Comparing against the effective value (not
+      // `value`) is deliberate: an undo back to published while a server draft
+      // exists must still send a request, so the backend draft gets cleared.
       /** @type {Map<string, import("../lib/schemas.js").UpdateBlockItem[]>} */
       const bySlug = new Map();
       for (const [blockPath, value] of drafts) {
@@ -434,9 +392,8 @@ export function CmsProvider({
       }
       if (bySlug.size === 0) return;
 
-      // If every block being PUT has value === published (all resets to
-      // baseline, e.g. per-block undo), treat it as a silent backend
-      // cleanup — no "Kaydediliyor / Taslak kaydedildi" flash.
+      // If every PUT block equals its published value (all undone to baseline),
+      // treat it as a silent backend cleanup with no status flash.
       const isAllReset = [...bySlug.values()].every((blocksForSlug) =>
         blocksForSlug.every((item) => {
           const b = currentBlocks.get(item.blockPath);
@@ -465,23 +422,18 @@ export function CmsProvider({
         }),
       );
 
-      // Global discard during PUT: skip the optimistic draftValue update
-      // entirely — `discardServerDrafts` already nullified draftValue
-      // optimistically, so applying our stale sent-values here would
-      // briefly re-populate it and fight the discard.
+      // Discard happened during the PUT: skip the optimistic update entirely.
+      // `discardServerDrafts` already nulled draftValue, so applying our stale
+      // sent-values here would briefly re-populate it and fight the discard.
       if (discardGenRef.current !== genAtDispatch) {
         setDraftSyncStatus("idle");
         return;
       }
 
-      // Optimistically reflect the backend's post-write state in the
-      // local blocks map: each block we just PUT now has draftValue
-      // equal to the value we sent, except when that value matches
-      // `block.value` (published) - in which case the backend
-      // auto-cleans and DraftValue becomes null. Without this update
-      // an undo would still see `draftValue` populated until the next
-      // refetch, leaving the dirty count and Save All button pointing
-      // at the stale draft.
+      // Mirror the backend's post-write state locally: each PUT block gets
+      // draftValue = the value sent, or null when that equals published (the
+      // backend auto-cleans). Without it, an undo would keep `draftValue`
+      // populated until the next refetch, leaving a stale dirty count.
       results.forEach((r, i) => {
         if (r.status !== "fulfilled") return;
         const [, blocksForSlug] = slugEntries[i];
@@ -534,15 +486,11 @@ export function CmsProvider({
     };
   }, [contentDraftsStore, stableGetAccessToken, flashDraftStatus]);
 
-  // Silent server-draft cleanup for the discard path. Fires a PUT with
-  // each block's published value (the only knob the API gives us for
-  // dropping a Redis draft — backend auto-cleans when draft===published)
-  // but doesn't go through the autosave debounce or touch
-  // `draftSyncStatus`. The pill therefore stays at its idle gray dot
-  // instead of flashing "Kaydediliyor… → Taslak kayıtlı HH:MM" for a
-  // request that conceptually removes a draft. Per-slug chaining mirrors
-  // the autosave path so a discard issued mid-flight can't overtake a
-  // still-pending autosave PUT for the same slug.
+  // Silent server-draft cleanup for discard. PUTs each block's published value
+  // (the only way the API drops a Redis draft: it auto-cleans when
+  // draft===published) without the debounce or `draftSyncStatus`, so the pill
+  // doesn't flash a save for a request that removes a draft. Per-slug chaining
+  // mirrors autosave so a mid-flight discard can't overtake a pending PUT.
   const discardServerDrafts = useCallback(
     /** @param {string[]} blockPaths */
     (blockPaths) => {
@@ -565,9 +513,8 @@ export function CmsProvider({
       }
       if (bySlug.size === 0) return;
 
-      // Optimistic: nullify draftValue locally so dirtyCount drops to 0
-      // and downstream surfaces (StatusBar, pill, ChangesPanel) update
-      // immediately without waiting for the round-trip.
+      // Optimistic: null draftValue locally so dirtyCount and downstream
+      // surfaces update without waiting for the round-trip.
       setBlocksState((prev) => {
         let mutated = false;
         const next = new Map(prev);
@@ -582,8 +529,8 @@ export function CmsProvider({
         return mutated ? next : prev;
       });
 
-      // Fire-and-forget cleanup PUTs. Per-slug chaining so concurrent
-      // autosaves can't sneak a stale draft in after the cleanup lands.
+      // Fire-and-forget cleanup PUTs, per-slug chained so a concurrent autosave
+      // can't sneak a stale draft in after cleanup.
       const currentConfig = draftConfigRef.current;
       (async () => {
         const accessToken = (await stableGetAccessToken()) || undefined;
@@ -616,10 +563,8 @@ export function CmsProvider({
       userSub,
       blocks,
       setBlocks: setBlocksState,
-      // Live-edit drafts are NOT in the value: they live in
-      // `contentDraftsStore` (stable ref) and consumers subscribe to their
-      // own blockPath via `useStoreSelector`, so a keystroke doesn't
-      // re-render every <EditableRegion> on the page.
+      // Live-edit drafts aren't in the value; they live in `contentDraftsStore`
+      // so a keystroke doesn't re-render every consumer.
       contentDraftsStore,
       setDraft,
       clearDraft,
@@ -678,31 +623,21 @@ export function CmsProvider({
   );
 
   // Push the page right when the admin drawer is open so the panel doesn't
-  // overlap content. The chevron handle on the drawer's right edge sticks
-  // out a tiny bit but doesn't add to the offset - panel width is the only
-  // thing that pushes. Plain CSS transition - keeps `framer-motion` isolated
-  // to the (lazy-loaded) admin chunk so public visitors don't pay for it.
+  // overlap content. Plain CSS transition keeps `framer-motion` in the
+  // lazy-loaded admin chunk so public visitors don't pay for it.
   const contentOffset = isAdmin && isDrawerOpen ? ADMIN_PANEL_WIDTH : 0;
 
   return (
     <CmsContext.Provider value={value}>
       {themeCss ? <style>{themeCss}</style> : null}
-      {/* Collections are an opt-in capability with their own provider/context
-          (see `inscribed/collections`). It's mounted here so existing apps
-          need no changes — both the page-side `<CollectionRegion>` /
-          `<CollectionItem>` bindings (in `children`) and the drawer's
-          collection tabs share one `CollectionContext`. It reads `config`,
-          `isAdmin`, and `getAccessToken` back out of `CmsContext`, so it must
-          live inside this provider. In a future major it becomes opt-in and
-          collection-free apps tree-shake it out. */}
+      {/* Collections are opt-in (see `inscribed/collections`), mounted here so
+          page bindings and the drawer's collection tabs share one
+          `CollectionContext`. It reads `config`/`isAdmin`/`getAccessToken` from
+          `CmsContext`, so it must live inside this provider. */}
       <CollectionProvider>
-        {/* Admin-only client refetch: `useCmsContent` GETs `/cms/content`
-            with the user's Bearer so post-save `triggerRefetch` (and the
-            draft autosave roundtrip) can pull fresh versions into the
-            editor's view without a navigation. Public visitors don't
-            mount this — soft-nav refreshes go through `router.refresh()`
-            above, which re-runs the layout server-side with the service
-            token. */}
+        {/* Admin-only client refetch so post-save `triggerRefetch` and the
+            autosave roundtrip pull fresh versions in without a navigation.
+            Public visitors refresh via `router.refresh()` above instead. */}
         {isAdmin ? <ContentLoader /> : null}
         <div
           style={{
@@ -718,16 +653,12 @@ export function CmsProvider({
   );
 }
 
-// Must match PANEL_WIDTH inside AdminDrawer.jsx. Hardcoded here (rather than
-// imported) so the constant stays out of the public bundle - AdminDrawer is
-// dynamically imported and only loads for admins.
+// Must match PANEL_WIDTH in AdminDrawer.jsx. Hardcoded, not imported, so it
+// stays out of the public bundle (AdminDrawer is admin-only and lazy-loaded).
 const ADMIN_PANEL_WIDTH = 460;
 
-// Public visitors render entirely from `initialBlocks` (server-fetched and
-// ISR-cached under `cmsCacheTag(slug)`); the cache is dropped on admin save
-// via `revalidateCmsSlug`, so there is no reason to re-verify on every page
-// view. Admin sessions still mount this so post-save `triggerRefetch` can
-// pull fresh versions into the editor's view without a navigation.
+// Admin-only. Public visitors render from `initialBlocks` (ISR-cached, dropped
+// on save via `revalidateCmsSlug`), so they never need this client refetch.
 function ContentLoader() {
   useCmsContent();
   return null;

@@ -1,21 +1,14 @@
 "use client";
 
 /**
- * @file `<CollectionItem>` - render-prop primitive for a single collection
- * row (e.g. one team, one news article).
+ * @file `<CollectionItem>`: render-prop primitive for one collection row.
  *
- * Public visitors render whatever the consumer's children function
- * returns. Admins with `item.canEdit === true` get an extra layer: the
- * rendered output is wrapped in a click-to-focus affordance (matches
- * EditableRegion's pattern) that opens the matching drawer Page-tab
- * card. Edits happen in the drawer via a schema-driven form; the page
- * preview re-renders after a successful save.
+ * Public visitors get the children function's output. Admins with
+ * `item.canEdit` also get a click-to-focus wrapper (like EditableRegion) that
+ * opens the matching drawer card; edits and re-render happen there.
  *
- * 404s come through `meta.error` with `error.isNotFound === true` so the
- * consumer can branch on the same try-catch surface that handles other
- * errors. The render-prop receives `item: null` while loading and on
- * error - branch on `meta.isLoading` / `meta.error` before reading
- * `item.data`.
+ * `item` is null while loading and on error, so branch on `meta.isLoading` /
+ * `meta.error` first. 404s arrive as `meta.error` with `error.isNotFound`.
  *
  *   <CollectionItem blockPath="news.hero" collection="News" slug="q1-release-notes">
  *     {(item, { isLoading, error }) => (
@@ -68,9 +61,8 @@ export function CollectionItem({ blockPath, collection, slug, scope: _scope, chi
   const groupPrefix = useContext(CmsGroupContext);
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 
-  // Hand the binding to the drawer so it can render a matching card in
-  // the Page tab. Public visitors register too - harmless overhead, and
-  // it keeps register/unregister symmetric across mode switches.
+  // Hand the binding to the drawer for its Page-tab card. Public visitors
+  // register too, keeping register/unregister symmetric across mode switches.
   useEffect(() => {
     registerCollectionBinding(fullPath, { collection, slug });
     return () => unregisterCollectionBinding(fullPath);
@@ -79,8 +71,6 @@ export function CollectionItem({ blockPath, collection, slug, scope: _scope, chi
   const { item, isLoading, error, refetch } = useCollectionItem(collection, slug);
   const rendered = /** @type {*} */ (children(item, { isLoading, error, refetch }));
 
-  // Only wrap when there's something to edit AND the user can edit it.
-  // No item / no canEdit → render as-is (public preview surface).
   if (!isAdmin || !item || !item.canEdit) return rendered;
 
   return (
@@ -94,9 +84,8 @@ export function CollectionItem({ blockPath, collection, slug, scope: _scope, chi
   );
 }
 
-// Page-side Collection highlight. Shares the drawer's collection accent
-// (`--ins-collection`) so the page binding and the drawer's Collection lane
-// read as one family — previously this was a separate hard-coded purple.
+// Page-side Collection highlight, sharing the drawer's collection accent
+// (`--ins-collection`) so page binding and drawer lane read as one family.
 const RING_HOVER  = `0 0 0 1.5px color-mix(in srgb, ${COLLECTION_ACCENT} 45%, transparent)`;
 const RING_ACTIVE = `0 0 0 2px color-mix(in srgb, ${COLLECTION_ACCENT} 80%, transparent)`;
 const BG_HOVER    = `color-mix(in srgb, ${COLLECTION_ACCENT} 5%, transparent)`;

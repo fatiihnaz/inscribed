@@ -1,34 +1,15 @@
 "use client";
 
 /**
- * @file `<CmsGroup name>` - declarative section wrapper.
+ * @file `<CmsGroup name>`: declarative section wrapper doing two things.
  *
- * Two effects, one wrapper:
+ *   1. Prefixes descendant blockPaths. A `<EditableRegion blockPath="x">`
+ *      inside `<CmsGroup name="hero">` reads/writes "hero.x"; nested groups
+ *      concat with dots. Discovery applies the same prefix on the manifest
+ *      side, so the consumer never repeats the group name.
  *
- *   1. Automatic blockPath prefix. Every `<EditableRegion blockPath="x">`
- *      and `<EditableList blockPath="x">` rendered as a descendant of a
- *      `<CmsGroup name="hero">` reads/writes "hero.x" instead of just
- *      "x". Nested groups concat with dots: a CmsGroup named "actions"
- *      inside one named "hero" turns "primary" into "hero.actions.primary".
- *      The discovery script applies the exact same prefix on the
- *      manifest side, so the consumer writes
- *
- *        <CmsGroup name="footer">
- *          <EditableRegion blockPath="copyright" blockType="Text"
- *                          defaultValue="© SKY LAB" />
- *        </CmsGroup>
- *
- *      and the backend stores `footer.copyright`. No need to repeat the
- *      group name in every blockPath.
- *
- *   2. In-page admin highlight. In admin mode the wrapper draws a dashed
- *      accent ring + a small label tag around its children on hover, so
- *      the editor can see "this is the hero section" at a glance.
- *      Public mode is a transparent passthrough: zero DOM, zero JS.
- *
- * The wrapper does not touch the manifest field directly. The
- * AdminDrawer groups blocks by blockPath prefix on its own; CmsGroup
- * just makes sure the consumer doesn't have to type the prefix twice.
+ *   2. In admin mode, draws a dashed ring + label around its children on
+ *      hover. Public mode is a transparent passthrough.
  */
 
 import { useContext, useState } from "react";
@@ -68,16 +49,8 @@ export function CmsGroup({ name, children, style, editable, visible }) {
   const parentVisibility = useContext(CmsGroupVisibilityContext);
   const [hovered, setHovered] = useState(false);
 
-  // Nested CmsGroups concat: <CmsGroup name="hero"><CmsGroup name="cta">
-  // ...</CmsGroup></CmsGroup> sees a child blockPath "primary" as
-  // "hero.cta.primary". Top-level wrapper has no parent so the prefix is
-  // just `name`.
   const prefix = parentPrefix ? `${parentPrefix}.${name}` : name;
 
-  // Fold this group's own visibility prop together with any inherited from
-  // an enclosing group — most restrictive wins, so a `readonly` group
-  // nested in a `hidden` one stays hidden. The resolved mode flows down to
-  // descendants (regions, lists, deeper groups).
   const ownMode = visible === false ? "hidden" : editable === false ? "readonly" : null;
   const visibility = strongerVisibility(parentVisibility, ownMode);
 
@@ -91,8 +64,6 @@ export function CmsGroup({ name, children, style, editable, visible }) {
     );
   }
 
-  // Surface the section's mode in the hover label so an admin understands
-  // why its fields are locked/absent (e.g. "hero · readonly").
   const label = visibility ? `${prefix} · ${visibility}` : prefix;
 
   return (

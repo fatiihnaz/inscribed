@@ -20,7 +20,7 @@ import { Plus, Trash2, ChevronUp, ChevronDown } from "../icons.jsx";
 
 import { addItem, moveItem, removeItem } from "../../lib/list-ops.js";
 import { useCmsContext } from "../../lib/context.js";
-import { ACCENT, TEXT_MUTED, emptyStateStyle } from "../admin-drawer-styles.js";
+import { ACCENT, TEXT_MUTED, STATUS_DANGER, R_BADGE, R_SM, emptyStateStyle } from "../admin-drawer-styles.js";
 
 import { FieldEditor } from "./FieldEditor.jsx";
 
@@ -290,16 +290,16 @@ function listItemSummary(itemSchema, item) {
 const listItemCardStyle = /** @type {React.CSSProperties} */ ({
   borderWidth: 1,
   borderStyle: "solid",
-  borderColor: "rgba(201,184,150,0.16)",
-  borderRadius: 6,
-  background: "rgba(201,184,150,0.03)",
+  borderColor: `color-mix(in srgb, ${ACCENT} 16%, transparent)`,
+  borderRadius: R_SM,
+  background: `color-mix(in srgb, ${ACCENT} 3%, transparent)`,
   overflow: "hidden",
   transition: "background-color 140ms ease, border-color 140ms ease",
 });
 
 const listItemCardHoverStyle = /** @type {React.CSSProperties} */ ({
-  borderColor: "rgba(201,184,150,0.34)",
-  background: "rgba(201,184,150,0.06)",
+  borderColor: `color-mix(in srgb, ${ACCENT} 34%, transparent)`,
+  background: `color-mix(in srgb, ${ACCENT} 6%, transparent)`,
 });
 
 const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
@@ -320,12 +320,12 @@ const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  borderRadius: 5,
+  borderRadius: R_SM,
   fontFamily: "ui-monospace, 'SF Mono', monospace",
   fontSize: 11,
   fontWeight: 600,
   color: ACCENT,
-  background: "rgba(201,184,150,0.12)",
+  background: `color-mix(in srgb, ${ACCENT} 12%, transparent)`,
 });
 
 const listItemSummaryStyle = /** @type {React.CSSProperties} */ ({
@@ -334,7 +334,7 @@ const listItemSummaryStyle = /** @type {React.CSSProperties} */ ({
   fontSize: 12,
   fontWeight: 450,
   marginTop: -1,
-  color: "rgba(255,255,255,0.9)",
+  color: "color-mix(in srgb, var(--ins-text, #fff) 90%, transparent)",
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -356,14 +356,14 @@ const listItemIconStyle = /** @type {React.CSSProperties} */ ({
   border: "none",
   background: "transparent",
   color: TEXT_MUTED,
-  borderRadius: 4,
+  borderRadius: R_BADGE,
   cursor: "pointer",
   padding: 0,
 });
 
 const listItemDangerStyle = /** @type {React.CSSProperties} */ ({
   ...listItemIconStyle,
-  color: "#e26464",
+  color: STATUS_DANGER,
 });
 
 const listItemBodyStyle = /** @type {React.CSSProperties} */ ({
@@ -371,7 +371,7 @@ const listItemBodyStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   flexDirection: "column",
   gap: 10,
-  borderTop: "1px solid rgba(201,184,150,0.08)",
+  borderTop: `1px solid color-mix(in srgb, ${ACCENT} 8%, transparent)`,
 });
 
 const listFieldStyle = /** @type {React.CSSProperties} */ ({
@@ -396,8 +396,8 @@ const listAddButtonStyle = /** @type {React.CSSProperties} */ ({
   gap: 6,
   padding: "9px 12px",
   background: "transparent",
-  border: "1px dashed rgba(201,184,150,0.35)",
-  borderRadius: 6,
+  border: `1px dashed color-mix(in srgb, ${ACCENT} 35%, transparent)`,
+  borderRadius: R_SM,
   color: ACCENT,
   fontSize: 12,
   fontWeight: 500,

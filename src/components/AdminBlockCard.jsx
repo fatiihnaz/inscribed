@@ -104,7 +104,7 @@ function InvalidCollectionCard({ block }) {
         </span>
       </div>
       <div style={blockBodyStyle}>
-        <div style={{ color: "rgba(255,255,255,0.40)", fontSize: 12 }}>
+        <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
           Bu Collection bloğu geçersiz bir bağlamaya sahip — beklenen{" "}
           <code>{`{ collection, slug }`}</code> şeklini taşımıyor.
         </div>

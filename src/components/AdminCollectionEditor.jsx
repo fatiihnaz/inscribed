@@ -42,12 +42,22 @@ import {
 } from "./editors/CollectionFieldsForm.jsx";
 import {
   TEXT_MUTED,
+  TEXT_MID,
   TEXT_FAINT,
   FONT_MONO,
   STATUS_OK,
   STATUS_WARN,
   STATUS_DANGER,
+  ACCENT,
+  SURFACE_1,
+  SURFACE_2,
+  HAIRLINE,
   COLLECTION_ACCENT,
+  COLLECTION_SOFT,
+  COLLECTION_LINE,
+  R_BADGE,
+  R_PILL,
+  buttonBaseStyle,
 } from "./admin-drawer-styles.js";
 
 const DRAFT_DEBOUNCE_MS = 1000;
@@ -603,7 +613,7 @@ const metaLabelStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const metaSlugStyle = /** @type {React.CSSProperties} */ ({
-  color: "rgba(255,255,255,0.65)",
+  color: TEXT_MID,
 });
 
 const metaVersionStyle = /** @type {React.CSSProperties} */ ({
@@ -616,17 +626,17 @@ const metaReadonlyStyle = /** @type {React.CSSProperties} */ ({
   textTransform: "uppercase",
   fontSize: 10,
   padding: "1px 6px",
-  background: "rgba(255,255,255,0.05)",
-  borderRadius: 3,
+  background: SURFACE_2,
+  borderRadius: R_BADGE,
 });
 
 const virtualHintStyle = /** @type {React.CSSProperties} */ ({
   fontSize: 12,
   color: TEXT_MUTED,
   padding: "6px 10px",
-  background: "rgba(201,184,150,0.06)",
-  border: "1px solid rgba(201,184,150,0.15)",
-  borderRadius: 3,
+  background: `color-mix(in srgb, ${ACCENT} 6%, transparent)`,
+  border: `1px solid color-mix(in srgb, ${ACCENT} 15%, transparent)`,
+  borderRadius: R_BADGE,
 });
 
 const hintStyle = /** @type {React.CSSProperties} */ ({
@@ -635,23 +645,18 @@ const hintStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const errorStyle = /** @type {React.CSSProperties} */ ({
-  color: "#ff8b8b",
+  color: `color-mix(in srgb, ${STATUS_DANGER} 55%, #fff)`,
   fontSize: 12,
   padding: "6px 10px",
-  background: "rgba(226,100,100,0.10)",
-  border: "1px solid rgba(226,100,100,0.30)",
-  borderRadius: 3,
+  background: `color-mix(in srgb, ${STATUS_DANGER} 10%, transparent)`,
+  border: `1px solid color-mix(in srgb, ${STATUS_DANGER} 30%, transparent)`,
+  borderRadius: R_BADGE,
 });
 
 const saveButtonStyle = /** @type {React.CSSProperties} */ ({
+  ...buttonBaseStyle,
   marginLeft: "auto",
-  padding: "7px 14px",
-  border: 0,
-  borderRadius: 6,
-  cursor: "pointer",
-  fontSize: 12,
   fontWeight: 600,
-  fontFamily: "inherit",
 });
 
 const actionsRowStyle = /** @type {React.CSSProperties} */ ({
@@ -666,9 +671,9 @@ const draftBadgeStyle = /** @type {React.CSSProperties} */ ({
   letterSpacing: "0.06em",
   padding: "1px 6px",
   color: COLLECTION_ACCENT,
-  background: "rgba(220, 195, 225, 0.10)",
-  border: "1px solid rgba(220, 195, 225, 0.30)",
-  borderRadius: 4,
+  background: COLLECTION_SOFT,
+  border: `1px solid ${COLLECTION_LINE}`,
+  borderRadius: R_BADGE,
 });
 
 // Pill chrome cloned from the panel's `HeaderStatusPill` so the two
@@ -681,9 +686,9 @@ const indicatorPillStyle = /** @type {React.CSSProperties} */ ({
   gap: 6,
   minHeight: 22,
   padding: "0 10px",
-  borderRadius: 99,
-  background: "rgba(255,255,255,0.025)",
-  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",
+  borderRadius: R_PILL,
+  background: SURFACE_1,
+  boxShadow: `inset 0 0 0 1px ${HAIRLINE}`,
   flexShrink: 0,
 });
 

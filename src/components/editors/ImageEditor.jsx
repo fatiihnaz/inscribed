@@ -5,12 +5,21 @@ import { AnimatePresence, motion } from "framer-motion";
 
 import { useCmsContext } from "../../lib/context.js";
 import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./styles.js";
+import {
+  ACCENT,
+  BORDER,
+  TEXT,
+  TEXT_MUTED,
+  TEXT_FAINT,
+  SURFACE_1,
+  STATUS_DANGER,
+} from "../admin-drawer-styles.js";
 
-const ACCENT = "#c9b896";
-const BORDER = "rgba(255,255,255,0.10)";
-const BORDER_ACCENT = "rgba(201,184,150,0.50)";
-const TEXT_MUTED = "rgba(255,255,255,0.40)";
-const TEXT_FAINT = "rgba(255,255,255,0.25)";
+// Dark scrim over image previews, derived from the panel bg so it tracks a
+// `theme` override.
+const SCRIM = "color-mix(in srgb, var(--ins-bg, #1c1815) 82%, transparent)";
+
+const BORDER_ACCENT = `color-mix(in srgb, ${ACCENT} 50%, transparent)`;
 
 /**
  * @typedef {Object} ImageValue
@@ -97,7 +106,7 @@ export function ImageEditor({ value, onChange, disabled }) {
                 maxHeight: 180,
                 objectFit: "contain",
                 display: "block",
-                background: "rgba(255,255,255,0.03)",
+                background: SURFACE_1,
                 borderRadius: 10,
                 border: `1px solid ${BORDER}`,
               }}
@@ -114,7 +123,7 @@ export function ImageEditor({ value, onChange, disabled }) {
                   style={{
                     position: "absolute",
                     inset: 0,
-                    background: "rgba(21,17,13,0.80)",
+                    background: SCRIM,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -144,10 +153,10 @@ export function ImageEditor({ value, onChange, disabled }) {
                 position: "absolute",
                 top: 8,
                 right: 8,
-                background: "rgba(21,17,13,0.82)",
+                background: SCRIM,
                 border: `1px solid ${BORDER}`,
                 borderRadius: 6,
-                color: "rgba(255,255,255,0.75)",
+                color: TEXT,
                 fontSize: 11,
                 padding: "4px 10px",
                 cursor: "pointer",
@@ -180,7 +189,7 @@ export function ImageEditor({ value, onChange, disabled }) {
               padding: "16px 14px",
               fontSize: 11,
               color: TEXT_FAINT,
-              background: "rgba(255,255,255,0.02)",
+              background: SURFACE_1,
             }}
           >
             Görsel yok
@@ -190,12 +199,16 @@ export function ImageEditor({ value, onChange, disabled }) {
           <motion.button
             type="button"
             animate={{
-              borderColor: isDragging ? BORDER_ACCENT : isUploading ? "rgba(201,184,150,0.30)" : BORDER,
-              background: isDragging
-                ? "rgba(201,184,150,0.06)"
+              borderColor: isDragging
+                ? BORDER_ACCENT
                 : isUploading
-                  ? "rgba(201,184,150,0.03)"
-                  : "rgba(255,255,255,0.02)",
+                  ? `color-mix(in srgb, ${ACCENT} 30%, transparent)`
+                  : BORDER,
+              background: isDragging
+                ? `color-mix(in srgb, ${ACCENT} 6%, transparent)`
+                : isUploading
+                  ? `color-mix(in srgb, ${ACCENT} 3%, transparent)`
+                  : SURFACE_1,
             }}
             transition={{ duration: 0.18 }}
             onClick={() => !isUploading && inputRef.current?.click()}
@@ -212,7 +225,7 @@ export function ImageEditor({ value, onChange, disabled }) {
               gap: 8,
               padding: "16px 14px",
               fontFamily: "inherit",
-              background: "rgba(255,255,255,0.02)",
+              background: SURFACE_1,
             }}
           >
             <AnimatePresence mode="wait" initial={false}>
@@ -229,7 +242,7 @@ export function ImageEditor({ value, onChange, disabled }) {
                   <div style={{
                     width: "80%",
                     height: 3,
-                    background: "rgba(255,255,255,0.08)",
+                    background: "color-mix(in srgb, var(--ins-surface, #fff) 8%, transparent)",
                     borderRadius: 99,
                     overflow: "hidden",
                   }}>
@@ -238,7 +251,7 @@ export function ImageEditor({ value, onChange, disabled }) {
                       transition={{ duration: 0.3, ease: "easeOut" }}
                       style={{
                         height: "100%",
-                        background: `linear-gradient(90deg, rgba(201,184,150,0.5), ${ACCENT})`,
+                        background: `linear-gradient(90deg, color-mix(in srgb, ${ACCENT} 50%, transparent), ${ACCENT})`,
                         borderRadius: 99,
                       }}
                     />
@@ -291,11 +304,11 @@ export function ImageEditor({ value, onChange, disabled }) {
           >
             <div style={{
               padding: "8px 10px",
-              background: "rgba(239,68,68,0.10)",
-              border: "1px solid rgba(239,68,68,0.28)",
+              background: `color-mix(in srgb, ${STATUS_DANGER} 10%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${STATUS_DANGER} 28%, transparent)`,
               borderRadius: 7,
               fontSize: 11,
-              color: "rgb(254,202,202)",
+              color: `color-mix(in srgb, ${STATUS_DANGER} 35%, #fff)`,
               display: "flex",
               alignItems: "center",
               gap: 6,

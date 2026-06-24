@@ -33,6 +33,7 @@ import { useCmsContext } from "../lib/context.js";
 import { useCollectionContext } from "../lib/collection-context.js";
 import { CmsGroupContext } from "../lib/group-context.js";
 import { useCollectionItem } from "../hooks/use-collection.js";
+import { COLLECTION_ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
 
 /**
  * @import { CollectionItemResponse } from "../lib/schemas.js"
@@ -93,10 +94,13 @@ export function CollectionItem({ blockPath, collection, slug, scope: _scope, chi
   );
 }
 
-const RING_HOVER  = "0 0 0 1.5px rgba(140, 130, 210, 0.45)";
-const RING_ACTIVE = "0 0 0 2px rgba(140, 130, 210, 0.80)";
-const BG_HOVER    = "rgba(140, 130, 210, 0.05)";
-const BG_ACTIVE   = "rgba(140, 130, 210, 0.10)";
+// Page-side Collection highlight. Shares the drawer's collection accent
+// (`--ins-collection`) so the page binding and the drawer's Collection lane
+// read as one family — previously this was a separate hard-coded purple.
+const RING_HOVER  = `0 0 0 1.5px color-mix(in srgb, ${COLLECTION_ACCENT} 45%, transparent)`;
+const RING_ACTIVE = `0 0 0 2px color-mix(in srgb, ${COLLECTION_ACCENT} 80%, transparent)`;
+const BG_HOVER    = `color-mix(in srgb, ${COLLECTION_ACCENT} 5%, transparent)`;
+const BG_ACTIVE   = `color-mix(in srgb, ${COLLECTION_ACCENT} 10%, transparent)`;
 
 /**
  * @param {{
@@ -135,14 +139,14 @@ function CollectionEditWrapper({ onClick, isActive, label, children }) {
             top: 0,
             right: isActive ? -2 : -1.5,
             transform: "translateY(-100%)",
-            background: "#221d18",
-            border: "1px solid rgba(255,255,255,0.10)",
+            background: BG_RAISED,
+            border: `1px solid ${BORDER}`,
             borderBottom: "none",
             borderRadius: "4px 4px 0 0",
             padding: "1px 6px",
             fontSize: 9,
             fontWeight: 500,
-            color: "rgba(190, 180, 230, 0.85)",
+            color: `color-mix(in srgb, ${COLLECTION_ACCENT} 85%, transparent)`,
             letterSpacing: "0.05em",
             lineHeight: "16px",
             whiteSpace: "nowrap",

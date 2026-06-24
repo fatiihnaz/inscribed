@@ -35,15 +35,28 @@ import {
 } from "../icons.jsx";
 
 import { labelStyle, labelTextStyle } from "./styles.js";
+import {
+  ACCENT,
+  BORDER,
+  BORDER_FOCUS,
+  TEXT,
+  TEXT_MUTED,
+  TEXT_HI,
+  SURFACE_1,
+  SURFACE_2,
+  SURFACE_3,
+  ACCENT_SOFT,
+  R_SM,
+  R_MD,
+} from "../admin-drawer-styles.js";
 
-const ACCENT       = "#c9b896";
-const BORDER       = "rgba(255,255,255,0.10)";
-const BORDER_FOCUS = "rgba(255,255,255,0.30)";
-const TEXT_MUTED   = "rgba(255,255,255,0.40)";
-const TEXT_PRIMARY = "rgba(255,255,255,0.96)";
-const SURFACE      = "rgba(255,255,255,0.05)";
-const SURFACE_HOVER = "rgba(255,255,255,0.10)";
-const ACTIVE_BG    = "rgba(201,184,150,0.15)";
+// Local aliases onto the shared tokens so the toolbar reads as part of the
+// same palette (and tracks a `theme` override). Names kept for the existing
+// call sites below.
+const TEXT_PRIMARY  = TEXT_HI;
+const SURFACE       = SURFACE_2;
+const SURFACE_HOVER = SURFACE_3;
+const ACTIVE_BG     = ACCENT_SOFT;
 
 // Tiptap returns "<p></p>" for an empty doc. Normalise that to "" so the
 // dirty/clean diff in CmsProvider (JSON.stringify equality vs block.value)
@@ -319,7 +332,7 @@ const shellStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   flexDirection: "column",
   border: `1px solid ${BORDER}`,
-  borderRadius: 8,
+  borderRadius: R_MD,
   background: SURFACE,
   overflow: "hidden",
 });
@@ -331,7 +344,7 @@ const toolbarStyle = /** @type {React.CSSProperties} */ ({
   gap: 1.5,
   padding: 4,
   borderBottom: `1px solid ${BORDER}`,
-  background: "rgba(255,255,255,0.02)",
+  background: SURFACE_1,
 });
 
 const btnStyle = /** @type {React.CSSProperties} */ ({
@@ -342,7 +355,7 @@ const btnStyle = /** @type {React.CSSProperties} */ ({
   height: 26,
   padding: 0,
   border: 0,
-  borderRadius: 5,
+  borderRadius: R_SM,
   background: "transparent",
   color: TEXT_MUTED,
   cursor: "pointer",
@@ -417,13 +430,13 @@ const rteCss = `
     margin: 0 0 0.6em;
     padding: 4px 10px;
     border-left: 2px solid ${ACCENT};
-    color: rgba(255,255,255,0.75);
+    color: ${TEXT};
     font-style: italic;
   }
   .inscribed-rte-content code {
     padding: 1px 5px;
     border-radius: 4px;
-    background: rgba(255,255,255,0.08);
+    background: ${SURFACE_3};
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
     font-size: 0.9em;
   }

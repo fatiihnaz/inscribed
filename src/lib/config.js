@@ -15,7 +15,10 @@
 /**
  * @import { CmsTransport } from "./transport.js"
  * @import { ServiceTokenProvider } from "./service-token.js"
+ * @import { CmsTheme } from "./theme.js"
  */
+
+import { normalizeTheme } from "./theme.js";
 
 /**
  * @typedef {Object} CmsConfig
@@ -37,6 +40,9 @@
  *   `createCmsPage` augments it onto the server-fetch config and server read
  *   helpers default it to `noServiceToken` (no token). Never crosses to the
  *   client - it may hold secrets.
+ * @property {CmsTheme|null} theme
+ *   Normalized subset of overridable visual tokens (see `theme.js`). Emitted
+ *   as CSS custom properties by `CmsProvider`. Null when no overrides given.
  */
 
 /**
@@ -47,10 +53,11 @@
  * @param {string} [opts.cdnUrl]   Image upload root. Omit to upload through the API at `${baseUrl}/cms/media`.
  * @param {string} [opts.clientId]
  * @param {string} [opts.globalSlug]   Override the default "__global" slug for cross-page blocks.
+ * @param {CmsTheme} [opts.theme]   Overrides for the admin/editing visual tokens (accent, fonts, radius, …). Unknown keys are dropped; unset keys keep their defaults.
  * @returns {CmsConfig}
  */
 
-export function createCmsConfig({ baseUrl, cdnUrl, clientId, globalSlug }) {
+export function createCmsConfig({ baseUrl, cdnUrl, clientId, globalSlug, theme }) {
   if (!baseUrl || typeof baseUrl !== "string") {
     throw new Error("createCmsConfig: baseUrl is required");
   }
@@ -60,5 +67,6 @@ export function createCmsConfig({ baseUrl, cdnUrl, clientId, globalSlug }) {
     cdnUrl: cdnUrl ? cdnUrl.replace(/\/+$/, "") : null,
     clientId: clientId ?? null,
     globalSlug: globalSlug ?? "__global",
+    theme: normalizeTheme(theme),
   });
 }

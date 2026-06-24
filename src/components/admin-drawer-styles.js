@@ -35,51 +35,93 @@ export const BODY_TRANSITION = {
   ease: [0.32, 0.72, 0.18, 1],
 };
 
-export const RADIUS = 10;
-export const RADIUS_SM = 7;
+export const RADIUS = "var(--ins-radius, 10px)";
+export const RADIUS_SM = "calc(var(--ins-radius, 10px) - 3px)";
+
+// ---------------------------------------------------------------------------
+// Design scale — internal, NOT themeable.
+//
+// These define the product's *shape* (corner steps, type ramp, motion), not
+// its palette. Kept out of the `--ins-*` vars / `theme` subset on purpose:
+// the `theme` override only recolors; geometry stays fixed so every surface
+// snaps to the same vocabulary regardless of the host's brand. The themeable
+// RADIUS / RADIUS_SM above are the exception — they shape the top-level
+// card/panel surfaces a host may legitimately want rounder or squarer.
+// ---------------------------------------------------------------------------
+
+// Radius steps for the inner chrome (badges, inputs, buttons, chips).
+export const R_BADGE = 4;   // tiny tags / index badges
+export const R_SM    = 6;   // inputs, dense controls
+export const R_BTN   = 7;   // buttons
+export const R_MD    = 8;   // single-field editors, nested cards
+export const R_PILL  = 99;  // count chips, status pills
+
+// Type ramp (px). One step per role — labels, metadata, body, headings.
+export const FS_MICRO = 9;   // uppercase micro-labels / mode chips
+export const FS_2XS   = 10;  // section labels
+export const FS_XS    = 11;  // metadata, hints
+export const FS_SM    = 12;  // default UI text / buttons
+export const FS_MD    = 13;  // field input text
+
+// Motion. One fast step for hovers/color swaps, one base step for layout.
+export const DUR_FAST = "140ms";
+export const DUR_BASE = "200ms";
+export const EASE = "cubic-bezier(0.32, 0.72, 0.18, 1)";
 
 // ---------------------------------------------------------------------------
 // Tokens
+//
+// Every token resolves through a `--ins-*` CSS variable with the stock value
+// baked in as the fallback, so the panel looks identical with no theme set.
+// `createCmsConfig({ theme })` overrides a small subset of *bases*
+// (--ins-accent, --ins-bg, --ins-surface, --ins-text, --ins-collection,
+// --ins-danger, --ins-radius, fonts); the soft/line/ramp variants below are
+// derived from those bases with `color-mix`, so overriding one base cascades
+// to every tint built on it. See `lib/theme.js`.
 // ---------------------------------------------------------------------------
 
-// Surfaces
-export const BG          = "#1c1815";
-export const BG_RAISED   = "#221d18";
-export const BG_SUNKEN   = "#171410";
-export const SURFACE_1   = "rgba(255,255,255,0.025)";
-export const SURFACE_2   = "rgba(255,255,255,0.05)";
-export const SURFACE_3   = "rgba(255,255,255,0.08)";
-export const HAIRLINE    = "rgba(255,255,255,0.06)";
-export const BORDER      = "rgba(255,255,255,0.10)";
-export const BORDER_HI   = "rgba(255,255,255,0.18)";
-export const BORDER_FOCUS= "rgba(255,255,255,0.30)";
+// Surfaces. `--ins-bg` is the warm-dark base; raised/sunken shift from it so
+// a custom bg carries the elevation shades along.
+export const BG          = "var(--ins-bg, #1c1815)";
+export const BG_RAISED   = "color-mix(in srgb, var(--ins-bg, #1c1815), #fff 5%)";
+export const BG_SUNKEN   = "color-mix(in srgb, var(--ins-bg, #1c1815), #000 6%)";
 
-// Text ramp
-export const TEXT_HI       = "rgba(255,255,255,0.96)";
-export const TEXT          = "rgba(255,255,255,0.82)";
-export const TEXT_MID      = "rgba(255,255,255,0.58)";
-export const TEXT_MUTED    = "rgba(255,255,255,0.38)";
-export const TEXT_FAINT    = "rgba(255,255,255,0.22)";
+// Elevation overlays + borders mix from `--ins-surface` (default white), so
+// they keep resolving to the original white-alpha values until overridden.
+export const SURFACE_1   = "color-mix(in srgb, var(--ins-surface, #fff) 2.5%, transparent)";
+export const SURFACE_2   = "color-mix(in srgb, var(--ins-surface, #fff) 5%, transparent)";
+export const SURFACE_3   = "color-mix(in srgb, var(--ins-surface, #fff) 8%, transparent)";
+export const HAIRLINE    = "color-mix(in srgb, var(--ins-surface, #fff) 6%, transparent)";
+export const BORDER      = "color-mix(in srgb, var(--ins-surface, #fff) 10%, transparent)";
+export const BORDER_HI   = "color-mix(in srgb, var(--ins-surface, #fff) 18%, transparent)";
+export const BORDER_FOCUS= "color-mix(in srgb, var(--ins-surface, #fff) 30%, transparent)";
 
-// Accents
-export const ACCENT        = "#c9b896";
-export const ACCENT_SOFT   = "rgba(201,184,150,0.14)";
-export const ACCENT_LINE   = "rgba(201,184,150,0.30)";
+// Text ramp mixes from `--ins-text` (default white).
+export const TEXT_HI       = "color-mix(in srgb, var(--ins-text, #fff) 96%, transparent)";
+export const TEXT          = "color-mix(in srgb, var(--ins-text, #fff) 82%, transparent)";
+export const TEXT_MID      = "color-mix(in srgb, var(--ins-text, #fff) 58%, transparent)";
+export const TEXT_MUTED    = "color-mix(in srgb, var(--ins-text, #fff) 38%, transparent)";
+export const TEXT_FAINT    = "color-mix(in srgb, var(--ins-text, #fff) 22%, transparent)";
 
-export const COLLECTION_ACCENT = "rgb(220, 195, 225)";
-export const COLLECTION_SOFT   = "rgba(220,195,225,0.10)";
-export const COLLECTION_LINE   = "rgba(220,195,225,0.30)";
+// Accents. Soft/line tints derive from the base accent vars.
+export const ACCENT        = "var(--ins-accent, #c9b896)";
+export const ACCENT_SOFT   = "color-mix(in srgb, var(--ins-accent, #c9b896) 14%, transparent)";
+export const ACCENT_LINE   = "color-mix(in srgb, var(--ins-accent, #c9b896) 30%, transparent)";
 
-// Status
+export const COLLECTION_ACCENT = "var(--ins-collection, rgb(220, 195, 225))";
+export const COLLECTION_SOFT   = "color-mix(in srgb, var(--ins-collection, rgb(220,195,225)) 10%, transparent)";
+export const COLLECTION_LINE   = "color-mix(in srgb, var(--ins-collection, rgb(220,195,225)) 30%, transparent)";
+
+// Status. Danger is themeable; ok/warn stay fixed (semantic, rarely rebranded).
 export const STATUS_OK     = "rgb(150, 210, 160)";
 export const STATUS_WARN   = "rgb(232, 192, 130)";
-export const STATUS_DANGER = "rgb(232, 132, 152)";
+export const STATUS_DANGER = "var(--ins-danger, rgb(232, 132, 152))";
 export const STATUS_SAVED  = STATUS_OK;
 export const STATUS_FAILED = STATUS_DANGER;
 
 // Typography
-export const FONT_SANS = '"Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
-export const FONT_MONO = '"JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace';
+export const FONT_SANS = 'var(--ins-font-sans, "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif)';
+export const FONT_MONO = 'var(--ins-font-mono, "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace)';
 
 // ---------------------------------------------------------------------------
 // Legacy aliases — consumed by editors/CollectionFieldsForm and other
@@ -128,18 +170,23 @@ export const TYPE_STYLES = Object.fromEntries(
 );
 
 /**
- * Helper: turn a CSS rgb(...) colour into an `rgba(..., a)` tint. Used to
- * derive bg / ring values from a single token without hand-coding alpha
- * forms for every type.
+ * Helper: turn a colour into a translucent tint. For plain `rgb(...)`
+ * literals (the block-type glyph colours) it emits `rgba(..., a)`; for
+ * anything else — notably the `var(--ins-*)`-backed accent tokens — it
+ * falls back to `color-mix` so the tint still tracks a themed base colour.
  *
  * @param {string} color
- * @param {number} alpha
+ * @param {number} alpha   0..1
  */
 function tintFromColor(color, alpha) {
   const match = /^rgb\(([^)]+)\)$/i.exec(color);
-  if (!match) return color;
-  return `rgba(${match[1]}, ${alpha})`;
+  if (match) return `rgba(${match[1]}, ${alpha})`;
+  return `color-mix(in srgb, ${color} ${alpha * 100}%, transparent)`;
 }
+
+// 50% accent tint for dirty-dot glows (was the `${ACCENT}80` hex-alpha form,
+// invalid now that ACCENT resolves through a `var(...)`).
+export const ACCENT_GLOW = "color-mix(in srgb, var(--ins-accent, #c9b896) 50%, transparent)";
 
 // ---------------------------------------------------------------------------
 // Layout — panel shell
@@ -244,7 +291,7 @@ export const modeChipStyle = {
   letterSpacing: "0.12em",
   color: TEXT_FAINT,
   padding: "4px 7px",
-  borderRadius: 4,
+  borderRadius: R_BADGE,
   background: SURFACE_1,
   boxShadow: `inset 0 0 0 1px ${HAIRLINE}`,
   flexShrink: 0,
@@ -320,7 +367,7 @@ export const tabLabelStyle = {
 export const tabCountBadgeStyle = {
   font: `500 10px/1 ${FONT_MONO}`,
   padding: "3px 6px",
-  borderRadius: 99,
+  borderRadius: R_PILL,
   background: SURFACE_2,
   color: TEXT_FAINT,
 };
@@ -335,7 +382,7 @@ export const tabDirtyDotStyle = {
   height: 6,
   borderRadius: "50%",
   background: ACCENT,
-  boxShadow: `0 0 6px ${ACCENT}80`,
+  boxShadow: `0 0 6px ${ACCENT_GLOW}`,
   marginLeft: -2,
 };
 
@@ -356,7 +403,7 @@ export const searchWrapStyle = {
   gap: 8,
   padding: "0 10px",
   height: 30,
-  borderRadius: 7,
+  borderRadius: R_BTN,
 };
 
 export const searchInputStyle = {
@@ -416,7 +463,7 @@ export const groupCountStyle = {
   gap: 6,
   font: `500 10px/1 ${FONT_MONO}`,
   padding: "2px 6px",
-  borderRadius: 99,
+  borderRadius: R_PILL,
   background: SURFACE_2,
   color: TEXT_FAINT,
   fontWeight: 500,
@@ -427,7 +474,7 @@ export const groupDirtyDotStyle = {
   height: 5,
   borderRadius: "50%",
   background: ACCENT,
-  boxShadow: `0 0 5px ${ACCENT}80`,
+  boxShadow: `0 0 5px ${ACCENT_GLOW}`,
 };
 
 export const groupBodyStyle = {
@@ -462,7 +509,7 @@ export const sectionLabelCountStyle = {
   color: TEXT_FAINT,
   background: SURFACE_2,
   padding: "1px 6px",
-  borderRadius: 99,
+  borderRadius: R_PILL,
   fontWeight: 500,
 };
 
@@ -544,7 +591,7 @@ export const dirtyDotStyle = {
   height: 6,
   borderRadius: "50%",
   background: ACCENT,
-  boxShadow: `0 0 5px ${ACCENT}80`,
+  boxShadow: `0 0 5px ${ACCENT_GLOW}`,
   flexShrink: 0,
 };
 
@@ -556,7 +603,7 @@ export const blockResetStyle = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  borderRadius: 5,
+  borderRadius: R_SM,
   border: 0,
   cursor: "pointer",
   padding: 0,
@@ -569,7 +616,7 @@ export const typeIconStyle = {
   flexShrink: 0,
   width: 24,
   height: 24,
-  borderRadius: 6,
+  borderRadius: R_SM,
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
@@ -585,7 +632,7 @@ export const typeChipStyle = {
   fontSize: 9.5,
   fontWeight: 600,
   letterSpacing: 0.4,
-  borderRadius: 4,
+  borderRadius: R_BADGE,
   textTransform: "uppercase",
   flexShrink: 0,
   background: ACCENT_SOFT,
@@ -689,31 +736,34 @@ export const statusActionsStyle = {
   flexShrink: 0,
 };
 
-// Buttons inside the status bar (ghost + primary). Background / color /
-// box-shadow live on the CSS classes so :hover can swap them — inline
-// styles would otherwise win.
-export const btnPrimaryStyle = {
+// Shared button geometry. Every button across the drawer (status-bar
+// primary/ghost, the Collection CTAs in the editor/region panels, the List
+// "+ Add") spreads this so they share one shape; colour / hover come from the
+// per-variant CSS classes (inline styles would otherwise beat :hover).
+export const buttonBaseStyle = {
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
   padding: "7px 12px",
-  borderRadius: 7,
-  font: `500 12px/1 ${FONT_SANS}`,
+  borderRadius: R_BTN,
+  font: `500 ${FS_SM}px/1 ${FONT_SANS}`,
   cursor: "pointer",
   border: 0,
   fontFamily: "inherit",
 };
 
-export const btnGhostStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  padding: "7px 12px",
-  borderRadius: 7,
-  font: `500 12px/1 ${FONT_SANS}`,
-  cursor: "pointer",
-  border: 0,
-  fontFamily: "inherit",
+export const btnPrimaryStyle = { ...buttonBaseStyle };
+export const btnGhostStyle = { ...buttonBaseStyle };
+
+// Shared input/field geometry. The themeable colour comes from the consumer
+// (warm tokens for the inline editors, neutral grays for the portable
+// CollectionFieldsForm); only the shape is shared here.
+export const fieldBaseStyle = {
+  font: "inherit",
+  fontSize: FS_MD,
+  padding: "9px 12px",
+  borderRadius: R_MD,
+  outline: "none",
 };
 
 // ---------------------------------------------------------------------------
@@ -747,7 +797,7 @@ export const footerStyle = {
 export const avatarStyle = {
   width: 26,
   height: 26,
-  borderRadius: 6,
+  borderRadius: R_SM,
   overflow: "hidden",
   flexShrink: 0,
   display: "flex",
@@ -798,7 +848,7 @@ export const signOutButtonStyle = {
   width: 26,
   height: 26,
   border: 0,
-  borderRadius: 6,
+  borderRadius: R_SM,
   cursor: "pointer",
   display: "inline-flex",
   alignItems: "center",
@@ -814,19 +864,19 @@ export const signOutButtonStyle = {
 export const errorStyle = {
   margin: "0 16px 8px",
   padding: "10px 12px",
-  background: "rgba(239,68,68,0.10)",
-  border: "1px solid rgba(239,68,68,0.28)",
-  color: "rgb(254,202,202)",
-  borderRadius: 8,
+  background: `color-mix(in srgb, ${STATUS_DANGER} 10%, transparent)`,
+  border: `1px solid color-mix(in srgb, ${STATUS_DANGER} 28%, transparent)`,
+  color: `color-mix(in srgb, ${STATUS_DANGER} 35%, #fff)`,
+  borderRadius: R_MD,
   fontSize: 12,
   lineHeight: 1.5,
 };
 
 export const conflictStyle = {
   ...errorStyle,
-  background: "rgba(245,158,11,0.10)",
-  border: "1px solid rgba(245,158,11,0.28)",
-  color: "rgb(254,243,199)",
+  background: `color-mix(in srgb, ${STATUS_WARN} 10%, transparent)`,
+  border: `1px solid color-mix(in srgb, ${STATUS_WARN} 28%, transparent)`,
+  color: `color-mix(in srgb, ${STATUS_WARN} 35%, #fff)`,
 };
 
 // ---------------------------------------------------------------------------
@@ -976,16 +1026,17 @@ export const panelCss = `
     color: ${BG};
     transition: background 140ms ease, color 140ms ease;
   }
-  .inscribed-btn-primary:hover:not(:disabled) { background: rgba(255,255,255,0.78); }
+  .inscribed-btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--ins-text, #fff) 78%, transparent); }
   .inscribed-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  /* Solid collection primary (status-bar "Aç") — soft pink fill */
+  /* Solid collection primary (status-bar "Aç") — soft pink fill derived
+     from the collection accent so a rebrand carries through. */
   .inscribed-btn-collection-solid {
-    background: rgb(231, 214, 233);
+    background: color-mix(in srgb, ${COLLECTION_ACCENT} 88%, #fff);
     color: #241c25;
     transition: background 140ms ease;
   }
-  .inscribed-btn-collection-solid:hover:not(:disabled) { background: rgb(238, 226, 240); }
+  .inscribed-btn-collection-solid:hover:not(:disabled) { background: color-mix(in srgb, ${COLLECTION_ACCENT} 78%, #fff); }
   .inscribed-btn-collection-solid:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .inscribed-btn-ghost {
@@ -1004,12 +1055,12 @@ export const panelCss = `
   .inscribed-btn-collection {
     background: ${COLLECTION_SOFT};
     color: ${COLLECTION_ACCENT};
-    box-shadow: inset 0 0 0 1px rgba(220,195,225,0.42);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, ${COLLECTION_ACCENT} 42%, transparent);
     transition: background 140ms ease, box-shadow 140ms ease;
   }
   .inscribed-btn-collection:hover:not(:disabled) {
-    background: rgba(220,195,225,0.17);
-    box-shadow: inset 0 0 0 1px rgba(220,195,225,0.60);
+    background: color-mix(in srgb, ${COLLECTION_ACCENT} 17%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, ${COLLECTION_ACCENT} 60%, transparent);
   }
   .inscribed-btn-collection:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -1038,7 +1089,7 @@ export const panelCss = `
   }
   .inscribed-logout:hover:not(:disabled) {
     color: ${STATUS_DANGER};
-    background-color: rgba(232,132,152,0.10);
+    background-color: color-mix(in srgb, ${STATUS_DANGER} 10%, transparent);
   }
   .inscribed-logout:disabled { opacity: 0.4; cursor: not-allowed; }
 

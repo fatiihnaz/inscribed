@@ -21,6 +21,7 @@ import { TextEditor } from "./TextEditor.jsx";
 import { ImageEditor } from "./ImageEditor.jsx";
 import { LinkEditor } from "./LinkEditor.jsx";
 import { DateEditor } from "./DateEditor.jsx";
+import { TEXT_MUTED } from "../admin-drawer-styles.js";
 
 // Lazy so TipTap (a heavy dep, ~5.8MB installed) stays out of the eager
 // admin-drawer chunk: an admin who never opens a RichText field shouldn't
@@ -60,7 +61,7 @@ export function FieldEditor({ blockType, value, onChange, disabled, hideLabel })
     case "Text":
     case "LongText":  return <TextEditor value={value ?? ""} onChange={onChange} disabled={disabled} multiline hideLabel={hideLabel} />;
     case "RichText":  return (
-      <Suspense fallback={<div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", padding: "4px 0" }}>Editör yükleniyor…</div>}>
+      <Suspense fallback={<div style={{ fontSize: 12, color: TEXT_MUTED, padding: "4px 0" }}>Editör yükleniyor…</div>}>
         <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />
       </Suspense>
     );

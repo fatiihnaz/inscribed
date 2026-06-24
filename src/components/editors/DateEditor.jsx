@@ -5,9 +5,7 @@
  */
 
 import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./styles.js";
-
-const TEXT_MUTED = "rgba(255,255,255,0.30)";
-const ACCENT = "#c9b896";
+import { ACCENT, TEXT_MUTED } from "../admin-drawer-styles.js";
 
 /**
  * @param {Object} props
@@ -47,8 +45,8 @@ export function DateEditor({ value, onChange, disabled, hideLabel }) {
           alignItems: "center",
           gap: 12,
           padding: "8px 10px",
-          background: "rgba(201,184,150,0.05)",
-          border: "1px solid rgba(201,184,150,0.10)",
+          background: `color-mix(in srgb, ${ACCENT} 5%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${ACCENT} 10%, transparent)`,
           borderRadius: 8,
         }}>
           {remaining.past ? (

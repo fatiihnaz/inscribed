@@ -45,6 +45,7 @@ import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
 import { addItem, makeDefaultItem, moveItem, removeItem } from "../lib/list-ops.js";
+import { ACCENT, STATUS_DANGER, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
 
 /**
  * @import { ItemSchema } from "../lib/schemas.js"
@@ -74,15 +75,14 @@ import { addItem, makeDefaultItem, moveItem, removeItem } from "../lib/list-ops.
  *   precedence over `editable`; inheritable from `<CmsGroup>`.
  */
 
-const ITEM_RING       = "inset 0 0 0 1.5px rgba(201,184,150,0.30)";
-const ITEM_BG         = "rgba(201,184,150,0.05)";
-const ACCENT          = "#c9b896";
-const ACCENT_DIM      = "rgba(201,184,150,0.65)";
-const DANGER          = "#e26464";
-// Match the AdminDrawer's panel surface (PRIMARY_500 in admin-drawer-styles.js)
-// so the per-item controls visually belong to the same admin layer.
-const PANEL_BG        = "#221d18";
-const PANEL_BORDER    = "1px solid rgba(255,255,255,0.10)";
+const ITEM_RING       = `inset 0 0 0 1.5px color-mix(in srgb, ${ACCENT} 30%, transparent)`;
+const ITEM_BG         = `color-mix(in srgb, ${ACCENT} 5%, transparent)`;
+const ACCENT_DIM      = `color-mix(in srgb, ${ACCENT} 65%, transparent)`;
+const DANGER          = STATUS_DANGER;
+// Match the AdminDrawer's raised panel surface so the per-item controls
+// visually belong to the same admin layer.
+const PANEL_BG        = BG_RAISED;
+const PANEL_BORDER    = `1px solid ${BORDER}`;
 
 /**
  * @param {EditableListProps} props
@@ -282,10 +282,12 @@ function GhostAddSlot({ children, onAdd }) {
         position: "relative",
         cursor: "pointer",
         borderRadius: 8,
-        background: lit ? "rgba(201,184,150,0.10)" : "rgba(201,184,150,0.04)",
+        background: lit
+          ? `color-mix(in srgb, ${ACCENT} 10%, transparent)`
+          : `color-mix(in srgb, ${ACCENT} 4%, transparent)`,
         border: lit
-          ? "1.5px dashed rgba(201,184,150,0.70)"
-          : "1.5px dashed rgba(201,184,150,0.30)",
+          ? `1.5px dashed color-mix(in srgb, ${ACCENT} 70%, transparent)`
+          : `1.5px dashed color-mix(in srgb, ${ACCENT} 30%, transparent)`,
         transition: "background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease",
         transform: lit ? "translateY(-1px)" : undefined,
         outline: "none",

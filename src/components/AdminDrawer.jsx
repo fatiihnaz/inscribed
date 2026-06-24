@@ -61,6 +61,7 @@ import {
   TEXT_MUTED,
   TEXT_FAINT,
   HAIRLINE,
+  SURFACE_1,
   SURFACE_2,
   FONT_SANS,
   FONT_MONO,
@@ -856,8 +857,8 @@ const headerPillStyle = /** @type {React.CSSProperties} */ ({
   minHeight: 22,
   padding: "0 8px",
   borderRadius: 99,
-  background: "rgba(255,255,255,0.025)",
-  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",
+  background: SURFACE_1,
+  boxShadow: `inset 0 0 0 1px ${HAIRLINE}`,
   flexShrink: 0,
   alignSelf: "center",
 });

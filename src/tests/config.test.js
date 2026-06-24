@@ -37,4 +37,30 @@ describe("createCmsConfig", () => {
     const cfg = createCmsConfig({ baseUrl: "https://api.test" });
     expect(cfg.transport).toBeUndefined();
   });
+
+  it("defaults theme to null when not supplied", () => {
+    expect(createCmsConfig({ baseUrl: "https://api.test" }).theme).toBeNull();
+  });
+
+  it("keeps only known theme keys and drops the rest", () => {
+    const cfg = createCmsConfig({
+      baseUrl: "https://api.test",
+      theme: { accent: "#3b82f6", radius: 8, bogus: "nope" },
+    });
+    expect(cfg.theme).toEqual({ accent: "#3b82f6", radius: 8 });
+  });
+
+  it("treats an all-unknown / empty theme as null", () => {
+    expect(
+      createCmsConfig({ baseUrl: "https://api.test", theme: { bogus: "x" } }).theme,
+    ).toBeNull();
+    expect(createCmsConfig({ baseUrl: "https://api.test", theme: {} }).theme).toBeNull();
+  });
+
+  it("rejects non-string/number theme values", () => {
+    expect(() =>
+      // @ts-expect-error - intentional wrong type
+      createCmsConfig({ baseUrl: "https://api.test", theme: { accent: {} } }),
+    ).toThrow(/theme\.accent must be a string or number/);
+  });
 });

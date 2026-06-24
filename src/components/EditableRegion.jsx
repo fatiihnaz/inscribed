@@ -30,6 +30,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
+import { ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
 
 /**
  * @import { BlockType } from "../lib/schemas.js"
@@ -72,11 +73,11 @@ import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "
  *   precedence over `editable`.
  */
 
-const RING_HOVER   = "0 0 0 1.5px rgba(201,184,150,0.30)";
-const RING_ACTIVE  = "0 0 0 2px rgba(201,184,150,0.80)";
-const BG_OFF    = "rgba(201,184,150,0)";
-const BG_HOVER  = "rgba(201,184,150,0.05)";
-const BG_ACTIVE = "rgba(201,184,150,0.08)";
+const RING_HOVER   = `0 0 0 1.5px color-mix(in srgb, ${ACCENT} 30%, transparent)`;
+const RING_ACTIVE  = `0 0 0 2px color-mix(in srgb, ${ACCENT} 80%, transparent)`;
+const BG_OFF    = `color-mix(in srgb, ${ACCENT} 0%, transparent)`;
+const BG_HOVER  = `color-mix(in srgb, ${ACCENT} 5%, transparent)`;
+const BG_ACTIVE = `color-mix(in srgb, ${ACCENT} 8%, transparent)`;
 const EMPTY_PLACEHOLDER = "-";
 
 const BLOCK_TAGS = new Set([
@@ -208,14 +209,14 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
             // background showing past the chip.
             right: isActive ? -2 : -1.5,
             transform: "translateY(-100%)",
-            background: "#221d18",
-            border: "1px solid rgba(255,255,255,0.10)",
+            background: BG_RAISED,
+            border: `1px solid ${BORDER}`,
             borderBottom: "none",
             borderRadius: "4px 4px 0 0",
             padding: "1px 6px",
             fontSize: 9,
             fontWeight: 500,
-            color: "rgba(201,184,150,0.65)",
+            color: `color-mix(in srgb, ${ACCENT} 65%, transparent)`,
             letterSpacing: "0.05em",
             lineHeight: "16px",
             whiteSpace: "nowrap",

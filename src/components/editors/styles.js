@@ -2,10 +2,19 @@
  * @file Shared styles for inline editors so the dark admin panel reads as
  * one cohesive surface.
  *
- * Mirrors the design tokens defined inline in AdminDrawer.jsx (warm-neutral
- * primary ramp + sage secondary accent). Keep these in sync if the panel
- * palette is ever recentred.
+ * Consumes the shared design tokens from `admin-drawer-styles.js` so the
+ * editor fields track the panel palette (and any `theme` override) instead
+ * of hand-rolling their own white-alpha values.
  */
+
+import {
+  BORDER,
+  SURFACE_2,
+  TEXT_HI,
+  TEXT_MUTED,
+  FS_2XS,
+  fieldBaseStyle,
+} from "../admin-drawer-styles.js";
 
 export const labelStyle = {
   display: "flex",
@@ -14,22 +23,18 @@ export const labelStyle = {
 };
 
 export const labelTextStyle = {
-  fontSize: 10,
-  color: "rgba(255,255,255,0.3)",
+  fontSize: FS_2XS,
+  color: TEXT_MUTED,
   textTransform: "uppercase",
   letterSpacing: "0.06em",
   fontWeight: 600,
 };
 
 export const fieldStyle = {
-  font: "inherit",
-  fontSize: 13,
-  padding: "9px 12px",
-  border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 8,
-  background: "rgba(255,255,255,0.05)",
-  color: "rgba(255,255,255,0.96)",
-  outline: "none",
+  ...fieldBaseStyle,
+  border: `1px solid ${BORDER}`,
+  background: SURFACE_2,
+  color: TEXT_HI,
 };
 
 // Merged on top of `fieldStyle` for read-only (`editable={false}`) blocks.

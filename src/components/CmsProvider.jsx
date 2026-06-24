@@ -14,6 +14,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { CmsContext } from "../lib/context.js";
 import { createCmsConfig } from "../lib/config.js";
+import { buildThemeCss } from "../lib/theme.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
 import { stableStringify } from "../lib/stable-stringify.js";
@@ -73,6 +74,14 @@ export function CmsProvider({
     }),
     [baseConfig, transport],
   );
+
+  // Theme overrides ride along on the serializable config as a normalized
+  // subset (see `theme.js`). Emit them once here as a `:root` block of
+  // `--ins-*` custom properties; every visual token reads them with a baked
+  // default fallback, so an empty theme emits nothing and the stock palette
+  // shows through. Lives at the provider root (not the drawer) so page-side
+  // editing affordances pick the vars up too.
+  const themeCss = useMemo(() => buildThemeCss(baseConfig.theme), [baseConfig.theme]);
 
   // Seed the blocks map from `initialBlocks` so EditableRegion has real
   // values to render during SSR and on first client paint. Subsequent
@@ -677,6 +686,7 @@ export function CmsProvider({
 
   return (
     <CmsContext.Provider value={value}>
+      {themeCss ? <style>{themeCss}</style> : null}
       {/* Collections are an opt-in capability with their own provider/context
           (see `inscribed/collections`). It's mounted here so existing apps
           need no changes — both the page-side `<CollectionRegion>` /

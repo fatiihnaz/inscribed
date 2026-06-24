@@ -32,6 +32,7 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
   - [Lists](#lists)
   - [Collections](#collections)
   - [Editing & drafts](#editing--drafts)
+  - [Theming](#theming)
   - [Access control](#access-control)
   - [Caching & revalidation](#caching--revalidation)
 - [Architecture: the seams](#architecture-the-seams)
@@ -105,6 +106,7 @@ export const cmsConfig = createCmsConfig({
   cdnUrl: process.env.CMS_CDN_URL,     // optional: image-upload root
   clientId: process.env.CMS_CLIENT_ID, // optional: X-CMS-Client-Id header
   // globalSlug: "__global",           // optional: slug for site-wide blocks
+  // theme: { accent: "#3b82f6" },     // optional: override the panel palette (see Theming)
 });
 ```
 
@@ -363,6 +365,40 @@ as drafts** (debounced ~1s to the draft endpoint) while a live preview overlays
 the page; **publishing** is an explicit save in the drawer. Discarding clears the
 server draft. inscribed itself depends on **no auth library**; these are all
 injected callbacks, with a public read-only default.
+
+### Theming
+
+The admin panel and the page-side editing affordances are styled through a set
+of CSS custom properties (`--ins-*`) with the stock warm-neutral palette baked
+in as fallbacks. Pass a `theme` to `createCmsConfig` to override a small,
+stable subset; `CmsProvider` emits it once as a `:root` block, and every
+derived tint (soft fills, borders, the text ramp) is computed from these bases
+with `color-mix`, so changing one base cascades everywhere it's used.
+
+Every key is optional and falls back to the stock value below, so pass only the
+ones you want to change. These are the actual defaults:
+
+```js
+export const cmsConfig = createCmsConfig({
+  baseUrl: process.env.CMS_URL,
+  theme: {
+    accent: "#c9b896",                  // sand — dirty rails, focus, primary buttons
+    collectionAccent: "rgb(220,195,225)", // pink-purple — Collection surfaces
+    danger: "rgb(232,132,152)",         // rose — destructive / error accent
+    bg: "#1c1815",                      // warm-dark panel base (raised/sunken shades derive from it)
+    surface: "#ffffff",                 // elevation-overlay base (surface/border alphas mix from it)
+    text: "#ffffff",                    // foreground base (the text ramp mixes from it)
+    radius: 10,                         // card/panel corner radius (number = px)
+    fontSans: '"Inter Tight", "Inter", system-ui, sans-serif',
+    fontMono: '"JetBrains Mono", ui-monospace, monospace',
+  },
+});
+```
+
+For example, to recolor just the brand accent, pass `theme: { accent: "#3b82f6" }`
+and leave the rest untouched. Unknown keys are dropped; overriding nothing is
+identical to shipping the stock theme. (Theming relies on CSS `color-mix`,
+supported by all current evergreen browsers.)
 
 ### Access control
 

@@ -37,5 +37,6 @@ export { getBlock, getBlockValue, groupBlocksByPrefix, indexBlocksByPath } from 
  * into internal paths. Changing their shape is a breaking change.
  *
  * @typedef {import("./lib/config.js").CmsConfig} CmsConfig
+ * @typedef {import("./lib/theme.js").CmsTheme} CmsTheme
  * @typedef {import("./lib/schemas.js").BlockResponse} BlockResponse
  */

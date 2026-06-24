@@ -34,6 +34,7 @@
 import { useContext, useState } from "react";
 
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
+import { ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
 import { useCmsContext } from "../lib/context.js";
 
 /**
@@ -52,11 +53,11 @@ import { useCmsContext } from "../lib/context.js";
  *   `editable`. Inherited by nested groups (most restrictive wins).
  */
 
-const RING_COLOR_HOVER = "rgba(201,184,150,0.50)";
-const RING_COLOR_OFF   = "rgba(201,184,150,0)";
-const LABEL_BG         = "#221d18";
-const LABEL_BORDER     = "1px solid rgba(255,255,255,0.10)";
-const LABEL_COLOR      = "rgba(201,184,150,0.85)";
+const RING_COLOR_HOVER = `color-mix(in srgb, ${ACCENT} 50%, transparent)`;
+const RING_COLOR_OFF   = `color-mix(in srgb, ${ACCENT} 0%, transparent)`;
+const LABEL_BG         = BG_RAISED;
+const LABEL_BORDER     = `1px solid ${BORDER}`;
+const LABEL_COLOR      = `color-mix(in srgb, ${ACCENT} 85%, transparent)`;
 
 /**
  * @param {CmsGroupProps} props

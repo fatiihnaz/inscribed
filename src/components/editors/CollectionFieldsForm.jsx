@@ -823,7 +823,10 @@ const labelTextStyle = {
   opacity: 0.65,
 };
 const requiredMarkStyle = {
-  color: "rgb(220, 195, 225)",
+  // Collection brand accent. Tied to the themeable `--ins-collection` var
+  // (with the stock purple as fallback) so a rebrand flows through, while
+  // the form's neutral gray chrome stays context-portable.
+  color: "var(--ins-collection, rgb(220, 195, 225))",
   fontSize: 11,
   fontWeight: 700,
   lineHeight: 1,
@@ -876,7 +879,7 @@ const switchTrackStyle = {
   transition: "background 160ms ease",
 };
 const switchTrackCheckedStyle = {
-  background: "rgba(200,170,230,0.8)",
+  background: "color-mix(in srgb, var(--ins-collection, rgb(220,195,225)) 80%, transparent)",
 };
 const switchThumbStyle = {
   position: "absolute",
@@ -902,7 +905,7 @@ const stringArrayChipStyle = {
   alignItems: "center",
   gap: 4,
   padding: "3px 5px 3px 10px",
-  borderRadius: 5,
+  borderRadius: 6,
   border: "1px solid rgba(127,127,127,0.25)",
   background: "rgba(127,127,127,0.08)",
   fontSize: 12,
@@ -982,7 +985,7 @@ const objectArrayIndexStyle = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  borderRadius: 5,
+  borderRadius: 6,
   fontSize: 11,
   fontWeight: 600,
   fontFamily: "ui-monospace, 'SF Mono', monospace",

@@ -1041,12 +1041,12 @@ const lineUnchangedStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const lineAddedStyle = /** @type {React.CSSProperties} */ ({
-  background: "rgba(150, 210, 160, 0.10)",
+  background: `color-mix(in srgb, ${DIFF_ADDED} 10%, transparent)`,
   color: TEXT,
 });
 
 const lineRemovedStyle = /** @type {React.CSSProperties} */ ({
-  background: "rgba(232, 132, 152, 0.10)",
+  background: `color-mix(in srgb, ${DIFF_REMOVED} 10%, transparent)`,
   color: TEXT,
 });
 
@@ -1081,13 +1081,13 @@ const lineHunkStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const pairedRemovedSpanStyle = /** @type {React.CSSProperties} */ ({
-  background: "rgba(232, 132, 152, 0.30)",
+  background: `color-mix(in srgb, ${DIFF_REMOVED} 30%, transparent)`,
   color: DIFF_REMOVED,
   borderRadius: 2,
 });
 
 const pairedAddedSpanStyle = /** @type {React.CSSProperties} */ ({
-  background: "rgba(150, 210, 160, 0.30)",
+  background: `color-mix(in srgb, ${DIFF_ADDED} 30%, transparent)`,
   color: DIFF_ADDED,
   borderRadius: 2,
 });
@@ -1141,16 +1141,16 @@ const unchangedSpanStyle = /** @type {React.CSSProperties} */ ({
 
 const removedSpanStyle = /** @type {React.CSSProperties} */ ({
   color: DIFF_REMOVED,
-  background: "rgba(232, 132, 152, 0.14)",
+  background: `color-mix(in srgb, ${DIFF_REMOVED} 14%, transparent)`,
   textDecoration: "line-through",
-  textDecorationColor: "rgba(232, 132, 152, 0.50)",
+  textDecorationColor: `color-mix(in srgb, ${DIFF_REMOVED} 50%, transparent)`,
   padding: "0 2px",
   borderRadius: 2,
 });
 
 const addedSpanStyle = /** @type {React.CSSProperties} */ ({
   color: DIFF_ADDED,
-  background: "rgba(150, 210, 160, 0.14)",
+  background: `color-mix(in srgb, ${DIFF_ADDED} 14%, transparent)`,
   padding: "0 2px",
   borderRadius: 2,
 });
@@ -1227,8 +1227,8 @@ function listItemRowStyle(kind) {
     flexDirection: "column",
     gap: 8,
   };
-  if (kind === "added") return { ...base, background: "rgba(150, 210, 160, 0.10)" };
-  if (kind === "removed") return { ...base, background: "rgba(232, 132, 152, 0.10)" };
+  if (kind === "added") return { ...base, background: `color-mix(in srgb, ${DIFF_ADDED} 10%, transparent)` };
+  if (kind === "removed") return { ...base, background: `color-mix(in srgb, ${DIFF_REMOVED} 10%, transparent)` };
   return { ...base, background: SURFACE_1 };
 }
 
@@ -1295,7 +1295,7 @@ function fallbackJsonStyle(tone) {
     fontFamily: FONT_MONO,
     fontSize: 11,
     color: tone,
-    background: tone === DIFF_REMOVED ? "rgba(232,132,152,0.10)" : "rgba(150,210,160,0.10)",
+    background: `color-mix(in srgb, ${tone} 10%, transparent)`,
     padding: "6px 8px",
     borderRadius: RADIUS_SM,
     whiteSpace: "pre-wrap",

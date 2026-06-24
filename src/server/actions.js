@@ -1,11 +1,8 @@
 "use server";
 
 /**
- * @file CMS Server Actions.
- *
- * Import from `inscribed/actions`.
- * The `"use server"` directive at the top of this file is required -
- * Next.js treats every export as a Server Action callable from Client Components.
+ * @file CMS Server Actions, imported from `inscribed/actions`. The top-level
+ * `"use server"` makes every export a Server Action callable from the client.
  */
 
 import { revalidateTag } from "next/cache";

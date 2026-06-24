@@ -2,22 +2,16 @@
 
 /**
  * @file Public client-side API for the optional Collections capability,
- * exposed as the `inscribed/collections` subpath.
+ * exposed as the `inscribed/collections` subpath. Collections are their own
+ * namespace (provider, context, cache, API); the separate subpath keeps them
+ * out of an app's graph when unused.
  *
- * Collections are a separate namespace from the CMS block editor (their own
- * provider, context, cache, and API). Importing them from this subpath keeps
- * them out of an app's graph when unused, and makes the dependency explicit.
+ * `<CollectionProvider>` must live inside `<CmsProvider>`, which mounts it for
+ * you automatically, so apps using only the components/hooks below don't have
+ * to render it themselves.
  *
- * Mounting: `<CollectionProvider>` must live inside `<CmsProvider>` (it reads
- * `config` / `isAdmin` / `getAccessToken` from the CMS context). Today
- * `<CmsProvider>` mounts it for you automatically, so apps that only use the
- * components/hooks below don't need to render it themselves.
- *
- * The `"use client"` directive above is load-bearing: tsup/esbuild bundles
- * every transitive `.jsx` into `dist/collections.js` and drops inner-file
- * directives during bundling. Only this entry file's top-level directive is
- * preserved, so Next.js needs it here to treat the bundle as a Client
- * Component (these are all hooks / context consumers).
+ * The top-level `"use client"` is load-bearing, same as in `index.js`: tsup
+ * keeps only the entry file's directive, so Next.js needs it here.
  */
 
 export { CollectionProvider } from "./components/CollectionProvider.jsx";

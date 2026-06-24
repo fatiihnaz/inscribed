@@ -1,15 +1,11 @@
 /**
- * @file Server-side content fetchers and sync helpers for Next.js App Router.
+ * @file Server-side content fetchers and sync helpers, published under
+ * `inscribed/server`. Use from Server Components, layouts, route handlers, or
+ * build scripts; never from a client component.
  *
- * SERVER ONLY - published under the `inscribed/server` subpath.
- * Pull it from React Server Components (`app/**\/page.jsx`, layouts,
- * route handlers, build scripts); never import it from a client component.
- *
- * Read helpers attach a service token from `config.getServiceToken` when one
- * is provided; otherwise they fall back to `noServiceToken` (no token) and
- * reads go out unauthenticated. Inject a real provider via
- * `createCmsPage({ getServiceToken })` when your backend requires auth for
- * reads - vendor-specific providers (e.g. Keycloak) live on the consumer side.
+ * Read helpers attach a service token from `config.getServiceToken`, or fall
+ * back to `noServiceToken` and read unauthenticated. Inject a real provider
+ * via `createCmsPage({ getServiceToken })` if your backend requires auth.
  */
 
 import { createRestTransport } from "../defaults/transport.js";
@@ -66,16 +62,12 @@ export async function getCmsContent(config, slug, options) {
 }
 
 /**
- * Server-side helper for the common page render: fetch the page's static
- * blocks (ISR-cached under `cmsCacheTag(slug)`, invalidated on admin save)
- * and the global slug (`config.globalSlug`, header/footer/site settings) in
- * parallel, then stamp each block with its source slug so the save layer
- * later PUTs each one back to the right place.
+ * Fetch a page's blocks and the global slug (`config.globalSlug`) in parallel,
+ * then stamp each block with its source slug so the save layer can PUT it back
+ * to the right place. Blocks are ISR-cached under `cmsCacheTag(slug)`.
  *
- * Use from `app/page.jsx` Server Components. Collection-typed blocks are
- * declarations only at this layer; consumer-side `<CollectionRegion>` /
- * `<CollectionItem>` fetch their items at render time so the
- * `cms-collection-{key}` cache tag lives independently of the page slug.
+ * Collection-typed blocks are declarations only here; `<CollectionRegion>` /
+ * `<CollectionItem>` fetch their items at render time under their own tag.
  *
  * @param {CmsConfig} config
  * @param {string} slug
@@ -102,10 +94,8 @@ export async function getCmsPageBlocks(config, slug, options) {
 
   if (!globalSlug || globalContent.blocks.length === 0) return pageBlocks;
 
-  // Page wins on a path collision (shouldn't happen when discovery is the
-  // source of truth, but be defensive). Otherwise append global blocks at
-  // the bottom of the list - the AdminDrawer reads sortOrder per slug,
-  // which keeps each group internally ordered.
+  // Page wins on a path collision (defensive; shouldn't happen). Global blocks
+  // append at the bottom; the AdminDrawer orders each slug group by sortOrder.
   /** @type {Set<string>} */
   const pagePaths = new Set(pageBlocks.map((b) => b.blockPath));
   const stampedGlobal = globalContent.blocks
@@ -120,11 +110,10 @@ export async function getCmsPageBlocks(config, slug, options) {
 // ---------------------------------------------------------------------------
 
 /**
- * `POST /cms/sync` - reconcile the *entire* block manifest in one authoritative
- * call. Pass every slug the app declares; the backend soft-deletes blocks and
- * slugs absent from `manifests` and restores ones that reappear (with their
- * existing content). An empty array marks everything deleted. Idempotent.
- * Intended for build-time / deploy-time pipelines.
+ * `POST /cms/sync`: reconcile the entire block manifest in one call. The
+ * backend treats `manifests` as the complete desired state, soft-deleting
+ * absent slugs/blocks and restoring reappearing ones. Idempotent; for
+ * build/deploy pipelines.
  *
  * @param {CmsConfig} config
  * @param {SyncManifestRequest[]} manifests
@@ -137,13 +126,9 @@ export function syncCmsManifest(config, manifests, accessToken) {
 }
 
 /**
- * Reconcile every manifest in a single authoritative call - for build/deploy
- * pipelines. Obtains a service token once via `getServiceToken` (default: none)
- * and `POST`s the full `manifests` array to `/cms/sync`. The backend treats it
- * as the complete desired state: slugs/blocks absent from the array are
- * soft-deleted, reappearing ones restored. An empty array marks everything
- * deleted. Logs per-slug counts plus any pruned slugs. Throws on transport
- * failure.
+ * Self-contained wrapper around `syncManifests` for CLI/build scripts: resolves
+ * a service token (default: none), POSTs the manifest, logs per-slug counts and
+ * pruned slugs, and throws with a readable message on failure.
  *
  * @param {SyncManifestRequest[]} manifests
  * @param {{ baseUrl?: string, getServiceToken?: ServiceTokenProvider }} [options]

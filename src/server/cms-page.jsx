@@ -1,10 +1,7 @@
 /**
- * @file `createCmsPage` factory - centralise per-page CMS boilerplate.
- *
- * SERVER ONLY - published under `inscribed/page`.
- *
- * Define one factory call (typically `app/lib/cms.jsx`) with your config,
- * session strategy, and revalidation; afterwards every page reduces to:
+ * @file `createCmsPage` factory, server-only, published under `inscribed/page`.
+ * One factory call (typically `app/lib/cms.jsx`) holds your config, session
+ * strategy, and revalidation; then every page reduces to:
  *
  *   import { CmsPage } from "../lib/cms.jsx";
  *   import { EditableRegion } from "inscribed";
@@ -19,10 +16,9 @@
  *     );
  *   }
  *
- * The `slug` prop is optional. When omitted, the helper reads the active
- * pathname from the `x-pathname` request header - this lets you wrap the
- * root layout once and let every static page inherit it. The header is not
- * standard; the consumer must populate it via a tiny middleware:
+ * `slug` is optional. When omitted, the helper reads the active pathname from
+ * the `x-pathname` header so you can wrap the root layout once and let static
+ * pages inherit it. That header isn't standard; populate it via middleware:
  *
  *   // middleware.js
  *   import { NextResponse } from "next/server";
@@ -32,13 +28,11 @@
  *     return NextResponse.next({ request: { headers } });
  *   }
  *
- * Dynamic routes (`/news/[id]`) still need explicit `<CmsPage slug="/news/[id]">`
- * because the header carries the concrete path, not the manifest template.
+ * Dynamic routes (`/news/[id]`) still need an explicit `slug` because the
+ * header carries the concrete path, not the manifest template.
  *
- * `Provider` is passed in by the caller (rather than imported here) so the
- * `"use client"` boundary in `inscribed/nextauth` (or a custom provider
- * module) stays intact - tsup does not preserve `"use client"` across entry
- * boundaries when bundling, but consumer-side imports do.
+ * `Provider` is passed in rather than imported so its `"use client"` boundary
+ * survives bundling (tsup doesn't preserve the directive across entries).
  */
 
 import { headers } from "next/headers";
@@ -57,25 +51,20 @@ const PATHNAME_HEADER = "x-pathname";
  * @typedef {Object} CreateCmsPageOptions
  * @property {CmsConfig | { baseUrl: string }} config
  * @property {import("../lib/service-token.js").ServiceTokenProvider} [getServiceToken]
- *   Server-only provider for the service token used by the SSR content fetch
- *   (so public visitors get rendered content without a user session). Default:
- *   no token. Inject e.g. a Keycloak client-credentials provider here. It is
- *   used server-side only and never passed to the client `Provider`.
+ *   Server-only provider for the service token on the SSR content fetch, so
+ *   public visitors get rendered content without a session. Never passed to
+ *   the client `Provider`. Default: no token (e.g. inject a Keycloak provider).
  * @property {import("../lib/transport.js").CmsTransport} [transport]
- *   Custom data-access transport for the SSR content fetch. Server-only -
- *   like `getServiceToken` it never crosses to the client, so to use a custom
- *   transport client-side too you must ALSO pass it to your provider
- *   (`<CmsProvider transport={...}>`). Default: REST against `config.baseUrl`.
+ *   Custom transport for the SSR fetch. Server-only, so to use it client-side
+ *   too pass it to your provider as well. Default: REST against `config.baseUrl`.
  * @property {*} Provider
- *   The CMS provider component - typically `NextAuthCmsProvider` from
- *   `inscribed/auth/client`, or your own wrapper. The provider receives
- *   `config`, `isAdmin`, `userSub`, `initialBlocks`, `onAfterSave`, and
- *   `session` props.
- * The three auth callbacks below together form a `CmsAuthAdapter`
- * (see `lib/auth.js`); omit them all for a public, read-only site (the
- * `publicAuth` default). For NextAuth, spread `withCmsAuth(authOptions)` from
- * `inscribed/auth/server` - it supplies all three and keeps the CMS core
- * itself free of any auth dependency.
+ *   The CMS provider component, typically `NextAuthCmsProvider` from
+ *   `inscribed/auth/client` or your own wrapper. Receives `config`, `isAdmin`,
+ *   `userSub`, `initialBlocks`, `onAfterSave`, and `session`.
+ *
+ * The three auth callbacks below form a `CmsAuthAdapter` (see `lib/auth.js`);
+ * omit them all for a public read-only site. For NextAuth, spread
+ * `withCmsAuth(authOptions)` from `inscribed/auth/server`.
  *
  * @property {import("../lib/auth.js").GetSession} [getSession]
  *   Resolves the server session. Default: `publicAuth.getSession` (always null → public).
@@ -84,13 +73,10 @@ const PATHNAME_HEADER = "x-pathname";
  * @property {(session: *) => string | null} [deriveUserSub]
  *   Default: `session?.user?.id ?? null`.
  * @property {(slug: string) => void | Promise<void>} [onAfterSave]
- *   Server Action invoked after a successful admin save. Typically
- *   `revalidateCmsSlug` from `inscribed/actions` - import it on the
- *   consumer side and pass it explicitly. The "use server" directive
- *   only survives across package entry boundaries, so importing the
- *   action inside this file (and using it as a default) would strip its
- *   Server Action status during bundling and Next.js would refuse to
- *   pass it to the client provider.
+ *   Server Action run after a successful admin save, typically
+ *   `revalidateCmsSlug` from `inscribed/actions`. Import it consumer-side and
+ *   pass it explicitly; importing it here would strip its "use server" status
+ *   during bundling.
  */
 
 /**
@@ -116,20 +102,16 @@ export function createCmsPage(options) {
     throw new Error("createCmsPage: `config` option is required");
   }
 
-  // Normalize the raw config exactly once at factory build time. Without
-  // this, callers passing a plain `{ baseUrl, cdnUrl }` literal end up
-  // missing the defaulted fields (notably `globalSlug`), which makes the
-  // server-side `getCmsPageBlocks` skip the __global fetch - public
-  // visitors then render header/footer placeholders because the client
-  // refetch in `useCmsContent` is admin-gated and never runs for them.
+  // Normalize once at build time. A plain `{ baseUrl }` literal would miss
+  // defaulted fields (notably `globalSlug`), making the server skip the
+  // __global fetch so public visitors see header/footer placeholders.
   const normalizedConfig = "baseUrl" in config && Object.isFrozen(config)
     ? /** @type {import("../lib/config.js").CmsConfig} */ (config)
     : createCmsConfig(config);
 
-  // Server-only view of the config: the service token (may hold secrets) and
-  // a custom transport (holds functions) must never reach the client, so they
-  // ride on a separate object used only for the SSR fetch below. The
-  // `normalizedConfig` passed to <Provider> stays serializable.
+  // Server-only view: the service token (secrets) and transport (functions)
+  // must never reach the client, so they ride on a separate object used only
+  // for the SSR fetch. The `normalizedConfig` sent to <Provider> stays serializable.
   const serverConfig =
     getServiceToken || transport
       ? {
@@ -147,7 +129,7 @@ export function createCmsPage(options) {
     try {
       initialBlocks = await getCmsPageBlocks(serverConfig, resolvedSlug);
     } catch {
-      // Backend offline or page not yet synced - render with empty blocks.
+      // Backend offline or page not yet synced: render with empty blocks.
     }
 
     return (
@@ -161,13 +143,9 @@ export function createCmsPage(options) {
 }
 
 /**
- * Read the request pathname out of the `x-pathname` header that the
- * consumer's middleware populates. `await` covers both Next 14 (sync
- * `headers()`) and Next 15 (async `headers()`).
- *
- * In development, surface a clear warning when the header is missing so
- * the consumer doesn't spend hours wondering why every page resolves to
- * `/`. In production, fall back silently to `/`.
+ * Read the pathname from the `x-pathname` header set by consumer middleware.
+ * `await` covers both Next 14 (sync `headers()`) and Next 15 (async). Warns
+ * in dev when the header is missing, falls back to `/` silently in prod.
  *
  * @returns {Promise<string>}
  */

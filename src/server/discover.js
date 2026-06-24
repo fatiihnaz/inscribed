@@ -1,11 +1,9 @@
 /**
- * @file Manifest discovery - AST-walk a Next.js app/ tree and produce a
- * `SyncManifestRequest[]` from `<EditableRegion>` JSX and `useCmsBlock`
- * call sites. Same shape the legacy hand-written `cms.manifest.mjs` had.
+ * @file Manifest discovery: AST-walk a Next.js app/ tree and build a
+ * `SyncManifestRequest[]` from `<EditableRegion>` JSX and `useCmsBlock` calls.
  *
- * SERVER ONLY - exposed via `inscribed/server` and used by the
- * `cms-sync` CLI. Not safe to import from a client component (pulls in the
- * native `oxc-parser` at runtime).
+ * Server-only (exposed via `inscribed/server`, used by the `cms-sync` CLI);
+ * pulls in the native `oxc-parser`, so never import it from a client component.
  *
  * Discovery rules:
  *
@@ -119,11 +117,9 @@ export async function discoverManifests(options = {}) {
   /** @type {Map<string, Map<string, ManifestBlockItem>>} */
   const bySlug = new Map();
 
-  // Page-scoped regions: walk every withCms root, follow imports DFS, drop
-  // each non-global region under the page's slug. Global regions are
-  // skipped here and collected separately below so they don't leak into
-  // any page slug (and so a Header/Footer declared on multiple pages
-  // doesn't get duplicated as a regular block).
+  // Page-scoped regions: walk every withCms root, follow imports DFS, file
+  // each non-global region under the page's slug. Global regions are handled
+  // separately below so a Header/Footer shared across pages isn't duplicated.
   for (const [rootFile, analysis] of analyses) {
     if (analysis.withCmsSlugs.length === 0) continue;
     for (const slug of analysis.withCmsSlugs) {
@@ -143,10 +139,9 @@ export async function discoverManifests(options = {}) {
     }
   }
 
-  // Global-scoped regions: across the whole app tree, dedup by blockPath.
-  // sortOrder follows file traversal order (collectSourceFiles is a stable
-  // recursive directory walk) so the Drawer lists header/footer fields in
-  // a stable order regardless of which page is loaded.
+  // Global-scoped regions: dedup by blockPath across the whole tree. sortOrder
+  // follows the stable file-traversal order, so the Drawer lists header/footer
+  // fields the same way regardless of which page is loaded.
   /** @type {Map<string, ManifestBlockItem>} */
   const globalMap = new Map();
   let globalSortOrder = 1;
@@ -294,18 +289,13 @@ async function analyzeFile(filePath) {
   /** @type {DiscoveryWarning[]} */
   const warnings = [];
 
-  // Stack of `<CmsGroup name>` prefixes. Pushed on JSXElement enter for any
-  // CmsGroup wrapper, popped on exit. JSXOpeningElement visits for child
-  // EditableRegion/EditableList read this stack and prepend the joined
-  // prefix to the static blockPath - mirroring the runtime behaviour where
-  // `<CmsGroup>` provides a React context to descendant components.
+  // Stack of `<CmsGroup name>` prefixes, pushed/popped on JSXElement
+  // enter/leave. Child EditableRegion/EditableList prepend the joined prefix
+  // to their static blockPath, mirroring the runtime `<CmsGroup>` context.
   /** @type {string[]} */
   const groupStack = [];
   const currentPrefix = () => groupStack.filter(Boolean).join(".");
 
-  // Single enter/leave pass mirroring the four former Babel visitors.
-  // `<CmsGroup>` push/pop straddles JSXElement enter/leave so the prefix is
-  // active for every descendant region, just as the runtime context is.
   walk(program, {
     enter(node) {
       switch (node.type) {
@@ -350,9 +340,8 @@ async function analyzeFile(filePath) {
             return;
           }
 
-          // useCmsBlock("path", { blockType, defaultValue }) - read-only block
-          // declaration. The 2nd arg is metadata; without it we can't register
-          // the block, so the call is treated as a pure read and ignored.
+          // useCmsBlock("path", { blockType, defaultValue }): read-only block
+          // declaration. No metadata arg means nothing to register, so ignore it.
           if (callee.name === "useCmsBlock") {
             const blockPath = literalString(node.arguments[0]);
             if (blockPath == null) return;
@@ -391,10 +380,9 @@ async function analyzeFile(filePath) {
           } else if (name.name === "EditableList") {
             handleEditableList(node, filePath, analysis, warnings, currentPrefix(), locator);
           }
-          // `<CollectionRegion>` and `<CollectionItem>` deliberately don't
-          // emit manifest blocks - Collection bindings live in a runtime
-          // registry (CmsContext.collectionBindings) so they aren't mixed
-          // into the CMS block namespace. See CmsProvider.
+          // `<CollectionRegion>` / `<CollectionItem>` deliberately emit no
+          // manifest blocks: collection bindings live in a runtime registry,
+          // kept out of the CMS block namespace. See CmsProvider.
           return;
         }
       }
@@ -413,14 +401,10 @@ async function analyzeFile(filePath) {
 
 /**
  * Pull a static `<EditableRegion>` declaration into the file analysis.
- * Required props: blockPath, blockType. A missing static defaultValue is
- * tolerated - the region still syncs, seeded with an empty string (""), and a
- * warning is emitted (an empty value renders as the placeholder until an admin
- * fills it). A missing blockPath/blockType still yields a warning and skips the
- * region (without a type there's nothing to sync). `groupPrefix` is the joined
- * stack of enclosing `<CmsGroup>` names; when non-empty it's prepended to
- * the blockPath so the manifest matches what the runtime context lookup
- * produces.
+ * blockPath and blockType are required (missing either warns and skips). A
+ * missing defaultValue is tolerated: the region syncs seeded with "" and
+ * warns. `groupPrefix` (joined enclosing `<CmsGroup>` names) is prepended to
+ * the blockPath so the manifest matches the runtime context lookup.
  *
  * @param {*} openingNode
  * @param {string} filePath
@@ -475,13 +459,11 @@ function handleEditableRegion(openingNode, filePath, analysis, warnings, groupPr
 
 /**
  * Pull a static `<EditableList>` declaration into the file analysis.
- * Required props: blockPath, itemSchema. `defaultValue` is optional and
- * defaults to `[]` (empty list) - lists usually start empty. `groupPrefix`
- * applies the same `<CmsGroup>` prefix rule used for EditableRegion.
+ * blockPath and itemSchema are required; `defaultValue` defaults to `[]`.
+ * `groupPrefix` applies the same prefix rule as EditableRegion.
  *
- * The itemSchema must be a plain object literal. Each value is itself a
- * `{ blockType, defaultValue }` literal pair; that's the manifest's
- * `ItemSchema` shape, validated structurally below.
+ * itemSchema must be an object literal whose values are `{ blockType,
+ * defaultValue }` pairs (the manifest's `ItemSchema` shape).
  *
  * @param {*} openingNode
  * @param {string} filePath
@@ -540,9 +522,8 @@ function handleEditableList(openingNode, filePath, analysis, warnings, groupPref
 }
 
 /**
- * Validate the `scope` prop. Only `"global"` is accepted today; anything
- * else yields a warning and the region is treated as page-scoped (the
- * safer default). Missing scope is silent — that's the common path.
+ * Validate the `scope` prop. Only `"global"` is accepted; anything else
+ * warns and falls back to page-scoped. Missing scope is silent (the common case).
  *
  * @param {Record<string, *>} props
  * @param {*} openingNode
@@ -623,8 +604,7 @@ function evalLiteral(node) {
   if (!node) return UNRESOLVED;
   switch (node.type) {
     case "Literal":
-      // RegExp / BigInt literals carry extra fields and aren't plain JSON
-      // values; treat them as unresolved (Babel never evaluated them either).
+      // RegExp / BigInt literals aren't plain JSON values; treat as unresolved.
       if (node.regex || node.bigint) return UNRESOLVED;
       return node.value;
     case "TemplateLiteral":
@@ -681,10 +661,9 @@ function locOf(node, locator) {
  */
 
 /**
- * Build an offset -> { line, column } mapper for one source string. Lines are
- * 1-based and columns 0-based, matching the `loc` Babel produced so warning
- * positions are byte-for-byte unchanged. Offsets are UTF-16 (JS string
- * indices), which is exactly what oxc emits.
+ * Build an offset -> { line, column } mapper for one source string. Lines
+ * 1-based, columns 0-based. Offsets are UTF-16 (JS string indices), which is
+ * what oxc emits.
  *
  * @param {string} source
  * @returns {Locator}
@@ -716,9 +695,8 @@ function makeLocator(source) {
 
 /**
  * Minimal depth-first walk over the plain-object ESTree AST oxc returns. A
- * node is any object with a string `type`; children live in node-valued or
- * array-valued properties. This replaces `@babel/traverse` - we only need
- * enter/leave in source order, not its scope/path machinery.
+ * node is any object with a string `type`; children live in node- or
+ * array-valued properties. We only need enter/leave in source order.
  *
  * @param {any} node
  * @param {Visitors} visitors

@@ -1,18 +1,13 @@
 "use client";
 
 /**
- * @file Public client-side API for `inscribed`.
+ * @file Public client-side API for `inscribed`. Server-only helpers live at
+ * `inscribed/server`; everything re-exported here ships in the client bundle.
  *
- * Server-only helpers live at `inscribed/server` (see `src/server/`).
- * Anything re-exported here ends up in the client bundle of the consuming
- * Next.js app, so keep server-only code out.
- *
- * The `"use client"` directive above is load-bearing: tsup/esbuild bundles
- * every transitive `.jsx` file into `dist/index.js` and drops inner-file
- * directives during bundling. Only the entry file's top-level directive is
- * preserved, so it must live here for Next.js to treat the bundle as a
- * Client Component (needed for the React hooks and `next/dynamic({ ssr:false })`
- * used internally by `CmsProvider`).
+ * The top-level `"use client"` is load-bearing. tsup bundles every transitive
+ * `.jsx` into `dist/index.js` and drops inner-file directives, keeping only
+ * the entry file's. So it must stay here for Next.js to treat the bundle as a
+ * Client Component.
  */
 
 export { CmsProvider } from "./components/CmsProvider.jsx";
@@ -30,11 +25,9 @@ export { CmsApiError } from "./lib/errors.js";
 export { getBlock, getBlockValue, groupBlocksByPrefix, indexBlocksByPath } from "./lib/blocks.js";
 
 /**
- * Public type re-exports. These shapes already surface through the public API
- * (e.g. `CmsProvider`'s `config` / `initialBlocks` props), so they are part of
- * the type contract - export them by name so consumers and plugins can
- * reference them (`@import { CmsConfig } from "inscribed"`) instead of reaching
- * into internal paths. Changing their shape is a breaking change.
+ * Public type re-exports. These shapes surface through the public API (e.g.
+ * `CmsProvider`'s props), so consumers and plugins reference them by name
+ * (`@import { CmsConfig } from "inscribed"`). Changing them is breaking.
  *
  * @typedef {import("./lib/config.js").CmsConfig} CmsConfig
  * @typedef {import("./lib/theme.js").CmsTheme} CmsTheme

@@ -1,44 +1,30 @@
 /**
- * @file Backend API request/response shape documentation.
- *
- * No runtime exports - these are JSDoc typedefs only. Imported via
- * `@import` references or referenced by name in other files' JSDoc blocks.
+ * @file Backend API request/response shapes. JSDoc typedefs only, no runtime
+ * exports; referenced via `@import` from other files.
  */
 
 /**
  * Allowed values for `BlockResponse.blockType`.
  *
  * Value shapes per type:
- *   - ShortText / LongText / RichText : string. `ShortText` edits as a
- *     single-line `<input>`, `LongText` as a multi-line `<textarea>`,
- *     `RichText` as a formatting editor. `Text` is the legacy alias of
- *     `LongText` (multi-line) - that was its original behaviour, so existing
- *     manifests/stored blocks keep their look; prefer the explicit names in
- *     new code.
- *   - Image           : { src: string, alt: string }
- *   - Link            : { href: string, label: string }
- *   - Date            : ISO 8601 string, e.g. "2026-08-15T18:00:00.000Z". Empty string when unset.
- *   - List            : Array of plain objects shaped by the manifest's `itemSchema`
- *                       (each object's keys map to leaf block types). The whole
- *                       list shares one `version` - all reorder/add/remove/edit
- *                       operations save atomically.
- *   - Collection      : Read-only binding to the backend's `/cms/collections/{key}` API.
- *                       `value` carries `{ collection: string, slug?: string }`;
- *                       resolved items are fetched separately by the SDK and
- *                       handed to consumer render-props (`<CollectionRegion>` /
- *                       `<CollectionItem>`). No inline editing - writes happen
- *                       in the collection's own admin surface (e.g. team leader
- *                       portal). CMS just surfaces the data here.
+ *   - ShortText / LongText / RichText: string. ShortText is a single-line
+ *     `<input>`, LongText a `<textarea>`, RichText a formatting editor. `Text`
+ *     is the legacy alias of LongText; prefer the explicit names in new code.
+ *   - Image: { src, alt }
+ *   - Link: { href, label }
+ *   - Date: ISO 8601 string, empty string when unset.
+ *   - List: array of objects shaped by the manifest's `itemSchema`. The whole
+ *     list shares one `version`, so reorder/add/remove/edit save atomically.
+ *   - Collection: read-only binding carrying `{ collection, slug? }`. The SDK
+ *     resolves items separately and hands them to render-props; writes happen
+ *     in the collection's own admin surface, not here.
  *
  * @typedef {"Text" | "ShortText" | "LongText" | "RichText" | "Image" | "Link" | "Date" | "List" | "Collection"} BlockType
  */
 
 /**
- * Per-field metadata for a List's item shape. Each entry pairs a leaf block
- * type (ShortText, LongText, Image, ...) with the seed value used when a
- * new list item is inserted. Use `ShortText` for single-line fields and
- * `LongText` for multi-line plain text. Nested lists (a field whose
- * `blockType` is "List") aren't supported in this iteration.
+ * Per-field metadata for a List's item shape: a leaf block type plus the seed
+ * value for new items. Nested lists aren't supported.
  *
  * @typedef {Object} ItemSchemaField
  * @property {Exclude<BlockType, "List" | "Collection">} blockType
@@ -56,33 +42,25 @@
  * @property {string} blockPath  Dot-notation path, e.g. "hero.title".
  * @property {BlockType} blockType
  * @property {*} value
- *   Arbitrary JSON; shape depends on blockType. For Collection blocks
- *   this carries `{ collection: string, slug?: string }` - the binding
- *   the SDK uses to resolve items from `/cms/collections/{key}`. The
- *   resolved items themselves are NOT stored here; consumer-side
- *   `<CollectionRegion>`/`<CollectionItem>` fetch them at render time
- *   so the cache tag (`cms-collection-{key}`) lives independently of
- *   the page slug.
+ *   Arbitrary JSON; shape depends on blockType. Collection blocks carry the
+ *   `{ collection, slug? }` binding; resolved items are fetched at render time
+ *   under their own cache tag, not stored here.
  * @property {number} sortOrder
  * @property {number} version    Used for optimistic concurrency.
  * @property {*|null} [draftValue]
- *   Admin-only overlay. Non-null when the backend's Redis layer holds a
- *   pending draft for this block; in that case `value` carries the
- *   published version and `draftValue` carries the draft. Backend
- *   auto-cleans (sends `null`) when the two would otherwise be equal,
- *   so any non-null `draftValue` is guaranteed to differ from `value`.
- *   Public payloads omit / null this field.
+ *   Admin-only overlay. Non-null when a pending draft exists: `value` is the
+ *   published version, `draftValue` the draft. The backend nulls it when the
+ *   two would be equal, so a non-null `draftValue` always differs from `value`.
+ *   Omitted in public payloads.
  * @property {string} [_slug]
- *   Client-side hint stamped by the SDK after fetch so the save layer
- *   knows which slug to PUT each block back to. Not part of the wire
- *   payload - the backend doesn't return or expect it.
+ *   SDK-stamped after fetch so the save layer knows which slug to PUT each
+ *   block back to. Not part of the wire payload.
  */
 
 /**
- * Binding stored as a Collection block's `value`. Discovery emits this
- * from `<CollectionRegion collection="..." />` / `<CollectionItem
- * collection="..." slug="..." />`. Backend stores it verbatim; the SDK
- * uses it at render time to resolve items.
+ * Binding stored as a Collection block's `value`, emitted by discovery from
+ * `<CollectionRegion>` / `<CollectionItem>`. Stored verbatim; the SDK resolves
+ * items from it at render time.
  *
  * @typedef {Object} CollectionBinding
  * @property {string} collection   Backend collection key (e.g. "Teams", "News"). Case-insensitive at the API level but discovery normalises to PascalCase.
@@ -90,15 +68,12 @@
  */
 
 /**
- * Per-collection field metadata returned by `/cms/collections/{key}/schema`
- * and by the `/cms/collections/me` envelope. Drives the schema-driven form
- * rendered in the drawer and in admin examples.
+ * Per-collection field metadata from `/cms/collections/{key}/schema` and the
+ * `/cms/collections/me` envelope. Drives the schema-driven drawer form.
  *
- * `ShortText` edits as a single-line `<input>`, `LongText` as a multi-line
- * `<textarea>`, `RichText` as a formatting editor. `Text` is the legacy
- * alias of `LongText` (multi-line). `ObjectArray` is the only non-scalar: its value is
- * an array of plain objects, each shaped by the descriptor's `itemFields`;
- * the form renders it as a repeatable sub-form (add/remove/reorder).
+ * Scalar types map to the obvious inputs (`Text` is the legacy alias of
+ * `LongText`). `ObjectArray` is the only non-scalar: its value is an array of
+ * objects shaped by `itemFields`, rendered as a repeatable sub-form.
  *
  * @typedef {"Text" | "ShortText" | "LongText" | "RichText" | "Bool" | "Url" | "StringArray" | "Date" | "Number" | "ObjectArray"} CollectionFieldType
  *
@@ -115,11 +90,9 @@
  *   which fields surface in filter pickers.
  * @property {string[] | null} options   When non-empty, render as a select regardless of `type`.
  * @property {CollectionFieldDescriptor[] | null} itemFields
- *   Non-null only for `ObjectArray` fields: the schema for one element of
- *   the repeatable sub-form. Each entry is itself a descriptor (Text, Url,
- *   StringArray, …) so rendering / seeding / payload shaping / validation
- *   recurse through the same machinery — nesting another `ObjectArray`
- *   works for free. `null` on every scalar field, exactly like `options`.
+ *   Non-null only for `ObjectArray` fields: the schema for one element of the
+ *   repeatable sub-form. Each entry is itself a descriptor, so nesting recurses
+ *   through the same machinery. `null` on scalar fields, like `options`.
  * @property {string | null} help
  *
  * @typedef {Object} CollectionSchema
@@ -141,10 +114,9 @@
 /**
  * @typedef {Object} CollectionListParams
  * @property {Record<string, *>} [filter]
- *   Plain object - each key is a filterable field name on the
- *   collection's schema; values are serialised as `String(value)` into
- *   the query string. Booleans become `"true"`/`"false"`. Unknown or
- *   non-filterable fields trigger 400 at the backend.
+ *   Each key is a filterable field; values are serialised as `String(value)`
+ *   into the query string (booleans become `"true"`/`"false"`). Unknown or
+ *   non-filterable fields trigger a 400.
  * @property {number} [offset]   Default 0.
  * @property {number} [limit]    Default 50, max 100, min 1.
  */
@@ -160,9 +132,8 @@
  * @property {string} collectionKey
  * @property {CollectionSchema} schema
  * @property {boolean} canCreate
- *   When false, the user has no global create permission - virtual slugs
- *   (from `GET /cms/collections/{key}`, version === 0) are the only way
- *   they can produce new rows.
+ *   When false, the user has no global create permission; virtual slugs
+ *   (version === 0 in the list) are their only way to produce new rows.
  * @property {CollectionSlugSource} slugSource
  *   `AutoGenerated` collections accept POST creation (backend derives the
  *   slug from a designated field, e.g. `data.title` for News). `RoleDerived`
@@ -171,39 +142,28 @@
  */
 
 /**
- * One row returned by `GET /cms/collections/{key}` (list) or
- * `GET /cms/collections/{key}/{slug}` (single). Backend-owned shape;
- * `data` is the per-collection payload (Team/News/...). Filtering
- * (status / publishedAt / category) will land at the API level via
- * query params; not yet implemented.
+ * One row from `GET /cms/collections/{key}` (list) or `.../{slug}` (single).
+ * Backend-owned shape; `data` is the per-collection payload.
  *
  * @typedef {Object} CollectionItemResponse
  * @property {string} id
- *   Persisted row id, or `Guid.Empty` (`00000000-…`) for virtual rows that
- *   don't yet exist server-side. NOT unique across a list response — many
- *   virtual rows share `Guid.Empty` — so never use it as a React key. Key
- *   by `slug` instead.
+ *   Persisted row id, or `Guid.Empty` for virtual rows not yet created.
+ *   NOT unique across a list (many virtual rows share `Guid.Empty`), so never
+ *   use it as a React key; key by `slug`.
  * @property {string} collectionKey
  * @property {string} slug
- *   Stable, unique-within-collection identity. All item access goes through
- *   the slug, so it is unique even when `id` is `Guid.Empty`. Use this as
- *   the React key when rendering item lists.
+ *   Stable, unique-within-collection identity, even when `id` is `Guid.Empty`.
+ *   Use this as the React key.
  * @property {*} data
  * @property {number} version
  * @property {boolean} canEdit
- *   Whether the requesting user can write to this row through the
- *   collection's own admin surface (e.g. team leader portal). The CMS
- *   itself never writes - this flag is forwarded to render-props so
- *   consumers can show "edit elsewhere" links.
+ *   Whether the user can write this row through the collection's own admin
+ *   surface. The CMS never writes; forwarded to render-props for
+ *   "edit elsewhere" links.
  * @property {*|null} [draftData]
- *   Admin-only overlay. Non-null when the backend's Redis layer holds a
- *   pending draft for this user + (key, slug) pair (or, for virtual
- *   `Guid.Empty` rows in the list response, the user's new-item draft
- *   for this collection). Drawer editors seed their local form state
- *   from `draftData ?? data` so the user sees their in-progress edits
- *   across reloads. A successful publish (PUT/POST) auto-clears the
- *   matching draft server-side, so consumers don't need explicit
- *   cleanup after save.
+ *   Admin-only overlay: pending draft for this user + (key, slug), or the
+ *   new-item draft for virtual rows. Drawer editors seed from `draftData ??
+ *   data`. A successful publish auto-clears it server-side.
  */
 
 /**
@@ -251,12 +211,9 @@
  */
 
 /**
- * One page's manifest entry: a slug and its blocks. The full `POST /cms/sync`
- * body is an array of these - the *complete, authoritative* set of every slug
- * the app declares. The backend reconciles against this set: blocks (and whole
- * slugs) present remotely but absent from the array are soft-deleted; ones that
- * reappear are restored with their existing content. An empty array therefore
- * marks every remote slug deleted.
+ * One page's manifest entry. The `POST /cms/sync` body is an array of these,
+ * the complete desired state: blocks/slugs absent from it are soft-deleted,
+ * reappearing ones restored. An empty array marks every remote slug deleted.
  *
  * @typedef {Object} SyncManifestRequest
  * @property {string} slug

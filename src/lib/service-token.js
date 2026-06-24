@@ -1,19 +1,13 @@
 /**
- * @file The service-token seam (CONTRACT ONLY).
+ * @file The service-token seam, contract only. A service token is the
+ * credential the server attaches when reading content on its own behalf, so
+ * public visitors get server-rendered content without a session. It's separate
+ * from the user's auth token (which flows client-side via `getAccessToken`).
  *
- * A "service token" is the credential the SERVER attaches when it reads
- * content on its own behalf - so public visitors get server-rendered content
- * without a user session. It is ORTHOGONAL to the user's auth token, which
- * flows in client-side via `getAccessToken`.
- *
- * This is a server-only seam: it never crosses the React Server -> Client
- * boundary, so (unlike the transport) there is no augment-in-provider dance -
- * it is resolved purely server-side. The default (`defaults/service-token.js`,
- * `noServiceToken`) sends no token; inject a real provider via
- * `createCmsPage({ getServiceToken })` (or pass one to the server read
- * helpers directly) when your backend requires auth for reads. Vendor-specific
- * providers (e.g. Keycloak client-credentials) live on the consumer/plugin
- * side, never in the core.
+ * Server-only: it never crosses to the client, so it's resolved purely
+ * server-side with no augment-in-provider step. The default `noServiceToken`
+ * sends nothing; inject a real provider via `createCmsPage({ getServiceToken })`
+ * when your backend requires auth for reads.
  */
 
 /**

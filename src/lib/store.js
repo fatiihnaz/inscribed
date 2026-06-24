@@ -1,20 +1,10 @@
 "use client";
 
 /**
- * @file Tiny external store + selector hook (zero dependencies).
- *
- * Purpose: high-churn, per-key state (collection caches, live-edit draft
- * overlays) lives here instead of in React state on `CmsProvider`. React
- * context has no per-field subscription - any consumer of `useContext`
- * re-renders whenever the provided value's identity changes, so keeping
- * these maps in the context value re-rendered every `<CollectionItem>` /
- * `<CollectionRegion>` on the page on every keystroke.
- *
- * With a store, a write notifies subscribers directly (the provider never
- * re-renders), and each consumer reads a narrow slice through
- * `useStoreSelector`. `useSyncExternalStore` bails out of a re-render when
- * the selected slice is referentially unchanged, so typing in one row's
- * editor only re-renders the consumers that actually read that row.
+ * @file Tiny external store + selector hook, zero dependencies. Holds
+ * high-churn per-key state (collection caches, draft overlays) outside React
+ * state so a write notifies only the subscribers that read the changed slice,
+ * rather than re-rendering every context consumer on each keystroke.
  */
 
 import { useCallback, useRef, useSyncExternalStore } from "react";
@@ -28,10 +18,9 @@ import { useCallback, useRef, useSyncExternalStore } from "react";
  */
 
 /**
- * Create a minimal observable store. `set` accepts a value or an updater;
- * a write that returns the same reference (`===`) is a no-op and does not
- * notify - so callers can keep their "return prev when nothing changed"
- * pattern and avoid spurious re-renders.
+ * Create a minimal observable store. `set` takes a value or an updater; a
+ * write that returns the same reference is a no-op and skips notifying, so a
+ * "return prev when nothing changed" updater avoids spurious re-renders.
  *
  * @template T
  * @param {T} initial
@@ -63,11 +52,10 @@ export function createStore(initial) {
  * Subscribe to a slice of a store. Re-renders only when `selector`'s output
  * changes per `isEqual` (defaults to `Object.is`).
  *
- * IMPORTANT: `selector` must return a referentially-stable value when the
- * relevant slice hasn't changed - return a stored object/primitive, never a
- * freshly-constructed object/array, or pass an `isEqual` that treats the
- * constructed shapes as equal. A selector that always allocates would make
- * `getSnapshot` return a new reference every call and loop.
+ * `selector` must return a stable reference when its slice hasn't changed:
+ * return a stored value, not a freshly-built object/array, or pass an
+ * `isEqual`. A selector that always allocates makes `getSnapshot` return a
+ * new reference every call and loops.
  *
  * @template T, S
  * @param {Store<T>} store
@@ -80,10 +68,9 @@ export function useStoreSelector(store, selector, isEqual) {
   selectorRef.current = selector;
   const isEqualRef = useRef(isEqual);
   isEqualRef.current = isEqual;
-  // Memoise the last selected value so an unrelated write (which notifies
-  // every subscriber) doesn't force a re-render here unless our slice
-  // actually changed. `useSyncExternalStore` compares the snapshot by
-  // `Object.is`; returning the cached reference is how we bail out.
+  // Cache the last selected value so an unrelated write doesn't re-render us
+  // unless our slice changed. useSyncExternalStore compares snapshots by
+  // Object.is, so returning the cached reference is how we bail out.
   const memoRef = useRef(/** @type {{ value: S } | null} */ (null));
 
   const getSnapshot = useCallback(() => {

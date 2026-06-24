@@ -1,14 +1,10 @@
 "use client";
 
 /**
- * @file Internal React context that carries the active `<CmsGroup>` prefix
- * down to descendant `<EditableRegion>` and `<EditableList>` components,
- * so they can prepend it to their `blockPath`.
- *
- * Lives in `lib/` (not `components/`) so it can be imported by both the
- * wrapper that publishes to it (CmsGroup) and the consumers that read it
- * (EditableRegion, EditableList) without forming a barrel cycle through
- * the components folder.
+ * @file Internal context carrying the active `<CmsGroup>` prefix down to
+ * descendant `<EditableRegion>` / `<EditableList>` so they can prepend it to
+ * their `blockPath`. Lives in `lib/` so both the publisher (CmsGroup) and the
+ * readers can import it without a barrel cycle through `components/`.
  */
 
 import { createContext } from "react";
@@ -21,14 +17,12 @@ import { createContext } from "react";
 export const CmsGroupContext = createContext(/** @type {string | null} */ (null));
 
 /**
- * Carries the enclosing `<CmsGroup>`'s editor-visibility mode down to
- * descendant `<EditableRegion>` / `<EditableList>` components, so a
- * section-level `visible` / `editable` prop cascades to every block inside
- * it. Kept separate from `CmsGroupContext` (the prefix) so the prefix
- * contract stays a bare string and existing consumers don't break.
+ * Carries the enclosing `<CmsGroup>`'s visibility mode down so a section-level
+ * `visible` / `editable` prop cascades to every block inside. Separate from
+ * `CmsGroupContext` so the prefix stays a bare string.
  *
- * Null means "no inherited override". `"readonly"` locks descendants;
- * `"hidden"` removes them from the drawer entirely (see EditableRegion).
+ * Null means no inherited override. `"readonly"` locks descendants; `"hidden"`
+ * drops them from the drawer.
  *
  * @type {React.Context<"hidden" | "readonly" | null>}
  */
@@ -40,9 +34,8 @@ const VISIBILITY_RANK = /** @type {const} */ ({ readonly: 1, hidden: 2 });
 
 /**
  * Resolve two visibility modes to the more restrictive one
- * (`hidden` > `readonly` > none). Used to fold a child's own
- * `visible`/`editable` prop together with the inherited group mode, and to
- * combine nested groups. Returns `null` when both are absent.
+ * (`hidden` > `readonly` > none). Folds a child's own `visible`/`editable`
+ * prop with the inherited group mode, and combines nested groups.
  *
  * @param {"hidden"|"readonly"|null} a
  * @param {"hidden"|"readonly"|null} b

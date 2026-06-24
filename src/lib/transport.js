@@ -1,16 +1,12 @@
 /**
- * @file The data-access seam (CONTRACT ONLY - no implementation).
+ * @file The data-access seam, contract only. The core never calls `fetch`
+ * directly, it calls a `CmsTransport`. The default REST implementation lives
+ * in `defaults/transport.js`; pass your own to target another backend via
+ * `createCmsConfig({ transport })`.
  *
- * The core never calls `fetch` directly; it calls a `CmsTransport`. The
- * default REST implementation that targets the reference `/cms/*` API lives
- * in `defaults/transport.js` and is wired automatically by `createCmsConfig`
- * when no `transport` is supplied. Point the SDK at a different backend by
- * passing your own implementation: `createCmsConfig({ transport })`.
- *
- * Token acquisition is a SEPARATE concern: the transport never fetches a
- * token, it only attaches whatever `accessToken` the caller resolved (a user
- * JWT for writes, a service token for server reads). That keeps "how we talk
- * to the backend" orthogonal to "what credential we send".
+ * A transport never fetches a token, it only attaches the `accessToken` the
+ * caller already resolved. So "how we talk to the backend" stays separate
+ * from "what credential we send".
  */
 
 /**

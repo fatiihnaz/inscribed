@@ -1,15 +1,8 @@
 /**
- * @file SDK configuration factory.
- *
- * Both server-side helpers and client-side hooks read this shape; keep it
- * free of browser-only types so it can be created in either environment.
- *
- * Note: `createCmsConfig` returns ONLY serializable data so the result can be
- * passed as a prop across the React Server -> Client boundary (e.g. by
- * `createCmsPage`). The `transport` (which holds functions) is NOT stored
- * here - it would break RSC serialization. It is resolved at the use site
- * instead: the client `CmsProvider` builds/augments it into the context
- * config, and server helpers fall back to `createRestTransport(config)`.
+ * @file SDK configuration factory. Read by both server helpers and client
+ * hooks, so the shape stays serializable and free of browser-only types,
+ * letting it cross the RSC boundary as a prop. `transport` holds functions
+ * and so is resolved at the use site rather than stored here.
  */
 
 /**
@@ -26,23 +19,18 @@ import { normalizeTheme } from "./theme.js";
  * @property {string|null} cdnUrl              CDN root for image uploads. When null, uploads fall back to `${baseUrl}/cms/media`.
  * @property {string|null} clientId            X-CMS-Client-Id header value.
  * @property {string} globalSlug
- *   Slug under which `scope="global"` blocks are stored. Fetched in
- *   parallel with the page slug on every render and merged into the same
- *   blocks map, so a header/footer/site-wide block edited on any page
- *   reflects everywhere. Default: "__global".
+ *   Slug holding `scope="global"` blocks (header/footer/site-wide). Fetched
+ *   alongside every page and merged into the same blocks map. Default "__global".
  * @property {CmsTransport} [transport]
- *   The data-access seam (see `transport.js`). Not set by `createCmsConfig`
- *   (it isn't serializable); the client provider augments it in and server
- *   helpers default it to the REST adapter. Present on the config the core
- *   actually reads at runtime.
+ *   Data-access seam (see `transport.js`). Added at the use site, not by
+ *   `createCmsConfig`: client provider augments it, server helpers default
+ *   it to the REST adapter.
  * @property {ServiceTokenProvider} [getServiceToken]
- *   Server-only seam (see `service-token.js`). Not set by `createCmsConfig`;
- *   `createCmsPage` augments it onto the server-fetch config and server read
- *   helpers default it to `noServiceToken` (no token). Never crosses to the
- *   client - it may hold secrets.
+ *   Server-only seam (see `service-token.js`). May hold secrets, so it never
+ *   crosses to the client. Added by `createCmsPage`; defaults to no token.
  * @property {CmsTheme|null} theme
- *   Normalized subset of overridable visual tokens (see `theme.js`). Emitted
- *   as CSS custom properties by `CmsProvider`. Null when no overrides given.
+ *   Overridable visual tokens (see `theme.js`), emitted as CSS custom
+ *   properties by `CmsProvider`. Null when no overrides given.
  */
 
 /**

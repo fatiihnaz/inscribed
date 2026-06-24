@@ -1,17 +1,13 @@
 /**
- * @file The auth seam (CONTRACT ONLY).
+ * @file The auth seam, contract only. `createCmsPage` consumes a
+ * `CmsAuthAdapter` (three server-side callbacks) and never imports an auth
+ * library. The default `publicAuth` treats everyone as anonymous, so the CMS
+ * is read-only out of the box.
  *
- * `createCmsPage` is auth-agnostic: it consumes a `CmsAuthAdapter` - three
- * server-side callbacks - and never imports an auth library. The neutral
- * default (`defaults/auth.js`, `publicAuth`) treats every visitor as an
- * anonymous public user, so the CMS works read-only out of the box with no
- * auth dependency at all.
- *
- * To enable editing, supply your own adapter. The auth library (next-auth,
- * Auth.js, Clerk, Lucia, ...) and identity provider (Keycloak, ...) are the
- * consumer's choice - the core depends on none of them. The adapter lives
- * outside the core: your app builds it, or an auth plugin provides one (e.g. a
- * NextAuth + Keycloak plugin exposing a `withCmsAuth(authOptions)` helper).
+ * To enable editing, supply your own adapter. The auth library and identity
+ * provider are the consumer's choice; the core depends on none of them. Your
+ * app builds the adapter, or an auth plugin provides one (e.g. a NextAuth +
+ * Keycloak plugin's `withCmsAuth(authOptions)`).
  */
 
 /**

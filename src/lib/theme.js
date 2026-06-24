@@ -1,24 +1,16 @@
 /**
- * @file Theme override layer.
+ * @file Theme override layer. The admin UI is styled with `--ins-*` CSS custom
+ * properties, each written as `var(--ins-x, <default>)` in
+ * `admin-drawer-styles.js`, with soft/line/ramp variants derived via
+ * `color-mix`. So overriding one base cascades to every tint built on it.
  *
- * The admin panel + page-side editing affordances are styled through a set
- * of CSS custom properties (`--ins-*`). Every visual token in
- * `components/admin-drawer-styles.js` is written as `var(--ins-x, <default>)`,
- * and the soft/line/ramp variants are derived from those bases with
- * `color-mix`, so overriding a single base cascades to every tint built on
- * it.
+ * Consumers override a stable subset via `createCmsConfig({ theme })`.
+ * `normalizeTheme` keeps only known keys; `buildThemeCss` turns the result
+ * into the `:root { … }` block `CmsProvider` emits. Unset keys fall back to the
+ * baked defaults, so emitting nothing ships the stock palette.
  *
- * Consumers override a small, stable subset via `createCmsConfig({ theme })`.
- * `normalizeTheme` keeps only known keys (so the public surface can't drift
- * into whatever a caller happens to pass) and `buildThemeCss` turns the
- * normalized object into the `:root { … }` declaration block the
- * `CmsProvider` emits once near the top of the tree. Unset keys fall back to
- * the defaults baked into each `var(...)` reference, so emitting nothing is
- * the same as shipping the stock palette.
- *
- * This module is intentionally free of DOM/React/browser deps: it rides
- * along inside the serializable config (which crosses the RSC boundary), so
- * it must run in either environment.
+ * No DOM/React deps: this rides inside the serializable config across the RSC
+ * boundary, so it must run in either environment.
  */
 
 /**
@@ -34,9 +26,9 @@ const THEME_VARS = {
   collectionAccent: "--ins-collection",
   danger:           "--ins-danger",
   // Neutral system bases. `bg` is the warm-dark panel base (raised/sunken
-  // shades derive from it); `surface` is the elevation-overlay base and
-  // `text` the foreground base — both default to white, so the white-alpha
-  // ramps resolve to their current values until overridden.
+  // shades derive from it); `surface` (elevation overlay) and `text`
+  // (foreground) both default to white, so the white-alpha ramps resolve to
+  // their current values until overridden.
   bg:               "--ins-bg",
   surface:          "--ins-surface",
   text:             "--ins-text",

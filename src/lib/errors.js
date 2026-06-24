@@ -1,11 +1,7 @@
 /**
- * @file Transport-agnostic error contract.
- *
- * `CmsApiError` is the error shape the core understands - any transport
- * (the default REST one in `defaults/transport.js`, or a custom backend
- * adapter) throws it on a failed request so the UI's `instanceof` / `.status`
- * branches work uniformly. `toApiError` is an HTTP helper that builds one
- * from a `Response`; REST-style transports reuse it, others can ignore it.
+ * @file The error shape every transport throws, so the UI's `instanceof` /
+ * `.status` branches work the same regardless of backend. `toApiError` builds
+ * one from an HTTP `Response`; non-REST transports can ignore it.
  */
 
 /**
@@ -13,9 +9,8 @@
  */
 
 /**
- * Error thrown for any non-2xx response. Carries the backend's
- * ProblemDetails payload when one is available, plus a `blockPath` hint
- * for 409 conflicts so callers can surface per-field errors.
+ * Thrown for any non-2xx response. Carries the ProblemDetails payload when
+ * present, plus a `blockPath` hint on 409s so callers can flag the field.
  */
 export class CmsApiError extends Error {
   /**
@@ -68,9 +63,7 @@ export async function toApiError(response) {
       }
     }
   } catch {
-    // Body present but not JSON. Keep `rawBody` so the caller can still
-    // surface whatever the backend wrote (often a plain "validation
-    // failed: ..." string).
+    // Not JSON. Keep rawBody so a plain-text error still bubbles up.
   }
 
   const blockPath =
@@ -78,8 +71,7 @@ export async function toApiError(response) {
       ? /** @type {*} */ (problem).blockPath
       : null;
 
-  // Prefer ProblemDetails.detail; fall back to the raw body so non-JSON
-  // 4xx responses (rare but they happen) still bubble up something useful.
+  // Prefer ProblemDetails.detail, fall back to the raw body, then statusText.
   const detail = problem?.detail || (rawBody && !problem ? rawBody : "") || response.statusText;
 
   return new CmsApiError({

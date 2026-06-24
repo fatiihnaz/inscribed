@@ -1,12 +1,7 @@
 /**
- * @file Stable JSON stringify - sorts object keys recursively before
- * serialising so two semantically-equal payloads (e.g. `{src,alt}` vs
- * `{alt,src}` produced by different editors) compare equal.
- *
- * Used by the autosave path and by dirty-detection to decide whether a
- * draft differs from the published value. Inputs are always JSON-safe
- * block values (round-trip through PUT requests), so we don't try to
- * handle Map/Set/Date/function — those would already break the wire format.
+ * @file JSON stringify with sorted keys, so `{src,alt}` and `{alt,src}`
+ * compare equal. Drives dirty-detection (draft vs published). Inputs are
+ * always JSON-safe block values, so no Map/Set/Date handling.
  */
 
 /** @param {*} value */

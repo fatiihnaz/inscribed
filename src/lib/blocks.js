@@ -1,8 +1,5 @@
 /**
- * @file Pure helpers for working with block arrays/maps.
- *
- * No React, no I/O - these are convenience accessors used by hooks
- * and consumers that need to drill into the content tree by path.
+ * @file Pure path-based accessors for block arrays/maps. No React, no I/O.
  */
 
 /**

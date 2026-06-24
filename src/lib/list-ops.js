@@ -1,11 +1,6 @@
 /**
- * @file Pure helpers for List-typed block mutations.
- *
- * Shared between the drawer's `ListEditor` (form-style per-item field
- * editor) and the in-page `<EditableList>` overlay (inline admin
- * controls). Both surfaces talk to the same blockPath/draft so the
- * underlying array operations must be identical - kept here as pure
- * functions to avoid drift.
+ * @file Pure array ops for List-typed blocks. Shared by `ListEditor` and the
+ * in-page `<EditableList>` so both edit a list the exact same way.
  */
 
 /**
@@ -13,9 +8,8 @@
  */
 
 /**
- * Build a fresh item object using the schema's `defaultValue`s. Each
- * non-null default is deep-cloned via JSON so two new items don't share
- * references that a later edit would mutate in place.
+ * Build a fresh item from the schema's `defaultValue`s. Defaults are
+ * deep-cloned so two new items never share a mutable reference.
  *
  * @param {ItemSchema | null | undefined} itemSchema
  * @returns {Record<string, *>}
@@ -32,9 +26,8 @@ export function makeDefaultItem(itemSchema) {
 }
 
 /**
- * Swap the item at `index` with its neighbour in `dir` direction. Returns
- * the original array (referentially equal) when the move would go
- * out-of-bounds so callers can detect a no-op and skip the setState.
+ * Swap the item at `index` with its neighbour in `dir`. Returns the same
+ * array reference on an out-of-bounds move so callers can skip the setState.
  *
  * @template T
  * @param {T[]} items

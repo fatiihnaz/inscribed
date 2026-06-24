@@ -1,17 +1,14 @@
 /**
- * @file Tiny word-level inline diff. Used by the admin drawer's preview
- * overlay to render Text / RichText / Link / Date block changes as a
- * single line with removed (red, strikethrough) and added (green) runs
- * interleaved with unchanged context.
+ * @file Tiny word-level inline diff. Renders block changes in the drawer's
+ * preview as one line of removed (red) and added (green) runs around unchanged
+ * context.
  *
- * Algorithm: classic LCS DP with backtrace, then adjacent same-type ops
- * are merged so the output is one run per visual segment. Tokeniser splits
- * on whitespace boundaries but keeps the whitespace as its own token so
- * the rendered diff preserves the original spacing.
+ * Algorithm: classic LCS DP with backtrace, then adjacent same-type ops are
+ * merged into one run per segment. The tokeniser keeps whitespace as its own
+ * token so the rendered diff preserves the original spacing.
  *
- * Scope: short blocks (a paragraph, a sentence, a URL). For multi-KB
- * RichText documents this is O(N·M) in time/space — fine in practice,
- * not intended for novel-length input.
+ * Scope: short blocks (a paragraph, a sentence, a URL). It's O(N·M) in
+ * time/space, fine in practice but not meant for novel-length input.
  */
 
 /**
@@ -89,15 +86,12 @@ const REFINE_MAX_LEN = 60;
 const REFINE_MIN_SIMILARITY = 0.4;
 
 /**
- * Post-process: when a word-level run looks like one short string being
- * replaced by another (removed run immediately followed by an added
- * run, both short, and the two share enough characters to look like an
- * edit rather than a swap), re-diff at the character level so single-
- * letter typos / suffix changes show up as fine-grained highlights
- * instead of two large coloured blobs.
+ * Post-process: when a removed run is immediately followed by a short, similar
+ * added run (one string edited into another), re-diff at the character level
+ * so typos / suffix changes show as fine highlights instead of two big blobs.
  *
- * Skipped when the pair is too long (cost) or too dissimilar (the
- * char-level result would be a confetti of one-letter ops).
+ * Skipped when the pair is too long (cost) or too dissimilar (the char diff
+ * would be confetti of one-letter ops).
  *
  * @param {DiffOp[]} ops
  * @returns {DiffOp[]}
@@ -176,16 +170,13 @@ function mergeRuns(ops) {
 }
 
 /**
- * Line-level LCS diff. Splits each input on newline boundaries, then
- * runs the same LCS pass to classify lines as unchanged / removed /
- * added. Used by the changes panel's GitHub-style unified view for
- * RichText (where paragraphs / `<br>` boundaries carry semantic
- * meaning) — text-only blocks stay on the inline word diff.
+ * Line-level LCS diff: split on newlines, then run the same LCS pass to
+ * classify lines as unchanged/removed/added. Used by the changes panel's
+ * unified view for RichText (where paragraph/`<br>` boundaries matter);
+ * text-only blocks stay on the inline word diff.
  *
- * Each op carries `text` (without trailing newline) so the renderer can
- * decide spacing. Adjacent removed/added line pairs aren't auto-paired
- * here; the renderer handles intra-line word diff when it sees that
- * pattern.
+ * Each op carries `text` without the trailing newline. Removed/added line
+ * pairs aren't auto-paired here; the renderer does the intra-line word diff.
  *
  * @param {string | null | undefined} a
  * @param {string | null | undefined} b
@@ -198,12 +189,10 @@ export function diffLines(a, b) {
 const LONG_LINE_THRESHOLD = 120;
 
 /**
- * Tokenise a string into "lines" for the unified diff. Splits on
- * newlines first; any remaining run longer than `LONG_LINE_THRESHOLD`
- * is further split on sentence boundaries (`.`, `!`, `?` followed by
- * whitespace) so long prose paragraphs aren't compared as one giant
- * line — repetitive sentences then align cleanly with LCS instead of
- * fighting it on word granularity.
+ * Tokenise a string into "lines" for the unified diff. Splits on newlines
+ * first; any run longer than `LONG_LINE_THRESHOLD` is further split on
+ * sentence boundaries, so a long paragraph isn't compared as one giant line
+ * and repetitive sentences align cleanly under LCS.
  *
  * @param {string | null | undefined} text
  * @returns {string[]}
@@ -229,10 +218,9 @@ function splitForLines(text) {
 }
 
 /**
- * Strip HTML tags and decode the handful of entities the rich-text
- * editor produces. Used to feed RichText values into the word diff —
- * markup churn would otherwise pollute the output. Loses formatting
- * but preserves the visible text the admin actually edited.
+ * Strip HTML tags and decode the few entities the rich-text editor produces,
+ * so RichText values can feed the word diff without markup churn polluting it.
+ * Loses formatting but keeps the visible text the admin edited.
  *
  * @param {string | null | undefined} html
  * @returns {string}

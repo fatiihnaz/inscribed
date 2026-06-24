@@ -179,8 +179,15 @@
  *
  * @typedef {Object} CollectionItemResponse
  * @property {string} id
+ *   Persisted row id, or `Guid.Empty` (`00000000-…`) for virtual rows that
+ *   don't yet exist server-side. NOT unique across a list response — many
+ *   virtual rows share `Guid.Empty` — so never use it as a React key. Key
+ *   by `slug` instead.
  * @property {string} collectionKey
  * @property {string} slug
+ *   Stable, unique-within-collection identity. All item access goes through
+ *   the slug, so it is unique even when `id` is `Guid.Empty`. Use this as
+ *   the React key when rendering item lists.
  * @property {*} data
  * @property {number} version
  * @property {boolean} canEdit

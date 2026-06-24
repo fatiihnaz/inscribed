@@ -76,6 +76,25 @@ import {
 const DEFAULT_DRAWER_PAGE_SIZE = 50;
 
 /**
+ * Build a `useCollection` params object, omitting keys the way the page-side
+ * `<CollectionRegion>` does (no key when absent / zero). Keeping both call
+ * sites on the same convention means the drawer's offset=0 window collapses
+ * onto the page's `{ limit }` cache entry instead of fetching its own.
+ *
+ * @param {Record<string, *> | undefined} filter
+ * @param {number} offset
+ * @param {number | undefined} limit
+ * @returns {import("../lib/schemas.js").CollectionListParams}
+ */
+function buildListParams(filter, offset, limit) {
+  return {
+    ...(filter ? { filter } : {}),
+    ...(offset ? { offset } : {}),
+    ...(limit != null ? { limit } : {}),
+  };
+}
+
+/**
  * @param {{ collectionKey: string }} props
  */
 export function AdminCollectionRegionPanel({ collectionKey }) {
@@ -104,6 +123,17 @@ export function AdminCollectionRegionPanel({ collectionKey }) {
     return [...bySignature.entries()].map(([signature, info]) => ({ signature, ...info }));
   }, [collectionBindings, collectionKey]);
 
+  // CreateForm only needs to locate the slug-less new-item draft sentinel,
+  // which the backend surfaces in unfiltered list responses. Hand it the
+  // params of the unfiltered section (if the page declares one) so it reads
+  // that already-fetched window instead of issuing a third, params-less GET.
+  // When no unfiltered binding exists the sentinel can only come from a
+  // dedicated unfiltered fetch, so fall back to one.
+  const createListParams = useMemo(() => {
+    const unfiltered = sections.find((s) => s.filter === undefined);
+    return buildListParams(undefined, unfiltered?.pageOffset ?? 0, unfiltered?.pageLimit);
+  }, [sections]);
+
   return (
     // CreateForm stays pinned at the top; the scroll lane below owns
     // every RegionSection so the panel doesn't overflow the drawer's
@@ -120,6 +150,7 @@ export function AdminCollectionRegionPanel({ collectionKey }) {
             key={collectionKey}
             collectionKey={collectionKey}
             schema={meta.schema}
+            listParams={createListParams}
           />
         ) : null}
 
@@ -172,11 +203,7 @@ function RegionSection({ collectionKey, filter, pageLimit, pageOffset, showHeade
   );
 
   const params = useMemo(
-    () => ({
-      ...(filter ? { filter } : {}),
-      offset,
-      limit,
-    }),
+    () => buildListParams(filter, offset, limit),
     [filter, offset, limit],
   );
   const { items, total, isLoading, error, refetch } = useCollection(collectionKey, params);
@@ -234,7 +261,7 @@ function RegionSection({ collectionKey, filter, pageLimit, pageOffset, showHeade
       ) : (
         <ul style={listStyle} data-cms-list>
           {accumulated.map((item) => (
-            <li key={item.slug || item.id} style={{ listStyle: "none" }}>
+            <li key={item.slug} style={{ listStyle: "none" }}>
               <RegionItemCard
                 collectionKey={collectionKey}
                 slug={item.slug}
@@ -391,16 +418,22 @@ function TypeIconCollection() {
 }
 
 /**
- * @param {{ collectionKey: string, schema: import("../lib/schemas.js").CollectionSchema }} props
+ * @param {{
+ *   collectionKey: string,
+ *   schema: import("../lib/schemas.js").CollectionSchema,
+ *   listParams: import("../lib/schemas.js").CollectionListParams,
+ * }} props
  */
-function CreateForm({ collectionKey, schema }) {
+function CreateForm({ collectionKey, schema, listParams }) {
   const { config, getAccessToken } = useCmsContext();
   const { updateCollectionItem, invalidateCollectionList, invalidateCollectionItem } = useCollectionContext();
   const [isOpen, setIsOpen] = useState(false);
   const [values, setValues] = useState(() => seedValues(schema.fields, {}));
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [isPending, startTransition] = useTransition();
-  const { items: unfiltered } = useCollection(collectionKey);
+  // Share the unfiltered section's list window so the sentinel lookup
+  // piggybacks on an already-fetched cache entry instead of a separate GET.
+  const { items: unfiltered } = useCollection(collectionKey, listParams);
   const draftEntry = useMemo(
     // Only the slug-less sentinel is the "new item" draft; a slug-bearing
     // boot-GUID row is a RoleDerived virtual item owned by RegionItemCard.

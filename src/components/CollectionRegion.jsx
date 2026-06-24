@@ -14,7 +14,7 @@
  *     {(items, { isLoading, error }) => (
  *       isLoading ? <Skeleton /> :
  *       error    ? <ErrorBanner message={error.message} /> :
- *                  items.map(i => <NewsCard key={i.id} {...i.data} />)
+ *                  items.map(i => <NewsCard key={i.slug} {...i.data} />)
  *     )}
  *   </CollectionRegion>
  */

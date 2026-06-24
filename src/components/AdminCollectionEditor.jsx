@@ -171,9 +171,16 @@ export function useCollectionEditor(collection, slug) {
   useEffect(() => {
     if (!schema) return;
     const baseline = item?.draftData ?? item?.data ?? {};
-    const serialized = stableStringify(baseline);
+    const seeded = seedValues(schema.fields, baseline);
+    // Normalise through the same seed→buildPayload pipeline the autosave
+    // effect compares against. Storing the raw baseline here would leave
+    // `lastSyncedRef` out of step with `buildPayload(values)` whenever the
+    // round-trip isn't identity (readOnly strip, default-filled missing
+    // fields, Number→null), so the very first autosave run would see a
+    // phantom diff and PUT a draft the user never made.
+    const serialized = stableStringify(buildPayload(schema.fields, seeded));
     if (serialized === lastSyncedRef.current) return;
-    setValues(seedValues(schema.fields, baseline));
+    setValues(seeded);
     lastSyncedRef.current = serialized;
   }, [schema, item]);
 
@@ -252,10 +259,6 @@ export function useCollectionEditor(collection, slug) {
         // eslint-disable-next-line no-console
         console.warn("[inscribed] collection draft autosave failed:", err);
         setDraftStatus("failed");
-        // Surface the failed state for a few seconds, then fall back to
-        // idle — the user's next keystroke retries automatically via the
-        // debounce, so we don't want a stuck red dot if the network
-        // recovers on its own.
         if (failedResetRef.current) clearTimeout(failedResetRef.current);
         failedResetRef.current = setTimeout(() => {
           setDraftStatus("idle");

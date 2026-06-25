@@ -1,14 +1,11 @@
 /**
- * icons.jsx — local, dependency-free Lucide icons.
+ * @file Local, dependency-free Lucide icons. SVG node data is copied verbatim
+ * from lucide-react v1.14.0 (ISC-licensed, https://lucide.dev); `Icon` mirrors
+ * lucide's wrapper (24x24 viewBox, `currentColor` stroke, same props) so call
+ * sites behave identically.
  *
- * The SVG node data below is copied verbatim from lucide-react v1.14.0, which
- * is ISC-licensed (see https://lucide.dev). `Icon` mirrors lucide's runtime
- * wrapper: same 24x24 viewBox, `currentColor` stroke, and the `size`/`color`/
- * `strokeWidth`/`absoluteStrokeWidth`/`className` props, so call sites like
- * `<ChevronDown size={13} color={...} />` behave identically.
- *
- * To add an icon: copy its `__iconNode` array from
- * `node_modules/lucide-react/dist/esm/icons/<name>.mjs` and add an export.
+ * To add one: copy its `__iconNode` array from the lucide-react package and
+ * add an export.
  */
 
 import { createElement, forwardRef } from "react";

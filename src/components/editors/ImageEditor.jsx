@@ -142,8 +142,8 @@ export function ImageEditor({ value, onChange, disabled }) {
               )}
             </AnimatePresence>
 
-            {/* Replace button — hidden in read-only mode so the image
-                stays a passive preview with no edit affordance. */}
+            {/* Replace button, hidden in read-only mode so the image stays a
+                passive preview. */}
             {!disabled && (
             <button
               type="button"
@@ -174,9 +174,7 @@ export function ImageEditor({ value, onChange, disabled }) {
             )}
           </div>
         ) : disabled ? (
-          /* Read-only empty state: a passive placeholder, never an
-             interactive dropzone — there's no image to show and no way
-             to add one. */
+          /* Read-only empty state: a passive placeholder, not a dropzone. */
           <div
             style={{
               width: "100%",

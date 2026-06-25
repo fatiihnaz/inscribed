@@ -39,14 +39,12 @@ export const RADIUS = "var(--ins-radius, 10px)";
 export const RADIUS_SM = "calc(var(--ins-radius, 10px) - 3px)";
 
 // ---------------------------------------------------------------------------
-// Design scale — internal, NOT themeable.
+// Design scale: internal, NOT themeable.
 //
-// These define the product's *shape* (corner steps, type ramp, motion), not
-// its palette. Kept out of the `--ins-*` vars / `theme` subset on purpose:
-// the `theme` override only recolors; geometry stays fixed so every surface
-// snaps to the same vocabulary regardless of the host's brand. The themeable
-// RADIUS / RADIUS_SM above are the exception — they shape the top-level
-// card/panel surfaces a host may legitimately want rounder or squarer.
+// These define the product's *shape* (corner steps, type ramp, motion), not its
+// palette, so they stay out of the `theme` subset (which only recolors) and
+// every surface snaps to the same vocabulary. The themeable RADIUS / RADIUS_SM
+// above are the exception: hosts may legitimately want rounder/squarer cards.
 // ---------------------------------------------------------------------------
 
 // Radius steps for the inner chrome (badges, inputs, buttons, chips).
@@ -56,7 +54,7 @@ export const R_BTN   = 7;   // buttons
 export const R_MD    = 8;   // single-field editors, nested cards
 export const R_PILL  = 99;  // count chips, status pills
 
-// Type ramp (px). One step per role — labels, metadata, body, headings.
+// Type ramp (px). One step per role: labels, metadata, body, headings.
 export const FS_MICRO = 9;   // uppercase micro-labels / mode chips
 export const FS_2XS   = 10;  // section labels
 export const FS_XS    = 11;  // metadata, hints
@@ -124,8 +122,7 @@ export const FONT_SANS = 'var(--ins-font-sans, "Inter Tight", "Inter", -apple-sy
 export const FONT_MONO = 'var(--ins-font-mono, "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace)';
 
 // ---------------------------------------------------------------------------
-// Legacy aliases — consumed by editors/CollectionFieldsForm and other
-// surfaces that didn't migrate to the new tokens.
+// Legacy aliases, consumed by surfaces that didn't migrate to the new tokens.
 // ---------------------------------------------------------------------------
 
 export const PRIMARY_700   = BG_SUNKEN;
@@ -137,8 +134,8 @@ export const TEXT_PRIMARY  = TEXT_HI;
 export const TEXT_SECONDARY= TEXT;
 
 // ---------------------------------------------------------------------------
-// Block-type metadata — glyph + accent. Drives the TypeIcon badge on
-// every block card, and the small type label on the right of the header.
+// Block-type metadata (glyph + accent). Drives the TypeIcon badge and the
+// type label on each block card header.
 // ---------------------------------------------------------------------------
 
 /** @type {Record<string, { glyph: string, color: string, label: string }>} */
@@ -170,10 +167,9 @@ export const TYPE_STYLES = Object.fromEntries(
 );
 
 /**
- * Helper: turn a colour into a translucent tint. For plain `rgb(...)`
- * literals (the block-type glyph colours) it emits `rgba(..., a)`; for
- * anything else — notably the `var(--ins-*)`-backed accent tokens — it
- * falls back to `color-mix` so the tint still tracks a themed base colour.
+ * Turn a colour into a translucent tint: `rgba(..., a)` for plain `rgb(...)`
+ * literals, else `color-mix` (so `var(--ins-*)` accent tokens still track a
+ * themed base colour).
  *
  * @param {string} color
  * @param {number} alpha   0..1
@@ -189,7 +185,7 @@ function tintFromColor(color, alpha) {
 export const ACCENT_GLOW = "color-mix(in srgb, var(--ins-accent, #c9b896) 50%, transparent)";
 
 // ---------------------------------------------------------------------------
-// Layout — panel shell
+// Layout: panel shell
 // ---------------------------------------------------------------------------
 
 export const panelStyle = {
@@ -428,7 +424,7 @@ export const searchClearStyle = {
 };
 
 // ---------------------------------------------------------------------------
-// Group card — flatter, less border
+// Group card
 // ---------------------------------------------------------------------------
 
 export const groupCardStyle = {
@@ -529,21 +525,16 @@ export const listStyle = {
 // Block card
 // ---------------------------------------------------------------------------
 
-// Base structural styles only. The card's surface fill, border ring,
-// hover state, dirty rail, and active accents all live on the
-// `.inscribed-block-card` CSS class (see `panelCss`) so the variant
-// classes (`.is-dirty`, `.inscribed-block-card-active`,
-// `.inscribed-block-card-collection-active`) can override them —
-// inline styles would otherwise win over CSS.
+// Base structure only. Surface fill, border, hover, dirty rail, and active
+// accents live on the `.inscribed-block-card` CSS class (see `panelCss`) so the
+// variant classes can override them; inline styles would otherwise win.
 export const blockCardStyle = {
   borderRadius: RADIUS,
   overflow: "hidden",
 };
 
-// `border: 0` is mandatory — this style is spread onto a <button> in
-// the card header. Without an explicit override the browser draws its
-// default button border (a 2px outset on most engines) which paints
-// dark left/right/bottom lines around every card.
+// `border: 0` is mandatory: this style is spread onto a <button>, and without
+// it the browser's default button border paints dark lines around every card.
 export const blockHeaderStyle = {
   display: "flex",
   alignItems: "center",
@@ -610,8 +601,7 @@ export const blockResetStyle = {
   flexShrink: 0,
 };
 
-// Type icon badge — replaces the dekoratif grip. Coloured per block type
-// via TYPE_META.
+// Type icon badge, coloured per block type via TYPE_META.
 export const typeIconStyle = {
   flexShrink: 0,
   width: 24,
@@ -670,7 +660,7 @@ export const emptyStateStyle = {
 };
 
 // ---------------------------------------------------------------------------
-// Status bar — absorbs the old save-bar + footer status pill
+// Status bar
 // ---------------------------------------------------------------------------
 
 export const statusBarStyle = {
@@ -767,9 +757,8 @@ export const fieldBaseStyle = {
 };
 
 // ---------------------------------------------------------------------------
-// Legacy save-bar exports — old code paths import these. Map them to
-// the new status-bar visuals so anything still using them looks right
-// while the components migrate.
+// Legacy save-bar exports mapped onto the new status-bar visuals, so code
+// paths still importing them keep working while components migrate.
 // ---------------------------------------------------------------------------
 
 export const panelFooterStyle = statusBarStyle;
@@ -911,7 +900,7 @@ export const handleIconStyle = {
 };
 
 // ---------------------------------------------------------------------------
-// Inline CSS — hover/focus states, scrollbar styling, status pulse,
+// Inline CSS: hover/focus states, scrollbar styling, status pulse,
 // dirty/active card variants, animation interpolation for height: auto.
 // ---------------------------------------------------------------------------
 
@@ -954,9 +943,8 @@ export const panelCss = `
   }
   .inscribed-search-clear:hover { color: ${TEXT}; }
 
-  /* Block card — inset shadow as border. Base surface + ring set here
-     so the dirty / active CSS variants can override them (inline styles
-     would otherwise win). */
+  /* Block card: inset shadow as border. Base surface + ring set here so the
+     dirty/active variants can override them (inline styles would otherwise win). */
   .inscribed-block-card {
     background: ${SURFACE_1};
     box-shadow: inset 0 0 0 1px ${HAIRLINE};
@@ -966,9 +954,9 @@ export const panelCss = `
   /* Collection lane cards (Page-tab Collection blocks + Region-tab item
      cards) keep a faint pink-purple ring in their idle state so the
      whole Collection lane reads as one visual family even before the
-     user opens anything. Hover stays on the shared base rule so dirty
-     and active state rules below can still win on source order — a
-     collection-specific :hover would beat them via specificity. */
+     user opens anything. Hover stays on the shared base rule so the dirty and
+     active rules below still win on source order (a collection-specific :hover
+     would beat them via specificity). */
   .inscribed-block-card.inscribed-block-card-collection {
     box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
   }
@@ -978,11 +966,9 @@ export const panelCss = `
   .inscribed-block-card.inscribed-block-card-collection.is-dirty {
     box-shadow: inset 0 0 0 1px ${COLLECTION_LINE}, inset 2px 0 0 ${COLLECTION_ACCENT};
   }
-  /* Active rules use a compound selector so they match the (0,2,0)
-     specificity of \`.inscribed-block-card.is-dirty\` — and come after
-     it in source order so an open + dirty card lands on the active
-     accent (sage for regular blocks, pink-purple for Collection lanes)
-     instead of the dirty rail. */
+  /* Active rules use a compound selector to match the (0,2,0) specificity of
+     `.inscribed-block-card.is-dirty` and come after it in source order, so an
+     open + dirty card lands on the active accent instead of the dirty rail. */
   .inscribed-block-card.inscribed-block-card-active {
     box-shadow: inset 0 0 0 1px ${BORDER_HI}, inset 3px 0 0 ${ACCENT};
     background: ${SURFACE_2};
@@ -992,7 +978,7 @@ export const panelCss = `
     background: ${SURFACE_2};
   }
 
-  /* Body collapse — height:0 ↔ height:auto via interpolate-size. */
+  /* Body collapse: height 0 to auto via interpolate-size. */
   .inscribed-collapse {
     height: 0;
     overflow: hidden;
@@ -1014,7 +1000,7 @@ export const panelCss = `
     opacity: 0.4;
     cursor: not-allowed;
   }
-  /* Collection undo — hover tints with the collection accent */
+  /* Collection undo: hover tints with the collection accent */
   .inscribed-icon-button-collection:hover:not(:disabled) {
     color: ${COLLECTION_ACCENT};
     background-color: ${COLLECTION_SOFT};
@@ -1029,8 +1015,8 @@ export const panelCss = `
   .inscribed-btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--ins-text, #fff) 78%, transparent); }
   .inscribed-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  /* Solid collection primary (status-bar "Aç") — soft pink fill derived
-     from the collection accent so a rebrand carries through. */
+  /* Solid collection primary (status-bar "Aç"): soft pink fill derived from
+     the collection accent so a rebrand carries through. */
   .inscribed-btn-collection-solid {
     background: color-mix(in srgb, ${COLLECTION_ACCENT} 88%, #fff);
     color: #241c25;

@@ -1,27 +1,17 @@
 "use client";
 
 /**
- * @file Tiptap-based rich-text editor for the admin drawer.
+ * @file Tiptap-based rich-text editor for the admin drawer. StarterKit + Link;
+ * H1 is disabled (the page heading is a separate Text block, body tops at H2/H3).
  *
- * StarterKit (paragraph, headings, lists, blockquote, bold/italic/strike,
- * inline code, history) + Link extension. H1 is disabled - page-level
- * heading lives in a separate Text block, body content tops out at H2/H3.
+ * Content is seeded once from `value` and propagated back via `onUpdate`.
+ * External replacements (reset, refetch) flow through the sync effect, which
+ * calls `setContent` only when the HTML actually differs, so typing doesn't
+ * trigger a setContent that would jump the cursor to the end.
  *
- * Editor is uncontrolled-ish: content is seeded once from `value` and
- * propagated back via `onUpdate`. External replacements (per-block reset,
- * server refetch) flow in through the sync effect that diffs the editor's
- * HTML against the incoming value and calls `setContent` only when they
- * actually differ - typing into the editor mustn't trigger setContent or
- * the cursor jumps to the end of the document on every keystroke.
- *
- * `immediatelyRender: false` keeps Tiptap from instantiating ProseMirror
- * during SSR; the drawer is already lazy-loaded with `ssr: false` from
- * CmsProvider, but the flag is cheap defence-in-depth against future
- * server-rendered admin contexts.
- *
- * Output is HTML. EditableRegion sanitises it with DOMPurify on every
- * render path (SSR + client), so an admin pasting hostile markup can
- * only XSS themselves - public visitors see scrubbed output.
+ * `immediatelyRender: false` keeps Tiptap off ProseMirror during SSR. Output is
+ * HTML, which EditableRegion sanitises with DOMPurify, so pasted hostile markup
+ * can only XSS the admin themselves.
  */
 
 import { useEffect, useRef } from "react";
@@ -123,9 +113,8 @@ export function RichTextEditor({ value, onChange, disabled, hideLabel }) {
     suppressUpdateRef.current = false;
   }, [editor, value]);
 
-  // `editable` is only read at init, so toggle it imperatively when the
-  // read-only state changes — this strips the contenteditable affordance
-  // off the ProseMirror surface so the value shows but can't be typed into.
+  // `editable` is only read at init, so toggle it imperatively when read-only
+  // changes, stripping the contenteditable affordance off ProseMirror.
   useEffect(() => {
     if (!editor) return;
     editor.setEditable(!disabled);
@@ -153,8 +142,7 @@ function Toolbar({ editor, disabled }) {
     return <div style={{ ...toolbarStyle, minHeight: 34 }} />;
   }
 
-  // Read-only: keep the toolbar in the layout for visual continuity but
-  // make it inert — no clicks reach the (now non-editable) document.
+  // Read-only: keep the toolbar in layout for continuity but make it inert.
   if (disabled) {
     return (
       <div

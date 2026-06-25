@@ -1,17 +1,12 @@
 "use client";
 
 /**
- * @file `ListEditor` - drawer-side editor for `List`-typed blocks.
+ * @file `ListEditor`: drawer-side editor for `List`-typed blocks, mirroring
+ * `<EditableList>` (per-item move/delete + "+ Add"). Each item is a sub-card
+ * whose body is the per-field editor stack keyed by the registered itemSchema.
  *
- * Mirrors the inline page UI (`<EditableList>`): per-item controls
- * (move up/down, delete) plus an "+ Add" button. Each item is rendered
- * as a sub-card whose body is the per-field editor stack
- * (Text/Image/Link/etc.) keyed by the registered itemSchema.
- *
- * `itemSchema` arrives via the AdminDrawer's CmsContext registry - it's
- * populated when an `<EditableList>` mounts on the page. Without it we
- * render a hint instead of editors so the admin sees why and the data
- * isn't lost.
+ * `itemSchema` comes from the CmsContext registry, populated when an
+ * `<EditableList>` mounts. Without it we render a hint instead of editors.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -133,17 +128,16 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
   const summary = listItemSummary(itemSchema, item);
 
-  // Page-side click on this list row sets `activeListItem`. When it points
-  // at us, expand and scroll into view, then clear the signal so it fires
-  // once (the user can collapse it again afterwards). Matches RegionItemCard.
+  // When `activeListItem` points at us (page-side row click), expand, scroll
+  // into view, and clear the signal so it fires once. Matches RegionItemCard.
   useEffect(() => {
     if (!activeListItem) return;
     if (activeListItem.path !== blockPath) return;
     if (activeListItem.index !== index) return;
     setIsOpen(true);
     setActiveListItem(null);
-    // Wait a frame so the parent List card's collapse has begun laying out
-    // before we scroll, otherwise the target's position is still stale.
+    // Wait a frame so the parent collapse has begun laying out before we
+    // scroll, else the target's position is stale.
     const raf = requestAnimationFrame(() => {
       ref.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
@@ -166,8 +160,7 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
           {summary || "Boş öğe"}
         </span>
 
-        {/* Reorder / delete controls are edit affordances — omitted in
-            read-only mode, leaving the item header as a passive view. */}
+        {/* Reorder/delete are edit affordances, omitted in read-only mode. */}
         {!disabled && (
         <div style={{ display: "inline-flex", gap: 2, marginLeft: "auto" }}>
           {onMoveUp ? (
@@ -231,9 +224,8 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
                   value: item[key],
                   onChange: (v) => onFieldChange(key, v),
                   disabled,
-                  // ListEditor already prints the field key as the label
-                  // above each editor, so suppress the editor's own caption
-                  // to avoid a redundant double label.
+                  // The field key is already printed above, so drop the editor's
+                  // own caption to avoid a double label.
                   hideLabel: true,
                 });
                 return (
@@ -256,12 +248,9 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
 }
 
 /**
- * One-line summary for a collapsed list item: the first Text/RichText
- * field that holds a non-empty string (RichText stripped of tags), so the
- * header reads like the item ("Ahmet Yılmaz") instead of a bare index.
- * Mirrors the Collection editor's `itemSummary`, keyed off `blockType`
- * rather than the collection field `type`. Returns null when there's
- * nothing usable, letting the caller fall back to a placeholder.
+ * One-line summary for a collapsed list item: the first Text/RichText field
+ * holding a non-empty string (RichText stripped of tags), so the header reads
+ * like the item instead of a bare index. Returns null when nothing usable.
  *
  * @param {ItemSchema} itemSchema
  * @param {Record<string, *> | undefined} item
@@ -282,11 +271,9 @@ function listItemSummary(itemSchema, item) {
 
 // ---- Styles ---------------------------------------------------------------
 
-// Border split into longhand props so the hover style can override
-// `borderColor` alone without React's shorthand/longhand-mix warning
-// (which would otherwise leave the border stuck after the first un-hover).
-// Tones stay in the gold/cream family — distinct from the Collection
-// editor's neutral grays — so the two list surfaces read as different.
+// Border in longhand props so hover can override `borderColor` alone without
+// React's shorthand/longhand-mix warning (which would stick the border after
+// un-hover). Gold/cream tones keep it distinct from the Collection editor.
 const listItemCardStyle = /** @type {React.CSSProperties} */ ({
   borderWidth: 1,
   borderStyle: "solid",
@@ -311,8 +298,7 @@ const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
   color: TEXT_MUTED,
 });
 
-// Gold index chip — same shape as the Collection editor's neutral badge
-// but tinted to keep this surface visually distinct.
+// Gold index chip, tinted to keep this surface distinct from the Collection editor.
 const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
   width: 20,

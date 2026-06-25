@@ -1,6 +1,6 @@
 {
   "name": "inscribed",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Inline-editing CMS SDK for Next.js App Router projects",
   "keywords": [
     "cms",
@@ -65,7 +65,6 @@
     "prepublishOnly": "npm test && npm run build"
   },
   "dependencies": {
-    "@skylab-kulubu/inscribed-auth": "^0.1.0",
     "@tiptap/extension-link": "^2.10.0",
     "@tiptap/pm": "^2.10.0",
     "@tiptap/react": "^2.10.0",

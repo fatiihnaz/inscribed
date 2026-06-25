@@ -967,7 +967,7 @@ export const panelCss = `
     box-shadow: inset 0 0 0 1px ${COLLECTION_LINE}, inset 2px 0 0 ${COLLECTION_ACCENT};
   }
   /* Active rules use a compound selector to match the (0,2,0) specificity of
-     `.inscribed-block-card.is-dirty` and come after it in source order, so an
+     .inscribed-block-card.is-dirty and come after it in source order, so an
      open + dirty card lands on the active accent instead of the dirty rail. */
   .inscribed-block-card.inscribed-block-card-active {
     box-shadow: inset 0 0 0 1px ${BORDER_HI}, inset 3px 0 0 ${ACCENT};

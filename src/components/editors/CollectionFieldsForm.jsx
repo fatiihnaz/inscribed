@@ -5,50 +5,28 @@ import { lazy, Suspense, useState } from "react";
 import { moveItem, removeItem } from "../../lib/list-ops.js";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "../icons.jsx";
 
-// Lazy so TipTap (a heavy dep) stays out of the package's main-entry
-// bundle: a consumer importing only the page-side pieces (EditableRegion,
-// CollectionItem, …) must not pay ~50KB for an editor they never open. A
-// static import would pull the TipTap chunk into index.js's eager graph
-// (the package sets no `sideEffects`, so tree-shaking wouldn't drop it).
-// It's fetched on demand the first time a RichText field renders — inside
-// the already dynamically-imported drawer.
+// Lazy so the heavy TipTap dep stays out of the main bundle: a consumer using
+// only page-side pieces shouldn't pay ~50KB for an editor they never open. A
+// static import would pull it into index.js's eager graph (no `sideEffects`, so
+// tree-shaking wouldn't drop it). Fetched the first time a RichText field renders.
 const RichTextEditor = lazy(() =>
   import("./RichTextEditor.jsx").then((m) => ({ default: m.RichTextEditor })),
 );
 
 /**
- * @file `CollectionFieldsForm` - schema-driven form renderer for
- * collection items.
+ * @file `CollectionFieldsForm`: schema-driven form renderer for collection
+ * items. Takes `CollectionFieldDescriptor`s plus a values map and renders one
+ * input per field. `options` switches a field to a select regardless of `type`;
+ * `ObjectArray` renders a repeatable accordion sub-form through this same
+ * renderer, so nested scalars (and further nesting) come for free.
  *
- * Takes a list of `CollectionFieldDescriptor`s (from
- * `/cms/collections/{key}/schema` or the `/me` envelope) and a values map,
- * renders one input per field. ReadOnly fields are disabled. Bool/Number/
- * Date/Url/StringArray/RichText plus the plain-text trio — ShortText
- * (single-line input), LongText (textarea), and the legacy Text alias of
- * LongText — are supported; an `options` array on a field switches it to
- * a select regardless of `type`. `ObjectArray`
- * fields render a repeatable sub-form as an accordion — one collapsible
- * card per element, its collapsed header showing a content-derived
- * summary, each card drawing the descriptor's `itemFields` through this
- * same renderer, so nested scalar types (and further ObjectArray nesting)
- * come for free.
+ * Pure rendering; the parent owns state. Companion helpers (`seedValues`,
+ * `buildPayload`, `requiredMissing`) handle seeding, request shaping, and
+ * required-field validation.
  *
- * Pure rendering - the parent owns state. The companion helpers
- * (`seedValues`, `buildPayload`, `requiredMissing`) handle initial
- * population, request shaping, and required-field validation so callers
- * don't have to re-implement them per form.
- *
- * Used by:
- *   - the admin drawer (Collection block cards under the Page tab, and
- *     per-Collection drawer tabs)
- *   - the example `/admin/collections` page
- *
- * Scalar inputs are intentionally neutral (inherit color, plain borders)
- * so they sit comfortably both on the drawer's dark surface and on a light
- * admin page. The one exception is `RichText`, which renders the drawer's
- * TipTap editor — that surface is dark-oriented, so a RichText field embedded
- * on a light page won't theme itself. The real edit path (the drawer) is
- * dark, so this is fine in practice.
+ * Scalar inputs are neutral so they sit on either a dark drawer or a light
+ * page. `RichText` is the exception: its TipTap surface is dark-oriented, fine
+ * since the real edit path is the dark drawer.
  */
 
 /**
@@ -99,8 +77,8 @@ function FieldInput({ field, value, onChange, disabled }) {
     </span>
   );
 
-  // `options` wins over `type` - any field with a known enumeration gets
-  // a select even if its underlying type would otherwise be text.
+  // `options` wins over `type`: an enumerated field is a select even if its
+  // type would otherwise be text.
   if (field.options && field.options.length > 0) {
     return (
       <label style={labelStyle}>
@@ -212,8 +190,7 @@ function FieldInput({ field, value, onChange, disabled }) {
           </div>
         );
 
-      // `Text` is the legacy alias of `LongText` (multi-line textarea) —
-      // that's how it has always rendered, so existing data keeps its look.
+      // `Text` is the legacy alias of `LongText` (multi-line textarea).
       case "Text":
       case "LongText":
         return (
@@ -231,11 +208,9 @@ function FieldInput({ field, value, onChange, disabled }) {
         </label>
       );
 
-      // RichText reuses the drawer's TipTap editor (same one the block
-      // forms use) for a real formatting surface instead of raw HTML in a
-      // textarea. A <div> wrapper (not <label>) since the editor nests its
-      // own toolbar buttons + contenteditable; `hideLabel` drops its
-      // built-in caption because `labelNode` above already names the field.
+      // RichText reuses the drawer's TipTap editor. A <div> wrapper, not
+      // <label>, since the editor nests its own toolbar + contenteditable;
+      // `hideLabel` drops its caption because `labelNode` already names the field.
       case "RichText":
         return (
           <div style={labelStyle}>
@@ -341,27 +316,19 @@ function StringArrayEditor({ field, value, onChange, disabled }) {
 // ---- ObjectArrayEditor -----------------------------------------------------
 
 /**
- * Repeatable sub-form for an `ObjectArray` field, rendered as an
- * accordion: each element is a collapsible card whose collapsed header
- * shows a 1-based badge + a content-derived summary (the first non-empty
- * text-ish inner field, via `itemSummary`) so a long list reads as a
- * scannable index rather than a wall of forms. Expanding a card reveals
- * its `itemFields` through the same `CollectionFieldsForm`, so nested
- * scalar types — and any further `ObjectArray` nesting — come for free.
+ * Repeatable accordion sub-form for an `ObjectArray` field: each element is a
+ * collapsible card with a content-derived summary header (via `itemSummary`),
+ * its `itemFields` rendered through the same `CollectionFieldsForm` so nesting
+ * comes for free.
  *
- * Per-item open state is tracked by index in a `Set` and remapped on
- * every structural op (`shiftOpenAfterRemove` / `swapOpen`) so the right
- * cards stay open through reorder/remove. Newly added items auto-expand.
- * Add / remove / reorder route through the shared `list-ops` helpers so
- * the array semantics match the page-side `<EditableList>`. New items are
- * seeded with per-type defaults via `seedValues` so required fields start
- * present-but-empty rather than undefined.
+ * Open state is a `Set` of indices remapped on every structural op
+ * (`shiftOpenAfterRemove` / `swapOpen`) so the right cards stay open through
+ * reorder/remove. Add/remove/reorder route through `list-ops` to match
+ * `<EditableList>`; new items seed per-type defaults via `seedValues`.
  *
- * Styling stays neutral (grays + currentColor, no theme tokens) so the
- * accordion reads correctly both on the drawer's dark surface and on a
- * light admin page — the rest of this file's contract. Collapse is a
- * plain conditional render (not the drawer-only `inscribed-collapse`
- * class, which isn't present on standalone admin pages).
+ * Styling is neutral (no theme tokens) so it reads on both the dark drawer and
+ * a light admin page, and collapse is a plain conditional render rather than
+ * the drawer-only `inscribed-collapse` class.
  *
  * @param {{
  *   field: import("../../lib/schemas.js").CollectionFieldDescriptor,
@@ -465,11 +432,9 @@ function ObjectArrayEditor({ field, value, onChange, disabled }) {
                     <ChevronDown size={14} />
                   </span>
                 </button>
-                {/* grid-rows 0fr↔1fr animates height with no fixed
-                    measurement and no drawer-only CSS, so the collapse is
-                    smooth on both the dark drawer and a standalone admin
-                    page. The body stays mounted (clipped) when closed,
-                    matching the drawer's keep-alive collapse. */}
+                {/* grid-rows 0fr/1fr animates height with no fixed measurement
+                    or drawer-only CSS. The body stays mounted (clipped) when
+                    closed, matching the drawer's keep-alive collapse. */}
                 <div
                   style={{
                     display: "grid",
@@ -504,10 +469,9 @@ function ObjectArrayEditor({ field, value, onChange, disabled }) {
 }
 
 /**
- * Small icon affordance for an accordion row header. Rendered as a
- * `role="button"` span (not a `<button>`) because it lives inside the
- * header `<button>` — nesting real buttons is invalid — and stops click /
- * key propagation so activating it doesn't also toggle the row.
+ * Icon affordance for an accordion row header. A `role="button"` span, not a
+ * `<button>`, because it lives inside the header button (nested buttons are
+ * invalid); stops click/key propagation so it doesn't also toggle the row.
  *
  * @param {{
  *   onClick: () => void,
@@ -555,9 +519,8 @@ export function seedValues(fields, data) {
   /** @type {Record<string, *>} */
   const out = {};
   for (const field of fields) {
-    // ObjectArray: seed each existing element through its own itemFields
-    // so partially-filled items still gain per-type defaults for any
-    // missing inner key. New (empty) arrays stay empty.
+    // ObjectArray: seed each element through its own itemFields so a
+    // partially-filled item still gains defaults for missing inner keys.
     if (field.type === "ObjectArray") {
       const arr = Array.isArray(data[field.name]) ? data[field.name] : [];
       out[field.name] = arr.map((item) => seedValues(field.itemFields ?? [], item ?? {}));
@@ -584,12 +547,9 @@ function defaultFor(type) {
 }
 
 /**
- * Derive a one-line summary for a collapsed ObjectArray card: the first
- * inner field that holds a non-empty string, so the header reads like the
- * item ("Portfolyo Sitesi") instead of a bare index. RichText is stripped
- * of tags first; everything non-string (Bool/Number/arrays) is skipped
- * since it makes a poor title. Returns `null` when nothing usable is
- * present, letting the caller fall back to a placeholder.
+ * One-line summary for a collapsed ObjectArray card: the first inner field
+ * holding a non-empty string (RichText stripped of tags), so the header reads
+ * like the item instead of a bare index. Returns `null` when nothing usable.
  *
  * @param {CollectionFieldDescriptor[]} itemFields
  * @param {Record<string, *> | undefined} item
@@ -607,12 +567,9 @@ export function itemSummary(itemFields, item) {
 }
 
 /**
- * Strip a Turkish plural suffix so an add button reads "Çalışma ekle"
- * rather than "Çalışmalar ekle". Turkish marks the plural only with
- * `-lar` / `-ler`, so trimming a trailing one recovers the singular for
- * the overwhelming majority of field labels. Guarded by a stem-length
- * floor so short words that merely end in those letters (e.g. "Sular")
- * are left intact, and otherwise returns the label untouched.
+ * Strip a Turkish plural suffix (`-lar`/`-ler`) so an add button reads "Çalışma
+ * ekle" not "Çalışmalar ekle". A stem-length floor leaves short words that
+ * merely end in those letters (e.g. "Sular") intact.
  *
  * @param {string} label
  * @returns {string}
@@ -703,12 +660,9 @@ export function requiredMissing(fields, values) {
 
     const value = values[field.name];
 
-    // ObjectArray validates inner required fields for every existing item
-    // even when the array itself is optional; a *required* array must
-    // additionally be non-empty. The returned path mirrors the backend's
-    // index notation as a readable chain (e.g. "Çalışmalar #1 → Başlık").
-    // Draft autosave never calls this, so inner required fields are only
-    // enforced on final save — matching the existing draft leniency.
+    // ObjectArray validates each item's inner required fields even when the
+    // array is optional; a required array must also be non-empty. Draft
+    // autosave never calls this, so inner requireds are enforced only on save.
     if (field.type === "ObjectArray") {
       const items = Array.isArray(value) ? value : [];
       if (field.required && items.length === 0) return field.label || field.name;
@@ -736,15 +690,10 @@ export function requiredMissing(fields, values) {
 }
 
 /**
- * Turn a backend validation `detail` into a Turkish, label-aware banner
- * message. The API reports field paths in dot/index notation
- * (`works[0].title`); we resolve each segment against the schema so the
- * admin reads "Çalışmalar #1 → Başlık" instead of the raw wire path.
- * Recognises the two shapes the backend emits — required + unknown field
- * — and otherwise falls back to swapping any quoted path token for its
- * label chain, so future message wordings still surface readable fields.
- * Returns `null` only when there's no detail to humanize, so callers can
- * fall back to a generic message.
+ * Turn a backend validation `detail` into a Turkish, label-aware banner. The
+ * API reports paths like `works[0].title`; resolve each segment against the
+ * schema so the admin reads "Çalışmalar #1 → Başlık". Handles the required and
+ * unknown-field shapes, else rewrites any quoted path token to its label chain.
  *
  * @param {string | null | undefined} detail
  * @param {CollectionFieldDescriptor[]} fields
@@ -759,8 +708,7 @@ export function humanizeCollectionError(detail, fields) {
   const unknown = detail.match(/Unknown field '([^']+)'/i);
   if (unknown) return `Bilinmeyen alan: ${resolveFieldPath(unknown[1], fields)}`;
 
-  // Generic fallback: rewrite any quoted path that resolves to a known
-  // field, leaving everything else (including unresolved tokens) intact.
+  // Rewrite any quoted path that resolves to a known field, leaving the rest intact.
   const rewritten = detail.replace(/'([^']+)'/g, (whole, path) => {
     const label = resolveFieldPath(path, fields);
     return label === path ? whole : `'${label}'`;
@@ -823,9 +771,8 @@ const labelTextStyle = {
   opacity: 0.65,
 };
 const requiredMarkStyle = {
-  // Collection brand accent. Tied to the themeable `--ins-collection` var
-  // (with the stock purple as fallback) so a rebrand flows through, while
-  // the form's neutral gray chrome stays context-portable.
+  // Themeable `--ins-collection` (stock purple fallback) so a rebrand flows
+  // through, while the form's neutral chrome stays portable.
   color: "var(--ins-collection, rgb(220, 195, 225))",
   fontSize: 11,
   fontWeight: 700,

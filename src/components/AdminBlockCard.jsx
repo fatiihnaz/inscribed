@@ -1,23 +1,15 @@
 "use client";
 
 /**
- * @file `BlockCard` — one inline-editable block row inside the admin
- * drawer's block list.
+ * @file `BlockCard`: one inline-editable block row in the drawer's block list.
  *
- * Header layout (left → right): TypeIcon glyph badge in the block's
- * type colour, mono blockPath, (when dirty) sage dot + Undo icon-button,
- * tiny mono type label, chevron. The grip has been retired — the type
- * icon now carries the same visual hook with real information.
+ * Header (left to right): TypeIcon badge, mono blockPath, (when dirty) sage dot
+ * + Undo button, type label, chevron. Body slides via `.inscribed-collapse`;
+ * Collection bodies stay mounted across collapse so the inner
+ * `useCollectionItem` fetch isn't replayed on reopen.
  *
- * Body slides open/closed via `.inscribed-collapse` (height 0 ↔ auto
- * via `interpolate-size`). Collection bodies stay mounted across
- * collapse so the inner `useCollectionItem` fetch isn't replayed
- * every time the card is reopened.
- *
- * Collection blocks (`blockType === "Collection"`) take a dedicated
- * lane: `<CollectionBlockCard>` lifts the editor's draft state up so
- * the header can render the "Geri al" reset next to the chevron —
- * same affordance, same place as regular dirty blocks.
+ * Collection blocks get a dedicated lane: `<CollectionBlockCard>` lifts the
+ * editor's draft state so the header can show the "Geri al" reset.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -84,10 +76,9 @@ export function BlockCard(props) {
 }
 
 /**
- * Standalone invalid-binding card. Rendered when a Collection block's
- * `value` is missing `{ collection, slug }`. Kept separate from
- * `CollectionBlockCard` so the `useCollectionEditor` hook is only
- * called when there's a valid pair to feed it.
+ * Card for a Collection block whose `value` is missing `{ collection, slug }`.
+ * Separate from `CollectionBlockCard` so `useCollectionEditor` only runs with a
+ * valid pair.
  *
  * @param {{ block: BlockResponse }} props
  */
@@ -129,13 +120,10 @@ function InvalidCollectionCard({ block }) {
 function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema, readOnly }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
 
-  // Editor reads the local draft if mid-edit, else the server-side
-  // overlay (`block.draftValue`), else the published value.
   const effective = block.draftValue ?? block.value;
   const value = hasDraft ? draft : effective;
-  // A read-only block can't be edited, so it never carries local dirty
-  // state worth surfacing — suppress the dot/reset/rail so the card reads
-  // as a passive, locked view instead of an editable one.
+  // A read-only block carries no dirty state to surface, so suppress the
+  // dot/reset/rail and let it read as a passive, locked view.
   const isDirty = !readOnly && (hasDraft
     ? stableStringify(draft) !== stableStringify(block.value)
     : block.draftValue != null);
@@ -185,8 +173,8 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
 }
 
 /**
- * Collection block lane — owns the editor's draft state so the header
- * can render the "Geri al" reset button up next to the chevron.
+ * Collection block lane: owns the editor's draft state so the header can render
+ * the "Geri al" reset next to the chevron.
  *
  * @param {{
  *   block: BlockResponse,
@@ -246,10 +234,8 @@ function CollectionBlockCard({ block, collection, slug, isActive, onFocus }) {
 }
 
 /**
- * Compose the card's class string based on its current state. Active
- * adds the lane-specific accent (sage for regular, pink-purple for
- * Collection). Dirty layers a thinner sage rail on top of the base
- * inset border.
+ * Compose the card's class string from its state. Active adds the lane accent
+ * (sage / pink-purple); dirty layers a thin sage rail on the base border.
  *
  * @param {{ isActive: boolean, isDirty: boolean, isCollection: boolean }} args
  */
@@ -262,9 +248,8 @@ function cardClassName({ isActive, isDirty, isCollection }) {
 }
 
 /**
- * Shared header row used by both block lanes. Header click toggles
- * the body; the per-card reset button (only rendered when `isDirty`)
- * stops propagation so undoing doesn't also expand/collapse the card.
+ * Shared header row for both lanes. Clicking it toggles the body; the reset
+ * button (only when dirty) stops propagation so undo doesn't also toggle.
  *
  * @param {{
  *   block: BlockResponse,
@@ -353,15 +338,12 @@ function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, onHeaderCl
 }
 
 /**
- * Block-type glyph badge. Uses the type's tone for fg + soft tinted bg
- * and ring. Drives the visual cue admins use to scan the list (Aa for
- * Text, ¶ for Rich, etc.).
+ * Block-type glyph badge in the type's tone (Aa for Text, ¶ for Rich, etc.),
+ * the cue admins scan the list by.
  *
  * @param {{ type: BlockType }} props
  */
-// Types whose glyph reads poorly as a centered character get a real SVG
-// icon instead (the "≡" glyph sits low in the badge); fall back to the
-// glyph for everything else.
+// Types whose glyph reads poorly when centered get a real SVG icon instead.
 const TYPE_ICON_OVERRIDES = { List: ListIcon };
 
 function TypeIcon({ type }) {
@@ -381,11 +363,10 @@ function TypeIcon({ type }) {
 }
 
 /**
- * Per-block undo. When a server-side draft exists, clearing the local
- * entry alone wouldn't reach the backend; instead we set the local draft
- * to the published value and let the autosave overwrite the Redis draft
- * (backend then auto-cleans because draft===published). When there's no
- * server-side draft, removing the local entry is enough.
+ * Per-block undo. With a server-side draft, clearing the local entry wouldn't
+ * reach the backend, so set the local draft to the published value and let
+ * autosave overwrite the Redis draft (the backend auto-cleans on
+ * draft===published). Without one, removing the local entry is enough.
  *
  * @param {BlockResponse} block
  * @param {(blockPath: string, value: *) => void} setDraft

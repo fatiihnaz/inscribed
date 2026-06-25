@@ -1,22 +1,17 @@
 "use client";
 
 /**
- * @file `AdminChangesPanel` — drawer preview overlay. Toggled by the
- * status-bar "Önizle" button when there are unsaved content-block edits;
- * occupies the tab body slot, replacing whatever tab is active so the
- * admin can review every dirty block in one place before committing.
+ * @file `AdminChangesPanel`: read-only drawer preview overlay. Toggled by the
+ * status bar's "Önizle" when there are unsaved edits; takes over the tab body
+ * so the admin can review every dirty block before committing. Per-block
+ * edit/undo stays on the Sayfa / Genel tabs.
  *
- * Read-only: per-block edit/undo lives on the Sayfa / Genel tabs. The
- * StatusBar's "Düzenle" toggle returns the user to the tab they were on.
+ * Diff: inline word-level red/green via `diffWords`. RichText is stripped of
+ * tags first so markup churn doesn't drown the content change. List diff is
+ * positional, so a reorder shows as "removed at N + added at M".
  *
- * Diff format: inline word-level red/green via `diffWords`. RichText
- * values are stripped of tags before diffing — markup churn would
- * otherwise drown out the visible content change. List diff is
- * positional (no stable item ids on the wire), so a reorder shows as
- * "removed at N + added at M".
- *
- * Collection blocks are excluded — collection drafts are per-item, not
- * per-block, and surface inside the collection's own region tab.
+ * Collection blocks are excluded: their drafts are per-item and surface in the
+ * collection's own region tab.
  */
 
 import { useMemo } from "react";
@@ -60,9 +55,7 @@ const DIFF_ADDED = STATUS_OK;
 const DIFF_REMOVED = STATUS_DANGER;
 const DIFF_CHANGED = STATUS_WARN;
 
-// Plain-text block types that diff line-by-line as raw strings. `RichText`
-// is handled separately (it strips HTML first), so it's intentionally not
-// in this set.
+// RichText is excluded on purpose: it strips HTML before diffing.
 const TEXTY_BLOCK_TYPES = new Set(["Text", "ShortText", "LongText"]);
 
 /**
@@ -132,10 +125,8 @@ export function AdminChangesPanel({
 }
 
 /**
- * Header-only card representing a collection with pending item drafts.
- * Same visual scaffolding as `BlockDiffCard` — inset rail, type icon,
- * Düzenle button — so it slots naturally into the same list. No body
- * because we don't surface per-item diffs here; the count is a
+ * Header-only card for a collection with pending item drafts. Same scaffolding
+ * as `BlockDiffCard` so it slots into the same list. No body: the count is a
  * pointer, the Düzenle button is the way in.
  *
  * @param {{
@@ -191,17 +182,10 @@ function CollectionDraftCard({ collectionKey, count, onGoToCollection }) {
  */
 function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
   const meta = TYPE_META[block.blockType] ?? TYPE_META.Text;
-  // Local in-progress draft takes precedence over the server-side
-  // draftValue overlay; falls back to the latter when the user closed
-  // the drawer without resetting an autosaved edit.
   const next = draft !== undefined ? draft : block.draftValue;
   const prev = block.value;
 
-  // Text-like blocks share their line-level ops between LineDiff and
-  // (previously) the change-count badge. The badge was dropped per UX
-  // simplification but the single-compute path is still worth keeping
-  // so future surfaces (e.g. an inline preview tooltip) can reuse it
-  // without a second LCS pass.
+  // Compute line ops once and pass down as `sharedOps` to avoid a second LCS pass.
   const ops = useMemo(() => {
     if (TEXTY_BLOCK_TYPES.has(block.blockType) || block.blockType === "RichText") {
       const a = block.blockType === "RichText" ? stripHtml(prev) : String(prev ?? "");
@@ -211,9 +195,8 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
     return null;
   }, [block.blockType, prev, next]);
 
-  // Inset rail in the block type's accent colour. Mirrors the
-  // `.is-dirty` pattern in `panelCss` so the layout doesn't reflow on
-  // tone change — inline style wins over the class' base shadow.
+  // Inset rail in the block's accent colour, mirroring the `.is-dirty` pattern
+  // so the layout doesn't reflow on tone change.
   const cardStyle = {
     ...blockCardStyle,
     boxShadow: `inset 0 0 0 1px ${HAIRLINE}, inset 2px 0 0 ${meta.color}`,
@@ -256,10 +239,8 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
 }
 
 /**
- * Type-dispatched diff renderer. Pulled out so the same code path drives
- * both top-level block diffs and the per-field list-item diffs. Atomic
- * primitive diffs are wrapped in a `DiffBox` for visual consistency
- * with the labelled field rows used inside Link / Image / List items.
+ * Type-dispatched diff renderer, shared by top-level block diffs and per-field
+ * list-item diffs.
  *
  * @param {{
  *   blockType: BlockType | string,
@@ -377,10 +358,9 @@ function collapseUnchanged(ops) {
 }
 
 /**
- * Walk a tokenised whitespace/word stream until `wordsKept` actual word
- * tokens have been counted, returning the slice boundary right after
- * (forward) or right before (backward) that boundary. Whitespace is
- * carried along so the rejoined string preserves spacing.
+ * Find the slice boundary after (forward) or before (backward) the first
+ * `wordsKept` word tokens. Whitespace is carried along so rejoining preserves
+ * spacing.
  *
  * @param {string[]} tokens
  * @param {number} wordsKept
@@ -428,20 +408,15 @@ function DiffSpan({ op }) {
   );
 }
 
-// ---- LineDiff (GitHub-style unified) -------------------------------------
-
 const HUNK_THRESHOLD_LINES = 6;
 const HUNK_KEEP_PER_SIDE = 2;
 const PAIR_MIN_SIMILARITY = 0.4;
 
 /**
- * GitHub-style unified line diff for RichText (and any other newline-
- * carrying value). Each op from `diffLines` becomes one row; adjacent
- * removed/added pairs that look like a single-line edit (high
- * character-LCS similarity) render as a paired row with intra-line
- * word highlights, otherwise they stack as two rows. Long runs of
- * unchanged lines collapse to a "@@ … N satır @@" hunk separator with
- * two-column line numbers (old / new).
+ * GitHub-style unified line diff for RichText (and any newline-carrying value).
+ * Each `diffLines` op is one row; adjacent removed/added pairs that look like a
+ * single-line edit render as one paired row with intra-line word highlights,
+ * else they stack. Long unchanged runs collapse to a "@@ … N satır @@" hunk.
  *
  * @param {{ prev: string, next: string, ops?: DiffOp[] }} props
  */
@@ -465,9 +440,8 @@ function LineDiff({ prev, next, ops: providedOps }) {
 }
 
 /**
- * Walk the line-level ops and (a) attach old/new line numbers, (b) pair
- * adjacent removed+added ops into a single "changed" row when they
- * resemble an edit rather than an unrelated removal + insertion.
+ * Walk the line ops to attach old/new line numbers and pair adjacent
+ * removed+added ops into one "changed" row when they resemble an edit.
  *
  * @param {DiffOp[]} ops
  * @returns {LineRow[]}
@@ -513,9 +487,8 @@ function buildLineRows(ops) {
 }
 
 /**
- * Replace long runs of unchanged rows with a hunk-separator row, keeping
- * `HUNK_KEEP_PER_SIDE` lines of context at each boundary (or zero on the
- * very first / last run). Mirrors git diff's `@@` headers.
+ * Replace long unchanged runs with a hunk-separator row, keeping
+ * `HUNK_KEEP_PER_SIDE` lines of context per boundary (zero at the start/end).
  *
  * @param {LineRow[]} rows
  * @returns {LineRow[]}
@@ -550,9 +523,8 @@ function applyHunks(rows) {
 }
 
 /**
- * Cheap line-similarity ratio for the row-pairing gate. Same shape as
- * `similarityRatio` in `word-diff.js` but local so the LineDiff stays
- * self-contained.
+ * Cheap line-similarity ratio for the row-pairing gate (local copy of
+ * `word-diff.js`'s `similarityRatio` so LineDiff stays self-contained).
  *
  * @param {string} a
  * @param {string} b
@@ -563,8 +535,7 @@ function lineSimilarity(a, b) {
   const m = b.length;
   if (n === 0 || m === 0) return 0;
   if (n > 200 || m > 200) {
-    // Skip the O(N·M) walk on long lines — pair them anyway if either
-    // is non-empty and they share at least a common prefix or suffix.
+    // Skip the O(N·M) walk on long lines; gate on common-prefix length instead.
     let commonPrefix = 0;
     const max = Math.min(n, m);
     while (commonPrefix < max && a[commonPrefix] === b[commonPrefix]) commonPrefix++;
@@ -623,11 +594,9 @@ const LONG_TEXT_THRESHOLD = 400;
 const LONG_TEXT_KEEP_PER_SIDE = 80;
 
 /**
- * Standalone added/removed/unchanged rows render their full text. For
- * very long content (e.g. a 500-char paragraph wholly removed) the row
- * visually balloons into many wrapped lines that add no extra signal
- * beyond "this whole thing changed". Keep the head + tail, drop the
- * middle behind a character-count pill so the diff stays scannable.
+ * Render a row's full text, but for very long content (a whole paragraph
+ * removed) keep head + tail and drop the middle behind a character-count pill
+ * so the diff stays scannable.
  *
  * @param {string} text
  * @returns {React.ReactNode}
@@ -669,11 +638,9 @@ function ChangedLinePair({ row }) {
 }
 
 /**
- * One side of a paired "changed" line. Filters the shared intra-line
- * ops to keep just the segments visible on this side (unchanged +
- * removed for prev, unchanged + added for next), so the rendered
- * sequence reconstructs the original line with the differing runs
- * highlighted.
+ * One side of a paired "changed" line. Filters the shared intra-line ops to
+ * this side's segments (unchanged + removed for prev, unchanged + added for
+ * next) so the line reconstructs with the differing runs highlighted.
  *
  * @param {{
  *   kind: "added" | "removed",
@@ -684,9 +651,8 @@ function ChangedLinePair({ row }) {
  * }} props
  */
 function PairedLine({ kind, oldLine, newLine, ops, side }) {
-  // Filter to this side then collapse long unchanged context — when the
-  // edit is a small change inside a long paragraph the middle stretches
-  // wouldn't add information, just walls of muted text.
+  // Filter to this side, then collapse long unchanged context so a small edit
+  // in a long paragraph doesn't render as walls of muted text.
   const sideOps = useMemo(
     () => collapseUnchanged(
       ops.filter((op) => op.type === "unchanged"
@@ -792,10 +758,9 @@ function ImageSide({ tone, label, src, alt }) {
 }
 
 /**
- * Positional list diff. For each index, classifies the pair as added,
- * removed, or changed; "changed" recurses into per-field inline diff
- * using the registered itemSchema. Unchanged items are skipped — the
- * panel exists to highlight what's changing.
+ * Positional list diff. Classifies each index as added/removed/changed;
+ * "changed" recurses into a per-field diff via the itemSchema. Unchanged items
+ * are skipped.
  *
  * @param {{
  *   oldItems: Record<string, *>[],
@@ -871,9 +836,8 @@ function labelForKind(kind) {
 }
 
 /**
- * Render an added- or removed-in-full item's fields with a tone tint, so
- * the user reads it as "the whole thing is new/gone" rather than a per-
- * field diff.
+ * Render a fully added/removed item's fields with a tone tint, so it reads as
+ * "the whole thing is new/gone" rather than a per-field diff.
  *
  * @param {{
  *   item: Record<string, *>,
@@ -944,9 +908,8 @@ function ItemFieldDiff({ prev, next, itemSchema }) {
 }
 
 /**
- * Render a single value (no diff) tinted in `tone` — used inside fully-
- * added or fully-removed list items where there's no "other side" to
- * compare against.
+ * Render a single value (no diff) tinted in `tone`, for fully added/removed
+ * list items where there's no other side to compare against.
  *
  * @param {{ blockType: BlockType | string, value: *, tone: string }} props
  */
@@ -1017,7 +980,6 @@ const diffBoxStyle = /** @type {React.CSSProperties} */ ({
   padding: "8px 10px",
 });
 
-// LineDiff (GitHub-style unified) styles
 const lineDiffWrapStyle = /** @type {React.CSSProperties} */ ({
   border: `1px solid ${HAIRLINE}`,
   borderRadius: RADIUS_SM,
@@ -1113,10 +1075,8 @@ const collapsedSpanStyle = /** @type {React.CSSProperties} */ ({
   verticalAlign: "middle",
 });
 
-// Same elision pill used inside LineDiff rows (both per-side word
-// collapses and standalone long-line char truncation). Visually
-// matches `collapsedSpanStyle` but separated so future tweaks to one
-// surface don't drag the other.
+// Elision pill for LineDiff rows. Aliased to `collapsedSpanStyle` but kept
+// separate so a future tweak to one surface doesn't drag the other.
 const collapsedInlineStyle = collapsedSpanStyle;
 
 const goToButtonStyle = /** @type {React.CSSProperties} */ ({

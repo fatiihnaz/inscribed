@@ -1,34 +1,21 @@
 "use client";
 
 /**
- * @file Slide-in admin panel for inline editing.
- *
- * Mounted only when `isAdmin` is true (gated by `CmsProvider`). The panel
- * always lives in the DOM but is translated off-screen left when closed; a
- * chevron handle attached to its right edge stays visible at x=0 so admins
- * can re-open it. The handle slides with the panel — it's part of the same
- * `motion.aside`, not a separate fixed element.
+ * @file Slide-in admin panel for inline editing. Mounted only for admins
+ * (gated by `CmsProvider`); always in the DOM but translated off-screen when
+ * closed, with a chevron handle at x=0 to reopen.
  *
  * Layout (top to bottom):
- *   - Header:  mono breadcrumb + page title + tiny "İZLENİYOR / DÜZENLENİYOR"
- *              mode chip. No more loud status pill — draft sync feedback now
- *              lives in the bottom status bar.
- *   - TabBar:  Sayfa / Genel + one per Collection region binding. Each tab
- *              carries a count badge and (when its lane has dirty blocks)
- *              a small sage dirty dot.
- *   - Toolbar: search input above the block list — filters by blockPath
- *              or blockType. Only rendered for Page/Global tabs.
- *   - Body:    block list per tab (cards collapse/expand with smooth
- *              height-auto animations), or `<AdminCollectionRegionPanel>`
- *              for Collection tabs.
- *   - StatusBar: single bottom lane absorbing the old dirty banner +
- *              save bar + footer status pill. Idle ("Kayıtlı · HH:MM"),
- *              saving (pulse), dirty (count + Geri al / Kaydet actions).
- *   - Footer:  user info + sign-out.
+ *   - Header:   breadcrumb + page title + mode chip.
+ *   - TabBar:   Sayfa / Genel + one per Collection binding, each with a count
+ *               badge and (when its lane is dirty) a sage dot.
+ *   - Toolbar:  block-list search (blockPath/blockType), Page/Global tabs only.
+ *   - Body:     per-tab block list, or `<AdminCollectionRegionPanel>`.
+ *   - StatusBar: bottom lane: idle / saving / dirty (count + Geri al / Kaydet).
+ *   - Footer:   user info + sign-out.
  *
- * Visual tokens, style objects, and the panel CSS string live in
- * `admin-drawer-styles.js`. Anything cosmetic should land there — this file
- * is layout + state only.
+ * Visual tokens and styles live in `admin-drawer-styles.js`; this file is
+ * layout + state only.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -145,19 +132,16 @@ export function AdminDrawer() {
     onSignOut,
     draftSyncStatus,
   } = useCmsContext();
-  // Collection state lives in its own context/provider (mounted by
-  // CmsProvider). The throwing reader is safe here because the drawer only
-  // renders inside CmsProvider, which always wraps it in CollectionProvider.
+  // Collection state lives in its own provider, which CmsProvider always wraps
+  // the drawer in, so the throwing reader is safe here.
   const {
     activeCollectionItem,
     setActiveCollectionItem,
     collectionBindings,
     collectionStore,
   } = useCollectionContext();
-  // The drawer aggregates across the whole collection + content draft state
-  // (dirty counts, bindings mirror, changes panel), so it subscribes to the
-  // full slices rather than a per-row view. It's a single admin surface, not
-  // page-side fan-out, so re-rendering on every write is expected and cheap.
+  // The drawer aggregates the whole draft/collection state, so it subscribes to
+  // full slices. As a single admin surface, re-rendering on every write is fine.
   const collectionListCache = useStoreSelector(collectionStore, (s) => s.listCache);
   const collectionItemCache = useStoreSelector(collectionStore, (s) => s.itemCache);
   const collectionDrafts = useStoreSelector(collectionStore, (s) => s.drafts);
@@ -169,13 +153,12 @@ export function AdminDrawer() {
   } = useCmsSave();
   const pathname = usePathname() ?? "/";
 
-  // Search filter (block path + block type). Only applied on Page / Global
-  // tabs; Collection lanes have their own filtering UI inside the panel.
+  // Search filter (path + type), Page/Global tabs only; Collection lanes
+  // filter inside their own panel.
   const [search, setSearch] = useState("");
 
-  // Split blocks into page-scoped / global-scoped lists and compute a
-  // per-block dirty flag at the drawer level so the tab bar can show a
-  // dirty dot without each card re-deriving it. CollectionItem bindings
+  // Split blocks into page/global lists and compute a per-block dirty flag here
+  // so the tab bar's dot doesn't re-derive it per card. CollectionItem bindings
   // are synthesised into the page list as virtual Collection blocks.
   const { pageBlockList, globalBlockList, dirtyByPath } = useMemo(() => {
     /** @type {BlockResponse[]} */
@@ -186,8 +169,7 @@ export function AdminDrawer() {
     const dirty = new Map();
 
     for (const block of blocks.values()) {
-      // `visible={false}` regions register as "hidden" — drop them from the
-      // drawer entirely (no card, no count, no dirty contribution).
+      // `visible={false}` regions register as "hidden": drop them entirely.
       if (editorVisibility.get(block.blockPath) === "hidden") continue;
 
       const slug = block._slug ?? pathname;
@@ -218,9 +200,8 @@ export function AdminDrawer() {
     return { pageBlockList: pages, globalBlockList: globals, dirtyByPath: dirty };
   }, [blocks, pathname, collectionBindings, drafts, editorVisibility]);
 
-  // Tab list. Always: "page", "global". Plus: one tab per collection
-  // with a `<CollectionRegion>` binding on the current page that the
-  // user has access to (per /me).
+  // Tab list: always "page"/"global", plus one per `<CollectionRegion>` binding
+  // on this page the user can access (per /me).
   const regionTabs = useMemo(() => {
     /** @type {Set<string>} */
     const pageRegions = new Set();
@@ -232,11 +213,8 @@ export function AdminDrawer() {
     const out = [];
     for (const my of myCollections) {
       if (!pageRegions.has(my.collectionKey)) continue;
-      // List cache keys are `"{key}|{stableStringify(params)}"`, so a
-      // direct `.get(collectionKey)` misses every entry. Scan by prefix
-      // and take the largest `total` we find — that's the unfiltered
-      // size when the user has opened the Region tab; falls back to a
-      // filtered window's reported total otherwise.
+      // List cache keys are `"{key}|{params}"`, so scan by prefix and take the
+      // largest `total` (the unfiltered size once the Region tab is opened).
       const listPrefix = `${my.collectionKey}|`;
       let total = 0;
       for (const [k, entry] of collectionListCache) {
@@ -252,12 +230,9 @@ export function AdminDrawer() {
     return out;
   }, [collectionBindings, myCollections, collectionListCache]);
 
-  // Per-collection-key dirty flag for the tab dot. Unions both the live
-  // overlay map (in-progress local edits) and the cached items with a
-  // server-persisted `draftData`. The overlay alone misses everything
-  // after the autosave debounce fires (the editor clears the overlay
-  // once the cache picks up `draftData`), so without the cache pass the
-  // dot would flash on briefly while the user types and then disappear.
+  // Per-key dirty flag for the tab dot, unioning the live overlay map and
+  // cached items carrying server `draftData`. The cache pass is needed because
+  // the overlay clears once autosave lands, which would otherwise drop the dot.
   const collectionDirtyByKey = useMemo(() => {
     /** @type {Set<string>} */
     const set = new Set();
@@ -276,10 +251,8 @@ export function AdminDrawer() {
   const pageDirty = pageBlockList.some((b) => dirtyByPath.get(b.blockPath));
   const globalDirty = globalBlockList.some((b) => dirtyByPath.get(b.blockPath));
 
-  // Diff-able dirty count for the StatusBar's "Önizle" toggle: page +
-  // global, excluding Collection synth blocks (their dirty state is
-  // per-item and surfaces inside the collection's own region tab, not
-  // through the block-level preview).
+  // Diff-able dirty count for "Önizle": page + global, minus Collection synth
+  // blocks (their dirty state surfaces in the region tab, not the block preview).
   const previewableCount = useMemo(() => {
     let n = 0;
     for (const b of pageBlockList) {
@@ -292,13 +265,9 @@ export function AdminDrawer() {
     return n;
   }, [pageBlockList, globalBlockList, dirtyByPath]);
 
-  // Per-collection dirty item slug sets, unioned across both the live
-  // overlay map (in-progress local edits) and the cached items with a
-  // server-persisted draft. Used by the preview overlay's collection
-  // summary banner so admins see at-a-glance whether any collection
-  // tab has pending work before publishing. Items not yet loaded into
-  // the item cache stay invisible — acceptable since the user hasn't
-  // even opened those collections this session.
+  // Per-collection dirty slug sets (overlay map + cached items with a server
+  // draft), for the preview overlay's summary banner. Items never loaded into
+  // the cache stay invisible, which is fine since they weren't opened.
   const collectionDirtyCounts = useMemo(() => {
     /** @type {Map<string, Set<string>>} */
     const out = new Map();
@@ -328,9 +297,8 @@ export function AdminDrawer() {
     return n;
   }, [collectionDirtyCounts]);
 
-  // First dirty (key, slug) for the StatusBar's "Aç" CTA. Iteration order
-  // of the Map mirrors collection-tab order, so this lands on whichever
-  // collection the user encountered first — predictable, not random.
+  // First dirty (key, slug) for the "Aç" CTA. Map iteration mirrors tab order,
+  // so this is predictable, not random.
   const firstDirtyCollectionTarget = useMemo(() => {
     for (const [key, slugs] of collectionDirtyCounts) {
       const slug = slugs.values().next().value;
@@ -339,8 +307,7 @@ export function AdminDrawer() {
     return null;
   }, [collectionDirtyCounts]);
 
-  // "Anything to preview" — either side counts. Drives the Önizle
-  // button visibility and the auto-close-on-clean effect.
+  // Drives Önizle visibility and the auto-close-on-clean effect.
   const anyPreviewable = previewableCount + collectionDirtyTotal > 0;
 
   const allTabs = useMemo(
@@ -358,10 +325,8 @@ export function AdminDrawer() {
   );
 
   const [activeTab, setActiveTabState] = useState(/** @type {string} */ ("page"));
-  // Preview overlay: when on, the body slot renders `AdminChangesPanel`
-  // instead of the active tab's content. Toggled by the StatusBar's
-  // Önizle / Düzenle button. Auto-closes when there's nothing left to
-  // preview (dirty drains to 0) or when the user clicks a different tab.
+  // Preview overlay: renders `AdminChangesPanel` in the body slot instead of the
+  // active tab. Auto-closes when dirty drains to 0 or the user switches tabs.
   const [isPreviewOpen, setPreviewOpen] = useState(false);
   useEffect(() => {
     if (isPreviewOpen && !anyPreviewable) setPreviewOpen(false);
@@ -372,31 +337,26 @@ export function AdminDrawer() {
     setActiveTabState(tab);
   };
 
-  // If the active tab disappears (e.g. navigating away from a page that
-  // had a Region binding), fall back to "page" so the user isn't stuck
-  // staring at a blank pane. Use the raw setter so an open preview isn't
-  // collateral-damaged by a routing event the user didn't initiate.
+  // If the active tab disappears (e.g. navigating off a page with a Region
+  // binding), fall back to "page". Raw setter so a routing event doesn't also
+  // close an open preview.
   useEffect(() => {
     if (allTabs.some((t) => t.id === activeTab)) return;
     setActiveTabState("page");
   }, [allTabs, activeTab]);
 
-  // Failsafe for the "Aç" auto-open signal. The card normally consumes
-  // `activeCollectionItem` on mount and clears it; if the target slug
-  // sits past a paginated window the card never mounts and the signal
-  // would otherwise persist in context — opening that row unexpectedly
-  // later when the user "Load more"s into it. As soon as the user
-  // navigates to any tab other than the target collection, drop the
-  // signal so it can't fire stale.
+  // Failsafe for the "Aç" signal: the card normally consumes and clears it on
+  // mount, but if the target slug sits past a paginated window the card never
+  // mounts. Drop the signal when the user leaves the target tab so it can't
+  // fire stale on a later "Load more".
   useEffect(() => {
     if (!activeCollectionItem) return;
     if (activeTab === `collection:${activeCollectionItem.key}`) return;
     setActiveCollectionItem(null);
   }, [activeTab, activeCollectionItem, setActiveCollectionItem]);
 
-  // Per-group collapse state. Storing the *closed* set (not open) means new
-  // groups arriving via discovery default to expanded — which is what users
-  // want on first sync.
+  // Per-group collapse state. Storing the *closed* set means new groups from
+  // discovery default to expanded.
   const [closedGroups, setClosedGroups] = useState(/** @type {Set<string>} */ (new Set()));
 
   const toggleGroup = (group) => {
@@ -412,9 +372,8 @@ export function AdminDrawer() {
     }
   };
 
-  // Auto-open the panel when an EditableRegion in the page is clicked, and
-  // switch to the tab that holds it so the matching block card scrolls into
-  // view instead of staying hidden behind the wrong tab.
+  // When an EditableRegion is clicked, open the panel and switch to its tab so
+  // the matching card scrolls into view instead of hiding behind another tab.
   useEffect(() => {
     if (!activeBlock) return;
     if (!isDrawerOpen) setDrawerOpen(true);
@@ -433,8 +392,8 @@ export function AdminDrawer() {
     });
   }, [activeBlock, blocks, pathname, isDrawerOpen, setDrawerOpen]);
 
-  // Track the wall-clock time of the most recent successful draft autosave
-  // so the header pill can echo "Taslak kayıtlı HH:MM" once dirty drains.
+  // Wall-clock time of the last successful autosave, echoed as "Taslak kayıtlı
+  // HH:MM" once dirty drains.
   const [lastSavedAt, setLastSavedAt] = useState(/** @type {string | null} */ (null));
   useEffect(() => {
     if (draftSyncStatus === "saved") {
@@ -447,12 +406,9 @@ export function AdminDrawer() {
     }
   }, [draftSyncStatus, dirtyCount]);
 
-  // Transient "Veri kaydedildi" pulse for the header pill: fires after a
-  // successful publish (`onSaveAll`) and clears itself a few seconds later
-  // so the pill returns to its idle dot. Distinct from `lastSavedAt` —
-  // that one tracks draft autosaves; this one signals a real publish.
-  // Detection is transition-based: `isSaving` goes true → false; if the
-  // round-trip didn't surface an error and dirty drained, it's a success.
+  // Transient "Veri kaydedildi" pulse after a successful publish (`onSaveAll`),
+  // distinct from `lastSavedAt` (which tracks draft autosaves). Detected on the
+  // `isSaving` true->false edge with no error and dirty drained to 0.
   const [publishedFlash, setPublishedFlash] = useState(false);
   const prevIsSavingRef = useRef(false);
   useEffect(() => {
@@ -466,11 +422,8 @@ export function AdminDrawer() {
     // what actually happened. Stay silent until everything is clean.
     if (collectionDirtyTotal !== 0) return;
     setPublishedFlash(true);
-    // The just-published data IS the saved state now — any leftover
-    // draft timestamp from before would lie ("Taslak kayıtlı") about
-    // a draft slot the publish round-trip just emptied. Clearing it
-    // here also prevents the pill from falling back to that stale
-    // label once the flash window closes.
+    // The publish emptied the draft slot, so clear the timestamp; otherwise the
+    // pill would fall back to a stale "Taslak kayıtlı" once the flash closes.
     setLastSavedAt(null);
   }, [isSaving, error, dirtyCount, collectionDirtyTotal]);
   useEffect(() => {
@@ -478,9 +431,8 @@ export function AdminDrawer() {
     const t = setTimeout(() => setPublishedFlash(false), 2400);
     return () => clearTimeout(t);
   }, [publishedFlash]);
-  // A new draft autosave or returning to dirty implicitly invalidates the
-  // "Veri kaydedildi" flash — the data no longer matches the just-published
-  // state.
+  // A new autosave or returning to dirty invalidates the "Veri kaydedildi"
+  // flash, since the data no longer matches the just-published state.
   useEffect(() => {
     if (draftSyncStatus === "saving" || dirtyCount > 0) setPublishedFlash(false);
   }, [draftSyncStatus, dirtyCount]);
@@ -489,8 +441,6 @@ export function AdminDrawer() {
   const isForbidden = error instanceof CmsApiError && error.isForbidden;
   const breadcrumbs = pathnameToBreadcrumbs(pathname);
 
-  // Search filter used by the visible block lists. Empty search lets
-  // everything through.
   const matchSearch = (block) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -606,19 +556,16 @@ export function AdminDrawer() {
             firstDirtyCollectionTarget={firstDirtyCollectionTarget}
             onGoToCollection={(target) => {
               setActiveTabState(`collection:${target.key}`);
-              // Signal the matching RegionItemCard to auto-expand. Done in
-              // a microtask so the tab body has time to mount and the
-              // card's effect can fire on first paint instead of racing
-              // setState in the same render.
+              // Signal the matching RegionItemCard to auto-expand once its tab
+              // body mounts (it reads `activeCollectionItem` on first paint).
               setActiveCollectionItem({ key: target.key, slug: target.slug });
             }}
             isSaving={isSaving}
             draftSyncStatus={draftSyncStatus}
             onDiscardAll={() => {
               onDiscardAll();
-              // Drop the pill's "Taslak kayıtlı HH:MM" indicator — the
-              // server draft just got cleared, so a stale timestamp
-              // pointing to a no-longer-existing draft is misleading.
+              // Clear the "Taslak kayıtlı HH:MM" indicator: the server draft is
+              // gone, so the timestamp would point at nothing.
               setLastSavedAt(null);
             }}
             onSaveAll={onSaveAll}
@@ -711,12 +658,9 @@ function PanelHeader({ breadcrumbs, dirty, draftSyncStatus, isSaving, lastSavedA
 }
 
 /**
- * Pill in the panel header replacing the old "İZLENİYOR / DÜZENLENİYOR"
- * mode chip. Surfaces the page-level autosave state with a coloured dot
- * + sans label + (when there's one) a mono wall-clock timestamp, so the
- * admin can glance at the top of the drawer and see whether their work
- * has been stashed to the server. Mirrors the bottom StatusBar's
- * vocabulary on purpose — same dot tones, same typography.
+ * Header pill surfacing the page-level autosave state: coloured dot + label +
+ * (when present) a wall-clock timestamp. Mirrors the bottom StatusBar's dot
+ * tones and typography on purpose.
  *
  * @param {{
  *   dirty: boolean,
@@ -743,11 +687,8 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       title: "Taslak kaydedilemedi",
     };
   } else if (publishedFlash) {
-    // Post-publish pulse: drafts have been promoted to live data, so a
-    // "Taslak kayıtlı" label would understate what just happened. Show
-    // "Veri kaydedildi" for a couple of seconds before falling back to
-    // the idle dot (or to draft timestamps if the user starts typing
-    // again).
+    // Post-publish pulse: drafts are now live data, so "Veri kaydedildi" shows
+    // for a couple of seconds before falling back to the idle dot.
     view = {
       state: "published",
       bg: STATUS_OK,
@@ -757,9 +698,8 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       title: "Tüm değişiklikler yayınlandı",
     };
   } else if (lastSavedAt) {
-    // Hold the label text steady during re-saves — only the dot pulses
-    // and changes colour. The timestamp slides vertically when it
-    // changes (new minute); same value → no animation (key unchanged).
+    // Hold the label steady during re-saves; only the dot pulses and recolours.
+    // The timestamp slides when the minute changes (same value, same key, no anim).
     view = {
       state: "saved",
       bg: isSyncing ? STATUS_WARN : STATUS_OK,
@@ -785,7 +725,7 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       title: `Taslak en son ${lastSavedAt}'de kaydedildi`,
     };
   } else if (isSyncing) {
-    // First save ever — no prior timestamp to anchor to.
+    // First save ever, no prior timestamp to anchor to.
     view = {
       state: "saving",
       bg: STATUS_WARN,
@@ -851,9 +791,8 @@ const headerPillStyle = /** @type {React.CSSProperties} */ ({
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  // Lock vertical size so empty (dot-only) state matches the label
-  // state's height — only the horizontal axis animates as the label
-  // appears/disappears, no vertical jitter on the header.
+  // Lock vertical size so the dot-only state matches the label height; only the
+  // horizontal axis animates, no vertical jitter.
   minHeight: 22,
   padding: "0 8px",
   borderRadius: 99,
@@ -1228,10 +1167,8 @@ function GroupCard({
 }
 
 /**
- * Group prefix is the slice before the first dot. Paths without a dot
- * have no group — returning null tells the caller to render them flat
- * (no group card) instead of inventing a single-item group named after
- * the path itself.
+ * Group prefix: the slice before the first dot, or null for a dotless path so
+ * the caller renders it flat instead of as a single-item group.
  *
  * @param {string} blockPath
  * @returns {string | null}
@@ -1275,14 +1212,13 @@ function chunkBlocksByPrefix(blocks) {
 }
 
 // ---------------------------------------------------------------------------
-// Status bar — absorbs the old dirty banner + save bar + footer pill
+// Status bar
 // ---------------------------------------------------------------------------
 
 /**
- * Replaces the tab bar while the preview overlay is open. Mirrors the
- * tab bar's height + border so the body content doesn't reflow on the
- * swap; left chip is the "go back" affordance, right chip is a passive
- * label + count badge confirming what the body is showing.
+ * Replaces the tab bar while the preview overlay is open. Matches its height +
+ * border so the body doesn't reflow; left chip goes back, right chip is a
+ * passive label + count.
  *
  * @param {{ count: number, onBack: () => void }} props
  */
@@ -1307,16 +1243,9 @@ function PreviewHeader({ count, onBack }) {
   );
 }
 
-// Match TabBar's child rhythm exactly: the bar has no vertical padding,
-// and the back button + title each carry the same 10px top/bottom
-// padding tab buttons use (`tabButtonStyle` in `admin-drawer-styles.js`).
-// Net height = 10 + 12px text/icon + 10 + 1px border ≈ 33px on both
-// surfaces, so swapping between them doesn't reflow the body slot.
-// Shared enter/exit choreography for StatusBar action buttons. Mirrors the
-// header pill's easing curve so the bottom-of-drawer transitions read as
-// part of the same family — a small upward slide on enter, fade out on
-// exit, with `layout` taking care of the horizontal stagger when sibling
-// buttons appear/disappear next to each other.
+// Shared enter/exit choreography for StatusBar action buttons: a small upward
+// slide on enter, fade out on exit, with `layout` handling the horizontal
+// stagger as sibling buttons appear/disappear. Mirrors the header pill's easing.
 const statusActionMotion = /** @type {const} */ ({
   layout: true,
   initial: { opacity: 0, y: 4, scale: 0.96 },
@@ -1366,11 +1295,9 @@ const previewCountStyle = /** @type {React.CSSProperties} */ ({
 });
 
 /**
- * Single-line rolling counter. When `value` changes the old number slides
- * out and the new one slides in — up when the count rises, down when it
- * falls (odometer feel). The `overflow: hidden` wrapper masks the digit
- * as it travels past one line height. `style` carries the text appearance
- * (colour, weight).
+ * Single-line rolling counter: on change the old number slides out and the new
+ * one in (up when rising, down when falling), masked by an `overflow: hidden`
+ * wrapper. `style` carries the text appearance.
  *
  * @param {{ value: number, style?: React.CSSProperties }} props
  */
@@ -1434,9 +1361,8 @@ function StatusBar({
   const isSyncing = draftSyncStatus === "saving" || isSaving;
   const isFailed  = draftSyncStatus === "failed";
 
-  // Status dot has four dirty states + transient sync/saved/failed.
-  // The dirty colours never pulse (a steady tint conveys "pending"
-  // without competing for attention with the syncing pulse).
+  // Dirty colours never pulse (a steady tint reads as "pending" without
+  // competing with the syncing pulse).
   /** @type {React.CSSProperties} */
   const dotBackground = (() => {
     if (isBothDirty) {
@@ -1490,9 +1416,8 @@ function StatusBar({
   } else if (isFailed) {
     msg = <span style={statusMsgStyle}>Taslak kaydedilemedi</span>;
   } else {
-    // Clean state. The header pill carries the "Taslak kayıtlı HH:MM" /
-    // "Veri kaydedildi" detail — repeating it here would be noisy, so
-    // the bar settles on a quiet idle line.
+    // Clean state. The header pill carries the timestamp detail, so the bar
+    // stays a quiet idle line rather than repeating it.
     msg = <span style={{ ...statusMsgStyle, ...statusMsgCleanStyle }}>Değişiklik yok</span>;
   }
 

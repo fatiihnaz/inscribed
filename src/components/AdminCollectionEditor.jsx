@@ -1,26 +1,15 @@
 "use client";
 
 /**
- * @file `AdminCollectionEditor` - schema-driven form + direct-PUT save for
- * a single collection row. Shared between two drawer surfaces:
+ * @file `AdminCollectionEditor`: schema-driven form + direct-PUT save for one
+ * collection row. Shared by the Page-tab Collection cards and the Region-tab
+ * item cards.
  *
- *   - Page-tab Collection cards (one per `<CollectionItem>` binding
- *     rendered on the page; the card wrapper lives in `AdminBlockCard`)
- *   - Region-tab item cards (one per row returned by
- *     `useCollection(key)`; rendered inside `AdminCollectionRegionPanel`)
- *
- * State lives in the `useCollectionEditor(collection, slug)` hook so the
- * surrounding card wrapper can render the per-card "Geri al" button up in
- * the card header (next to the chevron) alongside its `hasDraft` /
- * `undoDraft` exposure. The component itself is presentational: it
- * accepts the hook's return value via `editor` and renders the meta row
- * + form + save button.
- *
- * The hook lookup is identical for both surfaces: schema from the
- * provider's /me cache, item value from the shared item cache. Save
- * goes through `upsertCollectionItem` and the response is pushed back
- * into the cache via `updateCollectionItem` so the page-side preview
- * and any other open surfaces re-render with the new version.
+ * State lives in `useCollectionEditor(collection, slug)` so the surrounding
+ * card can render header controls (the "Geri al" reset) against the same state;
+ * the component itself is presentational. Schema comes from the /me cache, the
+ * item from the shared item cache; save goes through `upsertCollectionItem` and
+ * is written back via `updateCollectionItem` so other surfaces re-render.
  */
 
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -110,9 +99,8 @@ export function useCollectionEditor(collection, slug) {
     clearCollectionDraft,
   } = useCollectionContext();
   const { collections: my, isLoading: meLoading, error: meError } = useMyCollections();
-  // Read raw server-side item: the editor must not consume its own
-  // live-edit overlay, otherwise the seeding effect would re-fire on
-  // every keystroke and the autosave debounce would never settle.
+  // Read the raw item (overlayDrafts: false): consuming our own overlay would
+  // re-fire the seeding effect every keystroke and stall the autosave debounce.
   const { item, isLoading: itemLoading, error: itemError, refetch } = useCollectionItem(
     collection,
     slug,
@@ -129,19 +117,13 @@ export function useCollectionEditor(collection, slug) {
   const [draftStatus, setDraftStatus] = useState(
     /** @type {"idle"|"saving"|"failed"} */ ("idle"),
   );
-  // Wall-clock HH:MM of the most recent successful autosave this
-  // session. Persists in the indicator instead of flashing away after
-  // 900ms (the old behaviour) so the admin can glance at the card and
-  // see exactly when the draft last hit the server. Cleared when the
-  // server-side draft itself disappears (publish, undo).
+  // HH:MM of the last successful autosave, held in the indicator (cleared when
+  // the server draft disappears on publish/undo) so the admin sees when it landed.
   const [lastDraftSavedAt, setLastDraftSavedAt] = useState(
     /** @type {string | null} */ (null),
   );
-  // Post-publish pulse. Driven by `save()`; the indicator surfaces it as
-  // a green "Veri kaydedildi" chip for a couple of seconds before falling
-  // back to its idle dot. Distinct from `lastDraftSavedAt` (draft autosave
-  // timestamp) — that one always refers to a draft slot the backend still
-  // holds; this one fires the instant the row was actually published.
+  // Post-publish pulse driven by `save()`: a green "Veri kaydedildi" chip for a
+  // couple of seconds. Distinct from `lastDraftSavedAt`, which tracks the draft slot.
   const [publishedFlash, setPublishedFlash] = useState(false);
   useEffect(() => {
     if (!publishedFlash) return undefined;
@@ -149,35 +131,25 @@ export function useCollectionEditor(collection, slug) {
     return () => clearTimeout(t);
   }, [publishedFlash]);
 
-  // Last payload either returned by the server (data or draftData) or
-  // successfully PUT'd as a draft. Used to avoid resending the same
-  // payload twice (initial mount, cache refresh round-trips) and to
-  // detect when a local edit produces nothing actually changed.
+  // Last payload the server returned or we PUT as a draft. Guards against
+  // resending an unchanged payload and against re-seeding over live keystrokes.
   const lastSyncedRef = useRef(/** @type {string | null} */ (null));
   const failedResetRef = useRef(
     /** @type {ReturnType<typeof setTimeout>|null} */ (null),
   );
 
-  // Seed local form state when both schema + item have arrived. Prefer
-  // the in-progress draft so the admin sees their last in-flight edits
-  // across reloads; fall back to the published data otherwise. Re-seed
-  // on refetch / cache update so the form reflects the latest server
-  // state (e.g. after a successful save clears the draft).
-  //
-  // Skip the reseed when the baseline already matches `lastSyncedRef`:
-  // that means the cache change is the one our own autosave just made,
-  // and reseeding would clobber any keystrokes the user typed after the
-  // PUT fired.
+  // Seed form state once schema + item arrive, preferring the draft over
+  // published data so in-flight edits survive reloads. Skip the reseed when the
+  // baseline matches `lastSyncedRef` (the cache change is our own autosave), so
+  // we don't clobber keystrokes the user typed after the PUT fired.
   useEffect(() => {
     if (!schema) return;
     const baseline = item?.draftData ?? item?.data ?? {};
     const seeded = seedValues(schema.fields, baseline);
-    // Normalise through the same seed→buildPayload pipeline the autosave
-    // effect compares against. Storing the raw baseline here would leave
-    // `lastSyncedRef` out of step with `buildPayload(values)` whenever the
-    // round-trip isn't identity (readOnly strip, default-filled missing
-    // fields, Number→null), so the very first autosave run would see a
-    // phantom diff and PUT a draft the user never made.
+    // Normalise through the same seed->buildPayload pipeline the autosave
+    // compares against; storing the raw baseline would leave `lastSyncedRef` out
+    // of step (readOnly strip, default-fill, Number->null) and the first
+    // autosave would PUT a phantom diff.
     const serialized = stableStringify(buildPayload(schema.fields, seeded));
     if (serialized === lastSyncedRef.current) return;
     setValues(seeded);
@@ -188,22 +160,16 @@ export function useCollectionEditor(collection, slug) {
     if (failedResetRef.current) clearTimeout(failedResetRef.current);
   }, []);
 
-  // Clear the autosave timestamp when the server-side draft slot goes
-  // away — publish / undo both drop `draftData`, and a stale "Kayıtlı
-  // 14:32" referring to a no-longer-existing draft would just confuse.
+  // Clear the timestamp when the server draft goes away (publish/undo drop
+  // `draftData`), so it doesn't point at a draft that no longer exists.
   useEffect(() => {
     if (item?.draftData == null) setLastDraftSavedAt(null);
   }, [item?.draftData]);
 
-  // Debounced draft autosave. Every change to `values` resets a 1s
-  // timer; when it fires we PUT the current payload to the matching
-  // draft endpoint (item draft for published rows, new-item draft for
-  // virtual / version=0 rows). The backend Redis store has a 7-day TTL
-  // and a successful publish auto-clears the item-draft slot, so this
-  // effect is purely write-side: no GET coordination needed. The
-  // seeding effect above resyncs `lastSyncedRef` after the cache picks
-  // up a publish, preventing an autosave loop against the just-saved
-  // value.
+  // Debounced draft autosave (1s after the last change), PUT to the item-draft
+  // endpoint for published rows or the new-item-draft endpoint for virtual ones.
+  // Write-only: a publish auto-clears the slot and the seeding effect resyncs
+  // `lastSyncedRef`, preventing a loop against the just-saved value.
   useEffect(() => {
     if (!schema || !values) return undefined;
     if (!item?.canEdit) return undefined;
@@ -212,11 +178,9 @@ export function useCollectionEditor(collection, slug) {
     const payload = buildPayload(schema.fields, values);
     const serialized = stableStringify(payload);
 
-    // Live-preview overlay for page-side consumers. Push happens
-    // synchronously on every change so `<CollectionItem>` /
-    // `<CollectionRegion>` re-render in lockstep with the form. When
-    // the user types back to the server's view, drop the overlay so
-    // they fall back to `draftData ?? data` (no spurious diff).
+    // Live-preview overlay for page-side consumers, pushed on every change so
+    // they re-render in lockstep. Typing back to the server's view drops the
+    // overlay so they fall back to `draftData ?? data`.
     if (serialized === lastSyncedRef.current) {
       clearCollectionDraft(collection, slug);
       return undefined;
@@ -229,13 +193,11 @@ export function useCollectionEditor(collection, slug) {
       try {
         const token = await getAccessToken();
         setDraftStatus("saving");
-        // User resumed editing — the just-published indicator no longer
-        // matches the data, so retire the flash early.
+        // Editing resumed, so the "Veri kaydedildi" flash no longer holds.
         setPublishedFlash(false);
         if (isVirtualNow) {
-          // AutoGenerated: backend derives slug on publish; don't send one.
-          // RoleDerived / UserDefined: backend requires the slug to know
-          // which virtual entry this draft belongs to.
+          // AutoGenerated derives the slug on publish (don't send one);
+          // RoleDerived / UserDefined need it to identify the virtual entry.
           const body = slugSource === "AutoGenerated"
             ? { data: payload }
             : { slug, data: payload };
@@ -245,10 +207,8 @@ export function useCollectionEditor(collection, slug) {
         }
         if (cancelled) return;
         lastSyncedRef.current = serialized;
-        // Reflect the just-saved draft in the cache so `hasDraft` flips
-        // on immediately (badge + dirty rail) without waiting for an F5.
-        // In-place patch so list windows don't refetch and overwrite
-        // this with the server's pre-cleanup state on virtual rows.
+        // Patch the cache so `hasDraft` flips immediately. In-place so list
+        // windows don't refetch and overwrite it with the pre-cleanup state.
         if (!isVirtualNow && item) {
           patchCollectionItem(collection, slug, { ...item, draftData: payload });
         }
@@ -340,9 +300,8 @@ export function useCollectionEditor(collection, slug) {
     if (!schema || !item || item.draftData == null) return;
     setError(null);
     const publishedData = item.data;
-    // In-place patch (not `updateCollectionItem`) so list windows don't
-    // refetch and re-seed the item cache from the server's still-dirty
-    // state before the cleanup PUT below lands.
+    // In-place patch, not `updateCollectionItem`, so list windows don't refetch
+    // and re-seed from the server's still-dirty state before the cleanup PUT.
     patchCollectionItem(collection, slug, { ...item, draftData: null });
     if (item.version === 0) return;
     (async () => {
@@ -385,10 +344,9 @@ export function useCollectionEditor(collection, slug) {
 }
 
 /**
- * Presentational editor body. The `editor` prop carries all state +
- * handlers from `useCollectionEditor`; the parent card wrapper drives
- * the hook so it can also render header-level controls (the per-card
- * "Geri al" button next to the chevron) against the same state.
+ * Presentational editor body. `editor` carries all state + handlers from
+ * `useCollectionEditor`; the parent card drives the hook so it can also render
+ * header controls against the same state.
  *
  * @param {{
  *   editor: CollectionEditorState,
@@ -479,12 +437,9 @@ export function AdminCollectionEditor({ editor, showMetaRow = true }) {
 }
 
 /**
- * Per-card autosave indicator. Mirrors the panel's `HeaderStatusPill` —
- * same pill chrome, same dot tones, same layout/AnimatePresence
- * choreography — so the drawer reads as one design language across the
- * header, the StatusBar, and each collection card. Stays mounted as a
- * dot-only anchor when the card is clean (idle gray dot, no label) so
- * the row's horizontal rhythm doesn't jump when state arrives.
+ * Per-card autosave indicator, matching the panel's `HeaderStatusPill` chrome
+ * and dot tones. Stays mounted as a dot-only anchor when clean so the row's
+ * rhythm doesn't jump when state arrives.
  *
  * @param {{
  *   status: "idle" | "saving" | "failed",
@@ -535,8 +490,8 @@ function DraftIndicator({ status, lastSavedAt, hasServerDraft, publishedFlash })
       ),
     };
   } else if (hasServerDraft) {
-    // Server-side draftData but no autosave fired in this session yet —
-    // e.g. the admin reopened a card with a previously-stashed draft.
+    // Server draftData but no autosave this session, e.g. a card reopened with
+    // a previously-stashed draft.
     view = {
       state: "stashed",
       bg: STATUS_OK,
@@ -583,8 +538,7 @@ function DraftIndicator({ status, lastSavedAt, hasServerDraft, publishedFlash })
 }
 
 /**
- * Zero-padded HH:MM wall-clock string. Pulled out so the autosave
- * success path doesn't inline string-template math at a hot site.
+ * Zero-padded HH:MM wall-clock string.
  *
  * @param {Date} d
  * @returns {string}

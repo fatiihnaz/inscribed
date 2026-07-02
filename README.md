@@ -175,11 +175,18 @@ function Home() {
     </CmsPage>
   );
 }
+
+export default withCms("/", Home);
 ```
 
 `blockType` and `defaultValue` are **discovery-time metadata** read by the sync
 CLI, ignored at runtime. They tell inscribed what kind of editor to show and what to
 seed the database row with.
+
+`withCms("/", Home)` is a runtime no-op with one job: it marks this file as the
+**discovery root** for the `/` slug, so `cms-sync` knows which page owns the
+regions reachable from it (this file plus everything it imports). A page
+without a `withCms` root never enters the manifest.
 
 ### 5. Register the manifest
 
@@ -208,14 +215,22 @@ Editing is the same components plus an auth adapter covered next.
 inscribed has no schema file. You declare editable regions inline in your JSX and a
 static discovery step turns those declarations into a backend manifest.
 
-- **Declare** regions with `<EditableRegion>` / `<EditableList>` (and read-only
-  bindings with `<CollectionRegion>` / `<CollectionItem>`). Each carries
-  `blockType` + `defaultValue` literals.
+- **Declare** regions with `<EditableRegion>` / `<EditableList>`, each carrying
+  `blockType` + `defaultValue` literals. (`<CollectionRegion>` /
+  `<CollectionItem>` bindings are runtime-only and never enter the manifest;
+  see [Collections](#collections).)
+- **Root** each page with `withCms("/slug", Page)` from `inscribed/page` (a
+  runtime no-op). The scanner starts at every `withCms` call, follows relative
+  imports from that file, and files each reachable region under the call's
+  slug. Pages without a root contribute nothing to the manifest; only
+  `scope="global"` regions are collected without one.
 - **Discover** by running `cms-sync`. It AST-scans `app/`, applies `<CmsGroup>`
   prefixes, collects `scope="global"` regions under the global slug, and builds
   one manifest per page slug.
 - **Sync** pushes each manifest to the backend (idempotent). New regions get a
-  row seeded from `defaultValue`; removed regions are pruned.
+  row seeded from `defaultValue`; removed regions are pruned. When discovery
+  finds nothing, `cms-sync` refuses to push (an empty manifest would
+  soft-delete every remote slug) unless you pass `--allow-empty`.
 
 Because discovery reads the JSX statically, `blockType` and `defaultValue` must
 be **plain literals**, the scanner can't evaluate variables or imports.
@@ -564,7 +579,7 @@ bundle:
 | `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
 | `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `useCollection`, `useCollectionItem`, `useMyCollections`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
 | `inscribed/server` | server only | `getCmsContent`, `getCmsPageBlocks`, `syncCmsManifest`, `syncAll`, `cmsCacheTag` |
-| `inscribed/page` | server only | `createCmsPage` |
+| `inscribed/page` | server only | `createCmsPage`, `withCms` |
 | `inscribed/actions` | Server Action | `revalidateCmsSlug` |
 
 Import `inscribed/server` and `inscribed/page` only from Server Components, route
@@ -573,7 +588,10 @@ handlers, or build scripts, never from a Client Component.
 ## CLI: `cms-sync`
 
 Discovers `<EditableRegion>` (and `useCmsBlock` metadata) declarations under
-`app/` and pushes the manifest to the backend.
+`app/`, rooted at `withCms("/slug", ...)` call sites, and pushes the manifest
+to the backend. When discovery finds no roots and no global regions it exits
+with an error instead of pushing, since reconciling against an empty manifest
+soft-deletes every remote slug.
 
 ```
 cms-sync [options]
@@ -583,6 +601,7 @@ Options:
   --env <path>          dotenv file to preload (default: ./.env.local)
   --global-slug <name>  Slug for scope="global" blocks (default: __global)
   --dry-run             Print the discovered manifest as JSON without syncing
+  --allow-empty         Sync even when discovery finds nothing
   --help, -h            Show help
 
 Environment:

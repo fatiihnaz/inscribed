@@ -2,8 +2,9 @@
  * @file Manifest discovery: AST-walk a Next.js app/ tree and build a
  * `SyncManifestRequest[]` from `<EditableRegion>` JSX and `useCmsBlock` calls.
  *
- * Server-only (exposed via `inscribed/server`, used by the `cms-sync` CLI);
- * pulls in the native `oxc-parser`, so never import it from a client component.
+ * Server-only, consumed by the `cms-sync` CLI (not exported from any package
+ * entry); pulls in the native `oxc-parser`, so never import it from a client
+ * component.
  *
  * Discovery rules:
  *
@@ -382,7 +383,7 @@ async function analyzeFile(filePath) {
           }
           // `<CollectionRegion>` / `<CollectionItem>` deliberately emit no
           // manifest blocks: collection bindings live in a runtime registry,
-          // kept out of the CMS block namespace. See CmsProvider.
+          // kept out of the CMS block namespace. See CollectionProvider.
           return;
         }
       }

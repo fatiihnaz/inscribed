@@ -43,11 +43,11 @@ import { COLLECTION_ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
 /**
  * @typedef {Object} CollectionItemProps
  * @property {string} blockPath
- *   Discovery-time identifier. Runtime no-op; the hook fetches by
- *   `collection` + `slug`.
+ *   Binding identifier: keys this binding in the drawer registry and is the
+ *   click-to-focus target. The hook itself fetches by `collection` + `slug`.
  * @property {string} collection   Backend collection key.
  * @property {string} slug         Item slug (lowercased server-side).
- * @property {"global"} [scope]    Discovery-only marker for shared UI.
+ * @property {"global"} [scope]    Reserved; currently ignored (bindings are runtime-only).
  * @property {(item: CollectionItemResponse | null, meta: CollectionItemMeta) => React.ReactNode} children
  */
 

@@ -3,8 +3,9 @@
 /**
  * @file `<CollectionRegion>`: render-prop primitive for a whole collection
  * (all Teams, all News). Read-only here; writes happen in the collection's own
- * admin surface. Discovery emits a Collection block so the drawer shows the
- * binding; runtime fetches by `collection` through `useCollection`.
+ * admin surface. The binding registers into the runtime registry on mount so
+ * the drawer shows a tab for it (discovery ignores collections; they never
+ * enter the manifest); items fetch by `collection` through `useCollection`.
  *
  *   <CollectionRegion blockPath="news.list" collection="News">
  *     {(items, { isLoading, error }) => (
@@ -40,7 +41,8 @@ import { useCollection } from "../hooks/use-collection.js";
  * @property {number} [limit]   Page size (default 50, max 100, min 1).
  * @property {number} [offset]  Pagination offset (default 0).
  * @property {"global"} [scope]
- *   Discovery-only marker; runtime ignores it.
+ *   Reserved; currently ignored. Collection bindings are runtime-only, so
+ *   neither discovery nor the registry reads it.
  * @property {(items: CollectionItemResponse[], meta: CollectionRegionMeta) => React.ReactNode} children
  */
 

@@ -58,12 +58,13 @@
  */
 
 /**
- * Binding stored as a Collection block's `value`, emitted by discovery from
- * `<CollectionRegion>` / `<CollectionItem>`. Stored verbatim; the SDK resolves
- * items from it at render time.
+ * Binding carried in a Collection block's `value`. Discovery never emits
+ * these: `<CollectionRegion>` / `<CollectionItem>` register their binding into
+ * a runtime registry on mount, and the AdminDrawer synthesises Collection
+ * blocks from it. The SDK resolves items from the binding at render time.
  *
  * @typedef {Object} CollectionBinding
- * @property {string} collection   Backend collection key (e.g. "Teams", "News"). Case-insensitive at the API level but discovery normalises to PascalCase.
+ * @property {string} collection   Backend collection key (e.g. "Teams", "News"). Case-insensitive at the API level.
  * @property {string} [slug]       When set, the block resolves a single item via `GET /cms/collections/{key}/{slug}`. Omit for list bindings (`GET /cms/collections/{key}`).
  */
 

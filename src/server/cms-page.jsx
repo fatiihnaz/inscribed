@@ -41,6 +41,11 @@ import { getCmsPageBlocks } from "./get-content.js";
 import { createCmsConfig } from "../lib/config.js";
 import { publicAuth } from "../defaults/auth.js";
 
+// Re-exported here (not from the client entry) because pages calling it are
+// Server Components; the index bundle's "use client" would turn the export
+// into a client reference that can't be called during server render.
+export { withCms } from "../lib/with-cms.js";
+
 const PATHNAME_HEADER = "x-pathname";
 
 /**
@@ -58,13 +63,13 @@ const PATHNAME_HEADER = "x-pathname";
  *   Custom transport for the SSR fetch. Server-only, so to use it client-side
  *   too pass it to your provider as well. Default: REST against `config.baseUrl`.
  * @property {*} Provider
- *   The CMS provider component, typically `NextAuthCmsProvider` from
- *   `inscribed/auth/client` or your own wrapper. Receives `config`, `isAdmin`,
- *   `userSub`, `initialBlocks`, `onAfterSave`, and `session`.
+ *   The CMS provider component, typically `CmsProvider` or your own wrapper
+ *   around it. Receives `config`, `isAdmin`, `userSub`, `initialBlocks`,
+ *   `onAfterSave`, and `session`.
  *
  * The three auth callbacks below form a `CmsAuthAdapter` (see `lib/auth.js`);
- * omit them all for a public read-only site. For NextAuth, spread
- * `withCmsAuth(authOptions)` from `inscribed/auth/server`.
+ * omit them all for a public read-only site, or spread an adapter from an
+ * auth plugin / your own code.
  *
  * @property {import("../lib/auth.js").GetSession} [getSession]
  *   Resolves the server session. Default: `publicAuth.getSession` (always null → public).

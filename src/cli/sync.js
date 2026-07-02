@@ -59,10 +59,24 @@ for (const w of warnings) {
   console.warn(`[inscribed-discover] ${where}\n  ${w.message}`);
 }
 
+// An empty manifest is almost always a discovery mistake (no withCms roots,
+// wrong --app-root), and reconciling with it soft-deletes every remote slug.
+// Refuse unless the caller opts in; --dry-run only prints, so it may proceed.
 if (manifests.length === 0) {
-  console.warn(
-    `[inscribed-discover] No <EditableRegion> declarations found under ${path.relative(process.cwd(), appRoot)}. Reconciling with an empty manifest - every remote slug will be marked deleted (soft delete; restored on the next sync that finds them).`,
-  );
+  const where = path.relative(process.cwd(), appRoot);
+  if (args.allowEmpty || args.dryRun) {
+    console.warn(
+      `[inscribed-discover] No withCms("/slug", ...) roots or scope="global" regions found under ${where}.${args.dryRun ? "" : " Reconciling with an empty manifest - every remote slug will be marked deleted (soft delete; restored on the next sync that finds them)."}`,
+    );
+  } else {
+    console.error(
+      `[inscribed-discover] No withCms("/slug", ...) roots or scope="global" regions found under ${where}.\n` +
+        `  Syncing an empty manifest would soft-delete every remote slug, so nothing was pushed.\n` +
+        `  Wrap each page with withCms("/slug", Page) from "inscribed/page", or check --app-root.\n` +
+        `  Pass --allow-empty if you really mean to reconcile against an empty manifest.`,
+    );
+    process.exit(1);
+  }
 }
 
 for (const m of manifests) {
@@ -86,7 +100,7 @@ try {
  * @param {string[]} argv
  */
 function parseArgs(argv) {
-  /** @type {{ appRoot?: string, env?: string, globalSlug?: string, dryRun?: boolean, help?: boolean }} */
+  /** @type {{ appRoot?: string, env?: string, globalSlug?: string, dryRun?: boolean, allowEmpty?: boolean, help?: boolean }} */
   const out = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -94,6 +108,7 @@ function parseArgs(argv) {
     else if (a === "--env") out.env = argv[++i];
     else if (a === "--global-slug") out.globalSlug = argv[++i];
     else if (a === "--dry-run") out.dryRun = true;
+    else if (a === "--allow-empty") out.allowEmpty = true;
     else if (a === "--help" || a === "-h") out.help = true;
     else {
       console.error(`[inscribed-sync] Unknown argument: ${a}`);
@@ -115,6 +130,7 @@ Options:
   --env <path>         dotenv file to preload before discovery (default: ./.env.local)
   --global-slug <name> Slug for scope="global" blocks (default: __global)
   --dry-run            Print the discovered manifest as JSON without syncing
+  --allow-empty        Sync even when discovery finds nothing (soft-deletes every remote slug)
   --help, -h           Show this message
 
 Environment:

@@ -152,9 +152,10 @@ export const CmsPage = createCmsPage({
 ```jsx
 // app/page.jsx  (a Server Component)
 import { CmsPage } from "./lib/cms.jsx";
+import { withCms } from "inscribed/page";
 import { EditableRegion } from "inscribed";
 
-export default function Home() {
+function Home() {
   return (
     <CmsPage slug="/">
       <main>

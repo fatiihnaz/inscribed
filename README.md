@@ -224,9 +224,13 @@ static discovery step turns those declarations into a backend manifest.
   imports from that file, and files each reachable region under the call's
   slug. Pages without a root contribute nothing to the manifest; only
   `scope="global"` regions are collected without one.
-- **Discover** by running `cms-sync`. It AST-scans `app/`, applies `<CmsGroup>`
-  prefixes, collects `scope="global"` regions under the global slug, and builds
-  one manifest per page slug.
+- **Discover** by running `cms-sync`. It AST-scans `app/`, follows relative
+  imports and jsconfig/tsconfig `paths` aliases (also into files outside
+  `app/`, e.g. a root-level `components/` dir), applies `<CmsGroup>` prefixes,
+  collects `scope="global"` regions under the global slug, and builds one
+  manifest per page slug. Files that fail to parse are skipped with a warning;
+  an alias that resolves to nothing warns too instead of silently dropping the
+  file.
 - **Sync** pushes each manifest to the backend (idempotent). New regions get a
   row seeded from `defaultValue`; removed regions are pruned. When discovery
   finds nothing, `cms-sync` refuses to push (an empty manifest would
@@ -268,6 +272,14 @@ A `<EditableRegion blockPath="title">` inside it reads/writes `hero.title`.
 Groups nest (dot-joined), and discovery applies the exact same prefix so you
 never repeat the group name in each path. In admin mode the group also draws a
 labelled outline so editors can see section boundaries.
+
+> **One limit:** at runtime the prefix crosses component boundaries (React
+> context), but discovery is lexical — only regions written inside the
+> `<CmsGroup>` JSX **in the same file** get the prefix in the manifest.
+> Wrapping an imported component that declares regions would make the page
+> read `hero.title` while the manifest registers `title`; `cms-sync` warns
+> when it detects this. Put the `<CmsGroup>` inside the component file, or
+> write the prefix into each `blockPath`.
 
 `<CmsGroup>` also accepts `visible` / `editable` to lock or hide a whole section
 in one place; the mode cascades to every descendant. See

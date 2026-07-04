@@ -10,8 +10,14 @@
  *
  *   - Every `withCms("/slug", X)` call is the root of one slug. The file
  *     containing the call is the entry point; reachable files are followed
- *     via relative imports (DFS pre-order). Bare specifiers (`inscribed`,
- *     `next/...`) are not followed.
+ *     via relative imports and jsconfig/tsconfig `paths` aliases (DFS
+ *     pre-order), including files outside the scanned app root. Bare
+ *     specifiers (`inscribed`, `next/...`) are not followed; an alias that
+ *     matches no `paths` entry warns instead of silently dropping the file.
+ *
+ *   - Files that fail to parse are skipped with a warning rather than
+ *     aborting the run, so one broken (or oxc-unsupported) file can't kill
+ *     the whole sync. Their regions are missing from that run.
  *
  *   - Within reachable files, every `<EditableRegion blockPath blockType
  *     defaultValue ...>` JSX element contributes one ManifestBlockItem.
@@ -29,7 +35,7 @@
  *     is skipped (no DB row -> renders as empty placeholder forever).
  */
 
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -72,8 +78,14 @@ const UNRESOLVED = Symbol("unresolved");
  * @typedef {Object} FileAnalysis
  * @property {string} file
  * @property {string[]} imports
+ * @property {Map<string, string>} importBindings
+ *   Imported local name -> resolved file, for the cross-file group check.
  * @property {string[]} withCmsSlugs
  * @property {DiscoveredRegion[]} regions
+ * @property {{ componentName: string, file: string, prefix: string, loc: { line: number, column: number } | null }[]} groupComponentRefs
+ *   Imported components rendered inside a `<CmsGroup>`. Resolved into
+ *   warnings after every file is analyzed, when it's known whether the
+ *   component's graph declares regions.
  */
 
 /**
@@ -104,15 +116,54 @@ export async function discoverManifests(options = {}) {
   const globalSlug = options.globalSlug ?? "__global";
 
   const files = await collectSourceFiles(appRoot);
+  const aliases = loadPathAliases(appRoot);
   /** @type {Map<string, FileAnalysis>} */
   const analyses = new Map();
   /** @type {DiscoveryWarning[]} */
   const warnings = [];
 
-  for (const file of files) {
-    const { analysis, warnings: fileWarnings } = await analyzeFile(file);
+  // Demand-driven analysis: start from the files under appRoot, then pull in
+  // every reachable source file an import resolves to, even outside appRoot
+  // (a root-level components/ dir is common in Next.js apps). Non-source
+  // imports (css, json) and anything under node_modules are skipped.
+  const queue = [...files];
+  const queued = new Set(queue);
+  while (queue.length > 0) {
+    const file = /** @type {string} */ (queue.shift());
+    const { analysis, warnings: fileWarnings } = await analyzeFile(file, aliases);
     analyses.set(file, analysis);
     warnings.push(...fileWarnings);
+    for (const imp of analysis.imports) {
+      if (queued.has(imp)) continue;
+      if (imp.split(path.sep).includes("node_modules")) continue;
+      if (!SOURCE_EXTENSIONS.some((ext) => imp.endsWith(ext))) continue;
+      queued.add(imp);
+      queue.push(imp);
+    }
+  }
+
+  // Cross-file <CmsGroup>: the runtime prefix crosses component boundaries
+  // via React context, the static prefix cannot. Warn when a group wraps an
+  // imported component whose graph declares regions - the manifest would
+  // register them unprefixed while the page reads them prefixed, so the
+  // block would never resolve.
+  /** @type {Map<string, boolean>} */
+  const regionMemo = new Map();
+  /** @type {Set<string>} */
+  const seenGroupWarnings = new Set();
+  for (const analysis of analyses.values()) {
+    for (const ref of analysis.groupComponentRefs) {
+      if (!hasReachableRegions(ref.file, analyses, regionMemo)) continue;
+      const key = `${analysis.file}|${ref.prefix}|${ref.componentName}`;
+      if (seenGroupWarnings.has(key)) continue;
+      seenGroupWarnings.add(key);
+      warnings.push({
+        file: analysis.file,
+        loc: ref.loc,
+        message:
+          `<CmsGroup name="${ref.prefix}"> wraps <${ref.componentName}>, but the group prefix doesn't reach into imported components at discovery time (it does at runtime), so their blockPaths won't match the manifest. Move the <CmsGroup> inside the component, or bake "${ref.prefix}." into each blockPath.`,
+      });
+    }
   }
 
   /** @type {Map<string, Map<string, ManifestBlockItem>>} */
@@ -230,14 +281,64 @@ async function collectSourceFiles(dir) {
 }
 
 /**
+ * @typedef {Object} PathAliases
+ * @property {string} baseDir  Directory `paths` targets resolve against (config dir + baseUrl).
+ * @property {{ exact: boolean, prefix: string, suffix: string, targets: string[] }[]} entries
+ */
+
+/**
+ * Resolve an import specifier to a source file. Relative specs resolve
+ * against the importing file; bare specs are tried against the project's
+ * `paths` aliases. `unresolvedAlias` flags a spec that looked like an alias
+ * (matched a `paths` pattern, or the conventional `@/` prefix, which is not
+ * a valid npm scope) but resolved to nothing, so the caller can warn instead
+ * of silently dropping the file's regions.
+ *
  * @param {string} fromFile
  * @param {string} spec
+ * @param {PathAliases | null} aliases
+ * @returns {{ file: string | null, unresolvedAlias: boolean }}
+ */
+function resolveImportSpec(fromFile, spec, aliases) {
+  if (spec.startsWith(".")) {
+    const base = path.resolve(path.dirname(fromFile), spec);
+    return { file: resolveAsFileOrDir(base), unresolvedAlias: false };
+  }
+
+  let matchedAlias = false;
+  if (aliases) {
+    for (const entry of aliases.entries) {
+      /** @type {string} */
+      let wildcard;
+      if (entry.exact) {
+        if (spec !== entry.prefix) continue;
+        wildcard = "";
+      } else {
+        if (!spec.startsWith(entry.prefix) || !spec.endsWith(entry.suffix)) continue;
+        wildcard = spec.slice(entry.prefix.length, spec.length - entry.suffix.length);
+      }
+      matchedAlias = true;
+      for (const target of entry.targets) {
+        const candidate = path.resolve(
+          aliases.baseDir,
+          entry.exact ? target : target.replace("*", wildcard),
+        );
+        const file = resolveAsFileOrDir(candidate);
+        if (file) return { file, unresolvedAlias: false };
+      }
+    }
+  }
+  return { file: null, unresolvedAlias: matchedAlias || spec.startsWith("@/") };
+}
+
+/**
+ * Node-ish resolution for one base path: exact file, then known source
+ * extensions, then directory index files.
+ *
+ * @param {string} base
  * @returns {string | null}
  */
-function resolveImport(fromFile, spec) {
-  if (!spec.startsWith(".")) return null;
-  const base = path.resolve(path.dirname(fromFile), spec);
-
+function resolveAsFileOrDir(base) {
   if (existsSync(base) && isFile(base)) return base;
   for (const ext of SOURCE_EXTENSIONS) {
     if (existsSync(base + ext)) return base + ext;
@@ -249,6 +350,122 @@ function resolveImport(fromFile, spec) {
     }
   }
   return null;
+}
+
+/**
+ * Find the nearest jsconfig.json/tsconfig.json at or above the app root and
+ * pull out `compilerOptions.paths`, so alias imports resolve the way Next.js
+ * resolves them. The climb stops at the first directory holding a config or
+ * a package.json (the package boundary), never crossing into an unrelated
+ * outer project.
+ *
+ * @param {string} appRoot
+ * @returns {PathAliases | null}
+ */
+function loadPathAliases(appRoot) {
+  let dir = path.resolve(appRoot);
+  for (;;) {
+    for (const name of ["jsconfig.json", "tsconfig.json"]) {
+      const configPath = path.join(dir, name);
+      if (existsSync(configPath)) return parseAliasConfig(configPath, dir);
+    }
+    if (existsSync(path.join(dir, "package.json"))) return null;
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/**
+ * @param {string} configPath
+ * @param {string} dir
+ * @returns {PathAliases | null}
+ */
+function parseAliasConfig(configPath, dir) {
+  try {
+    const json = JSON.parse(stripJsonc(readFileSync(configPath, "utf8")));
+    const paths = json?.compilerOptions?.paths;
+    if (!paths || typeof paths !== "object") return null;
+    const baseDir = path.resolve(dir, json.compilerOptions.baseUrl ?? ".");
+    /** @type {PathAliases["entries"]} */
+    const entries = [];
+    for (const [pattern, targets] of Object.entries(paths)) {
+      if (!Array.isArray(targets)) continue;
+      const stringTargets = targets.filter((t) => typeof t === "string");
+      if (stringTargets.length === 0) continue;
+      const star = pattern.indexOf("*");
+      entries.push({
+        exact: star === -1,
+        prefix: star === -1 ? pattern : pattern.slice(0, star),
+        suffix: star === -1 ? "" : pattern.slice(star + 1),
+        targets: stringTargets,
+      });
+    }
+    return entries.length > 0 ? { baseDir, entries } : null;
+  } catch {
+    // Unreadable config: aliases just don't resolve, and the
+    // unresolved-alias warning points at the import instead.
+    return null;
+  }
+}
+
+/**
+ * Strip line and block comments plus trailing commas so tsconfig-style
+ * JSONC parses with JSON.parse. String contents (e.g. "http://x") survive.
+ *
+ * @param {string} src
+ * @returns {string}
+ */
+function stripJsonc(src) {
+  let out = "";
+  let inString = false;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inString) {
+      out += ch;
+      if (ch === "\\") { out += src[++i] ?? ""; continue; }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; out += ch; continue; }
+    if (ch === "/" && src[i + 1] === "/") {
+      while (i < src.length && src[i] !== "\n") i++;
+      out += "\n";
+      continue;
+    }
+    if (ch === "/" && src[i + 1] === "*") {
+      i += 2;
+      while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) i++;
+      i++;
+      continue;
+    }
+    out += ch;
+  }
+  return out.replace(/,\s*([}\]])/g, "$1");
+}
+
+/**
+ * Whether `file`'s import graph (itself included) declares any region.
+ * Memoised; `visiting` cuts cycles.
+ *
+ * @param {string} file
+ * @param {Map<string, FileAnalysis>} analyses
+ * @param {Map<string, boolean>} memo
+ * @param {Set<string>} [visiting]
+ * @returns {boolean}
+ */
+function hasReachableRegions(file, analyses, memo, visiting = new Set()) {
+  const cached = memo.get(file);
+  if (cached !== undefined) return cached;
+  if (visiting.has(file)) return false;
+  visiting.add(file);
+  const analysis = analyses.get(file);
+  const found = analysis
+    ? analysis.regions.length > 0 ||
+      analysis.imports.some((imp) => hasReachableRegions(imp, analyses, memo, visiting))
+    : false;
+  memo.set(file, found);
+  return found;
 }
 
 /** @param {string} p */
@@ -263,32 +480,45 @@ function isDirectory(p) {
 
 /**
  * @param {string} filePath
+ * @param {PathAliases | null} aliases
  * @returns {Promise<{ analysis: FileAnalysis, warnings: DiscoveryWarning[] }>}
  */
-async function analyzeFile(filePath) {
+async function analyzeFile(filePath, aliases) {
   const source = await readFile(filePath, "utf8");
   const lang = LANG_BY_EXT[path.extname(filePath)] ?? "jsx";
-
-  const { program, errors } = parseSync(filePath, source, { lang });
-  if (errors.length > 0) {
-    throw new Error(
-      `[inscribed-discover] Failed to parse ${path.relative(process.cwd(), filePath)}: ${errors[0].message}`,
-    );
-  }
-
-  // oxc spans are character offsets (UTF-16, i.e. JS string indices); the
-  // locator turns them into Babel-style { line (1-based), column (0-based) }.
-  const locator = makeLocator(source);
 
   /** @type {FileAnalysis} */
   const analysis = {
     file: filePath,
     imports: [],
+    importBindings: new Map(),
     withCmsSlugs: [],
     regions: [],
+    groupComponentRefs: [],
   };
   /** @type {DiscoveryWarning[]} */
   const warnings = [];
+
+  // A file that fails to parse is skipped, not fatal: one broken (or
+  // oxc-unsupported) file shouldn't kill the whole sync. The warning is loud
+  // because the file's regions are missing from this run.
+  let program;
+  try {
+    const parsed = parseSync(filePath, source, { lang });
+    if (parsed.errors.length > 0) throw new Error(parsed.errors[0].message);
+    program = parsed.program;
+  } catch (err) {
+    warnings.push({
+      file: filePath,
+      loc: null,
+      message: `Failed to parse: ${err instanceof Error ? err.message : String(err)}. Skipping this file; regions declared in it won't be discovered this run.`,
+    });
+    return { analysis, warnings };
+  }
+
+  // oxc spans are character offsets (UTF-16, i.e. JS string indices); the
+  // locator turns them into Babel-style { line (1-based), column (0-based) }.
+  const locator = makeLocator(source);
 
   // Stack of `<CmsGroup name>` prefixes, pushed/popped on JSXElement
   // enter/leave. Child EditableRegion/EditableList prepend the joined prefix
@@ -301,8 +531,21 @@ async function analyzeFile(filePath) {
     enter(node) {
       switch (node.type) {
         case "ImportDeclaration": {
-          const resolved = resolveImport(filePath, node.source.value);
-          if (resolved) analysis.imports.push(resolved);
+          const { file: resolved, unresolvedAlias } = resolveImportSpec(
+            filePath, node.source.value, aliases,
+          );
+          if (resolved) {
+            analysis.imports.push(resolved);
+            for (const spec of node.specifiers ?? []) {
+              if (spec.local?.name) analysis.importBindings.set(spec.local.name, resolved);
+            }
+          } else if (unresolvedAlias) {
+            warnings.push({
+              file: filePath,
+              loc: locOf(node, locator),
+              message: `Import "${node.source.value}" looks like a path alias but couldn't be resolved (checked jsconfig/tsconfig "paths"). Regions in that file won't be discovered.`,
+            });
+          }
           return;
         }
         case "JSXElement": {
@@ -380,6 +623,21 @@ async function analyzeFile(filePath) {
             handleEditableRegion(node, filePath, analysis, warnings, currentPrefix(), locator);
           } else if (name.name === "EditableList") {
             handleEditableList(node, filePath, analysis, warnings, currentPrefix(), locator);
+          } else if (/^[A-Z]/.test(name.name) && name.name !== "CmsGroup") {
+            // Imported component rendered inside a <CmsGroup>: candidate for
+            // the cross-file prefix warning. Only names bound by a resolved
+            // import qualify; package components (bare specifiers) can't
+            // contain regions.
+            const prefix = currentPrefix();
+            const target = prefix ? analysis.importBindings.get(name.name) : undefined;
+            if (prefix && target) {
+              analysis.groupComponentRefs.push({
+                componentName: name.name,
+                file: target,
+                prefix,
+                loc: locOf(node, locator),
+              });
+            }
           }
           // `<CollectionRegion>` / `<CollectionItem>` deliberately emit no
           // manifest blocks: collection bindings live in a runtime registry,

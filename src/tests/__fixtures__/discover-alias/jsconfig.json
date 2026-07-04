@@ -1,0 +1,9 @@
+{
+  // JSONC on purpose: the alias loader must tolerate comments and trailing commas.
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+    },
+  },
+}

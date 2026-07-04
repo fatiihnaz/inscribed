@@ -55,4 +55,55 @@ describe("discoverManifests", () => {
     expect(manifests).toEqual([]);
     expect(warnings).toEqual([]);
   });
+
+  it("follows relative imports that resolve outside the app root", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-project", "app");
+    const { manifests, warnings } = await discoverManifests({ appRoot });
+
+    const home = manifests.find((m) => m.slug === "/");
+    expect(home).toBeDefined();
+    expect(home.blocks.map((b) => b.blockPath)).toEqual(["home.title", "hero.sub"]);
+    expect(warnings).toEqual([]);
+  });
+
+  it("resolves jsconfig paths aliases and warns on unresolvable ones", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-alias", "app");
+    const { manifests, warnings } = await discoverManifests({ appRoot });
+
+    const page = manifests.find((m) => m.slug === "/aliased");
+    expect(page).toBeDefined();
+    expect(page.blocks.map((b) => b.blockPath)).toEqual(["alias.hero"]);
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toContain('"@/components/DoesNotExist"');
+    expect(warnings[0].message).toContain("path alias");
+  });
+
+  it("warns when a CmsGroup wraps an imported component that declares regions", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-group-cross");
+    const { manifests, warnings } = await discoverManifests({ appRoot });
+
+    // The manifest registers the unprefixed path; the warning explains the
+    // runtime/manifest mismatch. <Plain /> (no regions) must stay silent.
+    const page = manifests.find((m) => m.slug === "/cross");
+    expect(page.blocks.map((b) => b.blockPath)).toEqual(["title"]);
+
+    const groupWarnings = warnings.filter((w) => w.message.includes("group prefix"));
+    expect(groupWarnings).toHaveLength(1);
+    expect(groupWarnings[0].message).toContain("<Hero>");
+    expect(groupWarnings[0].message).toContain('name="hero"');
+  });
+
+  it("skips unparseable files with a warning instead of throwing", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-parse-error");
+    const { manifests, warnings } = await discoverManifests({ appRoot });
+
+    const page = manifests.find((m) => m.slug === "/ok");
+    expect(page).toBeDefined();
+    expect(page.blocks.map((b) => b.blockPath)).toEqual(["ok.title"]);
+
+    const parseWarnings = warnings.filter((w) => w.message.startsWith("Failed to parse"));
+    expect(parseWarnings).toHaveLength(1);
+    expect(parseWarnings[0].file.endsWith("broken.jsx")).toBe(true);
+  });
 });

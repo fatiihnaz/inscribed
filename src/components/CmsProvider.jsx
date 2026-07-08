@@ -32,7 +32,7 @@ const AdminDrawer = dynamic(
 
 /**
  * @param {Object} props
- * @param {CmsConfig | { baseUrl: string, clientId?: string }} props.config
+ * @param {CmsConfig | { baseUrl: string }} props.config
  * @param {string|null} [props.userSub]
  * @param {boolean} [props.isAdmin]
  * @param {BlockResponse[]} [props.initialBlocks]   Server-fetched blocks, seeded into the map before first paint to avoid SSR flicker.

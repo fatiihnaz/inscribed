@@ -15,10 +15,9 @@ describe("createCmsConfig", () => {
     expect(cfg.cdnUrl).toBe("https://cdn.test");
   });
 
-  it("defaults cdnUrl and clientId to null", () => {
+  it("defaults cdnUrl to null", () => {
     const cfg = createCmsConfig({ baseUrl: "https://api.test" });
     expect(cfg.cdnUrl).toBeNull();
-    expect(cfg.clientId).toBeNull();
   });
 
   it("defaults globalSlug to __global and honours an override", () => {

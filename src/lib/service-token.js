@@ -6,8 +6,9 @@
  *
  * Server-only: it never crosses to the client, so it's resolved purely
  * server-side with no augment-in-provider step. The default `noServiceToken`
- * sends nothing; inject a real provider via `createCmsPage({ getServiceToken })`
- * when your backend requires auth for reads.
+ * sends nothing, which the reference backend accepts only for anonymous-read
+ * collections (never `/cms/content`); inject a real provider via
+ * `createCmsPage({ getServiceToken })` for page content.
  */
 
 /**

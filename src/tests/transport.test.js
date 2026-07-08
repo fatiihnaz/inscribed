@@ -6,8 +6,8 @@ import { CmsApiError } from "../lib/errors.js";
  * Contract test for the default REST transport. The core only ever sees the
  * `CmsTransport` shape (see ../lib/transport.js); these assertions pin the
  * wire behaviour every custom backend adapter must match: endpoint paths,
- * headers (`X-CMS-Client-Id`, Bearer), the opaque `cache` -> Next.js mapping,
- * and `CmsApiError` on non-2xx.
+ * Bearer headers, the opaque `cache` -> Next.js mapping, and `CmsApiError`
+ * on non-2xx.
  */
 
 const BASE = "https://api.test";
@@ -56,16 +56,6 @@ describe("getContent", () => {
     fetchResolves({ slug: "home", blocks: [] });
     await t.getContent("home", { accessToken: "tok" });
     expect(lastCall()[1].headers.Authorization).toBe("Bearer tok");
-  });
-
-  it("attaches X-CMS-Client-Id only when configured", async () => {
-    fetchResolves({ slug: "home", blocks: [] });
-    await createRestTransport({ baseUrl: BASE }).getContent("home");
-    expect(lastCall()[1].headers["X-CMS-Client-Id"]).toBeUndefined();
-
-    fetchResolves({ slug: "home", blocks: [] });
-    await createRestTransport({ baseUrl: BASE, clientId: "client-1" }).getContent("home");
-    expect(lastCall()[1].headers["X-CMS-Client-Id"]).toBe("client-1");
   });
 
   it("maps the opaque cache hint onto Next.js' next: { revalidate, tags }", async () => {

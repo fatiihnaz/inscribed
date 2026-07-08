@@ -1,7 +1,9 @@
 /**
  * @file Default service-token provider: no token, so server-side reads go out
- * unauthenticated (correct for public backends). Inject a real provider via
- * `createCmsPage({ getServiceToken })` when reads need auth.
+ * unauthenticated. Against the reference backend that only reaches collections
+ * with anonymous read enabled; `/cms/content` always requires `cms:access`, so
+ * SSR page blocks render empty until a real provider (e.g. a service key) is
+ * injected via `createCmsPage({ getServiceToken })`.
  */
 
 /**

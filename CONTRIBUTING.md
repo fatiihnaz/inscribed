@@ -191,7 +191,7 @@ Three injection seams keep the core vendor-neutral. Each is a contract in
 When you add a feature that needs to talk to a backend, route it through the
 transport; don't `fetch` directly from a component or hook. The REST adapter in
 `defaults/transport.js` is the **only** place that knows concrete endpoint shapes,
-headers (`X-CMS-Client-Id`), and `CmsApiError` mapping.
+headers, and `CmsApiError` mapping.
 
 ## Common tasks
 

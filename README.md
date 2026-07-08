@@ -104,7 +104,6 @@ import { createCmsConfig } from "inscribed";
 export const cmsConfig = createCmsConfig({
   baseUrl: process.env.CMS_URL,        // backend root, no trailing slash
   cdnUrl: process.env.CMS_CDN_URL,     // optional: image-upload root
-  clientId: process.env.CMS_CLIENT_ID, // optional: X-CMS-Client-Id header
   // globalSlug: "__global",           // optional: slug for site-wide blocks
   // theme: { accent: "#3b82f6" },     // optional: override the panel palette (see Theming)
 });

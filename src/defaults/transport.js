@@ -18,21 +18,22 @@ import { CmsApiError, toApiError } from "../lib/errors.js";
 /**
  * Build the default REST transport bound to a single backend.
  *
- * @param {{ baseUrl: string, clientId?: string | null, cdnUrl?: string | null }} config
+ * @param {{ baseUrl: string, cdnUrl?: string | null }} config
  * @returns {CmsTransport}
  */
-export function createRestTransport({ baseUrl, clientId = null, cdnUrl = null }) {
+export function createRestTransport({ baseUrl, cdnUrl = null }) {
   const base = baseUrl.replace(/\/+$/, "");
   const cdn = cdnUrl ? cdnUrl.replace(/\/+$/, "") : null;
 
   /**
    * Common headers + optional Bearer. A falsy token sends no Authorization.
+   * No client/tenant header on purpose: the backend derives the tenant from
+   * the credential (`azp`), and a client-settable header would invite spoofing.
    * @param {string | null | undefined} token
    * @returns {Record<string, string>}
    */
   const headers = (token) => ({
     "Content-Type": "application/json",
-    ...(clientId ? { "X-CMS-Client-Id": clientId } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   });
 
@@ -217,7 +218,6 @@ export function createRestTransport({ baseUrl, clientId = null, cdnUrl = null })
         xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
 
         xhr.open("POST", target);
-        if (clientId) xhr.setRequestHeader("X-CMS-Client-Id", clientId);
         if (accessToken) xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
         xhr.send(body);
       });

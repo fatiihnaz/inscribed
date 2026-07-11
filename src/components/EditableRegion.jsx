@@ -103,7 +103,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   const empty = isValueEmpty(blockType, value);
 
   const rendered = empty
-    ? renderPlaceholder(as, rest)
+    ? renderPlaceholder(as, rest, isAdmin)
     : renderBlock(blockType, value, { as, ...rest });
 
   if (!isAdmin || visibilityMode) return rendered;
@@ -253,14 +253,17 @@ function renderBlock(blockType, value, props) {
 
 /**
  * Single placeholder for every empty/missing block. Always renders `as` (or
- * `<span>`) to avoid broken src-less `<img>`/`<a>` nodes.
+ * `<span>`) to avoid broken src-less `<img>`/`<a>` nodes. The dash marker is
+ * an editing affordance (find-and-click an empty region), so only admins see
+ * it; public visitors get the empty element with layout intact.
  *
  * @param {string|undefined} as
  * @param {Record<string, *>} rest
+ * @param {boolean} isAdmin
  */
-function renderPlaceholder(as, rest) {
+function renderPlaceholder(as, rest, isAdmin) {
   const Tag = as ?? "span";
-  return <Tag {...rest}>{EMPTY_PLACEHOLDER}</Tag>;
+  return <Tag {...rest}>{isAdmin ? EMPTY_PLACEHOLDER : null}</Tag>;
 }
 
 // Block `javascript:`/`data:`/`vbscript:` URLs on Link blocks: whitelist

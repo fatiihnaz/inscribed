@@ -58,6 +58,27 @@ describe("getContent", () => {
     expect(lastCall()[1].headers.Authorization).toBe("Bearer tok");
   });
 
+  it("routes tokenless reads through the public endpoint when clientKey is set", async () => {
+    const t = createRestTransport({ baseUrl: BASE, clientKey: "my-site" });
+
+    fetchResolves({ slug: "home", blocks: [] });
+    await t.getContent("home");
+    const [url] = lastCall();
+    expect(url).toContain(`${BASE}/cms/public/my-site/data`);
+    expect(new URL(url).searchParams.get("slug")).toBe("home");
+
+    // A token (user or service) always goes to the draft-aware endpoint.
+    fetchResolves({ slug: "home", blocks: [] });
+    await t.getContent("home", { accessToken: "tok" });
+    expect(lastCall()[0]).toContain(`${BASE}/cms/content`);
+  });
+
+  it("keeps /cms/content for tokenless reads without a clientKey", async () => {
+    fetchResolves({ slug: "home", blocks: [] });
+    await createRestTransport({ baseUrl: BASE }).getContent("home");
+    expect(lastCall()[0]).toContain(`${BASE}/cms/content`);
+  });
+
   it("maps the opaque cache hint onto Next.js' next: { revalidate, tags }", async () => {
     const t = createRestTransport({ baseUrl: BASE });
 

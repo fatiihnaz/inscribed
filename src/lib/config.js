@@ -17,6 +17,11 @@ import { normalizeTheme } from "./theme.js";
  * @typedef {Object} CmsConfig
  * @property {string} baseUrl                  Backend root, no trailing slash.
  * @property {string|null} cdnUrl              CDN root for image uploads. When null, uploads fall back to `${baseUrl}/cms/media`.
+ * @property {string|null} clientKey
+ *   This site's Client key on the reference backend (`azp` in its tokens).
+ *   Enables the anonymous published-content endpoint and, when the consumer
+ *   supplies no `getAccessToken`, the built-in browser auth. Not a trust
+ *   input: the backend derives identity from credentials, never from this.
  * @property {string} globalSlug
  *   Slug holding `scope="global"` blocks (header/footer/site-wide). Fetched
  *   alongside every page and merged into the same blocks map. Default "__global".
@@ -38,12 +43,13 @@ import { normalizeTheme } from "./theme.js";
  * @param {Object} opts
  * @param {string} opts.baseUrl
  * @param {string} [opts.cdnUrl]   Image upload root. Omit to upload through the API at `${baseUrl}/cms/media`.
+ * @param {string} [opts.clientKey]   This site's Client key on the reference backend. Omit to disable public content reads and the built-in auth.
  * @param {string} [opts.globalSlug]   Override the default "__global" slug for cross-page blocks.
  * @param {CmsTheme} [opts.theme]   Overrides for the admin/editing visual tokens (accent, fonts, radius, …). Unknown keys are dropped; unset keys keep their defaults.
  * @returns {CmsConfig}
  */
 
-export function createCmsConfig({ baseUrl, cdnUrl, globalSlug, theme }) {
+export function createCmsConfig({ baseUrl, cdnUrl, clientKey, globalSlug, theme }) {
   if (!baseUrl || typeof baseUrl !== "string") {
     throw new Error("createCmsConfig: baseUrl is required");
   }
@@ -51,6 +57,7 @@ export function createCmsConfig({ baseUrl, cdnUrl, globalSlug, theme }) {
   return Object.freeze({
     baseUrl: normalizedBase,
     cdnUrl: cdnUrl ? cdnUrl.replace(/\/+$/, "") : null,
+    clientKey: clientKey ?? null,
     globalSlug: globalSlug ?? "__global",
     theme: normalizeTheme(theme),
   });

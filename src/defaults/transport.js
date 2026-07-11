@@ -18,10 +18,10 @@ import { CmsApiError, toApiError } from "../lib/errors.js";
 /**
  * Build the default REST transport bound to a single backend.
  *
- * @param {{ baseUrl: string, cdnUrl?: string | null }} config
+ * @param {{ baseUrl: string, cdnUrl?: string | null, clientKey?: string | null }} config
  * @returns {CmsTransport}
  */
-export function createRestTransport({ baseUrl, cdnUrl = null }) {
+export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }) {
   const base = baseUrl.replace(/\/+$/, "");
   const cdn = cdnUrl ? cdnUrl.replace(/\/+$/, "") : null;
 
@@ -57,7 +57,14 @@ export function createRestTransport({ baseUrl, cdnUrl = null }) {
 
   return {
     async getContent(slug, opts = {}) {
-      const res = await fetch(url("/content", { slug }), {
+      // `/cms/content` always requires `cms:access`. Tokenless reads fall back
+      // to the published-only public endpoint, available when the client's
+      // `allowAnonymousContentRead` flag is on (404 otherwise).
+      const target =
+        !opts.accessToken && clientKey
+          ? url(`/public/${encodeURIComponent(clientKey)}/data`, { slug })
+          : url("/content", { slug });
+      const res = await fetch(target, {
         method: "GET",
         headers: headers(opts.accessToken),
         signal: opts.signal,

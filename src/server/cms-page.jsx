@@ -45,6 +45,10 @@ import { publicAuth } from "../defaults/auth.js";
 // Server Components; the index bundle's "use client" would turn the export
 // into a client reference that can't be called during server render.
 export { withCms } from "../lib/with-cms.js";
+// Same reason: config factories run in server modules (app/lib/cms.jsx), so
+// the callable export must come from this server entry. The index export
+// remains for client-side wrappers.
+export { createCmsConfig } from "../lib/config.js";
 
 const PATHNAME_HEADER = "x-pathname";
 
@@ -134,8 +138,12 @@ export function createCmsPage(options) {
     let initialBlocks = [];
     try {
       initialBlocks = await getCmsPageBlocks(serverConfig, resolvedSlug);
-    } catch {
+    } catch (err) {
       // Backend offline or page not yet synced: render with empty blocks.
+      if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.warn(`[inscribed] SSR content fetch failed for "${resolvedSlug}":`, err);
+      }
     }
 
     return (

@@ -99,7 +99,9 @@ the Server → Client boundary.
 
 ```js
 // app/lib/cms-config.js
-import { createCmsConfig } from "inscribed";
+// Server entry on purpose: this file is imported by Server Components, and
+// the "inscribed" client entry would make the factory uncallable there.
+import { createCmsConfig } from "inscribed/page";
 
 export const cmsConfig = createCmsConfig({
   baseUrl: process.env.CMS_URL,          // backend root, no trailing slash

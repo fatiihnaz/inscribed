@@ -14,6 +14,7 @@ import { CmsContext } from "../lib/context.js";
 import { createCmsConfig } from "../lib/config.js";
 import { buildThemeCss } from "../lib/theme.js";
 import { createRestTransport } from "../defaults/transport.js";
+import { getBrowserAuth } from "../defaults/browser-auth.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 import { createStore } from "../lib/store.js";
@@ -37,7 +38,7 @@ const AdminDrawer = dynamic(
  * @param {boolean} [props.isAdmin]
  * @param {BlockResponse[]} [props.initialBlocks]   Server-fetched blocks, seeded into the map before first paint to avoid SSR flicker.
  * @param {(slug: string) => void | Promise<void>} [props.onAfterSave]   Server Action run after a save, typically `revalidateTag(cmsCacheTag(slug))`.
- * @param {() => Promise<string>} [props.getAccessToken]   Returns the user's JWT, added as `Authorization: Bearer` on writes. Omit in public mode.
+ * @param {() => Promise<string>} [props.getAccessToken]   Returns the user's JWT, added as `Authorization: Bearer` on writes. When omitted and `config.clientKey` is set, the built-in browser auth (reference backend `/auth/*`) takes over; omit both for public mode.
  * @param {import("../lib/transport.js").CmsTransport} [props.transport]   Custom client transport. Defaults to REST from `config`. Passed here, not via `config`, because it holds functions that can't cross the RSC boundary.
  * @param {{ name: string|null, email: string|null, image: string|null } | null} [props.userInfo]   Identity for the admin panel footer. Null in public mode.
  * @param {() => void} [props.onSignOut]   Invoked by the admin panel's logout button.
@@ -45,13 +46,13 @@ const AdminDrawer = dynamic(
  */
 export function CmsProvider({
   config,
-  userSub = null,
-  isAdmin = false,
+  userSub: userSubProp = null,
+  isAdmin: isAdminProp = false,
   initialBlocks,
   onAfterSave,
   getAccessToken,
   transport,
-  userInfo = null,
+  userInfo: userInfoProp = null,
   onSignOut,
   children,
 }) {
@@ -73,6 +74,116 @@ export function CmsProvider({
   // Emit the theme overrides once as a `:root` block of `--ins-*` vars. At the
   // provider root (not the drawer) so page-side affordances pick them up too.
   const themeCss = useMemo(() => buildThemeCss(baseConfig.theme), [baseConfig.theme]);
+
+  // ---- Built-in browser auth (reference backend `/auth/*`) ----------------
+  //
+  // Active only when the consumer brings no auth of their own. Admin-ness is
+  // decided here on the client because the refresh cookie belongs to the API
+  // origin: the app's server never sees it, so SSR always renders public and
+  // the drawer mounts a beat after hydration.
+  const hasConsumerAuth = getAccessToken != null;
+  const browserAuth = useMemo(
+    () =>
+      !hasConsumerAuth && baseConfig.clientKey
+        ? getBrowserAuth({ baseUrl: baseConfig.baseUrl, clientKey: baseConfig.clientKey })
+        : null,
+    [hasConsumerAuth, baseConfig.baseUrl, baseConfig.clientKey],
+  );
+  const [browserSession, setBrowserSession] = useState(
+    /** @type {{ userSub: string|null, userInfo: { name: string|null, email: string|null, image: null } } | null} */ (null),
+  );
+  // Raised when the session dies underneath an active admin (refresh → 401:
+  // revoked, reuse-detection, or 30-day expiry) so the editor learns why the
+  // drawer vanished. Deliberate logouts (this tab or another) stay silent.
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const browserSessionRef = useRef(browserSession);
+  browserSessionRef.current = browserSession;
+
+  // Adopt the held token's identity if it passes the role gate. Also serves
+  // another tab's sign-in, where this tab holds no token yet: refresh first.
+  const adoptBrowserSession = useCallback(async () => {
+    const auth = browserAuth;
+    if (!auth) return;
+    let claims = auth.claims();
+    if (!claims) {
+      if (!(await auth.refresh())) return;
+      claims = auth.claims();
+      if (!claims) return;
+    }
+    if (browserSessionRef.current?.userSub === (claims.sub ?? null)) {
+      setSessionExpired(false);
+      return;
+    }
+    const roles = Array.isArray(claims.roles) ? claims.roles : [];
+    // `azp` must match this site's clientKey: on a shared API origin the
+    // cookie may belong to another client, whose roles say nothing here.
+    const mayEdit =
+      claims.azp === baseConfig.clientKey &&
+      (roles.includes("cms:access") || roles.includes("cms:admin"));
+    if (!mayEdit) {
+      if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[inscribed] signed in, but the token grants no cms:access for ` +
+            `clientKey "${baseConfig.clientKey}" (azp: "${claims.azp}"). ` +
+            `Check the client's memberships on the backend.`,
+        );
+      }
+      return;
+    }
+    setSessionExpired(false);
+    setBrowserSession({
+      userSub: claims.sub ?? null,
+      userInfo: { name: claims.name ?? null, email: claims.email ?? null, image: null },
+    });
+  }, [browserAuth, baseConfig.clientKey]);
+
+  // Session lifecycle: every adoption/teardown flows through auth transitions,
+  // so our own refresh, another tab's login/logout, and mid-edit expiry all
+  // land in one handler. Must subscribe before the entry probe below fires.
+  useEffect(() => {
+    if (!browserAuth) return;
+    return browserAuth.onChange((authenticated, reason) => {
+      if (authenticated) {
+        void adoptBrowserSession();
+        return;
+      }
+      if (reason === "expired" && browserSessionRef.current) setSessionExpired(true);
+      setBrowserSession(null);
+    });
+  }, [browserAuth, adoptBrowserSession]);
+
+  // Entry probe on mount: ?cms-login → interactive login, ?cms-auth=done →
+  // back from the backend callback, session hint → silent resume. Anonymous
+  // visitors (none of the three) trigger zero auth requests. Adoption happens
+  // in the onChange handler above, not here.
+  useEffect(() => {
+    if (!browserAuth) return;
+    (async () => {
+      const params = new URLSearchParams(window.location.search);
+      const explicitLogin = params.has("cms-login");
+      const returning = params.get("cms-auth") === "done";
+      if (!explicitLogin && !returning && !browserAuth.hasSessionHint()) return;
+
+      const ok = await browserAuth.refresh();
+      if (explicitLogin && !ok) {
+        browserAuth.login(); // full-page redirect; comes back with ?cms-auth=done
+        return;
+      }
+      if (explicitLogin || returning) stripAuthParams();
+    })();
+  }, [browserAuth]);
+
+  const browserSignOut = useCallback(async () => {
+    if (!browserAuth) return;
+    await browserAuth.logout();
+    setBrowserSession(null);
+  }, [browserAuth]);
+
+  // Browser session wins over the (always-public) SSR props when active.
+  const isAdmin = browserSession != null || isAdminProp;
+  const userSub = browserSession ? browserSession.userSub : userSubProp;
+  const userInfo = browserSession ? browserSession.userInfo : userInfoProp;
 
   // Seed the blocks map from `initialBlocks` so EditableRegion renders real
   // values during SSR and first paint. Later updates flow through `useCmsContent`.
@@ -215,7 +326,7 @@ export function CmsProvider({
   onAfterSaveRef.current = onAfterSave ?? null;
 
   const getAccessTokenRef = useRef(getAccessToken ?? null);
-  getAccessTokenRef.current = getAccessToken ?? null;
+  getAccessTokenRef.current = getAccessToken ?? browserAuth?.getAccessToken ?? null;
 
   const onSignOutRef = useRef(onSignOut ?? null);
   onSignOutRef.current = onSignOut ?? null;
@@ -588,7 +699,7 @@ export function CmsProvider({
       isDrawerOpen,
       setDrawerOpen,
       userInfo,
-      onSignOut: onSignOut ? stableOnSignOut : null,
+      onSignOut: onSignOut ? stableOnSignOut : browserSession ? browserSignOut : null,
     }),
     [
       normalizedConfig,
@@ -619,6 +730,8 @@ export function CmsProvider({
       userInfo,
       onSignOut,
       stableOnSignOut,
+      browserSession,
+      browserSignOut,
     ],
   );
 
@@ -648,6 +761,12 @@ export function CmsProvider({
           {children}
         </div>
         {isAdmin ? <AdminDrawer /> : null}
+        {sessionExpired && browserAuth ? (
+          <SessionExpiredNotice
+            onSignIn={() => browserAuth.login()}
+            onDismiss={() => setSessionExpired(false)}
+          />
+        ) : null}
       </CollectionProvider>
     </CmsContext.Provider>
   );
@@ -656,6 +775,76 @@ export function CmsProvider({
 // Must match PANEL_WIDTH in AdminDrawer.jsx. Hardcoded, not imported, so it
 // stays out of the public bundle (AdminDrawer is admin-only and lazy-loaded).
 const ADMIN_PANEL_WIDTH = 460;
+
+// Drop the auth marker params via history.replaceState (no Next.js navigation,
+// so no re-render or scroll reset); other query params survive.
+function stripAuthParams() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("cms-login");
+  url.searchParams.delete("cms-auth");
+  window.history.replaceState(null, "", url.toString());
+}
+
+// Inline (not in the lazy admin chunk): it must render after the drawer has
+// already unmounted, and its only trigger is an expired admin session.
+function SessionExpiredNotice({ onSignIn, onDismiss }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: 20,
+        left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 2147483000,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 14px",
+        background: "var(--ins-bg, #1c1815)",
+        color: "var(--ins-text, #fff)",
+        borderRadius: "var(--ins-radius, 10px)",
+        fontFamily: "var(--ins-font-sans, system-ui, sans-serif)",
+        fontSize: 13,
+        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.35)",
+      }}
+    >
+      <span>Oturumun sona erdi. Düzenlemeye devam etmek için tekrar giriş yap.</span>
+      <button
+        type="button"
+        onClick={onSignIn}
+        style={{
+          padding: "6px 12px",
+          borderRadius: 8,
+          border: "none",
+          background: "var(--ins-accent, #c9b896)",
+          color: "#1c1815",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+        }}
+      >
+        Giriş yap
+      </button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Kapat"
+        style={{
+          background: "none",
+          border: "none",
+          color: "inherit",
+          opacity: 0.6,
+          cursor: "pointer",
+          fontSize: 16,
+          lineHeight: 1,
+          padding: 2,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
 
 // Admin-only. Public visitors render from `initialBlocks` (ISR-cached, dropped
 // on save via `revalidateCmsSlug`), so they never need this client refetch.

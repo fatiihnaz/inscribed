@@ -187,6 +187,7 @@ Three injection seams keep the core vendor-neutral. Each is a contract in
 | Transport | `transport.js` (`CmsTransport`) | `transport.js` (`createRestTransport`) |
 | Service token | `service-token.js` | `service-token.js` (`noServiceToken`) |
 | Auth adapter | `auth.js` (`CmsAuthAdapter`) | `auth.js` (`publicAuth`) |
+| Browser auth | `getAccessToken` prop on `CmsProvider` | `browser-auth.js` (`getBrowserAuth`), active only with `config.clientKey` |
 
 When you add a feature that needs to talk to a backend, route it through the
 transport; don't `fetch` directly from a component or hook. The REST adapter in

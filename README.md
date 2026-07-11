@@ -102,10 +102,11 @@ the Server → Client boundary.
 import { createCmsConfig } from "inscribed";
 
 export const cmsConfig = createCmsConfig({
-  baseUrl: process.env.CMS_URL,        // backend root, no trailing slash
-  cdnUrl: process.env.CMS_CDN_URL,     // optional: image-upload root
-  // globalSlug: "__global",           // optional: slug for site-wide blocks
-  // theme: { accent: "#3b82f6" },     // optional: override the panel palette (see Theming)
+  baseUrl: process.env.CMS_URL,          // backend root, no trailing slash
+  cdnUrl: process.env.CMS_CDN_URL,       // optional: image-upload root
+  clientKey: process.env.CMS_CLIENT_KEY, // optional: this site's Client key on the reference backend; enables built-in auth + anonymous published reads
+  // globalSlug: "__global",             // optional: slug for site-wide blocks
+  // theme: { accent: "#3b82f6" },       // optional: override the panel palette (see Theming)
 });
 ```
 
@@ -356,7 +357,21 @@ type scalars (`ShortText` / `LongText` / `RichText` / `Number` / `Bool` / `Url`
 ### Editing & drafts
 
 Editing turns on when the provider knows the visitor is an admin and how to get
-their access token. Two pieces:
+their access token. There are two ways to get there.
+
+**Zero-config, against the reference backend:** set `clientKey` in the config
+and register the site's origin as a Client on the backend. Editors sign in by
+opening any page with `?cms-login`; the provider runs the backend's
+cookie + refresh flow client-side (single-flight and multi-tab safe, so the
+backend's refresh-token reuse detection never trips), checks the token's roles,
+and mounts the drawer for users holding `cms:access` on this `clientKey`.
+Anonymous visitors trigger zero auth traffic and read published content through
+the public endpoint (needs the client's `allowAnonymousContentRead` flag);
+protected setups pass a `cms:read` service key via `getServiceToken` instead.
+Note the session cookie is scoped to the API origin, so the drawer mounts a
+beat after hydration - the server always renders the public view.
+
+**Bring your own auth** in two pieces:
 
 1. **Server side:** give `createCmsPage` an auth adapter so it can resolve the
    session and decide `isAdmin`:
@@ -495,7 +510,8 @@ zero-config path still works.
 | ---- | -------- | ------- | ----------------- |
 | **Transport** | `CmsTransport` | REST adapter (`/cms/*`) | _how_ to talk to the backend |
 | **Service token** | `getServiceToken()` | none (unauthenticated reads) | server-side read credentials |
-| **Auth adapter** | `getSession` / `deriveAdmin` / `deriveUserSub` | public, read-only | who the visitor is |
+| **Auth adapter** | `getSession` / `deriveAdmin` / `deriveUserSub` | public, read-only | who the visitor is (server) |
+| **Browser auth** | `getAccessToken()` prop | reference `/auth/*` flow when `clientKey` is set, else off | who the editor is (client) |
 
 A guiding constraint: **functions can't cross the React Server → Client
 boundary.** That's why `createCmsConfig` returns only serializable data and the

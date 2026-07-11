@@ -170,8 +170,17 @@ export function createBrowserAuth({ baseUrl, clientKey }) {
           method: "POST",
           credentials: "include",
         });
-      } catch {
-        // Network failure: keep the hint so the next attempt retries.
+      } catch (err) {
+        // Network failure: keep the hint so the next attempt retries. In the
+        // browser this is most often a CORS rejection, which surfaces as a
+        // generic TypeError: say so, or the whole flow fails invisibly.
+        if (process.env.NODE_ENV !== "production") {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[inscribed] /auth/refresh unreachable (network/CORS) - is this origin in Cors__AllowedOrigins?`,
+            err,
+          );
+        }
         return false;
       }
       if (!res.ok) {

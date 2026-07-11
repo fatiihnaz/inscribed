@@ -124,9 +124,7 @@ export function CmsProvider({
       if (process.env.NODE_ENV !== "production") {
         // eslint-disable-next-line no-console
         console.warn(
-          `[inscribed] signed in, but the token grants no cms:access for ` +
-            `clientKey "${baseConfig.clientKey}" (azp: "${claims.azp}"). ` +
-            `Check the client's memberships on the backend.`,
+          `[inscribed] signed in but no cms:access for "${baseConfig.clientKey}" (azp "${claims.azp}") - add a membership on the backend.`,
         );
       }
       return;
@@ -134,7 +132,11 @@ export function CmsProvider({
     setSessionExpired(false);
     setBrowserSession({
       userSub: claims.sub ?? null,
-      userInfo: { name: claims.name ?? null, email: claims.email ?? null, image: null },
+      userInfo: {
+        name: claims.name ?? null,
+        email: claims.email ?? null,
+        image: null,
+      },
     });
   }, [browserAuth, baseConfig.clientKey]);
 
@@ -169,6 +171,15 @@ export function CmsProvider({
       if (explicitLogin && !ok) {
         browserAuth.login(); // full-page redirect; comes back with ?cms-auth=done
         return;
+      }
+      // Landing with the marker but failing refresh means the backend's login
+      // succeeded and the token exchange broke: almost always the cookie was
+      // dropped (Secure cookie on http) or CORS blocked the call.
+      if (returning && !ok && process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[inscribed] login returned but /auth/refresh gave no session - check the cookie flags and CORS.`,
+        );
       }
       if (explicitLogin || returning) stripAuthParams();
     })();

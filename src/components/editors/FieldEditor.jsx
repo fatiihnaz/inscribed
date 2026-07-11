@@ -3,7 +3,7 @@
 /**
  * @file Single source of truth for "blockType -> editor component" dispatch,
  * used by both `BlockCard` and `ListEditor`. Primitive types render the same
- * editor everywhere (so a new one is added once); List / DataSource get `null`
+ * editor everywhere (so a new one is added once); List / Collection get `null`
  * so the caller supplies its own surface.
  */
 
@@ -27,7 +27,7 @@ const RichTextEditor = lazy(() =>
 
 /**
  * Render the editor for a primitive block type, or `null` for composite types
- * (List, DataSource, unknown) so the caller supplies its own surface.
+ * (List, Collection, unknown) so the caller supplies its own surface.
  * `ShortText` is a single-line input, `LongText` (and the legacy `Text` alias)
  * a textarea. `hideLabel` is forwarded; editors that ignore it just drop it.
  *

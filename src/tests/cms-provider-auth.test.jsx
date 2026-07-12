@@ -171,6 +171,26 @@ describe("session adoption", () => {
     expect(window.location.search).not.toContain("cms-auth");
     expect(window.location.search).toContain("x=1");
   });
+
+  it("handles ?cms-logout: signs out instead of resuming, clears the hint, strips only the marker", async () => {
+    const key = nextKey();
+    // Hint + a good refresh would normally resume as admin; ?cms-logout must
+    // pre-empt that path entirely and never adopt the session.
+    localStorage.setItem(hintKey(key), "1");
+    refreshImpl = () => jsonRes(goodRefreshBody(key));
+    window.history.replaceState(null, "", "/?cms-logout&x=1");
+
+    renderCms({ baseUrl: BASE, clientKey: key });
+    await waitFor(() =>
+      expect(global.fetch.mock.calls.some((c) => String(c[0]).includes("/auth/logout"))).toBe(true),
+    );
+    await settle();
+    expect(adminText()).toBe("false");
+    expect(refreshCalls()).toBe(0);
+    expect(localStorage.getItem(hintKey(key))).toBeNull();
+    expect(window.location.search).not.toContain("cms-logout");
+    expect(window.location.search).toContain("x=1");
+  });
 });
 
 describe("session lifecycle", () => {

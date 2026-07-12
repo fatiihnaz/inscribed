@@ -155,14 +155,21 @@ export function CmsProvider({
     });
   }, [browserAuth, adoptBrowserSession]);
 
-  // Entry probe on mount: ?cms-login → interactive login, ?cms-auth=done →
-  // back from the backend callback, session hint → silent resume. Anonymous
-  // visitors (none of the three) trigger zero auth requests. Adoption happens
-  // in the onChange handler above, not here.
+  // Entry probe on mount: ?cms-logout → sign out, ?cms-login → interactive
+  // login, ?cms-auth=done → back from the backend callback, session hint →
+  // silent resume. Anonymous visitors (none of these) trigger zero auth
+  // requests. Adoption happens in the onChange handler above, not here.
   useEffect(() => {
     if (!browserAuth) return;
     (async () => {
       const params = new URLSearchParams(window.location.search);
+      // A ?cms-logout link kills the session before any resume probe: strip the
+      // marker and return so it never falls through into a silent re-adoption.
+      if (params.has("cms-logout")) {
+        await browserAuth.logout();
+        stripAuthParams();
+        return;
+      }
       const explicitLogin = params.has("cms-login");
       const returning = params.get("cms-auth") === "done";
       if (!explicitLogin && !returning && !browserAuth.hasSessionHint()) return;
@@ -793,6 +800,7 @@ function stripAuthParams() {
   const url = new URL(window.location.href);
   url.searchParams.delete("cms-login");
   url.searchParams.delete("cms-auth");
+  url.searchParams.delete("cms-logout");
   window.history.replaceState(null, "", url.toString());
 }
 

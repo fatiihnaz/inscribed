@@ -366,7 +366,8 @@ and register the site's origin as a Client on the backend. Editors sign in by
 opening any page with `?cms-login`; the provider runs the backend's
 cookie + refresh flow client-side (single-flight and multi-tab safe, so the
 backend's refresh-token reuse detection never trips), checks the token's roles,
-and mounts the drawer for users holding `cms:access` on this `clientKey`.
+and mounts the drawer for users holding `cms:access` on this `clientKey`. A
+`?cms-logout` link signs them back out (as does the drawer footer's button).
 Anonymous visitors trigger zero auth traffic and read published content through
 the public endpoint (needs the client's `allowAnonymousContentRead` flag);
 protected setups pass a `cms:read` service key via `getServiceToken` instead.

@@ -1,6 +1,6 @@
 {
   "name": "inscribed",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "Inline-editing CMS SDK for Next.js App Router projects",
   "keywords": [
     "cms",
@@ -79,8 +79,10 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
+    "jsdom": "^29.1.1",
     "next": "^15.5.19",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

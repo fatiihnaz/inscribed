@@ -17,6 +17,9 @@
 export { CollectionProvider } from "./components/CollectionProvider.jsx";
 export { CollectionRegion } from "./components/CollectionRegion.jsx";
 export { CollectionItem } from "./components/CollectionItem.jsx";
+// Chrome-free "add one item" form the host mounts on its own page; renders
+// nothing for visitors without create access.
+export { CollectionComposer } from "./components/CollectionComposer.jsx";
 export { CollectionFieldsForm, seedValues, buildPayload, requiredMissing, humanizeCollectionError } from "./components/editors/CollectionFieldsForm.jsx";
 
 export { useCollection, useCollectionItem } from "./hooks/use-collection.js";

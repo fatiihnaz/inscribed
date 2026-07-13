@@ -143,6 +143,12 @@
  */
 
 /**
+ * Sentinel id the backend puts on virtual rows (`Guid.Empty`). A slug-less
+ * sentinel row in a list response is the collection's new-item draft.
+ */
+export const NEW_DRAFT_GUID = "00000000-0000-0000-0000-000000000000";
+
+/**
  * One row from `GET /cms/collections/{key}` (list) or `.../{slug}` (single).
  * Backend-owned shape; `data` is the per-collection payload.
  *

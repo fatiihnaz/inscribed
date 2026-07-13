@@ -25,27 +25,23 @@ import {
 } from "../icons.jsx";
 
 import { labelStyle, labelTextStyle } from "./styles.js";
-import {
-  ACCENT,
-  BORDER,
-  BORDER_FOCUS,
-  TEXT,
-  TEXT_MUTED,
-  TEXT_HI,
-  SURFACE_1,
-  SURFACE_2,
-  SURFACE_3,
-  ACCENT_SOFT,
-  R_SM,
-  R_MD,
-} from "../admin-drawer-styles.js";
+import { ACCENT, ACCENT_SOFT, R_SM, R_MD } from "../admin-drawer-styles.js";
 
-// Local aliases onto the shared tokens so the toolbar reads as part of the
-// same palette (and tracks a `theme` override). Names kept for the existing
-// call sites below.
-const TEXT_PRIMARY  = TEXT_HI;
-const SURFACE       = SURFACE_2;
-const SURFACE_HOVER = SURFACE_3;
+// Theme-portable palette. The RTE renders both on the dark drawer AND on a
+// light host page (via CollectionComposer / CollectionFieldsForm), so text
+// inherits (`currentColor`) and surfaces/borders use mid-gray alphas that read
+// on any background: the same portability rule the sibling scalar inputs in
+// CollectionFieldsForm follow. Only the accent stays themeable. (Names kept for
+// the existing call sites below.)
+const TEXT_PRIMARY  = "currentColor";
+const TEXT          = "color-mix(in srgb, currentColor 78%, transparent)";
+const TEXT_MUTED    = "color-mix(in srgb, currentColor 55%, transparent)";
+const SURFACE       = "rgba(127,127,127,0.05)";
+const SURFACE_1     = "rgba(127,127,127,0.03)";
+const SURFACE_3     = "rgba(127,127,127,0.16)";
+const SURFACE_HOVER = "rgba(127,127,127,0.12)";
+const BORDER        = "rgba(127,127,127,0.24)";
+const BORDER_FOCUS  = "rgba(127,127,127,0.5)";
 const ACTIVE_BG     = ACCENT_SOFT;
 
 // Tiptap returns "<p></p>" for an empty doc. Normalise that to "" so the

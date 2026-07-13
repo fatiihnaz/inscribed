@@ -1,6 +1,6 @@
 {
   "name": "inscribed",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Inline-editing CMS SDK for Next.js App Router projects",
   "keywords": [
     "cms",

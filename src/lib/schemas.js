@@ -76,7 +76,12 @@
  * `LongText`). `ObjectArray` is the only non-scalar: its value is an array of
  * objects shaped by `itemFields`, rendered as a repeatable sub-form.
  *
- * @typedef {"Text" | "ShortText" | "LongText" | "RichText" | "Bool" | "Url" | "StringArray" | "Date" | "Number" | "ObjectArray"} CollectionFieldType
+ * `Image` is a fixed-shape `{ src, alt }` object (like the CMS Image block):
+ * `src` a Url, `alt` a ShortText, both required once the field has a value. It
+ * renders an upload dropzone (`config.transport.uploadImage`) instead of a bare
+ * text box.
+ *
+ * @typedef {"Text" | "ShortText" | "LongText" | "RichText" | "Image" | "Bool" | "Url" | "StringArray" | "Date" | "Number" | "ObjectArray"} CollectionFieldType
  *
  * @typedef {Object} CollectionFieldDescriptor
  * @property {string} name

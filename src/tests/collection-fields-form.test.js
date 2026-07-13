@@ -90,6 +90,35 @@ describe("requiredMissing - ObjectArray", () => {
   });
 });
 
+describe("Image field ({ src, alt } object)", () => {
+  const hero = {
+    name: "hero", type: "Image", label: "Kapak", required: false,
+    readOnly: false, filterable: false, options: null, help: null, itemFields: null,
+  };
+  const img = (src, alt) => ({ src, alt });
+
+  it("seeds a missing Image to an empty { src, alt }", () => {
+    expect(seedValues([hero], {})).toEqual({ hero: { src: "", alt: "" } });
+  });
+
+  it("passes an existing { src, alt } through buildPayload untouched", () => {
+    const v = img("https://cdn.example/x.jpg", "Kapak görseli");
+    expect(buildPayload([hero], { hero: v })).toEqual({ hero: v });
+  });
+
+  it("treats an optional empty image as valid, but requires alt once src is set", () => {
+    expect(requiredMissing([hero], { hero: img("", "") })).toBeNull();
+    expect(requiredMissing([hero], { hero: img("https://cdn/x.jpg", "") })).toBe("Kapak → Alt");
+    expect(requiredMissing([hero], { hero: img("https://cdn/x.jpg", "açıklama") })).toBeNull();
+  });
+
+  it("flags a required-but-empty Image by its label", () => {
+    const required = { ...hero, required: true };
+    expect(requiredMissing([required], { hero: img("", "") })).toBe("Kapak");
+    expect(requiredMissing([required], { hero: img("https://cdn/x.jpg", "a") })).toBeNull();
+  });
+});
+
 describe("humanizeCollectionError", () => {
   it("returns null when there's no detail", () => {
     expect(humanizeCollectionError("", [works])).toBeNull();

@@ -3,6 +3,7 @@
 import { lazy, Suspense, useState } from "react";
 
 import { moveItem, removeItem } from "../../lib/list-ops.js";
+import { ImageEditor } from "./ImageEditor.jsx";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "../icons.jsx";
 
 // Lazy so the heavy TipTap dep stays out of the main bundle: a consumer using
@@ -171,6 +172,15 @@ function FieldInput({ field, value, onChange, disabled }) {
           {field.help ? <span style={helpStyle}>{field.help}</span> : null}
         </label>
       );
+
+      case "Image":
+        return (
+          <div style={labelStyle}>
+            {labelNode}
+            <ImageEditor value={value} onChange={onChange} disabled={disabled} />
+            {field.help ? <span style={helpStyle}>{field.help}</span> : null}
+          </div>
+        );
 
       case "StringArray":
         return (
@@ -542,6 +552,7 @@ function defaultFor(type) {
     case "Number":      return null;
     case "StringArray": return [];
     case "ObjectArray": return [];
+    case "Image":       return { src: "", alt: "" };
     default:            return "";
   }
 }
@@ -670,6 +681,21 @@ export function requiredMissing(fields, values) {
         const innerMissing = requiredMissing(field.itemFields ?? [], items[i] ?? {});
         if (innerMissing) return `${field.label || field.name} #${i + 1} → ${innerMissing}`;
       }
+      continue;
+    }
+
+    // Image is `{ src, alt }`, both required whenever the field has a value.
+    // Runs before the `!required` skip: even an optional image must carry alt
+    // once src is set, else the backend 400s.
+    if (field.type === "Image") {
+      const v = value && typeof value === "object" ? value : {};
+      const s = typeof v.src === "string" ? v.src.trim() : "";
+      const a = typeof v.alt === "string" ? v.alt.trim() : "";
+      if (!s) {
+        if (field.required) return field.label || field.name;
+        continue;
+      }
+      if (!a) return `${field.label || field.name} → Alt`;
       continue;
     }
 
@@ -808,6 +834,7 @@ const checkboxLabelStyle = {
   color: "inherit",
   padding: "2px 0",
 };
+
 const switchRowStyle = {
   display: "flex",
   alignItems: "center",

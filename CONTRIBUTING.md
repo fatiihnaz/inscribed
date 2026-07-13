@@ -232,6 +232,28 @@ Two conventions worth knowing before you add one:
   main-entry bundle a static import leaks the chunk into `index.js` since the
   package sets no `sideEffects`. See `CollectionFieldsForm`'s RichText case.
 
+### Add a collection field type
+
+Collection field types are **backend-defined**: they arrive in the `/schema`
+response, never through the manifest, so there's no discovery step. The frontend
+only renders what the backend declares.
+
+1. Extend `CollectionFieldType` and document its value shape in
+   `src/lib/schemas.js`.
+2. Add a `case` in `CollectionFieldsForm`'s `FieldInput` that renders the editor.
+3. Teach the pure helpers in the same file: `defaultFor` (empty value for
+   `seedValues`), `buildPayload` (only if the type isn't a plain pass-through,
+   like `ObjectArray`), and `requiredMissing` (its validity rule).
+4. Cover 2–3 in `src/tests/collection-fields-form.test.js`.
+
+The backend must emit the new `type` for the editor to show; until then the field
+arrives as whatever type the schema currently reports. Keep any shared editor
+**portable** (neutral colours + `currentColor`, no `admin-drawer-styles` tokens,
+no framer-motion) if it's reused by `<CollectionComposer>` or the CMS block side:
+those surfaces render on light host pages and the drawer alike, and the
+collections entry must stay framer-free. `ImageEditor` is the reference: one
+component shared by the CMS Image block and the collection `Image` field.
+
 ## Commit conventions
 
 We use **[Conventional Commits](https://www.conventionalcommits.org/)** with small,

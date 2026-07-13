@@ -24,3 +24,6 @@ export { CollectionFieldsForm, seedValues, buildPayload, requiredMissing, humani
 
 export { useCollection, useCollectionItem } from "./hooks/use-collection.js";
 export { useMyCollections } from "./hooks/use-my-collections.js";
+// Powers <CollectionComposer> and the drawer's new-item card; exposed for
+// hosts that want to build their own create UI over the same draft/submit flow.
+export { useCollectionCreate } from "./hooks/use-collection-create.js";

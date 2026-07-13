@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/inscribed.svg)](https://www.npmjs.com/package/inscribed)
 [![license](https://img.shields.io/npm/l/inscribed.svg)](./LICENSE)
 
-**Inline-editing CMS SDK for Next.js App Router.**
+**Zero-Configuration, JSX-First Inline-Editing CMS SDK for Next.js App Router.**
 
 inscribed lets you mark up regions of your existing React tree as editable, then edit
 them in place from an admin drawer allowing no separate CMS dashboard and no content

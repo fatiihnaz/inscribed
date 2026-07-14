@@ -14,7 +14,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
-import { useCmsContext } from "../../lib/context.js";
+import { useImageUpload } from "../../hooks/use-image-upload.js";
 
 /**
  * @typedef {Object} ImageValue
@@ -29,47 +29,25 @@ import { useCmsContext } from "../../lib/context.js";
  * @param {boolean} [props.disabled]
  */
 export function ImageEditor({ value, onChange, disabled }) {
-  const { config, getAccessToken } = useCmsContext();
   const obj = value && typeof value === "object" ? value : {};
   const src = typeof obj.src === "string" ? obj.src : "";
   const alt = typeof obj.alt === "string" ? obj.alt : "";
   /** @param {{ src?: string, alt?: string }} p */
   const patch = (p) => onChange({ src, alt, ...p });
 
+  const { upload, reset, isUploading, progress, error: uploadError } = useImageUpload();
   const [isDragging, setIsDragging] = useState(false);
-  /** @type {[{ progress: number } | { error: string } | null, Function]} */
-  const [uploadState, setUploadState] = useState(null);
   const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
   const handleFile = useCallback(
     /** @param {File} file */
     async (file) => {
-      if (!file.type.startsWith("image/")) {
-        setUploadState({ error: "Lütfen bir görsel dosyası seçin." });
-        return;
-      }
-      setUploadState({ progress: 0 });
-      try {
-        const token = (await getAccessToken?.()) ?? null;
-        const result = await config.transport.uploadImage(file, {
-          onProgress: (p) => setUploadState({ progress: p }),
-          accessToken: token,
-        });
-        const uploaded = result?.data?.url;
-        if (!uploaded) throw new Error("CDN cevabında url bulunamadı");
-        // Preserve any alt already typed; only src changes on upload.
-        onChange({ src: uploaded, alt });
-        setUploadState(null);
-      } catch (/** @type {any} */ err) {
-        setUploadState({ error: err?.message ?? "Yükleme başarısız." });
-      }
+      // Preserve any alt already typed; only src changes on upload.
+      const url = await upload(file);
+      if (url) onChange({ src: url, alt });
     },
-    [config, getAccessToken, onChange, alt],
+    [upload, onChange, alt],
   );
-
-  const isUploading = uploadState !== null && "progress" in uploadState;
-  const uploadError = uploadState !== null && "error" in uploadState ? uploadState.error : null;
-  const progress = isUploading ? /** @type {any} */ (uploadState).progress : 0;
 
   const onDrop = (/** @type {React.DragEvent} */ e) => {
     e.preventDefault();
@@ -135,7 +113,7 @@ export function ImageEditor({ value, onChange, disabled }) {
           <span style={{ flex: 1 }}>{uploadError}</span>
           <button
             type="button"
-            onClick={() => setUploadState(null)}
+            onClick={reset}
             style={errorCloseStyle}
             aria-label="Hatayı kapat"
           >

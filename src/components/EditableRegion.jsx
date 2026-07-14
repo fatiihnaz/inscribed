@@ -14,7 +14,7 @@
  * For full control over rendering, use `useCmsBlock(blockPath)` instead.
  */
 
-import { cloneElement, useContext, useEffect, useState } from "react";
+import { cloneElement, useContext, useEffect, useRef, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 
 import { useCmsContext } from "../lib/context.js";
@@ -22,6 +22,11 @@ import { useStoreSelector } from "../lib/store.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
 import { ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
 import { InlineTextEditor } from "./InlineTextEditor.jsx";
+import { InlineImageOverlay } from "./InlineImageOverlay.jsx";
+
+// Below this the on-image scrim buttons don't fit; the block falls back to the
+// label chip → drawer for editing.
+const IMAGE_OVERLAY_MIN = { w: 150, h: 64 };
 
 /**
  * @import { BlockType } from "../lib/schemas.js"
@@ -83,6 +88,10 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   const groupVisibility = useContext(CmsGroupVisibilityContext);
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [wrapperSize, setWrapperSize] = useState(
+    /** @type {{ w: number, h: number } | null} */ (null),
+  );
+  const wrapperRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
 
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 
@@ -112,6 +121,24 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
     ? renderPlaceholder(as, rest, isAdmin)
     : renderBlock(blockType, value, { as, ...rest });
 
+  // Track the rendered image's box so the on-image overlay can stand down when
+  // the picture is too small to hold the scrim buttons. Admin + Image only.
+  useEffect(() => {
+    if (!isAdmin || blockType !== "Image") return undefined;
+    const el = wrapperRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      setWrapperSize((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isAdmin, blockType]);
+
   if (!isAdmin || visibilityMode) return rendered;
 
   const isActive = activeBlock === fullPath;
@@ -120,6 +147,9 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   // "active" ring/tint; only the label chip opens the drawer.
   const highlight = isActive || isFocused;
   const canInlineEdit = INLINE_TEXT_TYPES.has(/** @type {string} */ (blockType));
+  const isImageType = blockType === "Image";
+  const imageOverlayFits =
+    !wrapperSize || (wrapperSize.w >= IMAGE_OVERLAY_MIN.w && wrapperSize.h >= IMAGE_OVERLAY_MIN.h);
 
   const ringStyle = {
     boxShadow: highlight ? RING_ACTIVE : isHovered ? RING_HOVER : undefined,
@@ -128,6 +158,11 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
 
   let inner;
   let innerTag;
+  // Margin the consumer set on an Image is lifted onto the wrapper so the
+  // wrapper's box hugs the picture (not the surrounding margin). Otherwise the
+  // absolutely-positioned overlay anchors to the margin box and its buttons
+  // float in the gap above the image.
+  let wrapperMargin = null;
   if (canInlineEdit) {
     innerTag = as ?? "span";
     inner = (
@@ -145,6 +180,33 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
         style={{ ...ringStyle, cursor: "text" }}
       />
     );
+  } else if (isImageType) {
+    // Image's quick actions (replace/remove) live in the on-image overlay
+    // below; a click on the bare image opens the drawer for the details (alt,
+    // URL), same as the chip.
+    const childProps = rendered.props ?? {};
+    const { marginStyle, boxStyle } = liftMargin(childProps.style ?? {});
+    wrapperMargin = marginStyle;
+    inner = cloneElement(rendered, {
+      "data-block": fullPath,
+      "data-cms-active": highlight || undefined,
+      /** @param {React.MouseEvent} e */
+      onClick: (e) => {
+        if (childProps.onClick) childProps.onClick(e);
+        if (e.defaultPrevented) return;
+        e.stopPropagation();
+        setActiveBlock(fullPath);
+      },
+      style: {
+        // `display:block` drops the inline-image baseline gap so the wrapper
+        // (and overlay) match the image height exactly.
+        ...(rendered.type === "img" ? { display: "block" } : null),
+        ...boxStyle,
+        ...ringStyle,
+        cursor: "pointer",
+      },
+    });
+    innerTag = typeof rendered.type === "string" ? rendered.type : "span";
   } else {
     /** @param {React.MouseEvent} e */
     const handleClick = (e) => {
@@ -175,11 +237,13 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
 
   return (
     <span
+      ref={wrapperRef}
       style={{
         position: "relative",
         display: wrapperDisplay,
         backgroundColor: highlight ? BG_ACTIVE : isHovered ? BG_HOVER : BG_OFF,
         transition: "background-color 0.2s ease",
+        ...(wrapperMargin ?? {}),
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -221,8 +285,35 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
           {fullPath}{blockType ? ` · ${blockType}` : ""}
         </button>
       )}
+      {isImageType && !empty && imageOverlayFits && (isHovered || highlight) && (
+        <InlineImageOverlay
+          value={value && typeof value === "object" ? value : null}
+          onChange={(v) => setDraft(fullPath, v)}
+        />
+      )}
     </span>
   );
+}
+
+const MARGIN_PROPS = new Set(["margin", "marginTop", "marginRight", "marginBottom", "marginLeft"]);
+
+/**
+ * Split a style object into its margin props and everything else, so the margin
+ * can move to the positioned wrapper while the rest stays on the image.
+ *
+ * @param {Record<string, *>} style
+ * @returns {{ marginStyle: Record<string, *>, boxStyle: Record<string, *> }}
+ */
+function liftMargin(style) {
+  /** @type {Record<string, *>} */
+  const marginStyle = {};
+  /** @type {Record<string, *>} */
+  const boxStyle = {};
+  for (const [k, v] of Object.entries(style)) {
+    if (MARGIN_PROPS.has(k)) marginStyle[k] = v;
+    else boxStyle[k] = v;
+  }
+  return { marginStyle, boxStyle };
 }
 
 /**

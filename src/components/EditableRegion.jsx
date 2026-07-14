@@ -14,7 +14,7 @@
  * For full control over rendering, use `useCmsBlock(blockPath)` instead.
  */
 
-import { cloneElement, useContext, useEffect, useRef, useState } from "react";
+import { cloneElement, lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 
 import { useCmsContext } from "../lib/context.js";
@@ -23,6 +23,12 @@ import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "
 import { ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
 import { InlineTextEditor } from "./InlineTextEditor.jsx";
 import { InlineImageOverlay } from "./InlineImageOverlay.jsx";
+
+// Lazy so Tiptap never enters the public bundle: only an admin rendering a
+// RichText region triggers the chunk (already warmed by the drawer's prefetch).
+const InlineRichText = lazy(() =>
+  import("./InlineRichText.jsx").then((m) => ({ default: m.InlineRichText })),
+);
 
 // Below this the on-image scrim buttons don't fit; the block falls back to the
 // label chip → drawer for editing.
@@ -207,6 +213,19 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
       },
     });
     innerTag = typeof rendered.type === "string" ? rendered.type : "span";
+  } else if (blockType === "RichText") {
+    innerTag = as ?? "div";
+    inner = (
+      <Suspense fallback={rendered}>
+        <InlineRichText
+          value={typeof value === "string" ? value : ""}
+          onChange={(html) => setDraft(fullPath, html)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          style={{ ...ringStyle, cursor: "text" }}
+        />
+      </Suspense>
+    );
   } else {
     /** @param {React.MouseEvent} e */
     const handleClick = (e) => {

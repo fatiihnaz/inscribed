@@ -153,6 +153,20 @@ export function AdminDrawer() {
   } = useCmsSave();
   const pathname = usePathname() ?? "/";
 
+  // Warm the Tiptap chunk in the background once the admin surface mounts, so
+  // the first RichText edit (drawer card or in-place) doesn't stall ~1-2s on the
+  // lazy import. Admin-only path already; idle so it never competes with paint.
+  useEffect(() => {
+    const prefetch = () => { import("./editors/RichTextEditor.jsx").catch(() => {}); };
+    const ric = typeof window !== "undefined" ? window.requestIdleCallback : undefined;
+    if (ric) {
+      const id = ric(prefetch, { timeout: 2000 });
+      return () => window.cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(prefetch, 800);
+    return () => clearTimeout(t);
+  }, []);
+
   // Search filter (path + type), Page/Global tabs only; Collection lanes
   // filter inside their own panel.
   const [search, setSearch] = useState("");

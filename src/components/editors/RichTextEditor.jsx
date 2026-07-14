@@ -1,127 +1,55 @@
 "use client";
 
 /**
- * @file Tiptap-based rich-text editor for the admin drawer. StarterKit + Link;
- * H1 is disabled (the page heading is a separate Text block, body tops at H2/H3).
+ * @file Tiptap rich-text editor for the admin drawer: the shell (bordered
+ * surface + label), the top toolbar, and the content typography. The editor
+ * setup lives in `useRichTextEditor` and the buttons in `<RichTextToolbar>`, so
+ * the page-side inline editor shares both.
  *
- * Content is seeded once from `value` and propagated back via `onUpdate`.
- * External replacements (reset, refetch) flow through the sync effect, which
- * calls `setContent` only when the HTML actually differs, so typing doesn't
- * trigger a setContent that would jump the cursor to the end.
- *
- * `immediatelyRender: false` keeps Tiptap off ProseMirror during SSR. Output is
- * HTML, which EditableRegion sanitises with DOMPurify, so pasted hostile markup
- * can only XSS the admin themselves.
+ * Content is HTML, which EditableRegion sanitises with DOMPurify, so pasted
+ * hostile markup can only XSS the admin themselves.
  */
 
-import { useEffect, useRef } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
-import {
-  Bold, Italic, Strikethrough, Heading2, Heading3,
-  List as ListIcon, ListOrdered, Quote, Code, Link as LinkIcon,
-  Undo2, Redo2,
-} from "../icons.jsx";
+import { EditorContent } from "@tiptap/react";
 
+import { useRichTextEditor } from "../../hooks/use-rich-text-editor.js";
+import { RichTextToolbar } from "./RichTextToolbar.jsx";
 import { labelStyle, labelTextStyle } from "./styles.js";
-import { ACCENT, ACCENT_SOFT, R_SM, R_MD } from "../admin-drawer-styles.js";
+import { ACCENT, R_MD } from "../admin-drawer-styles.js";
 
-// Theme-portable palette. The RTE renders both on the dark drawer AND on a
-// light host page (via CollectionComposer / CollectionFieldsForm), so text
-// inherits (`currentColor`) and surfaces/borders use mid-gray alphas that read
-// on any background: the same portability rule the sibling scalar inputs in
-// CollectionFieldsForm follow. Only the accent stays themeable. (Names kept for
-// the existing call sites below.)
+// Theme-portable palette: the editor renders on the dark drawer AND on a light
+// host page (CollectionComposer), so text inherits (`currentColor`) and
+// surfaces/borders use mid-gray alphas that read on any background. Only the
+// accent stays themeable.
 const TEXT_PRIMARY  = "currentColor";
 const TEXT          = "color-mix(in srgb, currentColor 78%, transparent)";
-const TEXT_MUTED    = "color-mix(in srgb, currentColor 55%, transparent)";
 const SURFACE       = "rgba(127,127,127,0.05)";
 const SURFACE_1     = "rgba(127,127,127,0.03)";
 const SURFACE_3     = "rgba(127,127,127,0.16)";
-const SURFACE_HOVER = "rgba(127,127,127,0.12)";
 const BORDER        = "rgba(127,127,127,0.24)";
 const BORDER_FOCUS  = "rgba(127,127,127,0.5)";
-const ACTIVE_BG     = ACCENT_SOFT;
-
-// Tiptap returns "<p></p>" for an empty doc. Normalise that to "" so the
-// dirty/clean diff in CmsProvider (JSON.stringify equality vs block.value)
-// matches a freshly-seeded empty block instead of marking it permanently
-// dirty.
-const EMPTY_DOC_HTML = "<p></p>";
 
 /**
  * @param {Object} props
  * @param {string} props.value
  * @param {(value: string) => void} props.onChange
  * @param {boolean} [props.disabled]
- * @param {boolean} [props.hideLabel]  Drop the built-in "Zengin Metin"
- *   caption when a parent (e.g. `ListEditor`) already labels the field.
+ * @param {boolean} [props.hideLabel]  Drop the built-in "Zengin Metin" caption
+ *   when a parent (e.g. `ListEditor`) already labels the field.
  */
 export function RichTextEditor({ value, onChange, disabled, hideLabel }) {
-  const suppressUpdateRef = useRef(true);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [2, 3] },
-      }),
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-        HTMLAttributes: { rel: "noopener noreferrer" },
-      }),
-    ],
-    content: value || "",
-    editable: !disabled,
-    immediatelyRender: false,
-    editorProps: {
-      attributes: {
-        class: "inscribed-rte-content",
-      },
-    },
-    onUpdate: ({ editor }) => {
-      if (suppressUpdateRef.current) return;
-      const html = editor.getHTML();
-      onChange(html === EMPTY_DOC_HTML ? "" : html);
-    },
-  });
-
-  // Release the suppression once the editor instance is ready so that real
-  // user edits are forwarded normally.
-  useEffect(() => {
-    if (!editor) return;
-    suppressUpdateRef.current = false;
-    return () => { suppressUpdateRef.current = true; };
-  }, [editor]);
-
-  // External value replacements (reset, refetch, discard) need to mirror
-  // onto the editor. Skipping when the values match avoids the per-keystroke
-  // setContent that would otherwise nuke the cursor position.
-  useEffect(() => {
-    if (!editor) return;
-    const current = editor.getHTML();
-    const incoming = value || "";
-    if (incoming === current) return;
-    if (incoming === "" && current === EMPTY_DOC_HTML) return;
-    suppressUpdateRef.current = true;
-    editor.commands.setContent(incoming || "", false);
-    suppressUpdateRef.current = false;
-  }, [editor, value]);
-
-  // `editable` is only read at init, so toggle it imperatively when read-only
-  // changes, stripping the contenteditable affordance off ProseMirror.
-  useEffect(() => {
-    if (!editor) return;
-    editor.setEditable(!disabled);
-  }, [editor, disabled]);
+  const editor = useRichTextEditor({ value, onChange, disabled });
 
   return (
     <label style={labelStyle}>
       {hideLabel ? null : <span style={labelTextStyle}>Zengin Metin</span>}
-      <style>{rteCss}</style>
+      <style>{rteContentCss}</style>
       <div className="inscribed-rte-shell" style={shellStyle}>
-        <Toolbar editor={editor} disabled={disabled} />
+        <RichTextToolbar
+          editor={editor}
+          disabled={disabled}
+          style={{ borderBottom: `1px solid ${BORDER}`, background: SURFACE_1 }}
+        />
         <div style={contentWrapStyle}>
           <EditorContent editor={editor} />
         </div>
@@ -129,188 +57,6 @@ export function RichTextEditor({ value, onChange, disabled, hideLabel }) {
     </label>
   );
 }
-
-/**
- * @param {{ editor: import("@tiptap/react").Editor | null, disabled?: boolean }} props
- */
-function Toolbar({ editor, disabled }) {
-  if (!editor) {
-    return <div style={{ ...toolbarStyle, minHeight: 34 }} />;
-  }
-
-  // Read-only: keep the toolbar in layout for continuity but make it inert.
-  if (disabled) {
-    return (
-      <div
-        style={{ ...toolbarStyle, minHeight: 34, opacity: 0.4, pointerEvents: "none" }}
-        aria-disabled="true"
-      />
-    );
-  }
-
-  const handleLink = () => {
-    const prev = editor.getAttributes("link").href ?? "";
-    // eslint-disable-next-line no-alert
-    const url = window.prompt("Link URL", prev);
-    if (url === null) return; // cancelled
-    if (url === "") {
-      editor.chain().focus().extendMarkRange("link").unsetLink().run();
-      return;
-    }
-    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
-  };
-
-  // mousedown.preventDefault keeps the editor selection alive across
-  // toolbar clicks - without it, clicking Bold blurs the editor, the
-  // selection collapses, and the toggle runs against an empty range.
-  return (
-    <div style={toolbarStyle} onMouseDown={(e) => e.preventDefault()}>
-      <Btn
-        active={editor.isActive("bold")}
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        title="Kalın (Ctrl+B)"
-        ariaLabel="Kalın"
-      >
-        <Bold size={13} />
-      </Btn>
-      <Btn
-        active={editor.isActive("italic")}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        title="İtalik (Ctrl+I)"
-        ariaLabel="İtalik"
-      >
-        <Italic size={13} />
-      </Btn>
-      <Btn
-        active={editor.isActive("strike")}
-        onClick={() => editor.chain().focus().toggleStrike().run()}
-        title="Üstü çizili"
-        ariaLabel="Üstü çizili"
-      >
-        <Strikethrough size={13} />
-      </Btn>
-      <Btn
-        active={editor.isActive("code")}
-        onClick={() => editor.chain().focus().toggleCode().run()}
-        title="Inline kod"
-        ariaLabel="Inline kod"
-      >
-        <Code size={13} />
-      </Btn>
-
-      <Sep />
-
-      <Btn
-        active={editor.isActive("heading", { level: 2 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        title="Başlık 2"
-        ariaLabel="Başlık 2"
-      >
-        <Heading2 size={13} />
-      </Btn>
-      <Btn
-        active={editor.isActive("heading", { level: 3 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        title="Başlık 3"
-        ariaLabel="Başlık 3"
-      >
-        <Heading3 size={13} />
-      </Btn>
-
-      <Sep />
-
-      <Btn
-        active={editor.isActive("bulletList")}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        title="Madde listesi"
-        ariaLabel="Madde listesi"
-      >
-        <ListIcon size={13} />
-      </Btn>
-      <Btn
-        active={editor.isActive("orderedList")}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        title="Numaralı liste"
-        ariaLabel="Numaralı liste"
-      >
-        <ListOrdered size={13} />
-      </Btn>
-      <Btn
-        active={editor.isActive("blockquote")}
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        title="Alıntı"
-        ariaLabel="Alıntı"
-      >
-        <Quote size={13} />
-      </Btn>
-
-      <Sep />
-
-      <Btn
-        active={editor.isActive("link")}
-        onClick={handleLink}
-        title="Link"
-        ariaLabel="Link"
-      >
-        <LinkIcon size={13} />
-      </Btn>
-
-      <Sep />
-
-      <Btn
-        onClick={() => editor.chain().focus().undo().run()}
-        disabled={!editor.can().undo()}
-        title="Geri al (Ctrl+Z)"
-        ariaLabel="Geri al"
-      >
-        <Undo2 size={13} />
-      </Btn>
-      <Btn
-        onClick={() => editor.chain().focus().redo().run()}
-        disabled={!editor.can().redo()}
-        title="İleri al (Ctrl+Shift+Z)"
-        ariaLabel="İleri al"
-      >
-        <Redo2 size={13} />
-      </Btn>
-    </div>
-  );
-}
-
-/**
- * @param {{
- *   active?: boolean,
- *   disabled?: boolean,
- *   onClick: () => void,
- *   title: string,
- *   ariaLabel: string,
- *   children: React.ReactNode,
- * }} props
- */
-function Btn({ active, disabled, onClick, title, ariaLabel, children }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      aria-label={ariaLabel}
-      aria-pressed={active || undefined}
-      className={active ? "inscribed-rte-btn inscribed-rte-btn-active" : "inscribed-rte-btn"}
-      style={btnStyle}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Sep() {
-  return <span aria-hidden="true" style={sepStyle} />;
-}
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
 
 const shellStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
@@ -321,39 +67,6 @@ const shellStyle = /** @type {React.CSSProperties} */ ({
   overflow: "hidden",
 });
 
-const toolbarStyle = /** @type {React.CSSProperties} */ ({
-  display: "flex",
-  alignItems: "center",
-  flexWrap: "wrap",
-  gap: 1.5,
-  padding: 4,
-  borderBottom: `1px solid ${BORDER}`,
-  background: SURFACE_1,
-});
-
-const btnStyle = /** @type {React.CSSProperties} */ ({
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: 26,
-  height: 26,
-  padding: 0,
-  border: 0,
-  borderRadius: R_SM,
-  background: "transparent",
-  color: TEXT_MUTED,
-  cursor: "pointer",
-  transition: "background-color 120ms ease, color 120ms ease",
-});
-
-const sepStyle = /** @type {React.CSSProperties} */ ({
-  display: "inline-block",
-  width: 1,
-  height: 16,
-  margin: "0 4px",
-  background: BORDER,
-});
-
 const contentWrapStyle = /** @type {React.CSSProperties} */ ({
   padding: "10px 12px",
   minHeight: 120,
@@ -362,23 +75,11 @@ const contentWrapStyle = /** @type {React.CSSProperties} */ ({
   color: TEXT_PRIMARY,
 });
 
-// Tiptap renders into a contenteditable div; ProseMirror does not accept
-// inline styles on the editable surface, so we style it via a class. Also
-// covers focus state on the shell (no native :focus-within in inline styles)
-// and the typographic baseline for headings/lists/blockquotes/code.
-const rteCss = `
-  .inscribed-rte-btn:hover:not(:disabled) {
-    background: ${SURFACE_HOVER};
-    color: ${TEXT_PRIMARY};
-  }
-  .inscribed-rte-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
-  .inscribed-rte-btn-active {
-    background: ${ACTIVE_BG} !important;
-    color: ${ACCENT} !important;
-  }
+// Tiptap renders into a contenteditable div; ProseMirror rejects inline styles
+// there, so the content is styled via a class. Also covers the shell focus ring
+// and the typographic baseline for headings/lists/blockquotes/code. Button
+// states live in RichTextToolbar.
+const rteContentCss = `
   .inscribed-rte-content {
     outline: none;
     min-height: 100px;

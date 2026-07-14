@@ -21,6 +21,7 @@ import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
 import { ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
+import { InlineTextEditor } from "./InlineTextEditor.jsx";
 
 /**
  * @import { BlockType } from "../lib/schemas.js"
@@ -55,6 +56,10 @@ const BG_HOVER  = `color-mix(in srgb, ${ACCENT} 5%, transparent)`;
 const BG_ACTIVE = `color-mix(in srgb, ${ACCENT} 8%, transparent)`;
 const EMPTY_PLACEHOLDER = "-";
 
+// Block types that edit in place as a plain string. Everything else keeps the
+// click-to-drawer flow (structured editors, RichText via Tiptap).
+const INLINE_TEXT_TYPES = new Set(["Text", "ShortText", "LongText"]);
+
 const BLOCK_TAGS = new Set([
   "div", "section", "article", "main", "aside", "header", "footer", "nav",
   "h1", "h2", "h3", "h4", "h5", "h6", "p",
@@ -71,12 +76,13 @@ const BLOCK_TAGS = new Set([
 // eslint-disable-next-line no-unused-vars
 export function EditableRegion({ blockPath, as, editable, visible, blockType: _bt, defaultValue: _dv, scope: _scope, ...rest }) {
   const {
-    isAdmin, blocks, contentDraftsStore, activeBlock, setActiveBlock,
+    isAdmin, blocks, contentDraftsStore, activeBlock, setActiveBlock, setDraft,
     registerEditorVisibility, unregisterEditorVisibility,
   } = useCmsContext();
   const groupPrefix = useContext(CmsGroupContext);
   const groupVisibility = useContext(CmsGroupVisibilityContext);
   const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 
@@ -109,33 +115,62 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   if (!isAdmin || visibilityMode) return rendered;
 
   const isActive = activeBlock === fullPath;
-  /** @param {React.MouseEvent} e */
-  const handleClick = (e) => {
-    e.stopPropagation();
-    setActiveBlock(fullPath);
+  // Editing focus and drawer selection are decoupled: focusing an in-place text
+  // block highlights the region but does NOT open the drawer. Both drive the
+  // "active" ring/tint; only the label chip opens the drawer.
+  const highlight = isActive || isFocused;
+  const canInlineEdit = INLINE_TEXT_TYPES.has(/** @type {string} */ (blockType));
+
+  const ringStyle = {
+    boxShadow: highlight ? RING_ACTIVE : isHovered ? RING_HOVER : undefined,
+    transition: "box-shadow 0.15s ease",
   };
 
-  const childProps = rendered.props ?? {};
-  const mergedOnClick = childProps.onClick
-    ? /** @param {React.MouseEvent} e */ (e) => {
-        childProps.onClick(e);
-        if (!e.defaultPrevented) handleClick(e);
-      }
-    : handleClick;
+  let inner;
+  let innerTag;
+  if (canInlineEdit) {
+    innerTag = as ?? "span";
+    inner = (
+      <InlineTextEditor
+        {...rest}
+        tag={innerTag}
+        value={typeof value === "string" ? value : ""}
+        singleLine={blockType !== "LongText"}
+        placeholder="Metin ekle…"
+        data-block={fullPath}
+        data-cms-active={highlight || undefined}
+        onInput={(text) => setDraft(fullPath, text)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        style={{ ...ringStyle, cursor: "text" }}
+      />
+    );
+  } else {
+    /** @param {React.MouseEvent} e */
+    const handleClick = (e) => {
+      e.stopPropagation();
+      setActiveBlock(fullPath);
+    };
+    const childProps = rendered.props ?? {};
+    const mergedOnClick = childProps.onClick
+      ? /** @param {React.MouseEvent} e */ (e) => {
+          childProps.onClick(e);
+          if (!e.defaultPrevented) handleClick(e);
+        }
+      : handleClick;
+    inner = cloneElement(rendered, {
+      "data-block": fullPath,
+      "data-cms-active": isActive || undefined,
+      onClick: mergedOnClick,
+      style: {
+        ...(childProps.style ?? {}),
+        ...ringStyle,
+        cursor: "pointer",
+      },
+    });
+    innerTag = typeof rendered.type === "string" ? rendered.type : "span";
+  }
 
-  const cloned = cloneElement(rendered, {
-    "data-block": fullPath,
-    "data-cms-active": isActive || undefined,
-    onClick: mergedOnClick,
-    style: {
-      ...(childProps.style ?? {}),
-      boxShadow: isActive ? RING_ACTIVE : isHovered ? RING_HOVER : undefined,
-      transition: "box-shadow 0.15s ease",
-      cursor: "pointer",
-    },
-  });
-
-  const innerTag = typeof rendered.type === "string" ? rendered.type : "span";
   const wrapperDisplay = BLOCK_TAGS.has(innerTag) ? "block" : "inline-block";
 
   return (
@@ -143,20 +178,29 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
       style={{
         position: "relative",
         display: wrapperDisplay,
-        backgroundColor: isActive ? BG_ACTIVE : isHovered ? BG_HOVER : BG_OFF,
+        backgroundColor: highlight ? BG_ACTIVE : isHovered ? BG_HOVER : BG_OFF,
         transition: "background-color 0.2s ease",
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {cloned}
-      {(isHovered || isActive) && (
-        <span
-          aria-hidden="true"
+      {inner}
+      {(isHovered || highlight) && (
+        <button
+          type="button"
+          // preventDefault keeps the caret in the inline editor when the chip is
+          // clicked; stopPropagation keeps the click off the region beneath.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveBlock(fullPath);
+          }}
+          title="Panelde aç"
+          aria-label={`${fullPath} bloğunu panelde aç`}
           style={{
             position: "absolute",
             top: 0,
-            right: isActive ? -2 : -1.5,
+            right: highlight ? -2 : -1.5,
             transform: "translateY(-100%)",
             background: BG_RAISED,
             border: `1px solid ${BORDER}`,
@@ -169,13 +213,13 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
             letterSpacing: "0.05em",
             lineHeight: "16px",
             whiteSpace: "nowrap",
-            pointerEvents: "none",
+            cursor: "pointer",
             fontFamily: "ui-monospace, 'SF Mono', monospace",
             zIndex: 9999,
           }}
         >
           {fullPath}{blockType ? ` · ${blockType}` : ""}
-        </span>
+        </button>
       )}
     </span>
   );

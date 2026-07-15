@@ -15,7 +15,7 @@
 import { useContext, useState } from "react";
 
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
-import { ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
+import { ACCENT, BG_RAISED, ROOMY_INSET } from "./admin-drawer-styles.js";
 import { useCmsContext } from "../lib/context.js";
 
 /**
@@ -36,9 +36,9 @@ import { useCmsContext } from "../lib/context.js";
 
 const RING_COLOR_HOVER = `color-mix(in srgb, ${ACCENT} 50%, transparent)`;
 const RING_COLOR_OFF   = `color-mix(in srgb, ${ACCENT} 0%, transparent)`;
-const LABEL_BG         = BG_RAISED;
-const LABEL_BORDER     = `1px solid ${BORDER}`;
-const LABEL_COLOR      = `color-mix(in srgb, ${ACCENT} 85%, transparent)`;
+// The dashed outline sits this far outside the group box; the label straddles it
+// and it must clear the children's roomy cards so the group wraps them.
+const GROUP_OFFSET     = ROOMY_INSET + 4;
 
 /**
  * @param {CmsGroupProps} props
@@ -76,8 +76,8 @@ export function CmsGroup({ name, children, style, editable, visible }) {
           style={{
             position: "relative",
             outline: `1.5px dashed ${hovered ? RING_COLOR_HOVER : RING_COLOR_OFF}`,
-            outlineOffset: 6,
-            borderRadius: 4,
+            outlineOffset: GROUP_OFFSET,
+            borderRadius: 12,
             transition: "outline-color 0.18s ease",
             ...style,
           }}
@@ -88,25 +88,29 @@ export function CmsGroup({ name, children, style, editable, visible }) {
               aria-hidden="true"
               style={{
                 position: "absolute",
-                top: 0,
-                left: 0,
-                transform: "translate(-6px, -100%)",
-                background: LABEL_BG,
-                border: LABEL_BORDER,
-                borderBottom: "none",
-                borderRadius: "4px 4px 0 0",
-                padding: "1px 6px",
-                fontSize: 9,
+                // Straddle the outline's top line at the right, so it sits on the
+                // dashed line and clears the child block chips (which sit top-left).
+                top: -GROUP_OFFSET,
+                right: 8 - GROUP_OFFSET,
+                transform: "translateY(-50%)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                background: BG_RAISED,
+                color: "var(--ins-text, #fff)",
+                borderRadius: 6,
+                padding: "2px 6px",
+                fontSize: 10,
                 fontWeight: 500,
-                color: LABEL_COLOR,
-                letterSpacing: "0.05em",
-                lineHeight: "16px",
+                letterSpacing: "0.02em",
+                lineHeight: 1.5,
                 whiteSpace: "nowrap",
                 pointerEvents: "none",
                 fontFamily: "ui-monospace, 'SF Mono', monospace",
                 zIndex: 9999,
               }}
             >
+              <span style={{ fontWeight: 700, opacity: 0.85 }}>§</span>
               {label}
             </span>
           ) : null}

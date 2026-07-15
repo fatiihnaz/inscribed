@@ -20,9 +20,11 @@ import DOMPurify from "isomorphic-dompurify";
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
-import { ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
+import { ACCENT, ROOMY_INSET, TYPE_META } from "./admin-drawer-styles.js";
+import { stableStringify } from "../lib/stable-stringify.js";
 import { InlineTextEditor } from "./InlineTextEditor.jsx";
 import { InlineImageOverlay } from "./InlineImageOverlay.jsx";
+import { InlineImagePlaceholder } from "./InlineImagePlaceholder.jsx";
 
 // Lazy so Tiptap never enters the public bundle: only an admin rendering a
 // RichText region triggers the chunk (already warmed by the drawer's prefetch).
@@ -60,11 +62,14 @@ const IMAGE_OVERLAY_MIN = { w: 150, h: 64 };
  *   on the page; content still ships to the public DOM. Wins over `editable`.
  */
 
-const RING_HOVER   = `0 0 0 1.5px color-mix(in srgb, ${ACCENT} 30%, transparent)`;
-const RING_ACTIVE  = `0 0 0 2px color-mix(in srgb, ${ACCENT} 80%, transparent)`;
-const BG_OFF    = `color-mix(in srgb, ${ACCENT} 0%, transparent)`;
-const BG_HOVER  = `color-mix(in srgb, ${ACCENT} 5%, transparent)`;
-const BG_ACTIVE = `color-mix(in srgb, ${ACCENT} 8%, transparent)`;
+// Hover shows a neutral line ring; selecting switches to the accent ring plus a
+// faint tint (mirrors the reference prototype's hover -> select hierarchy).
+const RING_HOVER   = "inset 0 0 0 1px rgba(127, 127, 127, 0.55)";
+const RING_ACTIVE  = `0 0 0 1.5px ${ACCENT}`;
+const RING_RADIUS  = 12;
+const BG_OFF    = "transparent";
+const BG_HOVER  = "transparent";
+const BG_ACTIVE = `color-mix(in srgb, ${ACCENT} 5%, transparent)`;
 const EMPTY_PLACEHOLDER = "-";
 
 // Block types that edit in place as a plain string. Everything else keeps the
@@ -157,17 +162,17 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   const imageOverlayFits =
     !wrapperSize || (wrapperSize.w >= IMAGE_OVERLAY_MIN.w && wrapperSize.h >= IMAGE_OVERLAY_MIN.h);
 
-  const ringStyle = {
-    boxShadow: highlight ? RING_ACTIVE : isHovered ? RING_HOVER : undefined,
-    transition: "box-shadow 0.15s ease",
-  };
+  const dirty = block
+    ? (hasLocalDraft
+        ? stableStringify(localDraft) !== stableStringify(block.value)
+        : block.draftValue != null)
+    : false;
+  const glyph = (TYPE_META[/** @type {string} */ (blockType)] ?? TYPE_META.Text).glyph;
 
   let inner;
   let innerTag;
-  // Margin the consumer set on an Image is lifted onto the wrapper so the
-  // wrapper's box hugs the picture (not the surrounding margin). Otherwise the
-  // absolutely-positioned overlay anchors to the margin box and its buttons
-  // float in the gap above the image.
+  // Lift an Image's consumer margin onto the wrapper so the overlay anchors to
+  // the picture, not the margin box (else its buttons float above the image).
   let wrapperMargin = null;
   if (canInlineEdit) {
     innerTag = as ?? "span";
@@ -183,9 +188,18 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
         onInput={(text) => setDraft(fullPath, text)}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
-        style={{ ...ringStyle, cursor: "text" }}
+        style={{ cursor: "text" }}
       />
     );
+  } else if (isImageType && empty) {
+    // No <img> to hover when empty: render a drop-zone so a picture can be
+    // added in place. Margin lifts to the wrapper so the ring hugs the box.
+    const { marginStyle, boxStyle } = liftMargin(rendered.props?.style ?? {});
+    wrapperMargin = marginStyle;
+    inner = (
+      <InlineImagePlaceholder style={boxStyle} onChange={(v) => setDraft(fullPath, v)} />
+    );
+    innerTag = "div";
   } else if (isImageType) {
     // Image's quick actions (replace/remove) live in the on-image overlay
     // below; a click on the bare image opens the drawer for the details (alt,
@@ -208,7 +222,6 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
         // (and overlay) match the image height exactly.
         ...(rendered.type === "img" ? { display: "block" } : null),
         ...boxStyle,
-        ...ringStyle,
         cursor: "pointer",
       },
     });
@@ -222,7 +235,8 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
           onChange={(html) => setDraft(fullPath, html)}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          style={{ ...ringStyle, cursor: "text" }}
+          anchorRef={wrapperRef}
+          style={{ cursor: "text" }}
         />
       </Suspense>
     );
@@ -245,7 +259,6 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
       onClick: mergedOnClick,
       style: {
         ...(childProps.style ?? {}),
-        ...ringStyle,
         cursor: "pointer",
       },
     });
@@ -253,6 +266,9 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   }
 
   const wrapperDisplay = BLOCK_TAGS.has(innerTag) ? "block" : "inline-block";
+  // Padded card only for block-level text/rich; images stay tight (the overlay
+  // anchors to the image) and inline stays tight (no mid-sentence ballooning).
+  const roomy = wrapperDisplay === "block" && !isImageType;
 
   return (
     <span
@@ -260,8 +276,11 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
       style={{
         position: "relative",
         display: wrapperDisplay,
-        backgroundColor: highlight ? BG_ACTIVE : isHovered ? BG_HOVER : BG_OFF,
-        transition: "background-color 0.2s ease",
+        boxShadow: highlight ? RING_ACTIVE : isHovered ? RING_HOVER : "none",
+        backgroundColor: highlight ? BG_ACTIVE : BG_OFF,
+        borderRadius: RING_RADIUS,
+        transition: "box-shadow 0.15s ease, background-color 0.2s ease",
+        ...(roomy ? { padding: `8px ${ROOMY_INSET}px`, marginLeft: -ROOMY_INSET, marginRight: -ROOMY_INSET } : null),
         ...(wrapperMargin ?? {}),
       }}
       onMouseEnter={() => setIsHovered(true)}
@@ -283,25 +302,41 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
           style={{
             position: "absolute",
             top: 0,
-            right: highlight ? -2 : -1.5,
-            transform: "translateY(-100%)",
-            background: BG_RAISED,
-            border: `1px solid ${BORDER}`,
-            borderBottom: "none",
-            borderRadius: "4px 4px 0 0",
-            padding: "1px 6px",
-            fontSize: 9,
+            left: roomy ? 8 : 0,
+            // Straddle the ring line on roomy cards (sits in the padding gap);
+            // float fully above on tight regions so it clears the content.
+            transform: roomy ? "translateY(-50%)" : "translateY(-100%)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "2px 6px",
+            border: 0,
+            borderRadius: 6,
+            // Translucent ink + blur (like the on-image buttons): reads lighter
+            // on a bright page than a solid fill. Only the text turns accent when
+            // the region is active.
+            background: "color-mix(in srgb, var(--ins-bg, #1c1815) 82%, transparent)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            color: highlight ? ACCENT : "var(--ins-text, #fff)",
+            fontFamily: "ui-monospace, 'SF Mono', monospace",
+            fontSize: 9.5,
             fontWeight: 500,
-            color: `color-mix(in srgb, ${ACCENT} 65%, transparent)`,
-            letterSpacing: "0.05em",
-            lineHeight: "16px",
+            letterSpacing: "0.02em",
+            lineHeight: 1.5,
             whiteSpace: "nowrap",
             cursor: "pointer",
-            fontFamily: "ui-monospace, 'SF Mono', monospace",
             zIndex: 9999,
           }}
         >
-          {fullPath}{blockType ? ` · ${blockType}` : ""}
+          <span aria-hidden="true" style={{ fontWeight: 700, opacity: 0.85 }}>{glyph}</span>
+          {fullPath}
+          {dirty && (
+            <span
+              aria-label="Kaydedilmemiş değişiklik"
+              style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor", opacity: 0.9 }}
+            />
+          )}
         </button>
       )}
       {isImageType && !empty && imageOverlayFits && (isHovered || highlight) && (

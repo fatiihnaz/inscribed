@@ -106,6 +106,10 @@ export const ACCENT        = "var(--ins-accent, #c9b896)";
 export const ACCENT_SOFT   = "color-mix(in srgb, var(--ins-accent, #c9b896) 14%, transparent)";
 export const ACCENT_LINE   = "color-mix(in srgb, var(--ins-accent, #c9b896) 30%, transparent)";
 
+// Horizontal outward reach of a block-level EditableRegion's roomy card. A
+// CmsGroup outline must clear this to actually enclose its children.
+export const ROOMY_INSET   = 10;
+
 export const COLLECTION_ACCENT = "var(--ins-collection, rgb(220, 195, 225))";
 export const COLLECTION_SOFT   = "color-mix(in srgb, var(--ins-collection, rgb(220,195,225)) 10%, transparent)";
 export const COLLECTION_LINE   = "color-mix(in srgb, var(--ins-collection, rgb(220,195,225)) 30%, transparent)";

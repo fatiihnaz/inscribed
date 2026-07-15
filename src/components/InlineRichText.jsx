@@ -18,7 +18,6 @@ import { EditorContent } from "@tiptap/react";
 import { useRichTextEditor } from "../hooks/use-rich-text-editor.js";
 import { RichTextToolbar } from "./editors/RichTextToolbar.jsx";
 
-const GAP = 8;
 const MARGIN = 8;
 
 // Minimal content styling: just drop the focus outline; everything else is
@@ -42,11 +41,10 @@ function ensureInlineRteStyle() {
  * @param {() => void} [props.onBlur]
  * @param {React.CSSProperties} [props.style]
  */
-export function InlineRichText({ value, onChange, onFocus, onBlur, style }) {
+export function InlineRichText({ value, onChange, onFocus, onBlur, anchorRef, style }) {
   const editor = useRichTextEditor({ value, onChange, contentClass: "inscribed-inline-rte" });
   const [focused, setFocused] = useState(false);
   const [pos, setPos] = useState(/** @type {{ top: number, left: number } | null} */ (null));
-  const rootRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const barRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 
   useEffect(() => {
@@ -71,22 +69,21 @@ export function InlineRichText({ value, onChange, onFocus, onBlur, style }) {
     };
   }, [editor, onFocus, onBlur]);
 
-  // Anchor the bar to the block's top edge, not the caret: a caret-anchored bar
-  // sits over the line above it (i.e. content). Above the block it clears the
-  // text; once the block scrolls past the top it sticks to the viewport top so
-  // it stays reachable. RichTextToolbar's flex-wrap handles narrow viewports.
+  // Center the bar on the region's top ring line (straddling it, like the label
+  // chip), anchored to the wrapper so it sits on the visible border, not the
+  // caret. Sticks to the viewport top only once the line scrolls above it.
   useLayoutEffect(() => {
     if (!focused) return undefined;
     const place = () => {
-      const root = rootRef.current;
-      if (!root) return;
-      const rect = root.getBoundingClientRect();
+      const anchor = anchorRef?.current;
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
       const barW = barRef.current?.offsetWidth ?? 0;
       const barH = barRef.current?.offsetHeight ?? 0;
       const vw = window.innerWidth;
-      let left = Math.min(Math.max(MARGIN, rect.left), vw - barW - MARGIN);
-      if (left < MARGIN) left = MARGIN;
-      const top = Math.max(MARGIN, rect.top - barH - GAP);
+      const centered = rect.left + rect.width / 2 - barW / 2;
+      const left = Math.min(Math.max(MARGIN, centered), vw - barW - MARGIN);
+      const top = Math.max(MARGIN, rect.top - barH / 2);
       setPos({ top, left });
     };
     place();
@@ -96,10 +93,10 @@ export function InlineRichText({ value, onChange, onFocus, onBlur, style }) {
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
     };
-  }, [focused]);
+  }, [focused, anchorRef]);
 
   return (
-    <div ref={rootRef} style={style}>
+    <div style={style}>
       <EditorContent editor={editor} />
       {focused && typeof document !== "undefined"
         ? createPortal(
@@ -122,7 +119,7 @@ export function InlineRichText({ value, onChange, onFocus, onBlur, style }) {
                 boxShadow: "0 8px 28px -6px rgba(0,0,0,0.4)",
               }}
             >
-              <RichTextToolbar editor={editor} />
+              <RichTextToolbar editor={editor} dense />
             </div>,
             document.body,
           )

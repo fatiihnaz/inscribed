@@ -32,12 +32,13 @@ const SURFACE_HOVER = "rgba(127,127,127,0.12)";
  *   style?: React.CSSProperties,
  * }} props
  */
-export function RichTextToolbar({ editor, disabled, className, style }) {
+export function RichTextToolbar({ editor, disabled, className, style, dense }) {
   useEffect(() => {
     ensureToolbarStyle();
   }, []);
 
-  const rowStyle = { ...toolbarStyle, ...style };
+  const cls = dense ? `${className ? `${className} ` : ""}inscribed-rte-dense` : className;
+  const rowStyle = { ...toolbarStyle, ...(dense ? { padding: 3, gap: 1 } : null), ...style };
 
   if (!editor) {
     return <div className={className} style={{ ...rowStyle, minHeight: 34 }} />;
@@ -70,7 +71,7 @@ export function RichTextToolbar({ editor, disabled, className, style }) {
   // clicks - without it, clicking Bold blurs the editor, the selection
   // collapses, and the toggle runs against an empty range.
   return (
-    <div className={className} style={rowStyle} onMouseDown={(e) => e.preventDefault()}>
+    <div className={cls} style={rowStyle} onMouseDown={(e) => e.preventDefault()}>
       <Btn active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} title="Kalın (Ctrl+B)" ariaLabel="Kalın">
         <Bold size={13} />
       </Btn>
@@ -162,8 +163,6 @@ const btnStyle = /** @type {React.CSSProperties} */ ({
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  width: 26,
-  height: 26,
   padding: 0,
   border: 0,
   borderRadius: R_SM,
@@ -191,6 +190,14 @@ function ensureToolbarStyle() {
   const el = document.createElement("style");
   el.setAttribute("data-inscribed-rte-toolbar", "");
   el.textContent = `
+    .inscribed-rte-btn {
+      width: 26px;
+      height: 26px;
+    }
+    .inscribed-rte-dense .inscribed-rte-btn {
+      width: 22px;
+      height: 22px;
+    }
     .inscribed-rte-btn:hover:not(:disabled) {
       background: ${SURFACE_HOVER};
       color: ${TEXT_PRIMARY};

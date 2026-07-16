@@ -6,8 +6,8 @@
 **Zero-Configuration, JSX-First Inline-Editing CMS SDK for Next.js App Router.**
 
 inscribed lets you mark up regions of your existing React tree as editable, then edit
-them in place from an admin drawer allowing no separate CMS dashboard and no content
-modelling ceremony. The content you author in JSX _is_ the schema. A discovery
+them in place, directly on the page and from an admin drawer, allowing no separate
+CMS dashboard and no content modelling ceremony. The content you author in JSX _is_ the schema. A discovery
 step walks your `app/` directory, registers every editable region with your
 backend, and the same components render live content for visitors and an
 inline editor for admins.
@@ -47,8 +47,10 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
 
 ## Features
 
-- **Inline editing.** Visitors see content; admins see the same page with a
-  click-to-edit overlay and a side drawer. No context switch to a dashboard.
+- **In-place editing.** Visitors see content; admins edit it directly on the
+  page, type into text, format RichText with a floating toolbar, swap images on
+  the image, backed by a side drawer for structured types and block details. No
+  context switch to a dashboard.
 - **JSX-first content model.** Declare editable regions with `<EditableRegion>`,
   `<EditableList>`, `<CmsGroup>`. The structure of your components is the
   content schema.
@@ -254,7 +256,7 @@ A **block** is a single editable value addressed by a dot-notation `blockPath`
 | `ShortText`  | `string` | single-line input |
 | `LongText`   | `string` | multi-line textarea |
 | `RichText`   | HTML `string` (sanitised) | Tiptap |
-| `Image`      | `{ src, alt }` | upload + alt |
+| `Image`      | `{ src, alt }` | on-image replace / drop-zone + alt |
 | `Link`       | `{ href, label }` | URL + label |
 | `Date`       | ISO 8601 `string` | date picker / countdown |
 | `List`       | array of objects shaped by `itemSchema` | repeatable items |
@@ -454,11 +456,19 @@ beat after hydration - the server always renders the public view.
    }
    ```
 
-Once enabled, admins get the inline overlay and a side drawer. Edits **autosave
-as drafts** (debounced ~1s to the draft endpoint) while a live preview overlays
-the page; **publishing** is an explicit save in the drawer. Discarding clears the
-server draft. inscribed itself depends on **no auth library**; these are all
-injected callbacks, with a public read-only default.
+Once enabled, admins edit the same page in place. **Text** and **RichText**
+blocks edit where they sit, click and type, with a small floating toolbar for
+RichText formatting; **Image** blocks edit on the image (a replace / remove
+overlay, or an upload drop-zone when empty). **Link**, **Date**, **List**, and
+**Collection** blocks open the side drawer instead. Every block also shows a
+hover **label chip** that opens its drawer card for structured details (an
+image's alt text and URL, a link's label) whatever its type. Focusing a block to
+edit it highlights the region without opening the drawer; only the chip does.
+
+Edits **autosave as drafts** (debounced ~1s to the draft endpoint) while a live
+preview overlays the page; **publishing** is an explicit save in the drawer.
+Discarding clears the server draft. inscribed itself depends on **no auth
+library**; these are all injected callbacks, with a public read-only default.
 
 ### Theming
 

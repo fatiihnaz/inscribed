@@ -213,6 +213,10 @@ Keep the method's options shape consistent: `(…, opts?)` where `opts` is
 2. Teach `<EditableRegion>` (and discovery in `src/server/discover.js`) to render
    and recognise it.
 3. Add the editor UI in the admin drawer components.
+   If the type should edit on the page too, add its in-place surface alongside
+   the existing `Inline*` components (`InlineTextEditor`, `InlineRichText`,
+   `InlineImageOverlay` / `InlineImagePlaceholder`) that `<EditableRegion>`
+   swaps in for admins; keep heavy deps lazy (see the RichText note below).
 4. Thread the `disabled` prop through the editor and honour it on every
    interactive surface. Read-only blocks (`editable={false}`, or anything inside
    a locked `<CmsGroup>`) flow a `disabled` flag down through `FieldEditor`; an

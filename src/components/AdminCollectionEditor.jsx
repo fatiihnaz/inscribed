@@ -515,6 +515,7 @@ export function DraftIndicator({ status, lastSavedAt, hasServerDraft, publishedF
   return (
     <motion.div
       layout
+      layoutDependency={view.state}
       transition={{ duration: 0.22, ease: [0.32, 0.72, 0.18, 1] }}
       style={{ ...indicatorPillStyle, transformOrigin: "center", overflow: "hidden" }}
     >

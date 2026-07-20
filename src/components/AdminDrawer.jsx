@@ -775,15 +775,22 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
     };
   }
 
+  // Re-measure the layout FLIP only when the pill's content actually changes.
+  // Without this, every drawer re-render (e.g. an image resize spamming draft
+  // updates) re-measures mid-reflow and the pill twitches vertically.
+  const pillLayoutKey = `${view.state}|${lastSavedAt ?? ""}`;
+
   return (
     <motion.div
       layout
+      layoutDependency={pillLayoutKey}
       transition={{ duration: 0.22, ease: [0.32, 0.72, 0.18, 1] }}
       style={{ ...headerPillStyle, transformOrigin: "center", overflow: "hidden" }}
       title={view.title}
     >
       <motion.span
         layout
+        layoutDependency={pillLayoutKey}
         className={view.pulse ? "inscribed-status-pulse" : undefined}
         style={{ ...headerPillDotStyle, background: view.bg, boxShadow: view.glow }}
       />
@@ -1440,6 +1447,16 @@ function StatusBar({
     msg = <span style={{ ...statusMsgStyle, ...statusMsgCleanStyle }}>Değişiklik yok</span>;
   }
 
+  // Same guard as the header pill: FLIP-measure the action buttons only when
+  // the visible button set (or the preview label swap) changes, not on every
+  // drawer re-render.
+  const actionsLayoutKey = [
+    previewableCount > 0,
+    isPreviewOpen,
+    isContentDirty,
+    isOnlyCollectionDirty && Boolean(firstDirtyCollectionTarget),
+  ].join("|");
+
   return (
     <div style={statusBarStyle}>
       <div style={statusSignalStyle}>
@@ -1462,6 +1479,7 @@ function StatusBar({
               title={isPreviewOpen ? "Düzenlemeye dön" : "Değişiklikleri önizle"}
               aria-pressed={isPreviewOpen}
               {...statusActionMotion}
+              layoutDependency={actionsLayoutKey}
             >
               {isPreviewOpen ? <Pencil size={13} /> : <Eye size={13} />}
               <span>{isPreviewOpen ? "Düzenle" : "Önizle"}</span>
@@ -1478,6 +1496,7 @@ function StatusBar({
               aria-label="Tüm değişiklikleri iptal et"
               title="Tüm değişiklikleri iptal et"
               {...statusActionMotion}
+              layoutDependency={actionsLayoutKey}
             >
               <Undo2 size={13} />
             </motion.button>
@@ -1493,6 +1512,7 @@ function StatusBar({
               aria-label="Tümünü kaydet"
               title="Tümünü kaydet"
               {...statusActionMotion}
+              layoutDependency={actionsLayoutKey}
             >
               <Check size={13} />
               <span>Kaydet</span>
@@ -1508,6 +1528,7 @@ function StatusBar({
               aria-label={`${firstDirtyCollectionTarget.key} / ${firstDirtyCollectionTarget.slug} kaydını aç`}
               title={`${firstDirtyCollectionTarget.key} / ${firstDirtyCollectionTarget.slug} kaydını aç`}
               {...statusActionMotion}
+              layoutDependency={actionsLayoutKey}
             >
               <Pencil size={13} />
               <span>Aç</span>

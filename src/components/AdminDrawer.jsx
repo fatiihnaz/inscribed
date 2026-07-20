@@ -86,6 +86,7 @@ import {
   groupCountStyle,
   groupDirtyDotStyle,
   groupBodyStyle,
+  groupRailStyle,
   listStyle,
   emptyStateStyle,
   statusBarStyle,
@@ -549,7 +550,10 @@ export function AdminDrawer() {
               />
             </>
           ) : activeTab.startsWith("collection:") ? (
+            // Keyed so switching collection tabs resets the panel's detail-pane
+            // state instead of carrying an open pane across collections.
             <AdminCollectionRegionPanel
+              key={activeTab}
               collectionKey={activeTab.slice("collection:".length)}
             />
           ) : null}
@@ -1158,6 +1162,7 @@ function GroupCard({
             style={{ overflow: "hidden" }}
           >
             <div style={groupBodyStyle}>
+              <span aria-hidden="true" style={groupRailStyle} />
               {blocks.map((block) => (
                 <BlockCard
                   key={block.blockPath}

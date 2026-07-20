@@ -1,12 +1,17 @@
 "use client";
 
 /**
- * @file `BlockCard`: one inline-editable block row in the drawer's block list.
+ * @file One block row in the drawer's block list, weight-dispatched:
  *
- * Header (left to right): TypeIcon badge, mono blockPath, (when dirty) sage dot
- * + Undo button, type label, chevron. Body slides via `.inscribed-collapse`;
- * Collection bodies stay mounted across collapse so the inner
- * `useCollectionItem` fetch isn't replayed on reopen.
+ * Field-weight types (ShortText/Text/LongText/Date/Link) render as
+ * `FieldRow` — an always-open labeled form field (mono path label + editor),
+ * no collapse chrome. Heavy types (RichText/Image/List/Collection/unknown)
+ * stay collapsible cards whose closed header shows a value preview.
+ *
+ * Card header (left to right): TypeIcon badge, mono blockPath, value preview
+ * (closed only), (when dirty) sage dot + Undo, chevron. Bodies slide via
+ * `.inscribed-collapse`; Collection bodies stay mounted across collapse so the
+ * inner `useCollectionItem` fetch isn't replayed on reopen.
  *
  * Collection blocks get a dedicated lane: `<CollectionBlockCard>` lifts the
  * editor's draft state so the header can show the "Geri al" reset.
@@ -24,18 +29,24 @@ import {
   useCollectionEditor,
 } from "./AdminCollectionEditor.jsx";
 import {
+  TEXT_MID,
   TEXT_MUTED,
+  TEXT_FAINT,
   COLLECTION_ACCENT,
+  HAIRLINE,
+  FONT_SANS,
+  FONT_MONO,
+  R_MD,
   TYPE_META,
-  blockCardStyle,
-  blockHeaderStyle,
-  blockPathStyle,
-  blockBodyStyle,
   blockResetStyle,
-  blockTypeLabelStyle,
   dirtyDotStyle,
   typeIconStyle,
 } from "./admin-drawer-styles.js";
+
+// Field-weight types: a single light editor, rendered always-open as a form
+// field. Everything else (RichText/Image/List/Collection/unknown) keeps the
+// collapsible card surface.
+const INLINE_TYPES = new Set(["ShortText", "Text", "LongText", "Date", "Link"]);
 
 /**
  * @import { BlockResponse, BlockType, ItemSchema } from "../lib/schemas.js"
@@ -72,8 +83,165 @@ export function BlockCard(props) {
       />
     );
   }
+  if (INLINE_TYPES.has(props.block.blockType)) {
+    return <FieldRow {...props} />;
+  }
   return <RegularBlockCard {...props} />;
 }
+
+/**
+ * Always-open form field for field-weight blocks: mono path label on top
+ * (dirty dot + undo + lock live on the label row), the editor below. Active
+ * state (page region clicked) scrolls into view and lights the left rail via
+ * `.is-active`.
+ *
+ * @param {{
+ *   block: BlockResponse,
+ *   draft: *,
+ *   hasDraft: boolean,
+ *   isActive: boolean,
+ *   onChange: (value: *) => void,
+ *   onReset: () => void,
+ *   onFocus: () => void,
+ *   readOnly?: boolean,
+ * }} props
+ */
+function FieldRow({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, readOnly }) {
+  const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
+
+  const effective = block.draftValue ?? block.value;
+  const value = hasDraft ? draft : effective;
+  const isDirty = !readOnly && (hasDraft
+    ? stableStringify(draft) !== stableStringify(block.value)
+    : block.draftValue != null);
+
+  useEffect(() => {
+    if (isActive && ref.current) {
+      ref.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [isActive]);
+
+  return (
+    <div
+      ref={ref}
+      className={`inscribed-field-row${isActive ? " is-active" : ""}`}
+      style={fieldRowStyle}
+      onMouseDown={onFocus}
+    >
+      <div style={fieldLabelRowStyle}>
+        <TypeIcon type={block.blockType} />
+        <span style={fieldPathStyle} title={block.blockPath}>{block.blockPath}</span>
+        {isDirty ? (
+          <span style={dirtyDotStyle} aria-label="Kaydedilmemiş değişiklik" />
+        ) : null}
+        {isDirty ? (
+          <button
+            type="button"
+            onClick={onReset}
+            className="inscribed-icon-button"
+            style={blockResetStyle}
+            aria-label="Bu bloğun değişikliklerini geri al"
+            title="Geri al"
+          >
+            <Undo2 size={13} />
+          </button>
+        ) : null}
+        {readOnly ? (
+          <span
+            style={{ display: "inline-flex", color: TEXT_MUTED }}
+            title="Salt okunur (editable={false})"
+            aria-label="Salt okunur"
+          >
+            <Lock size={12} />
+          </span>
+        ) : null}
+      </div>
+      <div style={fieldEditorWrapStyle}>
+        <FieldEditor
+          blockType={block.blockType}
+          value={value}
+          onChange={onChange}
+          disabled={readOnly}
+          hideLabel
+        />
+      </div>
+    </div>
+  );
+}
+
+// No negative margins: group bodies clip via the collapse wrapper's
+// `overflow: hidden`, so an overhanging row gets sheared at both sides. The
+// 12px padding doubles as the active ring's cushion around label + editor.
+const fieldRowStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  padding: "6px 12px 8px",
+  borderRadius: R_MD,
+});
+
+const fieldLabelRowStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  minHeight: 22,
+});
+
+// Same guide-line geometry as disclosureBodyStyle (line centred under the
+// 20px icon), so open fields and opened heavy blocks indent identically.
+const fieldEditorWrapStyle = /** @type {React.CSSProperties} */ ({
+  margin: "0 0 0 9px",
+  padding: "2px 0 2px 14px",
+  borderLeft: `1px solid ${HAIRLINE}`,
+  display: "flex",
+  flexDirection: "column",
+});
+
+const fieldPathStyle = /** @type {React.CSSProperties} */ ({
+  flex: 1,
+  minWidth: 0,
+  font: `500 11px/1.2 ${FONT_MONO}`,
+  color: TEXT_MID,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
+// Disclosure rows (heavy blocks): the same form-row shell as FieldRow, with a
+// clickable header instead of an always-open editor.
+const disclosureRowStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexDirection: "column",
+  padding: "6px 12px 6px",
+  borderRadius: R_MD,
+});
+
+const disclosureHeaderStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  width: "100%",
+  minHeight: 22,
+  padding: 0,
+  background: "transparent",
+  border: 0,
+  cursor: "pointer",
+  userSelect: "none",
+  textAlign: "left",
+  fontFamily: "inherit",
+  color: "inherit",
+});
+
+// Open body: indented under the header with a hairline guide instead of a
+// boxed card, so the block keeps reading as part of the form flow.
+const disclosureBodyStyle = /** @type {React.CSSProperties} */ ({
+  margin: "4px 0 4px 9px",
+  padding: "4px 0 6px 14px",
+  borderLeft: `1px solid ${HAIRLINE}`,
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+});
 
 /**
  * Card for a Collection block whose `value` is missing `{ collection, slug }`.
@@ -84,17 +252,14 @@ export function BlockCard(props) {
  */
 function InvalidCollectionCard({ block }) {
   return (
-    <div className="inscribed-block-card" style={blockCardStyle}>
-      <div style={blockHeaderStyle}>
+    <div className="inscribed-field-row inscribed-field-row-collection" style={disclosureRowStyle}>
+      <div style={{ ...disclosureHeaderStyle, cursor: "default" }}>
         <TypeIcon type={block.blockType} />
-        <span style={blockPathStyle} title={block.blockPath}>
+        <span style={fieldPathStyle} title={block.blockPath}>
           {block.blockPath}
         </span>
-        <span style={blockTypeLabelStyle}>
-          {(TYPE_META[block.blockType] ?? TYPE_META.Text).label}
-        </span>
       </div>
-      <div style={blockBodyStyle}>
+      <div style={disclosureBodyStyle}>
         <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
           Bu Collection bloğu geçersiz bir bağlamaya sahip — beklenen{" "}
           <code>{`{ collection, slug }`}</code> şeklini taşımıyor.
@@ -148,14 +313,15 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
   return (
     <div
       ref={ref}
-      className={cardClassName({ isActive, isDirty, isCollection: false })}
-      style={blockCardStyle}
+      className={rowClassName({ isActive, isCollection: false })}
+      style={disclosureRowStyle}
     >
       <CardHeader
         block={block}
         isOpen={isOpen}
         isDirty={isDirty}
         readOnly={readOnly}
+        preview={blockPreview(block.blockType, value)}
         onHeaderClick={handleHeaderClick}
         onReset={onReset}
       />
@@ -164,7 +330,7 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
         aria-hidden={!isOpen}
         onMouseDown={onFocus}
       >
-        <div style={blockBodyStyle}>
+        <div style={disclosureBodyStyle}>
           {renderEditor(block, value, onChange, itemSchema, readOnly)}
         </div>
       </div>
@@ -209,14 +375,15 @@ function CollectionBlockCard({ block, collection, slug, isActive, onFocus }) {
   return (
     <div
       ref={ref}
-      className={cardClassName({ isActive, isDirty, isCollection: true })}
-      style={blockCardStyle}
+      className={rowClassName({ isActive, isCollection: true })}
+      style={disclosureRowStyle}
     >
       <CardHeader
         block={block}
         isOpen={isOpen}
         isDirty={isDirty}
         isCollection
+        preview={`${collection} · ${slug}`}
         onHeaderClick={handleHeaderClick}
         onReset={editor.undoDraft}
       />
@@ -225,7 +392,7 @@ function CollectionBlockCard({ block, collection, slug, isActive, onFocus }) {
         aria-hidden={!isOpen}
         onMouseDown={onFocus}
       >
-        <div style={blockBodyStyle}>
+        <div style={disclosureBodyStyle}>
           <AdminCollectionEditor editor={editor} />
         </div>
       </div>
@@ -234,22 +401,24 @@ function CollectionBlockCard({ block, collection, slug, isActive, onFocus }) {
 }
 
 /**
- * Compose the card's class string from its state. Active adds the lane accent
- * (sage / pink-purple); dirty layers a thin sage rail on the base border.
+ * Row class string: shares the form-row base (active ring) with `FieldRow`;
+ * the collection variant swaps the ring tone. Dirty state travels on the
+ * header dot, not the container.
  *
- * @param {{ isActive: boolean, isDirty: boolean, isCollection: boolean }} args
+ * @param {{ isActive: boolean, isCollection: boolean }} args
  */
-function cardClassName({ isActive, isDirty, isCollection }) {
-  const parts = ["inscribed-block-card"];
-  if (isCollection) parts.push("inscribed-block-card-collection");
-  if (isDirty) parts.push("is-dirty");
-  if (isActive) parts.push(isCollection ? "inscribed-block-card-collection-active" : "inscribed-block-card-active");
+function rowClassName({ isActive, isCollection }) {
+  const parts = ["inscribed-field-row"];
+  if (isCollection) parts.push("inscribed-field-row-collection");
+  if (isActive) parts.push("is-active");
   return parts.join(" ");
 }
 
 /**
  * Shared header row for both lanes. Clicking it toggles the body; the reset
  * button (only when dirty) stops propagation so undo doesn't also toggle.
+ * `preview` (a one-line value summary) shows only while closed, so a shut
+ * card still tells what's inside.
  *
  * @param {{
  *   block: BlockResponse,
@@ -257,31 +426,27 @@ function cardClassName({ isActive, isDirty, isCollection }) {
  *   isDirty: boolean,
  *   isCollection?: boolean,
  *   readOnly?: boolean,
+ *   preview?: string | null,
  *   onHeaderClick: () => void,
  *   onReset: () => void,
  * }} props
  */
-function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, onHeaderClick, onReset }) {
-  const meta = TYPE_META[block.blockType] ?? TYPE_META.Text;
+function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, onHeaderClick, onReset }) {
   return (
     <button
       type="button"
       onClick={onHeaderClick}
       aria-expanded={isOpen}
-      style={{
-        ...blockHeaderStyle,
-        width: "100%",
-        cursor: "pointer",
-        userSelect: "none",
-        textAlign: "left",
-        fontFamily: "inherit",
-        color: "inherit",
-      }}
+      style={disclosureHeaderStyle}
     >
       <TypeIcon type={block.blockType} />
-      <span style={blockPathStyle} title={block.blockPath}>
+      <span style={fieldPathStyle} title={block.blockPath}>
         {block.blockPath}
       </span>
+
+      {!isOpen && preview ? (
+        <span style={cardPreviewStyle} title={preview}>{preview}</span>
+      ) : null}
 
       {isDirty ? (
         <span
@@ -321,8 +486,6 @@ function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, onHeaderCl
         </span>
       ) : null}
 
-      <span style={blockTypeLabelStyle}>{meta.label}</span>
-
       <span
         style={{
           display: "inline-flex",
@@ -337,9 +500,53 @@ function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, onHeaderCl
   );
 }
 
+const cardPreviewStyle = /** @type {React.CSSProperties} */ ({
+  flex: "0 1 auto",
+  minWidth: 0,
+  maxWidth: "45%",
+  font: `11px/1.2 ${FONT_SANS}`,
+  color: TEXT_FAINT,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
 /**
- * Block-type glyph badge in the type's tone (Aa for Text, ¶ for Rich, etc.),
- * the cue admins scan the list by.
+ * One-line value summary for a closed heavy card. Returns null when there is
+ * nothing meaningful to show (the header then stays as-is).
+ *
+ * @param {string} blockType
+ * @param {*} value
+ * @returns {string | null}
+ */
+function blockPreview(blockType, value) {
+  switch (blockType) {
+    case "RichText": {
+      if (typeof value !== "string") return null;
+      const text = value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+      return text || null;
+    }
+    case "Image": {
+      if (!value || typeof value !== "object") return null;
+      if (typeof value.alt === "string" && value.alt) return value.alt;
+      if (typeof value.src === "string" && value.src) {
+        const clean = value.src.split(/[?#]/)[0];
+        return clean.slice(clean.lastIndexOf("/") + 1) || null;
+      }
+      return null;
+    }
+    case "List":
+      return Array.isArray(value) ? `${value.length} öğe` : null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Block-type glyph badge (Aa for Text, ¶ for Rich, etc.), the cue admins scan
+ * the list by. Monochrome on purpose: every row carries one, so per-type
+ * colours would turn the form into confetti; the glyph shape alone does the
+ * telling.
  *
  * @param {{ type: BlockType }} props
  */
@@ -354,10 +561,10 @@ function TypeIcon({ type }) {
       aria-hidden="true"
       style={{
         ...typeIconStyle,
-        color: meta.color,
+        color: TEXT_MUTED,
       }}
     >
-      {Override ? <Override size={13} /> : meta.glyph}
+      {Override ? <Override size={12} /> : meta.glyph}
     </span>
   );
 }

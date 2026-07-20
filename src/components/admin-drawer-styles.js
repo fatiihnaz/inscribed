@@ -477,12 +477,31 @@ export const groupDirtyDotStyle = {
   boxShadow: `0 0 5px ${ACCENT_GLOW}`,
 };
 
+// Wider gap than the old card stack: always-open field rows need air between
+// label/editor pairs to read as separate fields.
 export const groupBodyStyle = {
+  position: "relative",
   display: "flex",
   flexDirection: "column",
-  gap: 6,
+  gap: 10,
   paddingTop: 4,
-  paddingBottom: 4,
+  paddingBottom: 8,
+};
+
+// Group spine: a hairline living in the rows' existing left padding (the gutter
+// left of the type-icon column), so it ties the children to the header without
+// indenting them. Absolute on purpose: children keep their own editor rails, so
+// nothing double-indents. `left` matches the header label's left edge (its 6px
+// padding) so the line drops straight from under the group name.
+export const groupRailStyle = {
+  position: "absolute",
+  left: 6,
+  top: 2,
+  bottom: 6,
+  width: 1,
+  background: HAIRLINE,
+  borderRadius: 1,
+  pointerEvents: "none",
 };
 
 // ---------------------------------------------------------------------------
@@ -522,7 +541,7 @@ export const listStyle = {
   scrollbarWidth: "none",
   display: "flex",
   flexDirection: "column",
-  gap: 6,
+  gap: 10,
 };
 
 // ---------------------------------------------------------------------------
@@ -605,16 +624,17 @@ export const blockResetStyle = {
   flexShrink: 0,
 };
 
-// Type icon badge, coloured per block type via TYPE_META.
+// Type icon badge, coloured per block type via TYPE_META. Row-scaled (20px)
+// so it sits flush with the 11px mono labels of the form-row language.
 export const typeIconStyle = {
   flexShrink: 0,
-  width: 24,
-  height: 24,
-  borderRadius: R_SM,
+  width: 20,
+  height: 20,
+  borderRadius: R_BADGE,
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  font: `600 12px/1 ${FONT_MONO}`,
+  font: `600 11px/1 ${FONT_MONO}`,
 };
 
 // Legacy typeChipStyle kept for any caller that still imports it.
@@ -1121,4 +1141,54 @@ export const panelCss = `
   .inscribed-text-button:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .inscribed-create-card { transition: background 140ms ease, box-shadow 140ms ease; }
+
+  /* Region tab: quiet item rows in a divided group. Divider via inset shadow so
+     row hover backgrounds don't repaint the hairline. */
+  .inscribed-region-row {
+    background: transparent;
+    transition: background 140ms ease;
+  }
+  .inscribed-region-row:hover { background: ${SURFACE_1}; }
+  li + li > .inscribed-region-row { box-shadow: inset 0 1px 0 ${HAIRLINE}; }
+  .inscribed-region-row-chevron {
+    transition: transform 200ms ${EASE}, color 140ms ease;
+  }
+  .inscribed-region-row:hover .inscribed-region-row-chevron {
+    transform: translateX(2px);
+    color: ${TEXT_MID};
+  }
+
+  /* "+ Yeni" toolbar row: neutral at rest, collection-tinted on hover. */
+  .inscribed-create-row {
+    box-shadow: inset 0 0 0 1px ${HAIRLINE};
+    transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  }
+  .inscribed-create-row:hover {
+    color: ${COLLECTION_ACCENT};
+    background: ${COLLECTION_SOFT};
+    box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
+  }
+
+  /* Detail pane back button */
+  .inscribed-pane-back {
+    background: transparent;
+    color: ${TEXT_MUTED};
+    transition: color 140ms ease, background-color 140ms ease;
+  }
+  .inscribed-pane-back:hover { color: ${TEXT_HI}; background-color: ${SURFACE_2}; }
+
+  /* Form rows: always-open fields AND heavy-block disclosure rows share this
+     class. Active = the page region was clicked: a soft accent ring that
+     follows the row's radius (a straight rail would get clipped square by the
+     rounded corners). */
+  .inscribed-field-row {
+    transition: background 160ms ease, box-shadow 160ms ease;
+  }
+  .inscribed-field-row.is-active {
+    background: ${SURFACE_1};
+    box-shadow: inset 0 0 0 1px ${ACCENT_LINE};
+  }
+  .inscribed-field-row-collection.is-active {
+    box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
+  }
 `;

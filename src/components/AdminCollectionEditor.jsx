@@ -346,14 +346,17 @@ export function useCollectionEditor(collection, slug) {
 /**
  * Presentational editor body. `editor` carries all state + handlers from
  * `useCollectionEditor`; the parent card drives the hook so it can also render
- * header controls against the same state.
+ * header controls against the same state. `showActions: false` drops the
+ * indicator + Kaydet row for hosts (the region detail pane) that render their
+ * own footer against the same editor state.
  *
  * @param {{
  *   editor: CollectionEditorState,
  *   showMetaRow?: boolean,
+ *   showActions?: boolean,
  * }} props
  */
-export function AdminCollectionEditor({ editor, showMetaRow = true }) {
+export function AdminCollectionEditor({ editor, showMetaRow = true, showActions = true }) {
   const {
     collection, slug,
     schema, item, values, setValues,
@@ -413,7 +416,7 @@ export function AdminCollectionEditor({ editor, showMetaRow = true }) {
 
       {error ? <div style={errorStyle}>{error}</div> : null}
 
-      {canEdit ? (
+      {canEdit && showActions ? (
         <div style={actionsRowStyle}>
           <DraftIndicator
             status={draftStatus}
@@ -448,7 +451,7 @@ export function AdminCollectionEditor({ editor, showMetaRow = true }) {
  *   publishedFlash: boolean,
  * }} props
  */
-function DraftIndicator({ status, lastSavedAt, hasServerDraft, publishedFlash }) {
+export function DraftIndicator({ status, lastSavedAt, hasServerDraft, publishedFlash }) {
   /** @type {{ state: string, bg: string, glow: string, pulse: boolean, label: React.ReactNode }} */
   let view;
 

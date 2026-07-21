@@ -442,7 +442,6 @@ export const groupHeaderStyle = {
   gap: 8,
   width: "100%",
   padding: "6px 4px 6px 6px",
-  background: "transparent",
   border: 0,
   cursor: "pointer",
   color: TEXT,
@@ -691,7 +690,12 @@ export const statusBarStyle = {
   display: "flex",
   alignItems: "center",
   gap: 10,
-  padding: "10px 16px",
+  // Fixed height so the bar keeps a steady height whether or not the action
+  // buttons are mounted. The button row (~27px) is taller than the idle status
+  // line (~17px), so a content-driven height jumped ~10px on every dirty
+  // toggle; alignItems centres both states into the same box instead.
+  minHeight: 46,
+  padding: "0 16px",
   borderTop: `1px solid ${HAIRLINE}`,
   background: BG_RAISED,
 };

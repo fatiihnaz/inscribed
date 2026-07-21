@@ -503,6 +503,17 @@ export const groupRailStyle = {
   pointerEvents: "none",
 };
 
+// Closes a group in the flat list: a full-width rule shown after a group when
+// another block follows, so the group's bottom edge (and where the next block
+// starts) reads at a glance. Slightly stronger than the row hairlines on
+// purpose: a group boundary outranks a row divider.
+export const groupDividerStyle = {
+  listStyle: "none",
+  height: 1,
+  margin: 0,
+  background: BORDER,
+};
+
 // ---------------------------------------------------------------------------
 // Block list
 // ---------------------------------------------------------------------------
@@ -1195,4 +1206,20 @@ export const panelCss = `
   .inscribed-field-row-collection.is-active {
     box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
   }
+
+  /* Hover affordance for the expandable headers. A group is a container, so its
+     header takes a bg fill; a single block row is lighter, so it lifts its label
+     + chevron colour instead. Those colours live here (not inline) so :hover
+     wins, since an inline colour would beat a selector. */
+  .inscribed-group-header {
+    background: transparent;
+    border-radius: ${R_SM}px;
+    transition: background 140ms ease;
+  }
+  .inscribed-group-header:hover { background: ${SURFACE_2}; }
+
+  .inscribed-row-label { color: ${TEXT_MID}; transition: color 140ms ease; }
+  .inscribed-row-chevron { color: ${TEXT_MUTED}; }
+  .inscribed-disclosure-header:hover .inscribed-row-label { color: ${TEXT}; }
+  .inscribed-disclosure-header:hover .inscribed-row-chevron { color: ${TEXT}; }
 `;

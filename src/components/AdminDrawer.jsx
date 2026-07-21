@@ -87,6 +87,7 @@ import {
   groupDirtyDotStyle,
   groupBodyStyle,
   groupRailStyle,
+  groupDividerStyle,
   listStyle,
   emptyStateStyle,
   statusBarStyle,
@@ -1080,8 +1081,8 @@ function GroupedBlockList({
         <div style={emptyStateStyle}>{emptyHint}</div>
       ) : (
         <ul style={listStyle} data-cms-list>
-          {chunks.map((chunk) =>
-            chunk.type === "single" ? (
+          {chunks.map((chunk, i) => {
+            const row = chunk.type === "single" ? (
               <li key={`s:${chunk.block.blockPath}`} style={{ listStyle: "none" }}>
                 <BlockCard
                   block={chunk.block}
@@ -1112,8 +1113,14 @@ function GroupedBlockList({
                   onToggle={() => onToggleGroup(chunk.name)}
                 />
               </li>
-            ),
-          )}
+            );
+            // Close a group with a rule when another block follows, so where the
+            // group ends and the next block begins reads at a glance.
+            const closer = chunk.type === "group" && i < chunks.length - 1
+              ? <li key={`d:${chunk.name}`} aria-hidden="true" style={groupDividerStyle} />
+              : null;
+            return closer ? [row, closer] : row;
+          })}
         </ul>
       )}
     </section>
@@ -1142,7 +1149,7 @@ function GroupCard({
 }) {
   return (
     <div style={groupCardStyle}>
-      <button type="button" style={groupHeaderStyle} onClick={onToggle} aria-expanded={isOpen}>
+      <button type="button" className="inscribed-group-header" style={groupHeaderStyle} onClick={onToggle} aria-expanded={isOpen}>
         <span style={groupNameStyle}>{groupName}</span>
         <span style={groupCountStyle}>
           {blocks.length}
@@ -1174,6 +1181,7 @@ function GroupCard({
                 <BlockCard
                   key={block.blockPath}
                   block={block}
+                  displayPath={stripGroupPrefix(block.blockPath, groupName)}
                   draft={drafts.get(block.blockPath)}
                   hasDraft={drafts.has(block.blockPath)}
                   isActive={activeBlockPath === block.blockPath}
@@ -1202,6 +1210,20 @@ function GroupCard({
 function blockPathPrefix(blockPath) {
   const dot = blockPath.indexOf(".");
   return dot === -1 ? null : blockPath.slice(0, dot);
+}
+
+/**
+ * Drop the `${group}.` prefix from a grouped child's path for display, so a
+ * child of the "hero" group reads as `cover`, not `hero.cover`. The full path
+ * stays in the row's title. Falls back to the raw path if the prefix doesn't
+ * match (defensive; grouped children always carry it).
+ *
+ * @param {string} blockPath
+ * @param {string} groupName
+ */
+function stripGroupPrefix(blockPath, groupName) {
+  const p = `${groupName}.`;
+  return blockPath.startsWith(p) ? blockPath.slice(p.length) : blockPath;
 }
 
 /**

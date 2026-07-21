@@ -63,6 +63,7 @@ const INLINE_TYPES = new Set(["ShortText", "Text", "LongText", "Date", "Link"]);
  *   onFocus: () => void,
  *   itemSchema: ItemSchema | null,
  *   readOnly?: boolean,
+ *   displayPath?: string,
  * }} props
  */
 export function BlockCard(props) {
@@ -80,6 +81,7 @@ export function BlockCard(props) {
         slug={binding.slug}
         isActive={props.isActive}
         onFocus={props.onFocus}
+        displayPath={props.displayPath}
       />
     );
   }
@@ -104,9 +106,10 @@ export function BlockCard(props) {
  *   onReset: () => void,
  *   onFocus: () => void,
  *   readOnly?: boolean,
+ *   displayPath?: string,
  * }} props
  */
-function FieldRow({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, readOnly }) {
+function FieldRow({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, readOnly, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
 
   const effective = block.draftValue ?? block.value;
@@ -130,7 +133,7 @@ function FieldRow({ block, draft, hasDraft, isActive, onChange, onReset, onFocus
     >
       <div style={fieldLabelRowStyle}>
         <TypeIcon type={block.blockType} />
-        <span style={fieldPathStyle} title={block.blockPath}>{block.blockPath}</span>
+        <span style={fieldPathStyle} title={block.blockPath}>{displayPath ?? block.blockPath}</span>
         {isDirty ? (
           <span style={dirtyDotStyle} aria-label="Kaydedilmemiş değişiklik" />
         ) : null}
@@ -280,9 +283,10 @@ function InvalidCollectionCard({ block }) {
  *   onFocus: () => void,
  *   itemSchema: ItemSchema | null,
  *   readOnly?: boolean,
+ *   displayPath?: string,
  * }} props
  */
-function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema, readOnly }) {
+function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema, readOnly, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
 
   const effective = block.draftValue ?? block.value;
@@ -321,6 +325,7 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
         isOpen={isOpen}
         isDirty={isDirty}
         readOnly={readOnly}
+        displayPath={displayPath}
         preview={blockPreview(block.blockType, value)}
         onHeaderClick={handleHeaderClick}
         onReset={onReset}
@@ -348,9 +353,10 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
  *   slug: string,
  *   isActive: boolean,
  *   onFocus: () => void,
+ *   displayPath?: string,
  * }} props
  */
-function CollectionBlockCard({ block, collection, slug, isActive, onFocus }) {
+function CollectionBlockCard({ block, collection, slug, isActive, onFocus, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
   const editor = useCollectionEditor(collection, slug);
   const isDirty = editor.hasDraft && editor.canEdit;
@@ -383,6 +389,7 @@ function CollectionBlockCard({ block, collection, slug, isActive, onFocus }) {
         isOpen={isOpen}
         isDirty={isDirty}
         isCollection
+        displayPath={displayPath}
         preview={`${collection} · ${slug}`}
         onHeaderClick={handleHeaderClick}
         onReset={editor.undoDraft}
@@ -427,21 +434,23 @@ function rowClassName({ isActive, isCollection }) {
  *   isCollection?: boolean,
  *   readOnly?: boolean,
  *   preview?: string | null,
+ *   displayPath?: string,
  *   onHeaderClick: () => void,
  *   onReset: () => void,
  * }} props
  */
-function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, onHeaderClick, onReset }) {
+function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, displayPath, onHeaderClick, onReset }) {
   return (
     <button
       type="button"
       onClick={onHeaderClick}
       aria-expanded={isOpen}
+      className="inscribed-disclosure-header"
       style={disclosureHeaderStyle}
     >
       <TypeIcon type={block.blockType} />
-      <span style={fieldPathStyle} title={block.blockPath}>
-        {block.blockPath}
+      <span className="inscribed-row-label" style={{ ...fieldPathStyle, color: undefined }} title={block.blockPath}>
+        {displayPath ?? block.blockPath}
       </span>
 
       {!isOpen && preview ? (
@@ -487,10 +496,10 @@ function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, o
       ) : null}
 
       <span
+        className="inscribed-row-chevron"
         style={{
           display: "inline-flex",
-          color: TEXT_MUTED,
-          transition: "transform 220ms cubic-bezier(0.32, 0.72, 0.18, 1)",
+          transition: "transform 220ms cubic-bezier(0.32, 0.72, 0.18, 1), color 140ms ease",
           transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
         }}
       >

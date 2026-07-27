@@ -57,12 +57,13 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
 
   return {
     async getContent(slug, opts = {}) {
-      // `/cms/content` always requires `cms:access`. Tokenless reads fall back
-      // to the published-only public endpoint, available when the client's
-      // `allowAnonymousContentRead` flag is on (404 otherwise).
+      // `/cms/content` needs a credential and branches on it: callers without
+      // `content:write` get no `draftValue`. Tokenless reads fall back to the
+      // public endpoint, available when the client's `allowAnonymousContentRead`
+      // flag is on (404 otherwise).
       const target =
         !opts.accessToken && clientKey
-          ? url(`/public/${encodeURIComponent(clientKey)}/data`, { slug })
+          ? url(`/public/${encodeURIComponent(clientKey)}/content`, { slug })
           : url("/content", { slug });
       const res = await fetch(target, {
         method: "GET",

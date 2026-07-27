@@ -64,10 +64,11 @@ describe("getContent", () => {
     fetchResolves({ slug: "home", blocks: [] });
     await t.getContent("home");
     const [url] = lastCall();
-    expect(url).toContain(`${BASE}/cms/public/my-site/data`);
+    expect(url).toContain(`${BASE}/cms/public/my-site/content`);
     expect(new URL(url).searchParams.get("slug")).toBe("home");
 
-    // A token (user or service) always goes to the draft-aware endpoint.
+    // A token (user or service) always goes to `/cms/content`; the backend
+    // decides from the credential whether drafts ride along.
     fetchResolves({ slug: "home", blocks: [] });
     await t.getContent("home", { accessToken: "tok" });
     expect(lastCall()[0]).toContain(`${BASE}/cms/content`);

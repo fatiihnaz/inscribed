@@ -114,17 +114,18 @@ export function CmsProvider({
       setSessionExpired(false);
       return;
     }
-    const roles = Array.isArray(claims.roles) ? claims.roles : [];
-    // `azp` must match this site's clientKey: on a shared API origin the
-    // cookie may belong to another client, whose roles say nothing here.
+    // The backend renamed roles to capabilities in its admin API, but the JWT
+    // still carries them under the legacy `roles` claim.
+    const capabilities = Array.isArray(claims.roles) ? claims.roles : [];
+    // `azp` must match this site's clientKey: on a shared API origin the cookie
+    // may belong to another client, whose capabilities say nothing here.
     const mayEdit =
-      claims.azp === baseConfig.clientKey &&
-      (roles.includes("cms:access") || roles.includes("cms:admin"));
+      claims.azp === baseConfig.clientKey && capabilities.includes("content:write");
     if (!mayEdit) {
       if (process.env.NODE_ENV !== "production") {
         // eslint-disable-next-line no-console
         console.warn(
-          `[inscribed] signed in but no cms:access for "${baseConfig.clientKey}" (azp "${claims.azp}") - add a membership on the backend.`,
+          `[inscribed] no content:write for "${baseConfig.clientKey}" (azp "${claims.azp}", roles ${JSON.stringify(capabilities)}) - add an editor membership.`,
         );
       }
       return;

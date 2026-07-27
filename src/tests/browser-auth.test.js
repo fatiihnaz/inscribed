@@ -160,7 +160,7 @@ describe("claims", () => {
   it("decodes the base64url payload of the held token", async () => {
     store.set(HINT, "1");
     const auth = makeAuth();
-    const payload = { sub: "u1", azp: KEY, roles: ["cms:access"] };
+    const payload = { sub: "u1", azp: KEY, roles: ["content:write"] };
     fetchResolves(refreshBody({ payload }));
     await auth.getAccessToken();
     expect(auth.claims()).toEqual(payload);

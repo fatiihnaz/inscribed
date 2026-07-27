@@ -9,7 +9,8 @@
  * cache directly so the page preview re-renders without a fetch.
  *
  * Auth: the access token comes from `useCmsContext` as `Authorization: Bearer`.
- * The endpoint requires `cms:access`, so anonymous visitors get a 401 via `error`.
+ * The endpoint requires `content:read`, so anonymous visitors get a 401 via
+ * `error` unless the collection has anonymous read enabled.
  */
 
 import { useCallback, useEffect, useMemo, useRef } from "react";

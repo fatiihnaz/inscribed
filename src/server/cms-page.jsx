@@ -62,8 +62,9 @@ const PATHNAME_HEADER = "x-pathname";
  * @property {import("../lib/service-token.js").ServiceTokenProvider} [getServiceToken]
  *   Server-only provider for the service token on the SSR content fetch, so
  *   public visitors get rendered content without a session. Never passed to
- *   the client `Provider`. Default: no token; the reference backend requires
- *   `cms:access` on `/cms/content`, so inject e.g. a service-key provider.
+ *   the client `Provider`. Default: no token, which reaches `/cms/content`
+ *   only through the public endpoint (`clientKey` + the client's anonymous-read
+ *   flag); otherwise inject e.g. a `render`-preset service key.
  * @property {import("../lib/transport.js").CmsTransport} [transport]
  *   Custom transport for the SSR fetch. Server-only, so to use it client-side
  *   too pass it to your provider as well. Default: REST against `config.baseUrl`.

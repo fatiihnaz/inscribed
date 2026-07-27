@@ -51,7 +51,8 @@
  *   Admin-only overlay. Non-null when a pending draft exists: `value` is the
  *   published version, `draftValue` the draft. The backend nulls it when the
  *   two would be equal, so a non-null `draftValue` always differs from `value`.
- *   Omitted in public payloads.
+ *   Only computed for callers holding `content:write`; omitted for read-only
+ *   credentials and on the public endpoint.
  * @property {string} [_slug]
  *   SDK-stamped after fetch so the save layer knows which slug to PUT each
  *   block back to. Not part of the wire payload.
@@ -179,7 +180,7 @@ export const NEW_DRAFT_GUID = "00000000-0000-0000-0000-000000000000";
  */
 
 /**
- * Full response of `GET /cms/content` and `GET /cms/data`.
+ * Full response of `GET /cms/content` and `GET /cms/public/{clientKey}/content`.
  *
  * @typedef {Object} ContentResponse
  * @property {string} slug

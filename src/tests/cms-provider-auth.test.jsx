@@ -42,7 +42,7 @@ function goodRefreshBody(clientKey, claims = {}) {
     accessToken: fakeJwt({
       sub: "u1",
       azp: clientKey,
-      roles: ["cms:access"],
+      roles: ["content:read", "content:write"],
       name: "Fatih",
       email: "f@x.test",
       ...claims,
@@ -147,14 +147,14 @@ describe("session adoption", () => {
     renderCms({ baseUrl: BASE, clientKey: key });
     await settle();
     expect(adminText()).toBe("false");
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("no cms:access"));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("no content:write"));
   });
 
-  it("stays public when roles carry neither cms:access nor cms:admin", async () => {
+  it("stays public when the capabilities are read-only", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const key = nextKey();
     localStorage.setItem(hintKey(key), "1");
-    refreshImpl = () => jsonRes(goodRefreshBody(key, { roles: ["cms:read"] }));
+    refreshImpl = () => jsonRes(goodRefreshBody(key, { roles: ["content:read"] }));
 
     renderCms({ baseUrl: BASE, clientKey: key });
     await settle();

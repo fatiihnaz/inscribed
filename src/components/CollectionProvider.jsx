@@ -18,6 +18,7 @@ import { stableStringify } from "../lib/stable-stringify.js";
 
 /**
  * @import { CollectionItemCacheEntry, CollectionListCacheEntry } from "../lib/collection-context.js"
+ * @import { CollectionBinding } from "../lib/schemas.js"
  */
 
 /**
@@ -37,43 +38,67 @@ export function CollectionProvider({ children }) {
   // Registry of `<CollectionItem>` / `<CollectionRegion>` bindings. Collections
   // aren't in the manifest, so the drawer learns them via this runtime registry.
   // State-based so consumer useMemos recompute when bindings come and go.
+  //
+  // Refcounts live in a ref and the published Map in state: a binding is keyed
+  // by the record (or filter window) it addresses, so the same one can be
+  // rendered many times on a page, and only the last unmount may drop it. The
+  // ref also means a re-registration of something already bound publishes
+  // nothing, keeping the drawer's memos off the churn path.
+  const bindingEntriesRef = useRef(
+    /** @type {Map<string, { binding: CollectionBinding, count: number }>} */ (new Map()),
+  );
   const [collectionBindings, setCollectionBindings] = useState(
-    /** @returns {Map<string, { collection: string, slug?: string }>} */
+    /** @returns {Map<string, CollectionBinding>} */
     () => new Map(),
   );
 
+  const publishCollectionBindings = useCallback(() => {
+    /** @type {Map<string, CollectionBinding>} */
+    const next = new Map();
+    for (const [id, entry] of bindingEntriesRef.current) next.set(id, entry.binding);
+    setCollectionBindings(next);
+  }, []);
+
   const registerCollectionBinding = useCallback(
     /**
-     * @param {string} blockPath
-     * @param {{ collection: string, slug?: string, filter?: Record<string, *>, limit?: number, offset?: number }} binding
+     * @param {string} bindingId
+     * @param {CollectionBinding} binding
      */
-    (blockPath, binding) => {
-      setCollectionBindings((prev) => {
-        const existing = prev.get(blockPath);
-        // Compare via stableStringify so inline filter objects don't churn the
-        // registry every render (the drawer's tab discovery relies on stability).
-        if (existing && stableStringify(existing) === stableStringify(binding)) {
-          return prev;
+    (bindingId, binding) => {
+      const existing = bindingEntriesRef.current.get(bindingId);
+      if (existing) {
+        // Same record, two render sites: the binding value is presentation
+        // (group, label), so the first one on the page wins and the rest just
+        // hold the entry open.
+        if (
+          process.env.NODE_ENV !== "production" &&
+          stableStringify(existing.binding) !== stableStringify(binding)
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[inscribed] "${bindingId}" is bound more than once with different placement; keeping ${stableStringify(existing.binding)} and ignoring ${stableStringify(binding)}.`,
+          );
         }
-        const next = new Map(prev);
-        next.set(blockPath, binding);
-        return next;
-      });
+        existing.count += 1;
+        return;
+      }
+      bindingEntriesRef.current.set(bindingId, { binding, count: 1 });
+      publishCollectionBindings();
     },
-    [],
+    [publishCollectionBindings],
   );
 
   const unregisterCollectionBinding = useCallback(
-    /** @param {string} blockPath */
-    (blockPath) => {
-      setCollectionBindings((prev) => {
-        if (!prev.has(blockPath)) return prev;
-        const next = new Map(prev);
-        next.delete(blockPath);
-        return next;
-      });
+    /** @param {string} bindingId */
+    (bindingId) => {
+      const existing = bindingEntriesRef.current.get(bindingId);
+      if (!existing) return;
+      existing.count -= 1;
+      if (existing.count > 0) return;
+      bindingEntriesRef.current.delete(bindingId);
+      publishCollectionBindings();
     },
-    [],
+    [publishCollectionBindings],
   );
 
   // /cms/collections/me state. The fetch (further down) runs once so the

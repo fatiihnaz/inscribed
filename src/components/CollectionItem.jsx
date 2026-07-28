@@ -10,7 +10,7 @@
  * `item` is null while loading and on error, so branch on `meta.isLoading` /
  * `meta.error` first. 404s arrive as `meta.error` with `error.isNotFound`.
  *
- *   <CollectionItem blockPath="news.hero" collection="News" slug="q1-release-notes">
+ *   <CollectionItem collection="News" slug="q1-release-notes">
  *     {(item, { isLoading, error }) => (
  *       isLoading            ? <Skeleton /> :
  *       error?.isNotFound    ? <NotFound /> :
@@ -18,12 +18,15 @@
  *                              <Article {...item.data} />
  *     )}
  *   </CollectionItem>
+ *
+ * The binding identifies itself by the record it points at, so rendering the
+ * same item twice on a page yields one drawer card, not two.
  */
 
 import { useContext, useEffect, useState } from "react";
 
 import { useCmsContext } from "../lib/context.js";
-import { useCollectionContext } from "../lib/collection-context.js";
+import { collectionItemBindingId, useCollectionContext } from "../lib/collection-context.js";
 import { CmsGroupContext } from "../lib/group-context.js";
 import { useCollectionItem } from "../hooks/use-collection.js";
 import { useStoreSelector } from "../lib/store.js";
@@ -51,11 +54,10 @@ const COLLECTION_GLYPH = TYPE_META.Collection.glyph;
 
 /**
  * @typedef {Object} CollectionItemProps
- * @property {string} blockPath
- *   Binding identifier: keys this binding in the drawer registry and is the
- *   click-to-focus target. The hook itself fetches by `collection` + `slug`.
  * @property {string} collection   Backend collection key.
  * @property {string} slug         Item slug (lowercased server-side).
+ * @property {string} [group]
+ * @property {string} [label]      Drawer card and page chip text (default: `"{collection} · {slug}"`).
  * @property {"global"} [scope]    Reserved; currently ignored (bindings are runtime-only).
  * @property {(item: CollectionItemResponse | null, meta: CollectionItemMeta) => React.ReactNode} children
  */
@@ -64,20 +66,26 @@ const COLLECTION_GLYPH = TYPE_META.Collection.glyph;
  * @param {CollectionItemProps} props
  */
 // eslint-disable-next-line no-unused-vars
-export function CollectionItem({ blockPath, collection, slug, scope: _scope, children }) {
+export function CollectionItem({ collection, slug, group, label, scope: _scope, children }) {
   const { isAdmin, activeBlock, setActiveBlock } = useCmsContext();
   const {
     registerCollectionBinding, unregisterCollectionBinding, collectionStore,
   } = useCollectionContext();
   const groupPrefix = useContext(CmsGroupContext);
-  const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
+
+  const bindingId = collectionItemBindingId(collection, slug);
+  const cardGroup = group ?? groupPrefix;
+  const cardLabel = label ?? `${collection} · ${slug}`;
 
   // Hand the binding to the drawer for its Page-tab card. Public visitors
   // register too, keeping register/unregister symmetric across mode switches.
   useEffect(() => {
-    registerCollectionBinding(fullPath, { collection, slug });
-    return () => unregisterCollectionBinding(fullPath);
-  }, [fullPath, collection, slug, registerCollectionBinding, unregisterCollectionBinding]);
+    registerCollectionBinding(bindingId, { collection, slug, group: cardGroup, label: cardLabel });
+    return () => unregisterCollectionBinding(bindingId);
+  }, [
+    bindingId, collection, slug, cardGroup, cardLabel,
+    registerCollectionBinding, unregisterCollectionBinding,
+  ]);
 
   const { item, isLoading, error, refetch } = useCollectionItem(collection, slug);
   const drafts = useStoreSelector(collectionStore, (st) => st.drafts);
@@ -87,9 +95,9 @@ export function CollectionItem({ blockPath, collection, slug, scope: _scope, chi
 
   return (
     <CollectionEditWrapper
-      onClick={() => setActiveBlock(fullPath)}
-      isActive={activeBlock === fullPath}
-      label={`${collection} · ${slug}`}
+      onClick={() => setActiveBlock(bindingId)}
+      isActive={activeBlock === bindingId}
+      label={cardLabel}
       tag={typeof rendered?.type === "string" ? rendered.type : null}
       dirty={drafts.has(`${collection}:${slug}`) || item.draftData != null}
     >

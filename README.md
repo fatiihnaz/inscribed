@@ -300,6 +300,11 @@ per prefix.
 > unprefixed and they never resolve; `cms-sync` warns when it sees this.
 > Render the components inside the group instead of taking them as children.
 
+A `<CollectionItem>` inside a group is filed under it too, but by a different
+route: its binding carries the group name rather than baking it into a path (see
+[Collections](#collections)). Nothing of it reaches the manifest, so the
+`{children}` limit above doesn't apply to collection bindings.
+
 `<CmsGroup>` also accepts `visible` / `editable` to lock or hide a whole section
 in one place; the mode cascades to every descendant. See
 [Access control](#access-control).
@@ -383,6 +388,16 @@ refetch, ... }`. Items are fetched at render time and cached under
 and `useCollectionItem` (also from `inscribed/collections`) expose the same data
 directly. The `<CollectionProvider>` that backs them is mounted for you inside
 `<CmsProvider>`, so the components and hooks work without extra wiring.
+
+Neither takes a `blockPath`. A binding is identified by what it points at, the
+record for an item and the (collection, filter) window for a region, so the same
+article rendered in two places on a page is one drawer card, not two. Inside a
+`<CmsGroup>` an item's card is filed under that group; `group` and `label`
+override the placement and the card text without changing which record is bound:
+
+```jsx
+<CollectionItem collection="News" slug={slug} label="Öne çıkan haber" />
+```
 
 Editing a collection item is schema-driven: the backend's `/schema` describes
 each field's `type`, and the exported `<CollectionFieldsForm>` renders one input

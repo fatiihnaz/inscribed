@@ -56,6 +56,13 @@
  * @property {string} [_slug]
  *   SDK-stamped after fetch so the save layer knows which slug to PUT each
  *   block back to. Not part of the wire payload.
+ * @property {string|null} [_group]
+ *   Synthesised Collection rows only: which drawer group card the row belongs
+ *   to. A content block's group is read off its path instead (the prefix
+ *   `<CmsGroup>` bakes in), which a collection row's path has no room for.
+ * @property {string} [_label]
+ *   Synthesised Collection rows only: what the card shows instead of its
+ *   `blockPath`, which addresses a record rather than a position.
  */
 
 /**
@@ -67,6 +74,11 @@
  * @typedef {Object} CollectionBinding
  * @property {string} collection   Backend collection key (e.g. "Teams", "News"). Case-insensitive at the API level.
  * @property {string} [slug]       When set, the block resolves a single item via `GET /cms/collections/{key}/{slug}`. Omit for list bindings (`GET /cms/collections/{key}`).
+ * @property {string|null} [group] Item bindings only: the enclosing `<CmsGroup>` name, so the drawer can file the card under it.
+ * @property {string} [label]      Item bindings only: what the drawer card and the page chip read.
+ * @property {Record<string, *>} [filter]  List bindings only: the filter window the region declares, mirrored by the drawer's region panel.
+ * @property {number} [limit]      List bindings only.
+ * @property {number} [offset]     List bindings only.
  */
 
 /**

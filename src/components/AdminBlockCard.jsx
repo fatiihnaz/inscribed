@@ -78,6 +78,7 @@ function rowInsetStyle(base, topLevel) {
  *   onFocus: () => void,
  *   itemSchema: ItemSchema | null,
  *   readOnly?: boolean,
+ *   topLevel: boolean,
  *   displayPath?: string,
  * }} props
  */
@@ -87,7 +88,13 @@ export function BlockCard(props) {
       props.block.value ?? {}
     );
     if (typeof binding.collection !== "string" || typeof binding.slug !== "string") {
-      return <InvalidCollectionCard block={props.block} displayPath={props.displayPath} />;
+      return (
+        <InvalidCollectionCard
+          block={props.block}
+          topLevel={props.topLevel}
+          displayPath={props.displayPath}
+        />
+      );
     }
     return (
       <CollectionBlockCard
@@ -96,6 +103,7 @@ export function BlockCard(props) {
         slug={binding.slug}
         isActive={props.isActive}
         onFocus={props.onFocus}
+        topLevel={props.topLevel}
         displayPath={props.displayPath}
       />
     );
@@ -121,13 +129,12 @@ export function BlockCard(props) {
  *   onReset: () => void,
  *   onFocus: () => void,
  *   readOnly?: boolean,
+ *   topLevel: boolean,
  *   displayPath?: string,
  * }} props
  */
-function FieldRow({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, readOnly, displayPath }) {
+function FieldRow({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, readOnly, topLevel, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
-
-  const topLevel = displayPath === undefined;
 
   const effective = block.draftValue ?? block.value;
   const value = hasDraft ? draft : effective;
@@ -237,10 +244,9 @@ const disclosureBodyStyle = rowGuideBodyStyle;
  * Separate from `CollectionBlockCard` so `useCollectionEditor` only runs with a
  * valid pair.
  *
- * @param {{ block: BlockResponse, displayPath?: string }} props
+ * @param {{ block: BlockResponse, topLevel: boolean, displayPath?: string }} props
  */
-function InvalidCollectionCard({ block, displayPath }) {
-  const topLevel = displayPath === undefined;
+function InvalidCollectionCard({ block, topLevel, displayPath }) {
   return (
     <div
       className="inscribed-field-row inscribed-field-row-collection"
@@ -273,12 +279,12 @@ function InvalidCollectionCard({ block, displayPath }) {
  *   onFocus: () => void,
  *   itemSchema: ItemSchema | null,
  *   readOnly?: boolean,
+ *   topLevel: boolean,
  *   displayPath?: string,
  * }} props
  */
-function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema, readOnly, displayPath }) {
+function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema, readOnly, topLevel, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
-  const topLevel = displayPath === undefined;
 
   const effective = block.draftValue ?? block.value;
   const value = hasDraft ? draft : effective;
@@ -316,6 +322,7 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
         isOpen={isOpen}
         isDirty={isDirty}
         readOnly={readOnly}
+        topLevel={topLevel}
         displayPath={displayPath}
         preview={blockPreview(block.blockType, value)}
         onHeaderClick={handleHeaderClick}
@@ -344,12 +351,12 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
  *   slug: string,
  *   isActive: boolean,
  *   onFocus: () => void,
+ *   topLevel: boolean,
  *   displayPath?: string,
  * }} props
  */
-function CollectionBlockCard({ block, collection, slug, isActive, onFocus, displayPath }) {
+function CollectionBlockCard({ block, collection, slug, isActive, onFocus, topLevel, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
-  const topLevel = displayPath === undefined;
   const editor = useCollectionEditor(collection, slug);
   const isDirty = editor.hasDraft && editor.canEdit;
 
@@ -370,6 +377,8 @@ function CollectionBlockCard({ block, collection, slug, isActive, onFocus, displ
     if (!isOpen) onFocus();
   };
 
+  const record = `${collection} · ${slug}`;
+
   return (
     <div
       ref={ref}
@@ -381,8 +390,9 @@ function CollectionBlockCard({ block, collection, slug, isActive, onFocus, displ
         isOpen={isOpen}
         isDirty={isDirty}
         isCollection
+        topLevel={topLevel}
         displayPath={displayPath}
-        preview={`${collection} · ${slug}`}
+        preview={displayPath === record ? null : record}
         onHeaderClick={handleHeaderClick}
         onReset={editor.undoDraft}
       />
@@ -426,13 +436,13 @@ function rowClassName({ isActive, isCollection }) {
  *   isCollection?: boolean,
  *   readOnly?: boolean,
  *   preview?: string | null,
+ *   topLevel: boolean,
  *   displayPath?: string,
  *   onHeaderClick: () => void,
  *   onReset: () => void,
  * }} props
  */
-function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, displayPath, onHeaderClick, onReset }) {
-  const topLevel = displayPath === undefined;
+function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, topLevel, displayPath, onHeaderClick, onReset }) {
   return (
     <button
       type="button"

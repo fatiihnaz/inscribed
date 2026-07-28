@@ -14,9 +14,43 @@
 
 import { createContext, useContext } from "react";
 
+import { stableStringify } from "./stable-stringify.js";
+
 /**
- * @import { MyCollectionResponse, CollectionItemResponse } from "./schemas.js"
+ * @import { MyCollectionResponse, CollectionItemResponse, CollectionBinding } from "./schemas.js"
  */
+
+// Collection bindings share the drawer's single `activeBlock` channel with
+// content blocks, so their ids must be unreachable as a content path. Content
+// paths are dot-separated identifiers and never contain a colon.
+const BINDING_NS = "collection:";
+
+/**
+ * Identity of a `<CollectionItem>` binding: the record it points at, not where
+ * it is rendered. Two components showing the same record are one binding, and
+ * one drawer card, however the page nests them.
+ *
+ * @param {string} collection
+ * @param {string} slug
+ * @returns {string}
+ */
+export function collectionItemBindingId(collection, slug) {
+  return `${BINDING_NS}${collection}:${slug}`;
+}
+
+/**
+ * Identity of a `<CollectionRegion>` binding: the (collection, filter) window.
+ * `limit` / `offset` stay out of it on purpose: the drawer's region panel
+ * already collapses windows by filter signature, so two paginations of one
+ * filtered list would be one section anyway.
+ *
+ * @param {string} collection
+ * @param {Record<string, *>} [filter]
+ * @returns {string}
+ */
+export function collectionRegionBindingId(collection, filter) {
+  return `${BINDING_NS}${collection}|${stableStringify(filter ?? null)}`;
+}
 
 /**
  * @typedef {Object} CollectionItemCacheEntry
@@ -47,14 +81,17 @@ import { createContext, useContext } from "react";
  *   StatusBar's "Aç" CTA targets an item; the matching card auto-expands on
  *   render, then clears it so revisiting the tab doesn't re-open the row.
  * @property {(target: { key: string, slug: string } | null) => void} setActiveCollectionItem
- * @property {Map<string, { collection: string, slug?: string, filter?: Record<string, *>, limit?: number, offset?: number }>} collectionBindings
+ * @property {Map<string, CollectionBinding>} collectionBindings
  *   Runtime registry populated by `<CollectionItem>` / `<CollectionRegion>` on
  *   mount. Collections aren't in the CMS block namespace, so this is how the
- *   AdminDrawer learns the bindings on the current page. Key is the full
- *   blockPath; `slug` is set for items, omitted for list regions. Region
- *   bindings also carry filter/limit/offset so the drawer mirrors them.
- * @property {(blockPath: string, binding: { collection: string, slug?: string, filter?: Record<string, *>, limit?: number, offset?: number }) => void} registerCollectionBinding
- * @property {(blockPath: string) => void} unregisterCollectionBinding
+ *   AdminDrawer learns the bindings on the current page. Keyed by the binding's
+ *   own identity (see `collectionItemBindingId` / `collectionRegionBindingId`);
+ *   `slug` is set for items, omitted for list regions. Region bindings also
+ *   carry filter/limit/offset so the drawer mirrors them.
+ * @property {(bindingId: string, binding: CollectionBinding) => void} registerCollectionBinding
+ *   Refcounted: the same binding registered twice is one entry, and the first
+ *   registration's value wins.
+ * @property {(bindingId: string) => void} unregisterCollectionBinding
  * @property {MyCollectionResponse[]} myCollections
  *   `GET /cms/collections/me`, fetched once per session when `isAdmin` (empty
  *   for public visitors). All drawer surfaces read schemas from here instead

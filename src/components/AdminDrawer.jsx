@@ -217,15 +217,20 @@ export function AdminDrawer() {
     globals.sort((a, b) => a.sortOrder - b.sortOrder);
 
     let nextSort = pages.length > 0 ? pages[pages.length - 1].sortOrder + 1 : 1;
-    for (const [blockPath, binding] of collectionBindings) {
+    for (const [bindingId, binding] of collectionBindings) {
       if (!binding.slug) continue;
       pages.push(/** @type {BlockResponse} */ ({
-        blockPath,
+        blockPath: bindingId,
         blockType: "Collection",
         value: binding,
         version: 0,
         sortOrder: nextSort++,
         _slug: pathname,
+        // Group and label ride along on the binding: a collection row's path
+        // addresses a record, so unlike a content block it has nowhere to
+        // carry either.
+        _group: binding.group ?? null,
+        _label: binding.label,
       }));
     }
 
@@ -403,6 +408,17 @@ export function AdminDrawer() {
     setActiveCollectionItem(null);
   }, [mode, selectedCollection, activeCollectionItem, setActiveCollectionItem]);
 
+  // Every row the drawer renders, synthesised collection bindings included, so
+  // "which group holds this path" answers for both block kinds. The raw
+  // `blocks` map can't: collection rows never enter the content namespace.
+  const rowsByPath = useMemo(() => {
+    /** @type {Map<string, BlockResponse>} */
+    const map = new Map();
+    for (const block of pageBlockList) map.set(block.blockPath, block);
+    for (const block of globalBlockList) map.set(block.blockPath, block);
+    return map;
+  }, [pageBlockList, globalBlockList]);
+
   // Per-group collapse state. Storing the *closed* set means new groups from
   // discovery default to expanded.
   const [closedGroups, setClosedGroups] = useState(/** @type {Set<string>} */ (new Set()));
@@ -415,7 +431,8 @@ export function AdminDrawer() {
       else next.add(group);
       return next;
     });
-    if (closing && activeBlock && blockPathPrefix(activeBlock) === group) {
+    const activeRow = activeBlock ? rowsByPath.get(activeBlock) : undefined;
+    if (closing && activeRow && groupOfBlock(activeRow) === group) {
       setActiveBlock(null);
     }
   };
@@ -428,20 +445,20 @@ export function AdminDrawer() {
     // A page region was clicked, so leave whatever rail mode was open: the
     // matching card lives in the page list.
     setModeState("page");
-    const block = blocks.get(activeBlock);
+    const block = rowsByPath.get(activeBlock);
     if (!block) return;
     const slug = block._slug ?? pathname;
     const tab = slug === pathname ? "page" : "global";
     setActiveTab(tab);
-    const prefix = blockPathPrefix(block.blockPath);
-    if (prefix == null) return;
+    const group = groupOfBlock(block);
+    if (group == null) return;
     setClosedGroups((prev) => {
-      if (!prev.has(prefix)) return prev;
+      if (!prev.has(group)) return prev;
       const next = new Set(prev);
-      next.delete(prefix);
+      next.delete(group);
       return next;
     });
-  }, [activeBlock, blocks, pathname, isDrawerOpen, setDrawerOpen]);
+  }, [activeBlock, rowsByPath, pathname, isDrawerOpen, setDrawerOpen]);
 
   // Wall-clock time of the last successful autosave, echoed as "Taslak kayıtlı
   // HH:MM" once dirty drains.
@@ -496,6 +513,7 @@ export function AdminDrawer() {
     if (!search) return true;
     const q = search.toLowerCase();
     return block.blockPath.toLowerCase().includes(q)
+        || (block._label ?? "").toLowerCase().includes(q)
         || block.blockType.toLowerCase().includes(q);
   };
 
@@ -1478,7 +1496,7 @@ function GroupedBlockList({
   blockList, drafts, setDraft, clearDraft, activeBlockPath, onFocus,
   itemSchemas, editorVisibility, closedGroups, onToggleGroup, dirtyByPath, emptyHint,
 }) {
-  const chunks = useMemo(() => chunkBlocksByPrefix(blockList), [blockList]);
+  const chunks = useMemo(() => chunkBlocksByGroup(blockList), [blockList]);
 
   return (
     <section style={paneStyle}>
@@ -1491,6 +1509,8 @@ function GroupedBlockList({
               <li key={`s:${chunk.block.blockPath}`} style={{ listStyle: "none" }}>
                 <BlockCard
                   block={chunk.block}
+                  displayPath={displayLabelOf(chunk.block, null)}
+                  topLevel
                   draft={drafts.get(chunk.block.blockPath)}
                   hasDraft={drafts.has(chunk.block.blockPath)}
                   isActive={activeBlockPath === chunk.block.blockPath}
@@ -1589,7 +1609,8 @@ function GroupCard({
                 <BlockCard
                   key={block.blockPath}
                   block={block}
-                  displayPath={stripGroupPrefix(block.blockPath, groupName)}
+                  displayPath={displayLabelOf(block, groupName)}
+                  topLevel={false}
                   draft={drafts.get(block.blockPath)}
                   hasDraft={drafts.has(block.blockPath)}
                   isActive={activeBlockPath === block.blockPath}
@@ -1609,29 +1630,37 @@ function GroupCard({
 }
 
 /**
- * Group prefix: the slice before the first dot, or null for a dotless path so
- * the caller renders it flat instead of as a single-item group.
+ * Which group card a row belongs to, `null` for a flat one. The two block kinds
+ * carry it differently: a content block's group is the slice of its path before
+ * the first dot (the prefix `<CmsGroup>` bakes in, which discovery mirrors),
+ * while a collection row's path addresses a record, so its group travels on the
+ * binding instead.
  *
- * @param {string} blockPath
+ * @param {BlockResponse} block
  * @returns {string | null}
  */
-function blockPathPrefix(blockPath) {
-  const dot = blockPath.indexOf(".");
-  return dot === -1 ? null : blockPath.slice(0, dot);
+function groupOfBlock(block) {
+  if (block.blockType === "Collection") return block._group ?? null;
+  const dot = block.blockPath.indexOf(".");
+  return dot === -1 ? null : block.blockPath.slice(0, dot);
 }
 
 /**
- * Drop the `${group}.` prefix from a grouped child's path for display, so a
- * child of the "hero" group reads as `cover`, not `hero.cover`. The full path
- * stays in the row's title. Falls back to the raw path if the prefix doesn't
- * match (defensive; grouped children always carry it).
+ * What the row's label reads. Content rows show their path, minus the group
+ * prefix inside a group card so a child of "hero" reads as `cover`, not
+ * `hero.cover` (the full path stays in the row's title). Collection rows show
+ * the binding's label, their path being an identifier rather than a place.
+ * `undefined` means "the path as-is".
  *
- * @param {string} blockPath
- * @param {string} groupName
+ * @param {BlockResponse} block
+ * @param {string | null} groupName
+ * @returns {string | undefined}
  */
-function stripGroupPrefix(blockPath, groupName) {
+function displayLabelOf(block, groupName) {
+  if (block.blockType === "Collection") return block._label;
+  if (!groupName) return undefined;
   const p = `${groupName}.`;
-  return blockPath.startsWith(p) ? blockPath.slice(p.length) : blockPath;
+  return block.blockPath.startsWith(p) ? block.blockPath.slice(p.length) : block.blockPath;
 }
 
 /**
@@ -1643,26 +1672,26 @@ function stripGroupPrefix(blockPath, groupName) {
  * @param {BlockResponse[]} blocks
  * @returns {BlockChunk[]}
  */
-function chunkBlocksByPrefix(blocks) {
+function chunkBlocksByGroup(blocks) {
   /** @type {BlockChunk[]} */
   const chunks = [];
   /** @type {Map<string, number>} */
   const groupChunkIndex = new Map();
 
   for (const block of blocks) {
-    const prefix = blockPathPrefix(block.blockPath);
-    if (prefix == null) {
+    const group = groupOfBlock(block);
+    if (group == null) {
       chunks.push({ type: "single", block });
       continue;
     }
-    const existing = groupChunkIndex.get(prefix);
+    const existing = groupChunkIndex.get(group);
     if (existing != null) {
       const chunk = chunks[existing];
       if (chunk.type === "group") chunk.blocks.push(block);
       continue;
     }
-    groupChunkIndex.set(prefix, chunks.length);
-    chunks.push({ type: "group", name: prefix, blocks: [block] });
+    groupChunkIndex.set(group, chunks.length);
+    chunks.push({ type: "group", name: group, blocks: [block] });
   }
   return chunks;
 }

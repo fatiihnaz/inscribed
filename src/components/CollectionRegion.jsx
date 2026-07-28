@@ -7,7 +7,7 @@
  * the drawer shows a tab for it (discovery ignores collections; they never
  * enter the manifest); items fetch by `collection` through `useCollection`.
  *
- *   <CollectionRegion blockPath="news.list" collection="News">
+ *   <CollectionRegion collection="News">
  *     {(items, { isLoading, error }) => (
  *       isLoading ? <Skeleton /> :
  *       error    ? <ErrorBanner message={error.message} /> :
@@ -16,10 +16,9 @@
  *   </CollectionRegion>
  */
 
-import { useContext, useEffect } from "react";
+import { useEffect } from "react";
 
-import { useCollectionContext } from "../lib/collection-context.js";
-import { CmsGroupContext } from "../lib/group-context.js";
+import { collectionRegionBindingId, useCollectionContext } from "../lib/collection-context.js";
 import { useCollection } from "../hooks/use-collection.js";
 
 /**
@@ -29,9 +28,6 @@ import { useCollection } from "../hooks/use-collection.js";
 
 /**
  * @typedef {Object} CollectionRegionProps
- * @property {string} blockPath
- *   Binding identifier; lets the drawer disambiguate repeated references to
- *   the same collection.
  * @property {string} collection
  *   Backend collection key (e.g. "Teams", "News").
  * @property {Record<string, *>} [filter]
@@ -60,22 +56,25 @@ import { useCollection } from "../hooks/use-collection.js";
  * @param {CollectionRegionProps} props
  */
 // eslint-disable-next-line no-unused-vars
-export function CollectionRegion({ blockPath, collection, filter, limit, offset, scope: _scope, children }) {
+export function CollectionRegion({ collection, filter, limit, offset, scope: _scope, children }) {
   const { registerCollectionBinding, unregisterCollectionBinding } = useCollectionContext();
-  const groupPrefix = useContext(CmsGroupContext);
-  const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
+
+  const bindingId = collectionRegionBindingId(collection, filter);
 
   // The drawer's per-collection panel reads this binding to mirror the same
   // filter window ("filter parity").
   useEffect(() => {
-    /** @type {{ collection: string, filter?: Record<string, *>, limit?: number, offset?: number }} */
+    /** @type {import("../lib/schemas.js").CollectionBinding} */
     const binding = { collection };
     if (filter) binding.filter = filter;
     if (typeof limit === "number") binding.limit = limit;
     if (typeof offset === "number") binding.offset = offset;
-    registerCollectionBinding(fullPath, binding);
-    return () => unregisterCollectionBinding(fullPath);
-  }, [fullPath, collection, filter, limit, offset, registerCollectionBinding, unregisterCollectionBinding]);
+    registerCollectionBinding(bindingId, binding);
+    return () => unregisterCollectionBinding(bindingId);
+    // `bindingId` stands in for `filter`: an inline literal is a new object on
+    // every render, and re-running this effect on it would churn the registry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bindingId, collection, limit, offset, registerCollectionBinding, unregisterCollectionBinding]);
 
   /** @type {import("../lib/schemas.js").CollectionListParams | undefined} */
   const params = filter || typeof limit === "number" || typeof offset === "number"

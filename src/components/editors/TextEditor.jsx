@@ -6,6 +6,8 @@
  * legacy `Text` alias). Use `RichText` when the field needs formatting.
  */
 
+import { useLayoutEffect, useRef } from "react";
+
 import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./styles.js";
 
 /**
@@ -18,14 +20,34 @@ import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./st
  *   parent already labels the field.
  */
 export function TextEditor({ value, onChange, disabled, multiline, hideLabel }) {
+  const textareaRef = useRef(/** @type {HTMLTextAreaElement|null} */ (null));
+
+  // Grow to fit instead of scrolling inside a fixed box: a nested scroll area
+  // inside the drawer's own scroll traps the wheel and hides content. Reset to
+  // `auto` first so the field can also shrink when text is deleted.
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
   const control = multiline ? (
     <textarea
+      ref={textareaRef}
       className="inscribed-field"
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
-      rows={4}
       disabled={disabled}
-      style={{ ...fieldStyle, resize: "vertical", ...(disabled ? fieldDisabledStyle : null) }}
+      style={{
+        ...fieldStyle,
+        // Auto-grow owns the height, so manual resize would just be undone on
+        // the next keystroke.
+        resize: "none",
+        overflow: "hidden",
+        minHeight: 64,
+        ...(disabled ? fieldDisabledStyle : null),
+      }}
     />
   ) : (
     <input

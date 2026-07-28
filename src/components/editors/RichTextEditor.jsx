@@ -15,7 +15,7 @@ import { EditorContent } from "@tiptap/react";
 import { useRichTextEditor } from "../../hooks/use-rich-text-editor.js";
 import { RichTextToolbar } from "./RichTextToolbar.jsx";
 import { labelStyle, labelTextStyle } from "./styles.js";
-import { ACCENT, R_MD } from "../admin-drawer-styles.js";
+import { ACCENT, FS_MD, R_MD } from "../admin-drawer-styles.js";
 
 // Theme-portable palette: the editor renders on the dark drawer AND on a light
 // host page (CollectionComposer), so text inherits (`currentColor`) and
@@ -70,7 +70,7 @@ const shellStyle = /** @type {React.CSSProperties} */ ({
 const contentWrapStyle = /** @type {React.CSSProperties} */ ({
   padding: "10px 12px",
   minHeight: 120,
-  fontSize: 13,
+  fontSize: FS_MD,
   lineHeight: 1.6,
   color: TEXT_PRIMARY,
 });

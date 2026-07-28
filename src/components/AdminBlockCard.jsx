@@ -41,12 +41,23 @@ import {
   blockResetStyle,
   dirtyDotStyle,
   typeIconStyle,
+  groupIconStyle,
 } from "./admin-drawer-styles.js";
 
 // Field-weight types: a single light editor, rendered always-open as a form
 // field. Everything else (RichText/Image/List/Collection/unknown) keeps the
 // collapsible card surface.
 const INLINE_TYPES = new Set(["ShortText", "Text", "LongText", "Date", "Link"]);
+
+/**
+ * @param {React.CSSProperties} base
+ * @param {boolean} topLevel
+ */
+function rowInsetStyle(base, topLevel) {
+  return topLevel
+    ? { ...base, paddingLeft: 6 }
+    : { ...base, marginLeft: 6, paddingLeft: 6 };
+}
 
 /**
  * @import { BlockResponse, BlockType, ItemSchema } from "../lib/schemas.js"
@@ -72,7 +83,7 @@ export function BlockCard(props) {
       props.block.value ?? {}
     );
     if (typeof binding.collection !== "string" || typeof binding.slug !== "string") {
-      return <InvalidCollectionCard block={props.block} />;
+      return <InvalidCollectionCard block={props.block} displayPath={props.displayPath} />;
     }
     return (
       <CollectionBlockCard
@@ -112,6 +123,8 @@ export function BlockCard(props) {
 function FieldRow({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, readOnly, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
 
+  const topLevel = displayPath === undefined;
+
   const effective = block.draftValue ?? block.value;
   const value = hasDraft ? draft : effective;
   const isDirty = !readOnly && (hasDraft
@@ -128,11 +141,11 @@ function FieldRow({ block, draft, hasDraft, isActive, onChange, onReset, onFocus
     <div
       ref={ref}
       className={`inscribed-field-row${isActive ? " is-active" : ""}`}
-      style={fieldRowStyle}
+      style={rowInsetStyle(fieldRowStyle, topLevel)}
       onMouseDown={onFocus}
     >
       <div style={fieldLabelRowStyle}>
-        <TypeIcon type={block.blockType} />
+        <TypeIcon type={block.blockType} compact={topLevel} />
         <span style={fieldPathStyle} title={block.blockPath}>{displayPath ?? block.blockPath}</span>
         {isDirty ? (
           <span style={dirtyDotStyle} aria-label="Kaydedilmemiş değişiklik" />
@@ -251,15 +264,19 @@ const disclosureBodyStyle = /** @type {React.CSSProperties} */ ({
  * Separate from `CollectionBlockCard` so `useCollectionEditor` only runs with a
  * valid pair.
  *
- * @param {{ block: BlockResponse }} props
+ * @param {{ block: BlockResponse, displayPath?: string }} props
  */
-function InvalidCollectionCard({ block }) {
+function InvalidCollectionCard({ block, displayPath }) {
+  const topLevel = displayPath === undefined;
   return (
-    <div className="inscribed-field-row inscribed-field-row-collection" style={disclosureRowStyle}>
+    <div
+      className="inscribed-field-row inscribed-field-row-collection"
+      style={rowInsetStyle(disclosureRowStyle, topLevel)}
+    >
       <div style={{ ...disclosureHeaderStyle, cursor: "default" }}>
-        <TypeIcon type={block.blockType} />
+        <TypeIcon type={block.blockType} compact={topLevel} />
         <span style={fieldPathStyle} title={block.blockPath}>
-          {block.blockPath}
+          {displayPath ?? block.blockPath}
         </span>
       </div>
       <div style={disclosureBodyStyle}>
@@ -288,6 +305,7 @@ function InvalidCollectionCard({ block }) {
  */
 function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema, readOnly, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
+  const topLevel = displayPath === undefined;
 
   const effective = block.draftValue ?? block.value;
   const value = hasDraft ? draft : effective;
@@ -318,7 +336,7 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
     <div
       ref={ref}
       className={rowClassName({ isActive, isCollection: false })}
-      style={disclosureRowStyle}
+      style={rowInsetStyle(disclosureRowStyle, topLevel)}
     >
       <CardHeader
         block={block}
@@ -358,6 +376,7 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
  */
 function CollectionBlockCard({ block, collection, slug, isActive, onFocus, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
+  const topLevel = displayPath === undefined;
   const editor = useCollectionEditor(collection, slug);
   const isDirty = editor.hasDraft && editor.canEdit;
 
@@ -382,7 +401,7 @@ function CollectionBlockCard({ block, collection, slug, isActive, onFocus, displ
     <div
       ref={ref}
       className={rowClassName({ isActive, isCollection: true })}
-      style={disclosureRowStyle}
+      style={rowInsetStyle(disclosureRowStyle, topLevel)}
     >
       <CardHeader
         block={block}
@@ -440,6 +459,7 @@ function rowClassName({ isActive, isCollection }) {
  * }} props
  */
 function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, displayPath, onHeaderClick, onReset }) {
+  const topLevel = displayPath === undefined;
   return (
     <button
       type="button"
@@ -448,7 +468,7 @@ function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, d
       className="inscribed-disclosure-header"
       style={disclosureHeaderStyle}
     >
-      <TypeIcon type={block.blockType} />
+      <TypeIcon type={block.blockType} compact={topLevel} />
       <span className="inscribed-row-label" style={{ ...fieldPathStyle, color: undefined }} title={block.blockPath}>
         {displayPath ?? block.blockPath}
       </span>
@@ -557,18 +577,18 @@ function blockPreview(blockType, value) {
  * colours would turn the form into confetti; the glyph shape alone does the
  * telling.
  *
- * @param {{ type: BlockType }} props
+ * @param {{ type: BlockType, compact?: boolean }} props
  */
 // Types whose glyph reads poorly when centered get a real SVG icon instead.
 const TYPE_ICON_OVERRIDES = { List: ListIcon };
 
-function TypeIcon({ type }) {
+function TypeIcon({ type, compact }) {
   const meta = TYPE_META[type] ?? TYPE_META.Text;
   const Override = TYPE_ICON_OVERRIDES[type];
   return (
     <span
       aria-hidden="true"
-      style={{
+      style={compact ? { ...groupIconStyle, font: typeIconStyle.font } : {
         ...typeIconStyle,
         color: TEXT_MUTED,
       }}

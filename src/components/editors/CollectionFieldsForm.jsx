@@ -819,7 +819,7 @@ const inputStyle = {
   padding: "8px 10px",
   border: "1px solid rgba(127,127,127,0.22)",
   borderRadius: 6,
-  fontSize: 13,
+  fontSize: 12,
   lineHeight: 1.4,
   fontFamily: "inherit",
   background: "rgba(127,127,127,0.04)",
@@ -870,7 +870,7 @@ const switchThumbCheckedStyle = {
   left: 16,
 };
 const switchHiddenInputStyle = { position: "absolute", opacity: 0, width: 0, height: 0 };
-const emptyHintStyle = { color: "currentColor", opacity: 0.6, fontSize: 13 };
+const emptyHintStyle = { color: "currentColor", opacity: 0.6, fontSize: 12 };
 
 const stringArrayShellStyle = { display: "flex", flexDirection: "column", gap: 8 };
 const stringArrayListStyle = { display: "flex", flexWrap: "wrap", gap: 6 };

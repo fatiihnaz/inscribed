@@ -31,9 +31,9 @@ import {
 } from "./editors/CollectionFieldsForm.jsx";
 import {
   TEXT_MUTED,
-  TEXT_MID,
   TEXT_FAINT,
   FONT_MONO,
+  FONT_SANS,
   STATUS_OK,
   STATUS_WARN,
   STATUS_DANGER,
@@ -391,13 +391,11 @@ export function AdminCollectionEditor({ editor, showMetaRow = true, showActions 
     <div style={containerStyle}>
       {showMetaRow ? (
         <div style={metaRowStyle}>
-          <span style={metaLabelStyle}>{collection}</span>
-          <span style={metaSlugStyle}>{slug}</span>
-          {hasDraft ? <span style={draftBadgeStyle}>taslak</span> : null}
           <span style={metaVersionStyle}>
-            {isVirtual ? "yeni" : `v${item.version}`}
+            {isVirtual ? "Yeni kayıt" : `Sürüm ${item.version}`}
           </span>
-          {!canEdit ? <span style={metaReadonlyStyle}>readonly</span> : null}
+          {hasDraft ? <span style={draftBadgeStyle}>taslak</span> : null}
+          {!canEdit ? <span style={metaReadonlyStyle}>salt okunur</span> : null}
         </div>
       ) : null}
 
@@ -563,32 +561,21 @@ const metaRowStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   alignItems: "center",
   gap: 8,
-  fontSize: 11,
-  fontFamily: "ui-monospace, 'SF Mono', monospace",
-  letterSpacing: "0.04em",
-});
-
-const metaLabelStyle = /** @type {React.CSSProperties} */ ({
-  color: COLLECTION_ACCENT,
-  textTransform: "uppercase",
-});
-
-const metaSlugStyle = /** @type {React.CSSProperties} */ ({
-  color: TEXT_MID,
+  font: `400 11px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
 });
 
 const metaVersionStyle = /** @type {React.CSSProperties} */ ({
   color: TEXT_MUTED,
-  marginLeft: "auto",
 });
 
 const metaReadonlyStyle = /** @type {React.CSSProperties} */ ({
   color: TEXT_MUTED,
-  textTransform: "uppercase",
   fontSize: 10,
   padding: "1px 6px",
   background: SURFACE_2,
   borderRadius: R_BADGE,
+  marginLeft: "auto",
 });
 
 const virtualHintStyle = /** @type {React.CSSProperties} */ ({

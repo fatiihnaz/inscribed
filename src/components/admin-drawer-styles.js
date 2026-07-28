@@ -38,6 +38,10 @@ export const PANEL_TRANSITION = {
   ease: [0.32, 0.72, 0.18, 1],
 };
 
+// Corner radius of the page-side edit rings (EditableRegion + CollectionItem),
+// so both highlight shapes stay identical.
+export const RING_RADIUS = 12;
+
 export const RADIUS = "var(--ins-radius, 10px)";
 export const RADIUS_SM = "calc(var(--ins-radius, 10px) - 3px)";
 

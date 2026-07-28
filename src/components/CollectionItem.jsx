@@ -26,7 +26,16 @@ import { useCmsContext } from "../lib/context.js";
 import { useCollectionContext } from "../lib/collection-context.js";
 import { CmsGroupContext } from "../lib/group-context.js";
 import { useCollectionItem } from "../hooks/use-collection.js";
-import { COLLECTION_ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
+import { useStoreSelector } from "../lib/store.js";
+import { COLLECTION_ACCENT, FONT_MONO, TYPE_META } from "./admin-drawer-styles.js";
+import {
+  BLOCK_TAGS,
+  regionBoxStyle,
+  regionChipStyle,
+  chipDirtyDotStyle,
+} from "./page-region-chrome.js";
+
+const COLLECTION_GLYPH = TYPE_META.Collection.glyph;
 
 /**
  * @import { CollectionItemResponse } from "../lib/schemas.js"
@@ -57,7 +66,9 @@ import { COLLECTION_ACCENT, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
 // eslint-disable-next-line no-unused-vars
 export function CollectionItem({ blockPath, collection, slug, scope: _scope, children }) {
   const { isAdmin, activeBlock, setActiveBlock } = useCmsContext();
-  const { registerCollectionBinding, unregisterCollectionBinding } = useCollectionContext();
+  const {
+    registerCollectionBinding, unregisterCollectionBinding, collectionStore,
+  } = useCollectionContext();
   const groupPrefix = useContext(CmsGroupContext);
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 
@@ -69,6 +80,7 @@ export function CollectionItem({ blockPath, collection, slug, scope: _scope, chi
   }, [fullPath, collection, slug, registerCollectionBinding, unregisterCollectionBinding]);
 
   const { item, isLoading, error, refetch } = useCollectionItem(collection, slug);
+  const drafts = useStoreSelector(collectionStore, (st) => st.drafts);
   const rendered = /** @type {*} */ (children(item, { isLoading, error, refetch }));
 
   if (!isAdmin || !item || !item.canEdit) return rendered;
@@ -78,74 +90,72 @@ export function CollectionItem({ blockPath, collection, slug, scope: _scope, chi
       onClick={() => setActiveBlock(fullPath)}
       isActive={activeBlock === fullPath}
       label={`${collection} · ${slug}`}
+      tag={typeof rendered?.type === "string" ? rendered.type : null}
+      dirty={drafts.has(`${collection}:${slug}`) || item.draftData != null}
     >
       {rendered}
     </CollectionEditWrapper>
   );
 }
 
-// Page-side Collection highlight, sharing the drawer's collection accent
-// (`--ins-collection`) so page binding and drawer lane read as one family.
-const RING_HOVER  = `0 0 0 1.5px color-mix(in srgb, ${COLLECTION_ACCENT} 45%, transparent)`;
-const RING_ACTIVE = `0 0 0 2px color-mix(in srgb, ${COLLECTION_ACCENT} 80%, transparent)`;
-const BG_HOVER    = `color-mix(in srgb, ${COLLECTION_ACCENT} 5%, transparent)`;
-const BG_ACTIVE   = `color-mix(in srgb, ${COLLECTION_ACCENT} 10%, transparent)`;
-
 /**
+ * Same shell as `EditableRegion`, in the collection accent: a neutral ring on
+ * hover, the accent once selected, and the padded card (plus a chip that
+ * straddles its ring line) when the rendered content is block-level.
+ *
  * @param {{
  *   onClick: (e: React.MouseEvent) => void,
  *   isActive: boolean,
  *   label: string,
+ *   dirty: boolean,
+ *   tag: string | null,
  *   children: React.ReactNode,
  * }} props
  */
-function CollectionEditWrapper({ onClick, isActive, label, children }) {
+function CollectionEditWrapper({ onClick, isActive, label, dirty, tag, children }) {
   const [isHovered, setIsHovered] = useState(false);
   const showChip = isHovered || isActive;
+
+  const display = tag && BLOCK_TAGS.has(tag) ? "block" : "inline-block";
+  const roomy = display === "block";
+
   return (
     <span
-      style={{
-        position: "relative",
-        display: "inline-block",
-        boxShadow: isActive ? RING_ACTIVE : isHovered ? RING_HOVER : undefined,
-        background: isActive ? BG_ACTIVE : isHovered ? BG_HOVER : undefined,
-        transition: "box-shadow 0.15s ease, background-color 0.2s ease",
-        cursor: "pointer",
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick(e);
-      }}
+      style={regionBoxStyle({
+        display,
+        roomy,
+        highlight: isActive,
+        hovered: isHovered,
+        accent: COLLECTION_ACCENT,
+      })}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {children}
       {showChip ? (
-        <span
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            top: 0,
-            right: isActive ? -2 : -1.5,
-            transform: "translateY(-100%)",
-            background: BG_RAISED,
-            border: `1px solid ${BORDER}`,
-            borderBottom: "none",
-            borderRadius: "4px 4px 0 0",
-            padding: "1px 6px",
-            fontSize: 9,
-            fontWeight: 500,
-            color: `color-mix(in srgb, ${COLLECTION_ACCENT} 85%, transparent)`,
-            letterSpacing: "0.05em",
-            lineHeight: "16px",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            fontFamily: "ui-monospace, 'SF Mono', monospace",
-            zIndex: 9999,
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick(e);
           }}
+          title="Panelde aç"
+          aria-label={`${label} kaydını panelde aç`}
+          style={regionChipStyle({
+            roomy,
+            highlight: isActive,
+            accent: COLLECTION_ACCENT,
+            font: FONT_MONO,
+          })}
         >
+          <span aria-hidden="true" style={{ fontWeight: 700, opacity: 0.85 }}>
+            {COLLECTION_GLYPH}
+          </span>
           {label}
-        </span>
+          {dirty ? (
+            <span aria-label="Kaydedilmemiş değişiklik" style={chipDirtyDotStyle} />
+          ) : null}
+        </button>
       ) : null}
     </span>
   );

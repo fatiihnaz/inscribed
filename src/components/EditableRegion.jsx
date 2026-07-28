@@ -20,7 +20,13 @@ import DOMPurify from "isomorphic-dompurify";
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
-import { ACCENT, ROOMY_INSET, TYPE_META } from "./admin-drawer-styles.js";
+import { ACCENT, TYPE_META } from "./admin-drawer-styles.js";
+import {
+  BLOCK_TAGS,
+  regionBoxStyle,
+  regionChipStyle,
+  chipDirtyDotStyle,
+} from "./page-region-chrome.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 import { InlineTextEditor } from "./InlineTextEditor.jsx";
 import { InlineImageOverlay } from "./InlineImageOverlay.jsx";
@@ -62,27 +68,12 @@ const IMAGE_OVERLAY_MIN = { w: 150, h: 64 };
  *   on the page; content still ships to the public DOM. Wins over `editable`.
  */
 
-// Hover shows a neutral line ring; selecting switches to the accent ring plus a
-// faint tint (mirrors the reference prototype's hover -> select hierarchy).
-const RING_HOVER   = "inset 0 0 0 1px rgba(127, 127, 127, 0.55)";
-const RING_ACTIVE  = `0 0 0 1.5px ${ACCENT}`;
-const RING_RADIUS  = 12;
-const BG_OFF    = "transparent";
-const BG_HOVER  = "transparent";
-const BG_ACTIVE = `color-mix(in srgb, ${ACCENT} 5%, transparent)`;
 const EMPTY_PLACEHOLDER = "-";
 
 // Block types that edit in place as a plain string. Everything else keeps the
 // click-to-drawer flow (structured editors, RichText via Tiptap).
 const INLINE_TEXT_TYPES = new Set(["Text", "ShortText", "LongText"]);
 
-const BLOCK_TAGS = new Set([
-  "div", "section", "article", "main", "aside", "header", "footer", "nav",
-  "h1", "h2", "h3", "h4", "h5", "h6", "p",
-  "ul", "ol", "li", "dl", "dt", "dd",
-  "figure", "figcaption", "blockquote", "pre",
-  "form", "fieldset", "table", "thead", "tbody", "tr", "td", "th",
-]);
 
 /**
  * @param {EditableRegionProps & Record<string, *>} props
@@ -274,13 +265,13 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
     <span
       ref={wrapperRef}
       style={{
-        position: "relative",
-        display: wrapperDisplay,
-        boxShadow: highlight ? RING_ACTIVE : isHovered ? RING_HOVER : "none",
-        backgroundColor: highlight ? BG_ACTIVE : BG_OFF,
-        borderRadius: RING_RADIUS,
-        transition: "box-shadow 0.15s ease, background-color 0.2s ease",
-        ...(roomy ? { padding: `8px ${ROOMY_INSET}px`, marginLeft: -ROOMY_INSET, marginRight: -ROOMY_INSET } : null),
+        ...regionBoxStyle({
+          display: wrapperDisplay,
+          roomy,
+          highlight,
+          hovered: isHovered,
+          accent: ACCENT,
+        }),
         ...(wrapperMargin ?? {}),
       }}
       onMouseEnter={() => setIsHovered(true)}
@@ -299,42 +290,19 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
           }}
           title="Panelde aç"
           aria-label={`${fullPath} bloğunu panelde aç`}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: roomy ? 8 : 0,
-            // Straddle the ring line on roomy cards (sits in the padding gap);
-            // float fully above on tight regions so it clears the content.
-            transform: roomy ? "translateY(-50%)" : "translateY(-100%)",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            padding: "2px 6px",
-            border: 0,
-            borderRadius: 6,
-            // Translucent ink + blur (like the on-image buttons): reads lighter
-            // on a bright page than a solid fill. Only the text turns accent when
-            // the region is active.
-            background: "color-mix(in srgb, var(--ins-bg, #1c1815) 82%, transparent)",
-            backdropFilter: "blur(8px)",
-            WebkitBackdropFilter: "blur(8px)",
-            color: highlight ? ACCENT : "var(--ins-text, #fff)",
-            fontFamily: "ui-monospace, 'SF Mono', monospace",
-            fontSize: 9.5,
-            fontWeight: 500,
-            letterSpacing: "0.02em",
-            lineHeight: 1.5,
-            whiteSpace: "nowrap",
-            cursor: "pointer",
-            zIndex: 9999,
-          }}
+          style={regionChipStyle({
+            roomy,
+            highlight,
+            accent: ACCENT,
+            font: "ui-monospace, 'SF Mono', monospace",
+          })}
         >
           <span aria-hidden="true" style={{ fontWeight: 700, opacity: 0.85 }}>{glyph}</span>
           {fullPath}
           {dirty && (
             <span
               aria-label="Kaydedilmemiş değişiklik"
-              style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor", opacity: 0.9 }}
+              style={chipDirtyDotStyle}
             />
           )}
         </button>

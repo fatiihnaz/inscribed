@@ -1,23 +1,27 @@
 "use client";
 
 /**
- * @file `AdminCollectionRegionPanel`: drawer tab body for a collection with at
- * least one `<CollectionRegion>` binding on the page.
+ * @file `AdminCollectionRegionPanel`: the body for one collection. `scope`
+ * decides what it addresses: `"page"` shows a section per `<CollectionRegion>`
+ * binding the page declares, `"global"` shows the whole collection as a single
+ * unfiltered section (the rail's Collections area).
  *
- * Layout: a pinned "+ Yeni" toolbar row (when the collection supports
- * auto-generated slugs), then one quiet row-list per distinct region filter.
- * Rows don't expand inline; clicking one pushes a full-height detail pane in
- * from the right while the list layer parallax-slides left and dims (iOS-style
- * forward navigation). The list stays mounted underneath so caches and scroll
- * survive the round-trip.
+ * Layout: a record search, a "+ Yeni" row (when the collection supports
+ * auto-generated slugs), then one row-list per section. Rows carry the same
+ * two-line shape as the collections list a level up: a headline read from the
+ * item's own data via `titleFieldName`, with the slug beneath it as the
+ * identifier. Clicking one pushes a full-height detail pane in from the left
+ * while the list layer parallax-slides right and dims; the list stays mounted
+ * underneath so caches and scroll survive the round-trip.
  *
  * Each filter section owns its offset/limit and accumulates pages via "Load
- * more", using exactly the filter the region declared (filter parity).
+ * more", using exactly the filter the region declared (filter parity). Search
+ * runs over that loaded window only, and says so when more rows remain.
  */
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Plus, Undo2 } from "./icons.jsx";
+import { ChevronLeft, ChevronRight, Plus, Undo2, Search } from "./icons.jsx";
 
 import { useCollectionContext } from "../lib/collection-context.js";
 import { useStoreSelector } from "../lib/store.js";
@@ -57,6 +61,9 @@ import {
   paneStyle,
   emptyStateStyle,
   btnGhostStyle,
+  searchWrapStyle,
+  searchInputStyle,
+  searchClearStyle,
 } from "./admin-drawer-styles.js";
 
 const DEFAULT_DRAWER_PAGE_SIZE = 50;
@@ -66,6 +73,13 @@ const DEFAULT_DRAWER_PAGE_SIZE = 50;
 // anchor edge, so depth reads as coming out of the panel), the list recedes
 // right.
 const PANE_TRANSITION = { duration: 0.3, ease: [0.32, 0.72, 0.18, 1] };
+// The pane's cast shadow reaches past its own right edge, so at x=-100% the
+// slide reads as finished while the shadow still sits over the list, and the
+// unmount snaps it away. Fading only the tail of the exit removes both together.
+const PANE_EXIT_TRANSITION = {
+  ...PANE_TRANSITION,
+  opacity: { duration: 0.12, delay: 0.18, ease: "linear" },
+};
 // How far the list layer recedes while a pane is open.
 const PARALLAX_SHIFT = "28%";
 
@@ -91,10 +105,50 @@ function buildListParams(filter, offset, limit) {
   };
 }
 
+// Field names that conventionally hold an item's human title, in priority
+// order; anything else falls back to the schema's first textual field.
+const TITLE_FIELD_NAMES = ["title", "name", "heading", "başlık", "baslik", "ad"];
+const TEXTUAL_FIELD_TYPES = new Set(["ShortText", "Text", "LongText"]);
+
 /**
- * @param {{ collectionKey: string }} props
+ * Name of the field whose value should headline a row, or null when the schema
+ * offers nothing textual. Null is a real answer: the caller then shows the slug
+ * alone rather than inventing a label.
+ *
+ * @param {import("../lib/schemas.js").CollectionSchema | null | undefined} schema
+ * @returns {string | null}
  */
-export function AdminCollectionRegionPanel({ collectionKey }) {
+function titleFieldName(schema) {
+  const fields = schema?.fields;
+  if (!fields || fields.length === 0) return null;
+  for (const wanted of TITLE_FIELD_NAMES) {
+    const hit = fields.find((f) => f.name.toLowerCase() === wanted);
+    if (hit) return hit.name;
+  }
+  const textual = fields.find((f) => TEXTUAL_FIELD_TYPES.has(f.type));
+  return textual ? textual.name : null;
+}
+
+/**
+ * Row headline for one item. Reads the draft first: while an item is being
+ * edited its draft title is what the user expects to see in the list.
+ *
+ * @param {import("../lib/schemas.js").CollectionItemResponse} item
+ * @param {string | null} field
+ * @returns {string | null}
+ */
+function itemTitle(item, field) {
+  if (!field) return null;
+  const data = item.draftData ?? item.data;
+  const raw = data ? data[field] : undefined;
+  if (typeof raw !== "string") return null;
+  return raw.trim() || null;
+}
+
+/**
+ * @param {{ collectionKey: string, scope?: "page" | "global" }} props
+ */
+export function AdminCollectionRegionPanel({ collectionKey, scope = "page" }) {
   const {
     collectionBindings,
     collectionStore,
@@ -109,6 +163,9 @@ export function AdminCollectionRegionPanel({ collectionKey }) {
   const supportsCreate = canCreate && isAutoGenerated;
 
   const [pane, setPane] = useState(/** @type {PaneState} */ (null));
+  const [query, setQuery] = useState("");
+
+  const titleField = useMemo(() => titleFieldName(meta?.schema), [meta]);
 
   // StatusBar "Aç" jump: consume the signal here and open the detail pane
   // directly. Pane-level fetch by slug means the jump works even when the
@@ -139,6 +196,13 @@ export function AdminCollectionRegionPanel({ collectionKey }) {
   }, [drafts, itemCache, collectionKey]);
 
   const sections = useMemo(() => {
+    // Collections mode addresses the collection itself, so it shows one
+    // unfiltered section regardless of what this page happens to bind. Without
+    // this the panel would fall to the empty state for any collection the
+    // current page doesn't declare.
+    if (scope === "global") {
+      return [{ signature: "global", filter: undefined, pageLimit: undefined, pageOffset: undefined }];
+    }
     /** @type {Map<string, { filter: Record<string, *> | undefined, pageLimit: number | undefined, pageOffset: number | undefined }>} */
     const bySignature = new Map();
     for (const [, binding] of collectionBindings) {
@@ -153,7 +217,7 @@ export function AdminCollectionRegionPanel({ collectionKey }) {
       });
     }
     return [...bySignature.entries()].map(([signature, info]) => ({ signature, ...info }));
-  }, [collectionBindings, collectionKey]);
+  }, [collectionBindings, collectionKey, scope]);
 
   // CreateLane reads the new-item draft sentinel from an unfiltered list
   // response. Reuse the unfiltered section's params if the page declares one,
@@ -183,6 +247,31 @@ export function AdminCollectionRegionPanel({ collectionKey }) {
         }}
         aria-hidden={isPaneOpen}
       >
+        <div style={searchBarStyle}>
+          <div className="inscribed-search" style={searchWrapStyle}>
+            <Search size={13} color={TEXT_FAINT} />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Kayıt ara"
+              aria-label="Kayıt ara"
+              style={searchInputStyle}
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="inscribed-search-clear"
+                style={searchClearStyle}
+                aria-label="Temizle"
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
+        </div>
+
         {supportsCreate && meta?.schema ? (
           <CreateButton
             collectionKey={collectionKey}
@@ -206,6 +295,8 @@ export function AdminCollectionRegionPanel({ collectionKey }) {
                 pageOffset={section.pageOffset}
                 showHeader={sections.length > 1 || section.filter !== undefined}
                 dirtySlugs={dirtySlugs}
+                titleField={titleField}
+                query={query}
                 onOpenItem={(slug) => setPane({ mode: "edit", slug })}
               />
             ))
@@ -240,6 +331,9 @@ const listLayerStyle = /** @type {React.CSSProperties} */ ({
   minHeight: 0,
   display: "flex",
   flexDirection: "column",
+  // See `collectionsLayerStyle`: promoted so the recede animation composites
+  // rather than repainting every row each frame.
+  willChange: "transform, opacity",
 });
 
 const regionScrollStyle = /** @type {React.CSSProperties} */ ({
@@ -266,7 +360,8 @@ const regionScrollStyle = /** @type {React.CSSProperties} */ ({
  * }} props
  */
 function RegionSection({
-  collectionKey, filter, pageLimit, pageOffset, showHeader, dirtySlugs, onOpenItem,
+  collectionKey, filter, pageLimit, pageOffset, showHeader, dirtySlugs,
+  titleField, query, onOpenItem,
 }) {
   const initialLimit = pageLimit ?? DEFAULT_DRAWER_PAGE_SIZE;
   const initialOffset = pageOffset ?? 0;
@@ -310,6 +405,20 @@ function RegionSection({
   const loadMore = () => setOffset((o) => o + limit);
   const remaining = Math.max(0, total - accumulated.length);
 
+  // Client-side over the loaded window only: the list endpoint filters by the
+  // region's declared fields, not by free text, so searching cannot be pushed
+  // to the server without changing the contract.
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return accumulated;
+    return accumulated.filter((item) => {
+      if (item.slug.toLowerCase().includes(q)) return true;
+      const title = itemTitle(item, titleField);
+      return title != null && title.toLowerCase().includes(q);
+    });
+  }, [accumulated, query, titleField]);
+  const isSearching = query.trim().length > 0;
+
   return (
     <div style={sectionWrapStyle}>
       {showHeader ? (
@@ -332,12 +441,17 @@ function RegionSection({
         <div style={emptyStateStyle}>Yükleniyor…</div>
       ) : accumulated.length === 0 ? (
         <div style={emptyStateStyle}>Bu filtre için kayıt yok.</div>
+      ) : visible.length === 0 ? (
+        <div style={emptyStateStyle}>
+          {`"${query}" araması yüklenmiş kayıtlarda sonuç vermedi.`}
+        </div>
       ) : (
         <ul style={rowGroupStyle} data-cms-list>
-          {accumulated.map((item) => (
+          {visible.map((item) => (
             <li key={item.slug} style={{ listStyle: "none" }}>
               <RegionItemRow
                 slug={item.slug}
+                title={itemTitle(item, titleField)}
                 canEdit={item.canEdit}
                 dirty={dirtySlugs.has(item.slug)}
                 onOpen={() => onOpenItem(item.slug)}
@@ -346,6 +460,14 @@ function RegionSection({
           ))}
         </ul>
       )}
+
+      {/* Search only sees the loaded window, so say so rather than letting a
+          short result list read as "that's everything". */}
+      {isSearching && canLoadMore ? (
+        <div style={searchScopeNoteStyle}>
+          Yalnızca yüklenmiş {accumulated.length} kayıt arandı, {remaining} kayıt daha var.
+        </div>
+      ) : null}
 
       {canLoadMore ? (
         <button
@@ -393,7 +515,12 @@ function RegionHeader({ filter, loaded, total }) {
  *
  * @param {{ slug: string, canEdit: boolean, dirty: boolean, onOpen: () => void }} props
  */
-function RegionItemRow({ slug, canEdit, dirty, onOpen }) {
+function RegionItemRow({ slug, title, canEdit, dirty, onOpen }) {
+  // No title resolves when the schema has no textual field: the slug then takes
+  // the headline and keeps its identifier styling instead of being dressed up
+  // as prose.
+  const headline = title ?? slug;
+
   return (
     <button
       type="button"
@@ -401,11 +528,21 @@ function RegionItemRow({ slug, canEdit, dirty, onOpen }) {
       className="inscribed-region-row"
       style={rowStyle}
     >
-      <span style={rowSlugStyle} title={slug}>{slug}</span>
-      {!canEdit ? <span style={readonlyChipStyle}>readonly</span> : null}
-      {dirty ? (
-        <span style={rowDirtyDotStyle} aria-label="Kaydedilmemiş değişiklik" />
-      ) : null}
+      <span style={rowTextColStyle}>
+        <span style={rowHeadlineRowStyle}>
+          <span style={title ? rowTitleStyle : rowSlugHeadlineStyle} title={headline}>
+            {headline}
+          </span>
+          {!canEdit ? <span style={readonlyChipStyle}>salt okunur</span> : null}
+          {dirty ? (
+            <span style={rowDirtyDotStyle} aria-label="Kaydedilmemiş değişiklik" />
+          ) : null}
+        </span>
+        {title ? (
+          <span style={rowSlugStyle} title={slug}>{slug}</span>
+        ) : null}
+      </span>
+
       <span className="inscribed-region-row-chevron" style={rowChevronStyle} aria-hidden="true">
         <ChevronRight size={13} />
       </span>
@@ -442,9 +579,9 @@ function DetailPane({ onBack, title, meta, footer, children }) {
   return (
     <motion.div
       initial={{ x: "-100%" }}
-      animate={{ x: 0 }}
-      exit={{ x: "-100%" }}
-      transition={PANE_TRANSITION}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: "-100%", opacity: 0 }}
+      transition={PANE_EXIT_TRANSITION}
       style={detailPaneStyle}
       role="region"
       aria-label={title}
@@ -662,8 +799,8 @@ const regionHeaderStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const regionAllLabelStyle = /** @type {React.CSSProperties} */ ({
-  font: `600 10.5px/1 ${FONT_SANS}`,
-  letterSpacing: "0.08em",
+  font: `500 10.5px/1 ${FONT_SANS}`,
+  letterSpacing: "0.055em",
   textTransform: "uppercase",
   color: TEXT_MUTED,
 });
@@ -706,7 +843,7 @@ const rowStyle = /** @type {React.CSSProperties} */ ({
   alignItems: "center",
   gap: 8,
   width: "100%",
-  padding: "10px 12px",
+  padding: "9px 12px",
   border: 0,
   cursor: "pointer",
   textAlign: "left",
@@ -714,14 +851,64 @@ const rowStyle = /** @type {React.CSSProperties} */ ({
   color: "inherit",
 });
 
-const rowSlugStyle = /** @type {React.CSSProperties} */ ({
+// Two lines, no leading badge: an initial derived from the title would just
+// restate what the title already says. The collections list one level up keeps
+// its badge because a collection is a category you learn to recognise; a record
+// is identified by its own headline.
+const rowTextColStyle = /** @type {React.CSSProperties} */ ({
   flex: 1,
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+});
+
+const rowHeadlineRowStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  minWidth: 0,
+});
+
+// The headline is prose (a field value), so it takes the sans.
+const rowTitleStyle = /** @type {React.CSSProperties} */ ({
+  minWidth: 0,
+  font: `500 12px/1.2 ${FONT_SANS}`,
+  color: TEXT,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
+// Fallback headline: still an identifier, so it keeps the mono.
+const rowSlugHeadlineStyle = /** @type {React.CSSProperties} */ ({
   minWidth: 0,
   font: `500 12px/1.2 ${FONT_MONO}`,
   color: TEXT,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
+});
+
+// Secondary line under a resolved title.
+const rowSlugStyle = /** @type {React.CSSProperties} */ ({
+  minWidth: 0,
+  font: `500 10.5px/1.2 ${FONT_MONO}`,
+  color: TEXT_MUTED,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
+const searchBarStyle = /** @type {React.CSSProperties} */ ({
+  padding: "10px 16px 6px",
+  flexShrink: 0,
+});
+
+const searchScopeNoteStyle = /** @type {React.CSSProperties} */ ({
+  padding: "2px 16px 0",
+  font: `10.5px/1.4 ${FONT_SANS}`,
+  color: TEXT_MUTED,
 });
 
 const rowDirtyDotStyle = /** @type {React.CSSProperties} */ ({
@@ -801,6 +988,7 @@ const detailPaneStyle = /** @type {React.CSSProperties} */ ({
   // Right-edge hairline + soft cast shadow (the pane enters from the left):
   // separates the pane from the receding list layer while the two slide.
   boxShadow: `1px 0 0 ${HAIRLINE}, 16px 0 36px rgba(0, 0, 0, 0.35)`,
+  willChange: "transform",
 });
 
 const detailHeaderStyle = /** @type {React.CSSProperties} */ ({
@@ -868,7 +1056,7 @@ const saveButtonStyle = /** @type {React.CSSProperties} */ ({
 // -- Create lane --
 
 const createBarStyle = /** @type {React.CSSProperties} */ ({
-  padding: "10px 16px 4px",
+  padding: "0 16px 8px",
   flexShrink: 0,
 });
 
@@ -889,8 +1077,8 @@ const createButtonStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const draftBadgeStyle = /** @type {React.CSSProperties} */ ({
-  font: `600 9px/1 ${FONT_MONO}`,
-  letterSpacing: "0.06em",
+  font: `600 9px/1 ${FONT_SANS}`,
+  letterSpacing: "0.045em",
   textTransform: "uppercase",
   padding: "3px 6px",
   borderRadius: R_BADGE,

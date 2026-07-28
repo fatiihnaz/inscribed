@@ -79,19 +79,31 @@ describe("discoverManifests", () => {
     expect(warnings[0].message).toContain("path alias");
   });
 
-  it("warns when a CmsGroup wraps an imported component that declares regions", async () => {
+  it("carries a CmsGroup prefix into imported components, once per render site", async () => {
     const appRoot = path.join(fixturesRoot, "discover-group-cross");
     const { manifests, warnings } = await discoverManifests({ appRoot });
 
-    // The manifest registers the unprefixed path; the warning explains the
-    // runtime/manifest mismatch. <Plain /> (no regions) must stay silent.
+    // <Hero> is rendered under two groups and once bare, so its single region
+    // yields all three paths - matching what the runtime reads at each site.
     const page = manifests.find((m) => m.slug === "/cross");
-    expect(page.blocks.map((b) => b.blockPath)).toEqual(["title"]);
+    expect(page.blocks.map((b) => b.blockPath)).toEqual([
+      "hero.title", "footer.title", "title",
+    ]);
+    expect(warnings).toEqual([]);
+  });
 
-    const groupWarnings = warnings.filter((w) => w.message.includes("group prefix"));
-    expect(groupWarnings).toHaveLength(1);
-    expect(groupWarnings[0].message).toContain("<Hero>");
-    expect(groupWarnings[0].message).toContain('name="hero"');
+  it("warns when a CmsGroup wraps {children} instead of a static render site", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-group-children");
+    const { manifests, warnings } = await discoverManifests({ appRoot });
+
+    // No static edge to follow: the region syncs unprefixed while the runtime
+    // reads it as "sec.note".
+    const page = manifests.find((m) => m.slug === "/children");
+    expect(page.blocks.map((b) => b.blockPath)).toEqual(["note"]);
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toContain("{children}");
+    expect(warnings[0].message).toContain('name="sec"');
   });
 
   it("skips unparseable files with a warning instead of throwing", async () => {

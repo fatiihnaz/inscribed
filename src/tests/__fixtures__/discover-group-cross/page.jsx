@@ -4,10 +4,16 @@ import Plain from "./Plain";
 
 function Page() {
   return (
-    <CmsGroup name="hero">
+    <main>
+      <CmsGroup name="hero">
+        <Hero />
+        <Plain />
+      </CmsGroup>
+      <CmsGroup name="footer">
+        <Hero />
+      </CmsGroup>
       <Hero />
-      <Plain />
-    </CmsGroup>
+    </main>
   );
 }
 

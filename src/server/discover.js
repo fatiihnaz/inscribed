@@ -24,6 +24,12 @@
  *     `useCmsBlock("path", { blockType, defaultValue })` does the same for
  *     read-only blocks that never render through `<EditableRegion>`.
  *
+ *   - `<CmsGroup name>` prefixes follow the render site, not the file: a group
+ *     wrapping an imported component prefixes that component's regions too,
+ *     the way React context does at runtime. A component rendered under two
+ *     groups contributes its regions once per prefix. The one case static
+ *     analysis can't follow is `<CmsGroup>{children}</CmsGroup>`, which warns.
+ *
  *   - `sortOrder` is the DFS order (root file first, then imports in source
  *     order). Duplicate blockPaths within a slug: first occurrence wins.
  *
@@ -82,10 +88,13 @@ const UNRESOLVED = Symbol("unresolved");
  *   Imported local name -> resolved file, for the cross-file group check.
  * @property {string[]} withCmsSlugs
  * @property {DiscoveredRegion[]} regions
- * @property {{ componentName: string, file: string, prefix: string, loc: { line: number, column: number } | null }[]} groupComponentRefs
- *   Imported components rendered inside a `<CmsGroup>`. Resolved into
- *   warnings after every file is analyzed, when it's known whether the
- *   component's graph declares regions.
+ * @property {{ componentName: string, file: string, prefix: string, loc: { line: number, column: number } | null }[]} componentRefs
+ *   Every JSX render site of an imported component, with the `<CmsGroup>`
+ *   prefix in scope there (empty string when outside any group). The graph
+ *   walk replays these so a group prefix reaches into imported components,
+ *   the way React context does at runtime. Sites outside a group are recorded
+ *   too: without them "rendered unprefixed" and "imported but never rendered"
+ *   are indistinguishable, and only the latter may inherit the caller's prefix.
  */
 
 /**
@@ -142,29 +151,12 @@ export async function discoverManifests(options = {}) {
     }
   }
 
-  // Cross-file <CmsGroup>: the runtime prefix crosses component boundaries
-  // via React context, the static prefix cannot. Warn when a group wraps an
-  // imported component whose graph declares regions - the manifest would
-  // register them unprefixed while the page reads them prefixed, so the
-  // block would never resolve.
-  /** @type {Map<string, boolean>} */
-  const regionMemo = new Map();
-  /** @type {Set<string>} */
-  const seenGroupWarnings = new Set();
-  for (const analysis of analyses.values()) {
-    for (const ref of analysis.groupComponentRefs) {
-      if (!hasReachableRegions(ref.file, analyses, regionMemo)) continue;
-      const key = `${analysis.file}|${ref.prefix}|${ref.componentName}`;
-      if (seenGroupWarnings.has(key)) continue;
-      seenGroupWarnings.add(key);
-      warnings.push({
-        file: analysis.file,
-        loc: ref.loc,
-        message:
-          `<CmsGroup name="${ref.prefix}"> wraps <${ref.componentName}>, but the group prefix doesn't reach into imported components at discovery time (it does at runtime), so their blockPaths won't match the manifest. Move the <CmsGroup> inside the component, or bake "${ref.prefix}." into each blockPath.`,
-      });
-    }
-  }
+  /** @type {GraphContext} */
+  const ctx = {
+    analyses,
+    renderSites: buildRenderSites(analyses),
+    globalUnderPrefix: new Map(),
+  };
 
   /** @type {Map<string, Map<string, ManifestBlockItem>>} */
   const bySlug = new Map();
@@ -180,7 +172,7 @@ export async function discoverManifests(options = {}) {
 
       /** @type {DiscoveredRegion[]} */
       const ordered = [];
-      collectRegionsDfs(rootFile, analyses, new Set(), ordered);
+      collectRegionsDfs(rootFile, ctx, new Set(), ordered, "");
 
       let nextSortOrder = blockMap.size + 1;
       for (const region of ordered) {
@@ -204,6 +196,8 @@ export async function discoverManifests(options = {}) {
       globalMap.set(region.blockPath, regionToEntry(region, globalSortOrder++));
     }
   }
+
+  warnings.push(...ctx.globalUnderPrefix.values());
 
   /** @type {SyncManifestRequest[]} */
   const manifests = [];
@@ -236,23 +230,96 @@ function regionToEntry(region, sortOrder) {
 }
 
 /**
- * DFS pre-order: emit the current file's regions, then recurse into each
- * relative import in source order. `visited` prevents cycles and double
- * counting when a shared component is imported by both branches of the
- * graph reachable from a single slug.
+ * @typedef {Object} GraphContext
+ * @property {Map<string, FileAnalysis>} analyses
+ * @property {Map<string, Map<string, Set<string>>>} renderSites
+ *   Importing file -> imported file -> the group prefixes it is rendered at.
+ * @property {Map<string, DiscoveryWarning>} globalUnderPrefix
+ *   Deduped warnings for `scope="global"` regions reached through a group.
+ */
+
+/**
+ * Index every file's component render sites by the file they resolve to, so
+ * the walk can look up "at which prefixes does this import get rendered?".
+ *
+ * @param {Map<string, FileAnalysis>} analyses
+ * @returns {Map<string, Map<string, Set<string>>>}
+ */
+function buildRenderSites(analyses) {
+  /** @type {Map<string, Map<string, Set<string>>>} */
+  const sites = new Map();
+  for (const analysis of analyses.values()) {
+    for (const ref of analysis.componentRefs) {
+      let byTarget = sites.get(analysis.file);
+      if (!byTarget) sites.set(analysis.file, (byTarget = new Map()));
+      let prefixes = byTarget.get(ref.file);
+      if (!prefixes) byTarget.set(ref.file, (prefixes = new Set()));
+      prefixes.add(ref.prefix);
+    }
+  }
+  return sites;
+}
+
+/**
+ * DFS pre-order: emit the current file's regions under the prefix carried in
+ * from the render site, then recurse into each import in source order.
+ *
+ * The carried prefix is what makes a `<CmsGroup>` reach across a file
+ * boundary, matching the React context the runtime uses. An import rendered
+ * as JSX contributes its own site prefix (once per distinct prefix, so a
+ * component used under two groups yields both paths); an import that is never
+ * rendered as JSX (a plain helper module) just inherits the caller's.
+ *
+ * `visited` is keyed by file *and* prefix: a diamond import at one prefix is
+ * still counted once, but the same component under two groups isn't collapsed.
  *
  * @param {string} file
- * @param {Map<string, FileAnalysis>} analyses
+ * @param {GraphContext} ctx
  * @param {Set<string>} visited
  * @param {DiscoveredRegion[]} out
+ * @param {string} prefix
  */
-function collectRegionsDfs(file, analyses, visited, out) {
-  if (visited.has(file)) return;
-  visited.add(file);
-  const analysis = analyses.get(file);
+function collectRegionsDfs(file, ctx, visited, out, prefix) {
+  const key = `${file}|${prefix}`;
+  if (visited.has(key)) return;
+  visited.add(key);
+  const analysis = ctx.analyses.get(file);
   if (!analysis) return;
-  for (const region of analysis.regions) out.push(region);
-  for (const imp of analysis.imports) collectRegionsDfs(imp, analyses, visited, out);
+
+  for (const region of analysis.regions) {
+    // Global regions are filed unprefixed from a separate pass, so a group
+    // around one is a silent mismatch with the runtime's prefixed read.
+    if (prefix && region.scope === "global") {
+      const warnKey = `${file}|${region.blockPath}`;
+      if (!ctx.globalUnderPrefix.has(warnKey)) {
+        ctx.globalUnderPrefix.set(warnKey, {
+          file,
+          loc: null,
+          message: `scope="global" region "${region.blockPath}" is reached through <CmsGroup name="${prefix}">. Global regions sync unprefixed, but the runtime reads this one as "${joinPath(prefix, region.blockPath)}", so it won't resolve. Move it out of the group, or drop scope="global".`,
+        });
+      }
+      out.push(region);
+      continue;
+    }
+    out.push(prefix ? { ...region, blockPath: joinPath(prefix, region.blockPath) } : region);
+  }
+
+  const byTarget = ctx.renderSites.get(file);
+  for (const imp of analysis.imports) {
+    const sitePrefixes = byTarget?.get(imp);
+    if (!sitePrefixes) {
+      collectRegionsDfs(imp, ctx, visited, out, prefix);
+      continue;
+    }
+    for (const sitePrefix of sitePrefixes) {
+      collectRegionsDfs(imp, ctx, visited, out, joinPath(prefix, sitePrefix));
+    }
+  }
+}
+
+/** @param {...string} parts */
+function joinPath(...parts) {
+  return parts.filter(Boolean).join(".");
 }
 
 /**
@@ -444,30 +511,6 @@ function stripJsonc(src) {
   return out.replace(/,\s*([}\]])/g, "$1");
 }
 
-/**
- * Whether `file`'s import graph (itself included) declares any region.
- * Memoised; `visiting` cuts cycles.
- *
- * @param {string} file
- * @param {Map<string, FileAnalysis>} analyses
- * @param {Map<string, boolean>} memo
- * @param {Set<string>} [visiting]
- * @returns {boolean}
- */
-function hasReachableRegions(file, analyses, memo, visiting = new Set()) {
-  const cached = memo.get(file);
-  if (cached !== undefined) return cached;
-  if (visiting.has(file)) return false;
-  visiting.add(file);
-  const analysis = analyses.get(file);
-  const found = analysis
-    ? analysis.regions.length > 0 ||
-      analysis.imports.some((imp) => hasReachableRegions(imp, analyses, memo, visiting))
-    : false;
-  memo.set(file, found);
-  return found;
-}
-
 /** @param {string} p */
 function isFile(p) {
   try { return statSync(p).isFile(); } catch { return false; }
@@ -494,7 +537,7 @@ async function analyzeFile(filePath, aliases) {
     importBindings: new Map(),
     withCmsSlugs: [],
     regions: [],
-    groupComponentRefs: [],
+    componentRefs: [],
   };
   /** @type {DiscoveryWarning[]} */
   const warnings = [];
@@ -616,6 +659,28 @@ async function analyzeFile(filePath, aliases) {
           }
           return;
         }
+        case "JSXExpressionContainer": {
+          // `<CmsGroup name="x">{children}</CmsGroup>`: the prefix reaches
+          // whatever the caller passes at runtime, but there is no static
+          // edge to follow, so those regions sync unprefixed.
+          const prefix = currentPrefix();
+          if (!prefix) return;
+          const expr = node.expression;
+          const referenced =
+            expr?.type === "Identifier"
+              ? expr.name
+              : expr?.type === "MemberExpression" && expr.property?.type === "Identifier"
+                ? expr.property.name
+                : null;
+          if (referenced !== "children") return;
+          warnings.push({
+            file: filePath,
+            loc: locOf(node, locator),
+            message:
+              `<CmsGroup name="${prefix}"> wraps {children}. The prefix reaches them through React context at runtime, but discovery can't see what the caller passes, so any regions in there sync unprefixed and won't resolve. Render the components inside the group instead of taking them as children, or bake "${prefix}." into their blockPaths.`,
+          });
+          return;
+        }
         case "JSXOpeningElement": {
           const name = node.name;
           if (name.type !== "JSXIdentifier") return;
@@ -624,17 +689,15 @@ async function analyzeFile(filePath, aliases) {
           } else if (name.name === "EditableList") {
             handleEditableList(node, filePath, analysis, warnings, currentPrefix(), locator);
           } else if (/^[A-Z]/.test(name.name) && name.name !== "CmsGroup") {
-            // Imported component rendered inside a <CmsGroup>: candidate for
-            // the cross-file prefix warning. Only names bound by a resolved
-            // import qualify; package components (bare specifiers) can't
-            // contain regions.
-            const prefix = currentPrefix();
-            const target = prefix ? analysis.importBindings.get(name.name) : undefined;
-            if (prefix && target) {
-              analysis.groupComponentRefs.push({
+            // Only names bound by a resolved import qualify; package
+            // components (bare specifiers) resolve to nothing and can't
+            // declare regions of their own.
+            const target = analysis.importBindings.get(name.name);
+            if (target) {
+              analysis.componentRefs.push({
                 componentName: name.name,
                 file: target,
-                prefix,
+                prefix: currentPrefix(),
                 loc: locOf(node, locator),
               });
             }

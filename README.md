@@ -277,13 +277,28 @@ Groups nest (dot-joined), and discovery applies the exact same prefix so you
 never repeat the group name in each path. In admin mode the group also draws a
 labelled outline so editors can see section boundaries.
 
-> **One limit:** at runtime the prefix crosses component boundaries (React
-> context), but discovery is lexical: only regions written inside the
-> `<CmsGroup>` JSX **in the same file** get the prefix in the manifest.
-> Wrapping an imported component that declares regions would make the page
-> read `hero.title` while the manifest registers `title`; `cms-sync` warns
-> when it detects this. Put the `<CmsGroup>` inside the component file, or
-> write the prefix into each `blockPath`.
+The prefix follows the **render site**, not the file. Wrapping an imported
+component in a group prefixes the regions it declares too, so the group name is
+written once, where the component is used:
+
+```jsx
+// page.jsx           -> the list below syncs as hero.highlights
+<CmsGroup name="hero">
+  <HeroHighlights />
+</CmsGroup>
+
+// hero-highlights.jsx -> no group, no repeated prefix
+<EditableList blockPath="highlights" … />
+```
+
+A component rendered under two different groups contributes its regions once
+per prefix.
+
+> **One limit:** discovery follows static JSX, so
+> `<CmsGroup name="hero">{children}</CmsGroup>` is opaque to it. The prefix
+> still applies at runtime, but the manifest registers those regions
+> unprefixed and they never resolve; `cms-sync` warns when it sees this.
+> Render the components inside the group instead of taking them as children.
 
 `<CmsGroup>` also accepts `visible` / `editable` to lock or hide a whole section
 in one place; the mode cascades to every descendant. See
@@ -322,6 +337,23 @@ export function Team() {
   );
 }
 ```
+
+By default the list renders no element of its own, so items land directly in
+whatever container you wrap it in. Pass `as` (with the layout props that
+container had) to fold the wrapper into the list and get the page-side ring and
+label chip on the block as a whole:
+
+```jsx
+<EditableList
+  blockPath="team.members"
+  as="div"
+  style={{ display: "grid", gap: 12 }}
+  itemSchema={{ … }}
+>
+```
+
+The `as` wrapper renders in public mode too, so the layout is identical for
+visitors and admins, only the ring and chip are admin-only.
 
 > `<EditableList>` (and the Collection components below) use a render-prop,
 > a function child, so they must live in a `"use client"` component. Wrap the

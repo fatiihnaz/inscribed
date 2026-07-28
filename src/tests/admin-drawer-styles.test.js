@@ -12,10 +12,12 @@ describe("panelCss template literal integrity", () => {
   });
 
   it("carries every rule, including ones past the comment that broke it", () => {
-    // The break happened mid-comment above the active-card rules; assert the
-    // selectors around and after that point survive in the string.
-    expect(panelCss).toContain(".inscribed-block-card.is-dirty");
-    expect(panelCss).toContain(".inscribed-block-card.inscribed-block-card-active");
+    // The break happened mid-comment in the middle of the sheet. The card rules
+    // that used to anchor this assertion are gone (the changes preview was the
+    // last surface on that language), so anchor on the rules that now sit at
+    // that point instead.
+    expect(panelCss).toContain(".inscribed-collapse.is-open");
+    expect(panelCss).toContain(".inscribed-icon-button");
     // Rules far down the body: present only if the literal ran to completion.
     expect(panelCss).toContain(".inscribed-logout");
     expect(panelCss).toContain("@keyframes inscribed-status-pulse");

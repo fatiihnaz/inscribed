@@ -38,11 +38,6 @@ export const PANEL_TRANSITION = {
   ease: [0.32, 0.72, 0.18, 1],
 };
 
-export const BODY_TRANSITION = {
-  duration: 0.24,
-  ease: [0.32, 0.72, 0.18, 1],
-};
-
 export const RADIUS = "var(--ins-radius, 10px)";
 export const RADIUS_SM = "calc(var(--ins-radius, 10px) - 3px)";
 
@@ -129,9 +124,6 @@ export const COLLECTION_LINE   = "color-mix(in srgb, var(--ins-collection, rgb(2
 export const STATUS_OK     = "rgb(150, 210, 160)";
 export const STATUS_WARN   = "rgb(232, 192, 130)";
 export const STATUS_DANGER = "var(--ins-danger, rgb(232, 132, 152))";
-export const STATUS_SAVED  = STATUS_OK;
-export const STATUS_FAILED = STATUS_DANGER;
-
 // Typography
 export const FONT_SANS = 'var(--ins-font-sans, "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif)';
 // Deliberately unbranded: the platform's own code face, not a shipped
@@ -144,14 +136,8 @@ export const FONT_MONO = 'var(--ins-font-mono, ui-monospace, SFMono-Regular, "SF
 // Legacy aliases, consumed by surfaces that didn't migrate to the new tokens.
 // ---------------------------------------------------------------------------
 
-export const PRIMARY_700   = BG_SUNKEN;
-export const PRIMARY_600   = BG_RAISED;
-export const PRIMARY_500   = BG;
 export const BORDER_SOFT   = HAIRLINE;
-export const BORDER_STRONG = BORDER_HI;
 export const TEXT_PRIMARY  = TEXT_HI;
-export const TEXT_SECONDARY= TEXT;
-
 // ---------------------------------------------------------------------------
 // Block-type metadata (glyph + accent). Drives the TypeIcon badge and the
 // type label on each block card header.
@@ -385,25 +371,6 @@ export const headerCrumbCurrentStyle = {
 export const headerSepStyle = {
   flexShrink: 0,
   color: TEXT_FAINT,
-};
-
-// Mini "İZLENİYOR / DÜZENLENİYOR" mode chip. Replaces the loud status
-// pill from the original.
-export const modeChipStyle = {
-  font: `9.5px/1 ${FONT_SANS}`,
-  letterSpacing: "0.12em",
-  color: TEXT_FAINT,
-  padding: "4px 7px",
-  borderRadius: R_BADGE,
-  background: SURFACE_1,
-  boxShadow: `inset 0 0 0 1px ${HAIRLINE}`,
-  flexShrink: 0,
-};
-
-export const modeChipDirtyStyle = {
-  color: ACCENT,
-  background: ACCENT_SOFT,
-  boxShadow: `inset 0 0 0 1px ${ACCENT_LINE}`,
 };
 
 // ---------------------------------------------------------------------------
@@ -640,31 +607,6 @@ export const groupDividerStyle = {
 // Block list
 // ---------------------------------------------------------------------------
 
-export const sectionLabelStyle = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  padding: "14px 16px 6px",
-  fontSize: 10,
-  letterSpacing: "0.06em",
-  textTransform: "uppercase",
-  color: TEXT_FAINT,
-  fontWeight: 600,
-};
-
-export const sectionLabelCountStyle = {
-  fontFamily: FONT_SANS,
-  fontVariantNumeric: "tabular-nums",
-  letterSpacing: 0,
-  textTransform: "none",
-  fontSize: 10,
-  color: TEXT_FAINT,
-  background: SURFACE_2,
-  padding: "1px 6px",
-  borderRadius: R_PILL,
-  fontWeight: 500,
-};
-
 export const listStyle = {
   flex: 1,
   margin: 0,
@@ -684,53 +626,61 @@ export const listStyle = {
 // Base structure only. Surface fill, border, hover, dirty rail, and active
 // accents live on the `.inscribed-block-card` CSS class (see `panelCss`) so the
 // variant classes can override them; inline styles would otherwise win.
-export const blockCardStyle = {
-  borderRadius: RADIUS,
-  overflow: "hidden",
+// ---------------------------------------------------------------------------
+// Row language
+//
+// One definition for the drawer's core row shape, shared by the block list and
+// the changes preview. They are exported rather than kept per-file precisely
+// because the two drifted apart while each owned its own copy: the preview kept
+// boxed cards, type-label chips and per-type glyph colours long after the block
+// list dropped them.
+// ---------------------------------------------------------------------------
+
+// Outer container: no fill or border. Rows read as form flow, not as cards.
+export const rowContainerStyle = {
+  display: "flex",
+  flexDirection: "column",
+  padding: "6px 12px 6px",
+  borderRadius: R_MD,
 };
 
-// `border: 0` is mandatory: this style is spread onto a <button>, and without
-// it the browser's default button border paints dark lines around every card.
-export const blockHeaderStyle = {
+// Header line: glyph, identifier, trailing controls. `border: 0` is mandatory:
+// this is spread onto a <button> in the block list, and without it the browser's
+// default button border paints lines around every row.
+export const rowHeaderStyle = {
   display: "flex",
   alignItems: "center",
   gap: 8,
-  padding: "8px 10px",
+  width: "100%",
+  minHeight: 22,
+  padding: 0,
   background: "transparent",
   border: 0,
+  textAlign: "left",
+  fontFamily: "inherit",
+  color: "inherit",
 };
 
-export const blockPathStyle = {
-  flex: 1,
-  font: `500 12px/1.2 ${FONT_MONO}`,
-  color: TEXT,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  minWidth: 0,
-};
-
-export const blockTypeLabelStyle = {
-  fontWeight: 500,
-  fontSize: 9.5,
-  lineHeight: 1,
-  color: TEXT_FAINT,
-  paddingLeft: 2,
-};
-
-export const blockBodyStyle = {
-  padding: "12px 12px 14px",
+// Body indented under the header by a hairline guide, centred beneath the
+// glyph column, so an open row still reads as part of its header.
+export const rowGuideBodyStyle = {
+  margin: "4px 0 4px 9px",
+  padding: "4px 0 6px 14px",
+  borderLeft: `1px solid ${HAIRLINE}`,
   display: "flex",
   flexDirection: "column",
   gap: 10,
-  borderTop: `1px solid ${HAIRLINE}`,
 };
 
-export const blockHintStyle = {
-  margin: 0,
-  fontSize: 11.5,
-  color: TEXT_MUTED,
-  lineHeight: 1.45,
+// The row's identifier (block path, collection key): a literal key, so mono.
+export const rowPathStyle = {
+  flex: 1,
+  minWidth: 0,
+  font: `500 11px/1.2 ${FONT_MONO}`,
+  color: TEXT_MID,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 export const dirtyDotStyle = {
@@ -785,24 +735,6 @@ export const typeChipStyle = {
   background: ACCENT_SOFT,
   color: ACCENT,
   boxShadow: `inset 0 0 0 1px ${ACCENT_LINE}`,
-};
-
-// Legacy grip styles kept to avoid breaking older imports. No longer used
-// by BlockCard but harmless to expose.
-export const gripStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, 3px)",
-  gridAutoRows: "3px",
-  gap: 2,
-  flexShrink: 0,
-  alignSelf: "center",
-};
-export const gripDotStyle = {
-  width: 3,
-  height: 3,
-  borderRadius: "50%",
-  background: "rgba(255,255,255,0.15)",
-  display: "block",
 };
 
 export const emptyStateStyle = {
@@ -871,20 +803,6 @@ export const statusMsgEmphasisStyle = {
   fontWeight: 600,
 };
 
-export const statusTsStyle = {
-  font: `11px/1 ${FONT_SANS}`,
-  fontVariantNumeric: "tabular-nums",
-  color: TEXT_FAINT,
-  marginLeft: 6,
-};
-
-export const statusLabelStyle = {
-  fontSize: 11,
-  fontWeight: 500,
-  letterSpacing: 0,
-  lineHeight: 1,
-};
-
 export const statusActionsStyle = {
   display: "flex",
   gap: 4,
@@ -925,15 +843,6 @@ export const fieldBaseStyle = {
 // Legacy save-bar exports mapped onto the new status-bar visuals, so code
 // paths still importing them keep working while components migrate.
 // ---------------------------------------------------------------------------
-
-export const panelFooterStyle = statusBarStyle;
-export const dirtyInlineStyle = statusSignalStyle;
-export const footerActionsStyle = statusActionsStyle;
-export const iconActionStyle = {
-  ...btnGhostStyle,
-  padding: "7px 10px",
-};
-export const iconActionPrimaryStyle = btnPrimaryStyle;
 
 // ---------------------------------------------------------------------------
 // User footer
@@ -1110,41 +1019,6 @@ export const panelCss = `
     transition: color 140ms ease;
   }
   .inscribed-search-clear:hover { color: ${TEXT}; }
-
-  /* Block card: inset shadow as border. Base surface + ring set here so the
-     dirty/active variants can override them (inline styles would otherwise win). */
-  .inscribed-block-card {
-    background: ${SURFACE_1};
-    box-shadow: inset 0 0 0 1px ${HAIRLINE};
-    transition: box-shadow 160ms ease, background 160ms ease;
-  }
-  .inscribed-block-card:hover { box-shadow: inset 0 0 0 1px ${BORDER}; }
-  /* Collection lane cards (Page-tab Collection blocks + Region-tab item
-     cards) keep a faint pink-purple ring in their idle state so the
-     whole Collection lane reads as one visual family even before the
-     user opens anything. Hover stays on the shared base rule so the dirty and
-     active rules below still win on source order (a collection-specific :hover
-     would beat them via specificity). */
-  .inscribed-block-card.inscribed-block-card-collection {
-    box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
-  }
-  .inscribed-block-card.is-dirty {
-    box-shadow: inset 0 0 0 1px ${ACCENT_LINE}, inset 2px 0 0 ${ACCENT};
-  }
-  .inscribed-block-card.inscribed-block-card-collection.is-dirty {
-    box-shadow: inset 0 0 0 1px ${COLLECTION_LINE}, inset 2px 0 0 ${COLLECTION_ACCENT};
-  }
-  /* Active rules use a compound selector to match the (0,2,0) specificity of
-     .inscribed-block-card.is-dirty and come after it in source order, so an
-     open + dirty card lands on the active accent instead of the dirty rail. */
-  .inscribed-block-card.inscribed-block-card-active {
-    box-shadow: inset 0 0 0 1px ${BORDER_HI}, inset 3px 0 0 ${ACCENT};
-    background: ${SURFACE_2};
-  }
-  .inscribed-block-card.inscribed-block-card-collection-active {
-    box-shadow: inset 0 0 0 1px ${BORDER_HI}, inset 3px 0 0 ${COLLECTION_ACCENT};
-    background: ${SURFACE_2};
-  }
 
   /* Body collapse: height 0 to auto via interpolate-size. */
   .inscribed-collapse {

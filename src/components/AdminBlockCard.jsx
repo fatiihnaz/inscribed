@@ -40,6 +40,10 @@ import {
   TYPE_META,
   blockResetStyle,
   dirtyDotStyle,
+  rowContainerStyle,
+  rowHeaderStyle,
+  rowGuideBodyStyle,
+  rowPathStyle,
   typeIconStyle,
   groupIconStyle,
 } from "./admin-drawer-styles.js";
@@ -213,51 +217,20 @@ const fieldEditorWrapStyle = /** @type {React.CSSProperties} */ ({
   flexDirection: "column",
 });
 
-const fieldPathStyle = /** @type {React.CSSProperties} */ ({
-  flex: 1,
-  minWidth: 0,
-  font: `500 11px/1.2 ${FONT_MONO}`,
-  color: TEXT_MID,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-});
+const fieldPathStyle = rowPathStyle;
 
-// Disclosure rows (heavy blocks): the same form-row shell as FieldRow, with a
-// clickable header instead of an always-open editor.
-const disclosureRowStyle = /** @type {React.CSSProperties} */ ({
-  display: "flex",
-  flexDirection: "column",
-  padding: "6px 12px 6px",
-  borderRadius: R_MD,
-});
+// Disclosure rows (heavy blocks): the shared row shell, with a clickable header
+// instead of an always-open editor. Only the pointer affordance is local; the
+// geometry lives in the styles module so the changes preview matches it.
+const disclosureRowStyle = rowContainerStyle;
 
 const disclosureHeaderStyle = /** @type {React.CSSProperties} */ ({
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  width: "100%",
-  minHeight: 22,
-  padding: 0,
-  background: "transparent",
-  border: 0,
+  ...rowHeaderStyle,
   cursor: "pointer",
   userSelect: "none",
-  textAlign: "left",
-  fontFamily: "inherit",
-  color: "inherit",
 });
 
-// Open body: indented under the header with a hairline guide instead of a
-// boxed card, so the block keeps reading as part of the form flow.
-const disclosureBodyStyle = /** @type {React.CSSProperties} */ ({
-  margin: "4px 0 4px 9px",
-  padding: "4px 0 6px 14px",
-  borderLeft: `1px solid ${HAIRLINE}`,
-  display: "flex",
-  flexDirection: "column",
-  gap: 10,
-});
+const disclosureBodyStyle = rowGuideBodyStyle;
 
 /**
  * Card for a Collection block whose `value` is missing `{ collection, slug }`.

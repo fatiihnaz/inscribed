@@ -7,8 +7,10 @@
  * edit/undo stays on the Sayfa / Genel tabs.
  *
  * Diff: inline word-level red/green via `diffWords`. RichText is stripped of
- * tags first so markup churn doesn't drown the content change. List diff is
- * positional, so a reorder shows as "removed at N + added at M".
+ * tags first so markup churn doesn't drown the content change; a change that
+ * touched only markup is reported as such instead of rendering as nothing.
+ * List items are matched by content through an LCS, so a reorder reads as a
+ * move rather than as a run of edits down the list.
  *
  * Collection blocks are excluded: their drafts are per-item and surface in the
  * collection's own region tab.
@@ -18,16 +20,16 @@ import { useMemo } from "react";
 import { Pencil } from "./icons.jsx";
 
 import { stableStringify } from "../lib/stable-stringify.js";
-import { diffWords, diffLines, stripHtml } from "../lib/word-diff.js";
+import { diffWords, diffLines, stripHtml, lcsIndexPairs } from "../lib/word-diff.js";
 
 import {
   TEXT_MUTED,
   TEXT_FAINT,
   TEXT,
   HAIRLINE,
-  BORDER,
   SURFACE_1,
   RADIUS_SM,
+  R_SM,
   FONT_MONO,
   COLLECTION_ACCENT,
   COLLECTION_LINE,
@@ -38,12 +40,12 @@ import {
   paneStyle,
   listStyle,
   emptyStateStyle,
-  blockCardStyle,
-  blockHeaderStyle,
-  blockPathStyle,
-  blockBodyStyle,
-  blockTypeLabelStyle,
+  rowContainerStyle,
+  rowHeaderStyle,
+  rowGuideBodyStyle,
+  rowPathStyle,
   typeIconStyle,
+  FONT_SANS,
 } from "./admin-drawer-styles.js";
 
 /**
@@ -137,26 +139,18 @@ export function AdminChangesPanel({
  */
 function CollectionDraftCard({ collectionKey, count, onGoToCollection }) {
   const meta = TYPE_META.Collection;
-  const cardStyle = {
-    ...blockCardStyle,
-    boxShadow: `inset 0 0 0 1px ${HAIRLINE}, inset 2px 0 0 ${meta.color}`,
-  };
   return (
-    <div className="inscribed-block-card" style={cardStyle}>
-      <div style={blockHeaderStyle}>
-        <span
-          aria-hidden="true"
-          style={{ ...typeIconStyle, color: meta.color }}
-        >
+    <div style={rowContainerStyle}>
+      <div style={rowHeaderStyle}>
+        <span aria-hidden="true" style={{ ...typeIconStyle, color: TEXT_MUTED }}>
           {meta.glyph}
         </span>
-        <span style={blockPathStyle} title={collectionKey}>
+        <span style={rowPathStyle} title={collectionKey}>
           {collectionKey}
         </span>
         <span style={collectionDraftCountStyle}>
           {count} taslak
         </span>
-        <span style={blockTypeLabelStyle}>{meta.label}</span>
         <button
           type="button"
           onClick={() => onGoToCollection(collectionKey)}
@@ -195,25 +189,17 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
     return null;
   }, [block.blockType, prev, next]);
 
-  // Inset rail in the block's accent colour, mirroring the `.is-dirty` pattern
-  // so the layout doesn't reflow on tone change.
-  const cardStyle = {
-    ...blockCardStyle,
-    boxShadow: `inset 0 0 0 1px ${HAIRLINE}, inset 2px 0 0 ${meta.color}`,
-  };
   return (
-    <div className="inscribed-block-card" style={cardStyle}>
-      <div style={blockHeaderStyle}>
-        <span
-          aria-hidden="true"
-          style={{ ...typeIconStyle, color: meta.color }}
-        >
+    <div style={rowContainerStyle}>
+      <div style={rowHeaderStyle}>
+        {/* Monochrome like the block list's glyphs: every row carries one, so
+            per-type colour would turn the list into confetti. */}
+        <span aria-hidden="true" style={{ ...typeIconStyle, color: TEXT_MUTED }}>
           {meta.glyph}
         </span>
-        <span style={blockPathStyle} title={block.blockPath}>
+        <span style={rowPathStyle} title={block.blockPath}>
           {block.blockPath}
         </span>
-        <span style={blockTypeLabelStyle}>{meta.label}</span>
         <button
           type="button"
           onClick={() => onGoToBlock(block)}
@@ -225,7 +211,7 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
           <Pencil size={11} />
         </button>
       </div>
-      <div style={blockBodyStyle}>
+      <div style={rowGuideBodyStyle}>
         <DiffContent
           blockType={block.blockType}
           prev={prev}
@@ -263,13 +249,7 @@ function DiffContent({ blockType, prev, next, itemSchema, sharedOps }) {
         />
       );
     case "RichText":
-      return (
-        <LineDiff
-          prev={stripHtml(prev)}
-          next={stripHtml(next)}
-          ops={sharedOps ?? undefined}
-        />
-      );
+      return <RichTextDiff prev={prev} next={next} ops={sharedOps ?? undefined} />;
     case "Link":
       return <LinkDiff prev={prev} next={next} />;
     case "Date":
@@ -403,7 +383,7 @@ function DiffSpan({ op }) {
   }
   return (
     <span style={collapsedSpanStyle} aria-label={`${op.count} kelime gizlendi`}>
-      … {op.count} kelime …
+      …
     </span>
   );
 }
@@ -569,7 +549,7 @@ function lineSimilarity(a, b) {
 function LineRow({ row }) {
   if (row.kind === "hunk") {
     return (
-      <div style={lineHunkStyle}>@@ … {row.count} satır …  @@</div>
+      <div style={lineHunkStyle} aria-label={`${row.count} satır gizlendi`}>…</div>
     );
   }
   if (row.kind === "changed") {
@@ -582,8 +562,6 @@ function LineRow({ row }) {
   const glyph = row.kind === "added" ? "+" : row.kind === "removed" ? "-" : " ";
   return (
     <div style={{ ...lineRowBase, ...tone }}>
-      <span style={lineNoStyle}>{row.oldLine ?? ""}</span>
-      <span style={lineNoStyle}>{row.newLine ?? ""}</span>
       <span style={lineGutterStyle}>{glyph}</span>
       <span style={lineTextStyle}>{renderLineText(row.text)}</span>
     </div>
@@ -664,8 +642,6 @@ function PairedLine({ kind, oldLine, newLine, ops, side }) {
   const glyph = kind === "added" ? "+" : "-";
   return (
     <div style={{ ...lineRowBase, ...tone }}>
-      <span style={lineNoStyle}>{oldLine ?? ""}</span>
-      <span style={lineNoStyle}>{newLine ?? ""}</span>
       <span style={lineGutterStyle}>{glyph}</span>
       <span style={lineTextStyle}>
         {sideOps.length === 0 ? " " : sideOps.map((op, i) => {
@@ -674,7 +650,7 @@ function PairedLine({ kind, oldLine, newLine, ops, side }) {
           if (op.type === "added") return <span key={i} style={pairedAddedSpanStyle}>{op.text}</span>;
           return (
             <span key={i} style={collapsedInlineStyle} aria-label={`${op.count} kelime gizlendi`}>
-              … {op.count} kelime …
+              …
             </span>
           );
         })}
@@ -686,6 +662,114 @@ function PairedLine({ kind, oldLine, newLine, ops, side }) {
 /**
  * @param {{ prev: *, next: * }} props
  */
+// Marks worth naming when only the markup moved. Anything outside this map is
+// rolled into a generic count rather than shown as a raw tag name.
+const RICH_MARKS = [
+  { tag: "strong", label: "kalın" },
+  { tag: "b", label: "kalın" },
+  { tag: "em", label: "italik" },
+  { tag: "i", label: "italik" },
+  { tag: "s", label: "üstü çizili" },
+  { tag: "a", label: "bağlantı" },
+  { tag: "h2", label: "başlık" },
+  { tag: "h3", label: "alt başlık" },
+  { tag: "blockquote", label: "alıntı" },
+  { tag: "li", label: "liste öğesi" },
+  { tag: "code", label: "kod" },
+];
+
+/**
+ * Count each named mark's opening tags, so a formatting-only edit can be
+ * described instead of rendered as an empty diff.
+ *
+ * @param {string} html
+ * @returns {Map<string, number>}
+ */
+function countMarks(html) {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  if (!html) return counts;
+  for (const { tag, label } of RICH_MARKS) {
+    const hits = String(html).match(new RegExp(`<${tag}(\\s[^>]*)?>`, "gi"));
+    if (hits) counts.set(label, (counts.get(label) ?? 0) + hits.length);
+  }
+  return counts;
+}
+
+/**
+ * RichText diffs on its stripped text, which means a change that touched only
+ * markup used to render as a card with nothing in it. Detect that case and
+ * report which marks moved instead.
+ *
+ * @param {{ prev: *, next: *, ops?: DiffOp[] }} props
+ */
+function RichTextDiff({ prev, next, ops }) {
+  const prevText = useMemo(() => stripHtml(prev), [prev]);
+  const nextText = useMemo(() => stripHtml(next), [next]);
+  const isTextUnchanged = prevText === nextText;
+
+  // Only worth walking the markup when the text came out identical, and the
+  // scan is a regex per mark, so keep it off the render path otherwise.
+  const moved = useMemo(() => {
+    if (!isTextUnchanged) return [];
+    const before = countMarks(prev);
+    const after = countMarks(next);
+    /** @type {{ label: string, delta: number }[]} */
+    const out = [];
+    for (const label of new Set([...before.keys(), ...after.keys()])) {
+      const delta = (after.get(label) ?? 0) - (before.get(label) ?? 0);
+      if (delta !== 0) out.push({ label, delta });
+    }
+    out.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    return out;
+  }, [isTextUnchanged, prev, next]);
+
+  if (!isTextUnchanged) {
+    return <LineDiff prev={prevText} next={nextText} ops={ops} />;
+  }
+
+  return (
+    <div style={formatOnlyStyle}>
+      <span>Metin aynı, yalnızca biçimlendirme değişti.</span>
+      {moved.length > 0 ? (
+        <span style={formatMarksStyle}>
+          {moved.map(({ label, delta }) => (
+            <span
+              key={label}
+              style={{ ...formatMarkChipStyle, color: delta > 0 ? DIFF_ADDED : DIFF_REMOVED }}
+            >
+              {delta > 0 ? "+" : "−"}{Math.abs(delta)} {label}
+            </span>
+          ))}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+const formatOnlyStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  fontSize: 12,
+  color: TEXT_MUTED,
+});
+
+const formatMarksStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 6,
+});
+
+const formatMarkChipStyle = /** @type {React.CSSProperties} */ ({
+  font: `500 10.5px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
+  padding: "3px 6px",
+  borderRadius: R_SM,
+  background: SURFACE_1,
+  boxShadow: `inset 0 0 0 1px ${HAIRLINE}`,
+});
+
 function LinkDiff({ prev, next }) {
   const prevLabel = prev?.label ?? "";
   const nextLabel = next?.label ?? "";
@@ -729,8 +813,8 @@ function ImageDiff({ prev, next }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={imageRowStyle}>
-        <ImageSide tone={DIFF_REMOVED} label="Yayında" src={prevSrc} alt={prevAlt} />
-        <ImageSide tone={DIFF_ADDED} label="Taslak" src={nextSrc} alt={nextAlt} />
+        <ImageSide label="Yayında" src={prevSrc} alt={prevAlt} />
+        <ImageSide label="Taslak" src={nextSrc} alt={nextAlt} isNext />
       </div>
       {prevAlt !== nextAlt ? (
         <FieldLabeled label="alt">
@@ -744,10 +828,10 @@ function ImageDiff({ prev, next }) {
 /**
  * @param {{ tone: string, label: string, src: string | null, alt: string }} props
  */
-function ImageSide({ tone, label, src, alt }) {
+function ImageSide({ label, src, alt, isNext }) {
   return (
-    <div style={imageSideStyle(tone)}>
-      <div style={imageLabelStyle(tone)}>{label}</div>
+    <div style={imageSideStyle}>
+      <div style={isNext ? imageLabelNextStyle : imageLabelStyle}>{label}</div>
       {src ? (
         <img src={src} alt={alt} style={imageThumbStyle} />
       ) : (
@@ -769,23 +853,64 @@ function ImageSide({ tone, label, src, alt }) {
  * }} props
  */
 function ListDiff({ oldItems, newItems, itemSchema }) {
+  // Match by content, not by position. Comparing index-for-index reported a
+  // reorder as a run of edits: moving one item up rewrote every row it passed.
+  // The LCS pins the items that kept their relative order; anything outside it
+  // whose content still exists on the other side is a move, and only what is
+  // left over is a real edit.
   const rows = useMemo(() => {
-    const max = Math.max(oldItems.length, newItems.length);
-    /** @type {{ kind: "added"|"removed"|"changed", index: number, prev: *, next: * }[]} */
-    const out = [];
-    for (let i = 0; i < max; i++) {
-      const a = oldItems[i];
-      const b = newItems[i];
-      if (a === undefined) {
-        out.push({ kind: "added", index: i, prev: null, next: b });
-      } else if (b === undefined) {
-        out.push({ kind: "removed", index: i, prev: a, next: null });
-      } else if (stableStringify(a) === stableStringify(b)) {
-        continue;
-      } else {
-        out.push({ kind: "changed", index: i, prev: a, next: b });
-      }
+    const oldHashes = oldItems.map((it) => stableStringify(it));
+    const newHashes = newItems.map((it) => stableStringify(it));
+
+    const kept = new Set();
+    const keptNew = new Set();
+    for (const { a, b } of lcsIndexPairs(oldHashes, newHashes)) {
+      kept.add(a);
+      keptNew.add(b);
     }
+
+    const looseOld = oldHashes.map((_, i) => i).filter((i) => !kept.has(i));
+    const looseNew = newHashes.map((_, i) => i).filter((i) => !keptNew.has(i));
+
+    /** @type {{ kind: "added"|"removed"|"changed"|"moved", index: number, from?: number, prev: *, next: * }[]} */
+    const out = [];
+
+    // Same content on both sides but outside the LCS: it travelled.
+    const pendingNew = [...looseNew];
+    const stillOld = [];
+    for (const oi of looseOld) {
+      const at = pendingNew.findIndex((ni) => newHashes[ni] === oldHashes[oi]);
+      if (at === -1) { stillOld.push(oi); continue; }
+      const ni = pendingNew.splice(at, 1)[0];
+      out.push({ kind: "moved", index: ni, from: oi, prev: oldItems[oi], next: newItems[ni] });
+    }
+
+    // Whatever is left pairs up in order, so editing an item in place reads as
+    // one changed row rather than a removal plus an unrelated addition. The
+    // similarity gate keeps that from overreaching: deleting one item and
+    // adding a different one must not be reported as an edit between them.
+    const pairable = Math.min(stillOld.length, pendingNew.length);
+    let paired = 0;
+    while (
+      paired < pairable
+      && lineSimilarity(oldHashes[stillOld[paired]], newHashes[pendingNew[paired]])
+         >= PAIR_MIN_SIMILARITY
+    ) {
+      const oi = stillOld[paired];
+      const ni = pendingNew[paired];
+      out.push({ kind: "changed", index: ni, prev: oldItems[oi], next: newItems[ni] });
+      paired++;
+    }
+    for (let k = paired; k < stillOld.length; k++) {
+      const oi = stillOld[k];
+      out.push({ kind: "removed", index: oi, prev: oldItems[oi], next: null });
+    }
+    for (let k = paired; k < pendingNew.length; k++) {
+      const ni = pendingNew[k];
+      out.push({ kind: "added", index: ni, prev: null, next: newItems[ni] });
+    }
+
+    out.sort((a, b) => a.index - b.index);
     return out;
   }, [oldItems, newItems]);
 
@@ -799,14 +924,22 @@ function ListDiff({ oldItems, newItems, itemSchema }) {
         <div key={row.index} style={listItemRowStyle(row.kind)}>
           <div style={listItemHeaderStyle}>
             <span style={listItemGlyphStyle(row.kind)} aria-hidden="true">
-              {row.kind === "added" ? "+" : row.kind === "removed" ? "−" : "~"}
+              {GLYPH_FOR_KIND[row.kind]}
             </span>
-            <span style={listItemIndexStyle}>#{row.index + 1}</span>
-            <span style={listItemBadgeStyle(toneForKind(row.kind))}>
+            <span style={listItemIndexStyle}>
+              {row.kind === "moved"
+                ? `#${row.from + 1} → #${row.index + 1}`
+                : `#${row.index + 1}`}
+            </span>
+            <span style={listItemBadgeStyle()}>
               {labelForKind(row.kind)}
             </span>
           </div>
-          {row.kind === "added" || row.kind === "removed" ? (
+          {row.kind === "moved" ? (
+            // Content is identical by definition, so there is nothing to diff:
+            // show the item quietly, just enough to tell which one travelled.
+            <ItemFields item={row.next} itemSchema={itemSchema} tone={TEXT_MUTED} />
+          ) : row.kind === "added" || row.kind === "removed" ? (
             <ItemFields
               item={row.kind === "added" ? row.next : row.prev}
               itemSchema={itemSchema}
@@ -825,15 +958,20 @@ function ListDiff({ oldItems, newItems, itemSchema }) {
 function toneForKind(kind) {
   if (kind === "added") return DIFF_ADDED;
   if (kind === "removed") return DIFF_REMOVED;
+  // A move changes no content, so it stays off the add/remove palette.
+  if (kind === "moved") return TEXT_MUTED;
   return DIFF_CHANGED;
 }
 
 /** @param {"added"|"removed"|"changed"} kind */
 function labelForKind(kind) {
-  if (kind === "added") return "eklendi";
-  if (kind === "removed") return "silindi";
-  return "değişti";
+  if (kind === "added") return "Eklendi";
+  if (kind === "removed") return "Silindi";
+  if (kind === "moved") return "Taşındı";
+  return "Düzenlendi";
 }
+
+const GLYPH_FOR_KIND = { added: "+", removed: "−", moved: "⇅", changed: "~" };
 
 /**
  * Render a fully added/removed item's fields with a tone tint, so it reads as
@@ -914,7 +1052,9 @@ function ItemFieldDiff({ prev, next, itemSchema }) {
  * @param {{ blockType: BlockType | string, value: *, tone: string }} props
  */
 function SoloValue({ blockType, value, tone }) {
-  const wrap = tone === DIFF_REMOVED ? removedSpanStyle : addedSpanStyle;
+  const wrap = tone === DIFF_REMOVED ? removedSpanStyle
+    : tone === DIFF_ADDED ? addedSpanStyle
+    : neutralSpanStyle;
   if (value == null || value === "") {
     return <span style={emptyValueStyle}>—</span>;
   }
@@ -963,7 +1103,8 @@ const scrollStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const collectionDraftCountStyle = /** @type {React.CSSProperties} */ ({
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
+  fontVariantNumeric: "tabular-nums",
   fontSize: 10,
   letterSpacing: "0.04em",
   color: COLLECTION_ACCENT,
@@ -990,9 +1131,11 @@ const lineDiffWrapStyle = /** @type {React.CSSProperties} */ ({
   lineHeight: 1.6,
 });
 
+// No line-number gutters: a "line" here is a paragraph of prose, and the editor
+// the author works in never numbers them, so the columns carried no meaning.
 const lineRowBase = /** @type {React.CSSProperties} */ ({
   display: "grid",
-  gridTemplateColumns: "28px 28px 16px 1fr",
+  gridTemplateColumns: "16px 1fr",
   alignItems: "baseline",
   paddingRight: 8,
 });
@@ -1010,14 +1153,6 @@ const lineAddedStyle = /** @type {React.CSSProperties} */ ({
 const lineRemovedStyle = /** @type {React.CSSProperties} */ ({
   background: `color-mix(in srgb, ${DIFF_REMOVED} 10%, transparent)`,
   color: TEXT,
-});
-
-const lineNoStyle = /** @type {React.CSSProperties} */ ({
-  color: TEXT_FAINT,
-  textAlign: "right",
-  paddingRight: 6,
-  userSelect: "none",
-  fontSize: 10,
 });
 
 const lineGutterStyle = /** @type {React.CSSProperties} */ ({
@@ -1108,6 +1243,13 @@ const removedSpanStyle = /** @type {React.CSSProperties} */ ({
   borderRadius: 2,
 });
 
+// Used when a row reports movement rather than a content change: nothing was
+// added or removed, so the value is shown plainly.
+const neutralSpanStyle = /** @type {React.CSSProperties} */ ({
+  color: TEXT,
+  padding: "0 2px",
+});
+
 const addedSpanStyle = /** @type {React.CSSProperties} */ ({
   color: DIFF_ADDED,
   background: `color-mix(in srgb, ${DIFF_ADDED} 14%, transparent)`,
@@ -1135,39 +1277,34 @@ const imageRowStyle = /** @type {React.CSSProperties} */ ({
 });
 
 /** @param {string} tone */
-function imageSideStyle(tone) {
-  return /** @type {React.CSSProperties} */ ({
-    border: `1px solid ${HAIRLINE}`,
-    borderLeft: `2px solid ${tone}`,
-    borderRadius: RADIUS_SM,
-    background: SURFACE_1,
-    padding: 6,
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-    alignItems: "center",
-  });
-}
+// Neutral on both sides: swapping a picture is neither an addition nor a
+// deletion, so the red/green diff palette misdescribed it. Which side is the
+// proposal is carried by the caption's weight instead of by a colour.
+const imageSideStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+});
 
-/** @param {string} tone */
-function imageLabelStyle(tone) {
-  return /** @type {React.CSSProperties} */ ({
-    fontFamily: FONT_MONO,
-    fontSize: 10,
-    letterSpacing: "0.06em",
-    textTransform: "uppercase",
-    color: tone,
-    alignSelf: "flex-start",
-  });
-}
+const imageLabelStyle = /** @type {React.CSSProperties} */ ({
+  font: `500 10.5px/1 ${FONT_SANS}`,
+  color: TEXT_MUTED,
+});
+
+const imageLabelNextStyle = /** @type {React.CSSProperties} */ ({
+  font: `600 10.5px/1 ${FONT_SANS}`,
+  color: TEXT,
+});
 
 const imageThumbStyle = /** @type {React.CSSProperties} */ ({
-  maxWidth: "100%",
-  maxHeight: 120,
+  width: "100%",
+  height: 104,
   objectFit: "contain",
-  border: `1px solid ${BORDER}`,
-  borderRadius: RADIUS_SM,
-  background: "#000",
+  boxShadow: `inset 0 0 0 1px ${HAIRLINE}`,
+  borderRadius: R_SM,
+  // A drawer surface rather than pure black: the thumbnail is a panel element,
+  // not a lightbox, and a hard black plate fought everything around it.
+  background: SURFACE_1,
 });
 
 const emptyValueStyle = /** @type {React.CSSProperties} */ ({
@@ -1206,7 +1343,7 @@ const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
 
 /** @param {"added"|"removed"|"changed"} kind */
 function listItemGlyphStyle(kind) {
-  const tone = kind === "added" ? DIFF_ADDED : kind === "removed" ? DIFF_REMOVED : DIFF_CHANGED;
+  const tone = toneForKind(kind);
   return /** @type {React.CSSProperties} */ ({
     fontFamily: FONT_MONO,
     fontSize: 13,
@@ -1219,14 +1356,10 @@ function listItemGlyphStyle(kind) {
 }
 
 /** @param {string} tone */
-function listItemBadgeStyle(tone) {
+function listItemBadgeStyle() {
   return /** @type {React.CSSProperties} */ ({
-    fontFamily: FONT_MONO,
-    fontSize: 10,
-    letterSpacing: "0.06em",
-    textTransform: "uppercase",
-    color: tone,
-    opacity: 0.75,
+    font: `400 11px/1 ${FONT_SANS}`,
+    color: TEXT_MUTED,
   });
 }
 
@@ -1254,8 +1387,10 @@ function fallbackJsonStyle(tone) {
   return /** @type {React.CSSProperties} */ ({
     fontFamily: FONT_MONO,
     fontSize: 11,
-    color: tone,
-    background: `color-mix(in srgb, ${tone} 10%, transparent)`,
+    color: tone === DIFF_ADDED || tone === DIFF_REMOVED ? tone : TEXT,
+    background: tone === DIFF_ADDED || tone === DIFF_REMOVED
+      ? `color-mix(in srgb, ${tone} 10%, transparent)`
+      : SURFACE_1,
     padding: "6px 8px",
     borderRadius: RADIUS_SM,
     whiteSpace: "pre-wrap",

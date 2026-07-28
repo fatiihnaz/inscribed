@@ -1689,11 +1689,10 @@ function PreviewHeader({ count, onBack }) {
         aria-label="Düzenlemeye dön"
       >
         <ChevronLeft size={12} />
-        <span>Düzenle</span>
+        <span>Düzenlemeye dön</span>
       </button>
       <div style={previewTitleStyle}>
-        <span>Değişiklikler</span>
-        <span style={previewCountStyle}>{count}</span>
+        <span>{count} Değişiklik</span>
       </div>
     </div>
   );
@@ -1838,20 +1837,8 @@ const previewTitleStyle = /** @type {React.CSSProperties} */ ({
   alignItems: "center",
   gap: 8,
   color: TEXT_MUTED,
-  // Same caps tuning as `groupNameStyle`: the sans doesn't want the tracking
-  // and weight the mono did.
-  font: `500 10.5px/1 ${FONT_SANS}`,
-  letterSpacing: "0.055em",
-  textTransform: "uppercase",
-});
-
-const previewCountStyle = /** @type {React.CSSProperties} */ ({
-  font: `500 10px/1 ${FONT_SANS}`,
+  font: `400 11px/1 ${FONT_SANS}`,
   fontVariantNumeric: "tabular-nums",
-  padding: "3px 6px",
-  borderRadius: 99,
-  background: SURFACE_2,
-  color: TEXT_MID,
 });
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { diffWords, diffLines, stripHtml } from "../lib/word-diff.js";
+import { diffWords, diffLines, stripHtml, lcsIndexPairs } from "../lib/word-diff.js";
 
 /** Reconstruct the "before" text: everything unchanged or removed, in order. */
 const before = (ops) =>
@@ -114,5 +114,49 @@ describe("stripHtml", () => {
 
   it("collapses 3+ newlines down to a blank line", () => {
     expect(stripHtml("<p>a</p><p></p><p></p><p>b</p>")).toBe("a\n\nb");
+  });
+});
+
+// The changes preview classifies a list item as *moved* when it sits outside
+// the LCS while its content still exists on the other side. That rule is only
+// as good as these pairs, so pin the shapes it depends on.
+describe("lcsIndexPairs", () => {
+  it("pairs nothing when either side is empty", () => {
+    expect(lcsIndexPairs([], ["a"])).toEqual([]);
+    expect(lcsIndexPairs(["a"], [])).toEqual([]);
+  });
+
+  it("pairs every element when the arrays match", () => {
+    expect(lcsIndexPairs(["a", "b"], ["a", "b"])).toEqual([
+      { a: 0, b: 0 },
+      { a: 1, b: 1 },
+    ]);
+  });
+
+  it("leaves the moved element out of the pairing", () => {
+    // ["a","b","c","d"] -> ["d","a","b","c"]: a, b and c keep their relative
+    // order, so only d falls outside and reads as the one that travelled.
+    const pairs = lcsIndexPairs(["a", "b", "c", "d"], ["d", "a", "b", "c"]);
+    expect(pairs).toEqual([
+      { a: 0, b: 1 },
+      { a: 1, b: 2 },
+      { a: 2, b: 3 },
+    ]);
+    expect(pairs.some((p) => p.a === 3)).toBe(false);
+  });
+
+  it("returns pairs ascending on both sides", () => {
+    const pairs = lcsIndexPairs(["x", "a", "y", "b"], ["a", "z", "b"]);
+    const aIdx = pairs.map((p) => p.a);
+    const bIdx = pairs.map((p) => p.b);
+    expect([...aIdx].sort((m, n) => m - n)).toEqual(aIdx);
+    expect([...bIdx].sort((m, n) => m - n)).toEqual(bIdx);
+  });
+
+  it("skips elements that exist on only one side", () => {
+    expect(lcsIndexPairs(["a", "gone", "b"], ["a", "b"])).toEqual([
+      { a: 0, b: 0 },
+      { a: 2, b: 1 },
+    ]);
   });
 });

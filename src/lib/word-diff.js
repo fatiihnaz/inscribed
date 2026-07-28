@@ -82,6 +82,52 @@ function lcsDiff(A, B, merge = true) {
   return merge ? mergeRuns(ops) : ops;
 }
 
+/**
+ * Index pairs of the longest common subsequence of two token arrays.
+ *
+ * `lcsDiff` reports the *text* of each run, which is what the word and line
+ * renderers need. Callers that must know which elements survived, and where
+ * they landed, need indices instead: a list reorder is precisely "everything
+ * outside the LCS moved", so an item is a move only if it sits outside these
+ * pairs while its content still exists on the other side.
+ *
+ * @param {string[]} A
+ * @param {string[]} B
+ * @returns {{ a: number, b: number }[]}  Ascending in both indices.
+ */
+export function lcsIndexPairs(A, B) {
+  const n = A.length;
+  const m = B.length;
+  if (n === 0 || m === 0) return [];
+
+  /** @type {Uint16Array[]} */
+  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < m; j++) {
+      dp[i + 1][j + 1] = A[i] === B[j]
+        ? dp[i][j] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  /** @type {{ a: number, b: number }[]} */
+  const pairs = [];
+  let i = n;
+  let j = m;
+  while (i > 0 && j > 0) {
+    if (A[i - 1] === B[j - 1]) {
+      pairs.push({ a: i - 1, b: j - 1 });
+      i--; j--;
+    } else if (dp[i][j - 1] >= dp[i - 1][j]) {
+      j--;
+    } else {
+      i--;
+    }
+  }
+  pairs.reverse();
+  return pairs;
+}
+
 const REFINE_MAX_LEN = 60;
 const REFINE_MIN_SIMILARITY = 0.4;
 

@@ -25,6 +25,11 @@
  * Admin mode adds per-item controls (delete, move) and an "+ Add" button. All
  * mutations go through `setDraft`, so the drawer's save bar picks them up; one
  * version per list, atomic save. `itemSchema`/`defaultValue` must be literals.
+ *
+ * By default the list renders no element of its own, so items sit directly in
+ * whatever flex/grid container the consumer wraps it in. Pass `as` (plus the
+ * layout props that container had) to fold that wrapper into the list and get
+ * the page-side ring + label chip on the block as a whole.
  */
 
 import { Fragment, useContext, useEffect, useState } from "react";
@@ -34,7 +39,14 @@ import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
 import { addItem, makeDefaultItem, moveItem, removeItem } from "../lib/list-ops.js";
-import { ACCENT, STATUS_DANGER, BG_RAISED, BORDER } from "./admin-drawer-styles.js";
+import { stableStringify } from "../lib/stable-stringify.js";
+import { ACCENT, FONT_MONO, STATUS_DANGER, BG_RAISED, BORDER, TYPE_META } from "./admin-drawer-styles.js";
+import {
+  BLOCK_TAGS,
+  regionBoxStyle,
+  regionChipStyle,
+  chipDirtyDotStyle,
+} from "./page-region-chrome.js";
 
 /**
  * @import { ItemSchema } from "../lib/schemas.js"
@@ -47,6 +59,12 @@ import { ACCENT, STATUS_DANGER, BG_RAISED, BORDER } from "./admin-drawer-styles.
  *   Per-field metadata. Required: "+ Add" uses it for the seed item, discovery
  *   builds the manifest entry's `itemSchema` from it.
  * @property {(item: Record<string, *>, index: number) => React.ReactNode} children
+ * @property {string} [as]
+ *   Wrapper tag for the whole list. Without it the list is transparent (items
+ *   land straight in the consumer's flex/grid container) and the page has no
+ *   list-level edit affordance. With it, the wrapper renders in public mode
+ *   too, so admin and public layout stay identical, and admin mode adds the
+ *   ring + label chip. Extra props (`style`, `className`, ...) go to it.
  * @property {*[]} [defaultValue]
  *   Discovery-only seed, default `[]`. Pass an array to pre-seed items.
  * @property {"global"} [scope]
@@ -71,16 +89,17 @@ const PANEL_BORDER    = `1px solid ${BORDER}`;
 /**
  * @param {EditableListProps} props
  */
-export function EditableList({ blockPath, itemSchema, children, defaultValue, scope, editable, visible }) {
+export function EditableList({ blockPath, itemSchema, children, defaultValue, scope, editable, visible, as, ...rest }) {
   void defaultValue; void scope; // discovery-only
   const {
     isAdmin, blocks, contentDraftsStore, setDraft,
     registerItemSchema, unregisterItemSchema,
     registerEditorVisibility, unregisterEditorVisibility,
-    setActiveBlock, setActiveListItem,
+    activeBlock, setActiveBlock, setActiveListItem,
   } = useCmsContext();
   const groupPrefix = useContext(CmsGroupContext);
   const groupVisibility = useContext(CmsGroupVisibilityContext);
+  const [isHovered, setIsHovered] = useState(false);
 
   // Auto-prefix under a `<CmsGroup>`, matching discovery's static rule.
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
@@ -123,15 +142,15 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
 
   // Public visitors and read-only/hidden lists get the plain passthrough: items
   // render, but no add/move/delete. The drawer card lock/removal is the
-  // registry's job.
+  // registry's job. `as` still renders, so the layout doesn't shift between
+  // public and admin.
   if (!isAdmin || visibilityMode) {
-    return (
-      <>
-        {items.map((item, i) => (
-          <Fragment key={i}>{children(item, i)}</Fragment>
-        ))}
-      </>
-    );
+    const body = items.map((item, i) => (
+      <Fragment key={i}>{children(item, i)}</Fragment>
+    ));
+    if (!as) return <>{body}</>;
+    const Wrapper = /** @type {*} */ (as);
+    return <Wrapper {...rest}>{body}</Wrapper>;
   }
 
   const defaultItem = makeDefaultItem(itemSchema);
@@ -145,7 +164,7 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
     setItems(next);
   };
 
-  return (
+  const body = (
     <>
       {items.map((item, i) => (
         <AdminItemWrapper
@@ -166,6 +185,63 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
         {children(defaultItem, items.length)}
       </GhostAddSlot>
     </>
+  );
+
+  // Without `as` there is no element to hang a ring or chip on, so the list
+  // keeps its transparent shape and only the items carry chrome.
+  if (!as) return body;
+
+  const Wrapper = /** @type {*} */ (as);
+  const isActive = activeBlock === fullPath;
+  const dirty = block
+    ? (hasLocalDraft
+        ? stableStringify(localDraft) !== stableStringify(block.value)
+        : block.draftValue != null)
+    : false;
+  const roomy = BLOCK_TAGS.has(Wrapper);
+  const userStyle = /** @type {React.CSSProperties} */ (rest.style ?? {});
+
+  return (
+    <Wrapper
+      {...rest}
+      style={{
+        ...userStyle,
+        // Insets last: a consumer `margin` shorthand would otherwise reset the
+        // roomy card's negative side margins back to zero.
+        ...regionBoxStyle({
+          display: userStyle.display ?? (roomy ? "block" : "inline-block"),
+          roomy,
+          highlight: isActive,
+          hovered: isHovered,
+          accent: ACCENT,
+        }),
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {body}
+      {(isHovered || isActive) && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveBlock(fullPath);
+            // The chip targets the list itself, so drop any item the drawer
+            // was told to scroll to.
+            setActiveListItem(null);
+          }}
+          title="Panelde aç"
+          aria-label={`${fullPath} listesini panelde aç`}
+          style={regionChipStyle({ roomy, highlight: isActive, accent: ACCENT, font: FONT_MONO })}
+        >
+          <span aria-hidden="true" style={{ fontWeight: 700, opacity: 0.85 }}>
+            {TYPE_META.List.glyph}
+          </span>
+          {fullPath}
+          {dirty && <span aria-label="Kaydedilmemiş değişiklik" style={chipDirtyDotStyle} />}
+        </button>
+      )}
+    </Wrapper>
   );
 }
 

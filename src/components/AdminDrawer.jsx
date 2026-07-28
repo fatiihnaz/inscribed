@@ -5,12 +5,19 @@
  * (gated by `CmsProvider`); always in the DOM but translated off-screen when
  * closed, with a chevron handle at x=0 to reopen.
  *
- * Layout (top to bottom):
- *   - Header:   breadcrumb + page title + mode chip.
- *   - TabBar:   Sayfa / Genel + one per Collection binding, each with a count
- *               badge and (when its lane is dirty) a sage dot.
- *   - Toolbar:  block-list search (blockPath/blockType), Page/Global tabs only.
- *   - Body:     per-tab block list, or `<AdminCollectionRegionPanel>`.
+ * Layout: a left `ModeRail` (Sayfa / Koleksiyonlar) beside a pane column.
+ * Collections are a top-level area, not per-page tabs: the rail opens every
+ * collection the user can reach, while the page only points at the ones it
+ * binds via `CollectionRefStrip`.
+ *
+ * Pane column (top to bottom):
+ *   - Header:   mode badge + navigable path + status pill, on one row. The
+ *               path's last segment is the title; ancestors route the host app
+ *               (and in collections mode, step back to the list).
+ *   - TabBar:   Sayfa / Genel, with a count badge and a dirty dot. Swapped for
+ *               `PreviewHeader` while the changes overlay is open.
+ *   - Toolbar:  block-list search (blockPath/blockType), page mode only.
+ *   - Body:     per-tab block list, the collections list, or a region panel.
  *   - StatusBar: bottom lane: idle / saving / dirty (count + Geri al / Kaydet).
  *   - Footer:   user info + sign-out.
  *
@@ -20,10 +27,10 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ChevronsLeft, ChevronDown, ChevronLeft, ChevronRight,
-  Check, Undo2, LogOut, Search, Eye, Pencil,
+  Check, Undo2, LogOut, Search, Eye, Pencil, FileText, Layers, Folder,
 } from "./icons.jsx";
 
 import { useCmsContext } from "../lib/context.js";
@@ -36,6 +43,7 @@ import { stableStringify } from "../lib/stable-stringify.js";
 
 import { BlockCard, resetBlock } from "./AdminBlockCard.jsx";
 import { AdminCollectionRegionPanel } from "./AdminCollectionRegionPanel.jsx";
+import { AdminCollectionsPane } from "./AdminCollectionsPane.jsx";
 import { AdminChangesPanel } from "./AdminChangesPanel.jsx";
 
 import {
@@ -47,9 +55,11 @@ import {
   TEXT_MID,
   TEXT_MUTED,
   TEXT_FAINT,
+  BG,
   HAIRLINE,
   SURFACE_1,
   SURFACE_2,
+  R_MD,
   FONT_SANS,
   FONT_MONO,
   STATUS_OK,
@@ -58,15 +68,17 @@ import {
   panelStyle,
   paneContainerStyle,
   paneStyle,
+  railStyle,
+  railButtonStyle,
+  railDirtyDotStyle,
+  railIndicatorStyle,
   headerStyle,
-  breadcrumbStyle,
-  breadcrumbHomeStyle,
-  breadcrumbItemWrapStyle,
-  breadcrumbSepStyle,
-  breadcrumbCurrentStyle,
-  breadcrumbInactiveStyle,
-  titleBarStyle,
-  pageTitleStyle,
+  headerBadgeStyle,
+  headerBadgeCollectionStyle,
+  headerPathStyle,
+  headerCrumbStyle,
+  headerCrumbCurrentStyle,
+  headerSepStyle,
   tabBarStyle,
   tabBarScrollStyle,
   tabBarChevronStyle,
@@ -83,6 +95,7 @@ import {
   groupCardStyle,
   groupHeaderStyle,
   groupNameStyle,
+  groupIconStyle,
   groupCountStyle,
   groupDirtyDotStyle,
   groupBodyStyle,
@@ -154,6 +167,9 @@ export function AdminDrawer() {
     save: onSaveAll, discard: onDiscardAll,
   } = useCmsSave();
   const pathname = usePathname() ?? "/";
+  // Header path ancestors navigate the host app; the drawer already follows the
+  // route via `usePathname`, so it re-renders into the new page on its own.
+  const router = useRouter();
 
   // Warm the Tiptap chunk in the background once the admin surface mounts, so
   // the first RichText edit (drawer card or in-place) doesn't stall ~1-2s on the
@@ -216,16 +232,17 @@ export function AdminDrawer() {
     return { pageBlockList: pages, globalBlockList: globals, dirtyByPath: dirty };
   }, [blocks, pathname, collectionBindings, drafts, editorVisibility]);
 
-  // Tab list: always "page"/"global", plus one per `<CollectionRegion>` binding
-  // on this page the user can access (per /me).
-  const regionTabs = useMemo(() => {
+  // Collections this page binds as a region and the user can reach (per /me).
+  // These are reference rows in the page list, not tabs: a collection is a
+  // top-level area reached from the rail, and the page only points at it.
+  const pageCollectionRefs = useMemo(() => {
     /** @type {Set<string>} */
     const pageRegions = new Set();
     for (const [, binding] of collectionBindings) {
       if (binding.slug) continue;
       pageRegions.add(binding.collection);
     }
-    /** @type {{ id: string, label: string, count: number, key: string }[]} */
+    /** @type {{ label: string, count: number, key: string }[]} */
     const out = [];
     for (const my of myCollections) {
       if (!pageRegions.has(my.collectionKey)) continue;
@@ -236,12 +253,7 @@ export function AdminDrawer() {
       for (const [k, entry] of collectionListCache) {
         if (k.startsWith(listPrefix)) total = Math.max(total, entry.total);
       }
-      out.push({
-        id: `collection:${my.collectionKey}`,
-        label: my.collectionKey,
-        count: total,
-        key: my.collectionKey,
-      });
+      out.push({ label: my.collectionKey, count: total, key: my.collectionKey });
     }
     return out;
   }, [collectionBindings, myCollections, collectionListCache]);
@@ -332,12 +344,17 @@ export function AdminDrawer() {
       ...(globalBlockList.length > 0
         ? [{ id: "global", label: "Genel", count: globalBlockList.length, dirty: globalDirty }]
         : []),
-      ...regionTabs.map((t) => ({
-        ...t,
-        dirty: collectionDirtyByKey.has(t.key),
-      })),
     ],
-    [pageBlockList.length, globalBlockList.length, regionTabs, pageDirty, globalDirty, collectionDirtyByKey],
+    [pageBlockList.length, globalBlockList.length, pageDirty, globalDirty],
+  );
+
+  // Rail mode. Collections is a top-level area (everything the user can reach,
+  // not just what this page binds), so it carries its own selection instead of
+  // living in the page's tab bar. `scope` decides whether the opened panel
+  // shows the whole collection or only this page's bound sections.
+  const [mode, setModeState] = useState(/** @type {"page"|"collections"} */ ("page"));
+  const [selectedCollection, setSelectedCollection] = useState(
+    /** @type {{ key: string, scope: "page"|"global" } | null} */ (null),
   );
 
   const [activeTab, setActiveTabState] = useState(/** @type {string} */ ("page"));
@@ -353,6 +370,21 @@ export function AdminDrawer() {
     setActiveTabState(tab);
   };
 
+  /** @param {"page"|"collections"} next */
+  const setMode = (next) => {
+    if (isPreviewOpen) setPreviewOpen(false);
+    setModeState(next);
+  };
+
+  // Stable identity so the memoised collections list isn't re-rendered by every
+  // drawer re-render: the drawer subscribes to the whole drafts map, so it
+  // re-renders on each keystroke in any field.
+  const selectCollectionFromList = useCallback(
+    /** @param {string} key */
+    (key) => setSelectedCollection({ key, scope: "global" }),
+    [],
+  );
+
   // If the active tab disappears (e.g. navigating off a page with a Region
   // binding), fall back to "page". Raw setter so a routing event doesn't also
   // close an open preview.
@@ -367,9 +399,9 @@ export function AdminDrawer() {
   // fire stale on a later "Load more".
   useEffect(() => {
     if (!activeCollectionItem) return;
-    if (activeTab === `collection:${activeCollectionItem.key}`) return;
+    if (mode === "collections" && selectedCollection?.key === activeCollectionItem.key) return;
     setActiveCollectionItem(null);
-  }, [activeTab, activeCollectionItem, setActiveCollectionItem]);
+  }, [mode, selectedCollection, activeCollectionItem, setActiveCollectionItem]);
 
   // Per-group collapse state. Storing the *closed* set means new groups from
   // discovery default to expanded.
@@ -393,6 +425,9 @@ export function AdminDrawer() {
   useEffect(() => {
     if (!activeBlock) return;
     if (!isDrawerOpen) setDrawerOpen(true);
+    // A page region was clicked, so leave whatever rail mode was open: the
+    // matching card lives in the page list.
+    setModeState("page");
     const block = blocks.get(activeBlock);
     if (!block) return;
     const slug = block._slug ?? pathname;
@@ -455,7 +490,7 @@ export function AdminDrawer() {
 
   const isConflict = error instanceof CmsApiError && error.isConflict;
   const isForbidden = error instanceof CmsApiError && error.isForbidden;
-  const breadcrumbs = pathnameToBreadcrumbs(pathname);
+  const pathSegments = pathnameToSegments(pathname);
 
   const matchSearch = (block) => {
     if (!search) return true;
@@ -485,9 +520,20 @@ export function AdminDrawer() {
         style={panelStyle}
         aria-hidden={!isDrawerOpen}
       >
+        <ModeRail
+          mode={mode}
+          onChange={setMode}
+          pageDirty={pageDirty || globalDirty}
+          collectionsDirty={collectionDirtyTotal > 0}
+        />
+
         <div style={paneContainerStyle}>
           <PanelHeader
-            breadcrumbs={breadcrumbs}
+            mode={mode}
+            segments={pathSegments}
+            collectionKey={selectedCollection?.key ?? null}
+            onNavigate={(href) => router.push(href)}
+            onBackToCollections={() => setSelectedCollection(null)}
             dirty={dirtyCount > 0}
             draftSyncStatus={draftSyncStatus}
             isSaving={isSaving}
@@ -495,7 +541,11 @@ export function AdminDrawer() {
             publishedFlash={publishedFlash}
           />
 
-          {isPreviewOpen ? (
+          {mode === "collections" ? (
+            // No bar here: the header path's `collections /` segment is the way
+            // back, so a second one would just repeat it.
+            null
+          ) : isPreviewOpen ? (
             <PreviewHeader
               count={previewableCount + collectionDirtyTotal}
               onBack={() => setPreviewOpen(false)}
@@ -508,7 +558,14 @@ export function AdminDrawer() {
             />
           )}
 
-          {isPreviewOpen ? (
+          {mode === "collections" ? (
+            <CollectionsMode
+              selected={selectedCollection}
+              onSelect={selectCollectionFromList}
+              collections={myCollections}
+              dirtyKeys={collectionDirtyByKey}
+            />
+          ) : isPreviewOpen ? (
             <AdminChangesPanel
               blockList={[...pageBlockList, ...globalBlockList]}
               drafts={drafts}
@@ -523,12 +580,26 @@ export function AdminDrawer() {
               }}
               onGoToCollection={(collectionKey) => {
                 setPreviewOpen(false);
-                setActiveTabState(`collection:${collectionKey}`);
+                setModeState("collections");
+                setSelectedCollection({ key: collectionKey, scope: "global" });
               }}
             />
-          ) : (activeTab === "page" || activeTab === "global") ? (
+          ) : (
             <>
               <Toolbar value={search} onChange={setSearch} />
+              {activeTab === "page" && pageCollectionRefs.length > 0 && !search ? (
+                <CollectionRefStrip
+                  refs={pageCollectionRefs}
+                  dirtyKeys={collectionDirtyByKey}
+                  onOpen={(key) => {
+                    // Page-scoped: the reference means "the list rendered on
+                    // this page", so keep the page's filters rather than
+                    // dropping the user into the whole collection.
+                    setModeState("collections");
+                    setSelectedCollection({ key, scope: "page" });
+                  }}
+                />
+              ) : null}
               <GroupedBlockList
                 blockList={activeTab === "page" ? filteredPage : filteredGlobal}
                 drafts={drafts}
@@ -550,14 +621,7 @@ export function AdminDrawer() {
                 }
               />
             </>
-          ) : activeTab.startsWith("collection:") ? (
-            // Keyed so switching collection tabs resets the panel's detail-pane
-            // state instead of carrying an open pane across collections.
-            <AdminCollectionRegionPanel
-              key={activeTab}
-              collectionKey={activeTab.slice("collection:".length)}
-            />
-          ) : null}
+          )}
 
           {error ? (
             <div style={isConflict ? conflictStyle : errorStyle}>
@@ -574,9 +638,10 @@ export function AdminDrawer() {
             collectionDirtyCount={collectionDirtyTotal}
             firstDirtyCollectionTarget={firstDirtyCollectionTarget}
             onGoToCollection={(target) => {
-              setActiveTabState(`collection:${target.key}`);
-              // Signal the matching RegionItemCard to auto-expand once its tab
-              // body mounts (it reads `activeCollectionItem` on first paint).
+              setModeState("collections");
+              setSelectedCollection({ key: target.key, scope: "global" });
+              // Signal the panel to open the item's detail pane once it mounts
+              // (it reads `activeCollectionItem` on first paint).
               setActiveCollectionItem({ key: target.key, slug: target.slug });
             }}
             isSaving={isSaving}
@@ -630,12 +695,245 @@ export function AdminDrawer() {
 }
 
 // ---------------------------------------------------------------------------
+// Mode rail
+// ---------------------------------------------------------------------------
+
+/**
+ * Top-level area switch on the panel's left edge. Icon-only (labels live in the
+ * tooltip) so the rail costs the pane as little width as possible; the dot marks
+ * unsaved work waiting in an area the user isn't currently looking at.
+ *
+ * @param {{
+ *   mode: "page"|"collections",
+ *   onChange: (mode: "page"|"collections") => void,
+ *   pageDirty: boolean,
+ *   collectionsDirty: boolean,
+ * }} props
+ */
+function ModeRail({ mode, onChange, pageDirty, collectionsDirty }) {
+  return (
+    <nav style={railStyle} aria-label="Bölümler">
+      <RailButton
+        icon={FileText}
+        label="Sayfa"
+        active={mode === "page"}
+        dirty={pageDirty}
+        accent={ACCENT}
+        onClick={() => onChange("page")}
+      />
+      <RailButton
+        icon={Layers}
+        label="Koleksiyonlar"
+        active={mode === "collections"}
+        dirty={collectionsDirty}
+        accent={COLLECTION_ACCENT}
+        isCollection
+        onClick={() => onChange("collections")}
+      />
+    </nav>
+  );
+}
+
+/**
+ * @param {{
+ *   icon: (props: { size?: number }) => React.ReactNode,
+ *   label: string,
+ *   active: boolean,
+ *   dirty: boolean,
+ *   accent: string,
+ *   isCollection?: boolean,
+ *   onClick: () => void,
+ * }} props
+ */
+function RailButton({ icon: Icon, label, active, dirty, accent, isCollection, onClick }) {
+  const className = [
+    "inscribed-rail-btn",
+    isCollection ? "inscribed-rail-btn-collection" : null,
+    active ? "is-active" : null,
+  ].filter(Boolean).join(" ");
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={className}
+      style={railButtonStyle}
+      aria-label={label}
+      aria-current={active ? "true" : undefined}
+      title={label}
+    >
+      {active ? (
+        // Shared `layoutId`: mounting this in the newly active button makes
+        // framer slide the bar from the old one instead of swapping it.
+        <motion.span
+          layoutId="inscribed-rail-indicator"
+          aria-hidden="true"
+          style={{ ...railIndicatorStyle, background: accent }}
+          transition={RAIL_TRANSITION}
+        />
+      ) : null}
+      <motion.span
+        initial={false}
+        animate={{ scale: active ? 1 : 0.9 }}
+        transition={RAIL_TRANSITION}
+        style={{ display: "inline-flex" }}
+      >
+        <Icon size={17} />
+      </motion.span>
+      {dirty ? (
+        <span
+          style={{ ...railDirtyDotStyle, background: accent }}
+          aria-label="kaydedilmemiş değişiklik var"
+        />
+      ) : null}
+    </button>
+  );
+}
+
+// Rail motion: a short spring so the indicator slide and the icon settle feel
+// like one gesture rather than two eased tweens.
+const RAIL_TRANSITION = /** @type {const} */ ({
+  type: "spring",
+  stiffness: 420,
+  damping: 32,
+  mass: 0.7,
+});
+
+// ---------------------------------------------------------------------------
+// Collections mode
+// ---------------------------------------------------------------------------
+
+// Mirrors the region panel's own list/detail choreography one level up, so
+// drilling from the collections list into a collection reads as the same
+// gesture as drilling from a collection into an item.
+const COLLECTIONS_TRANSITION = { duration: 0.3, ease: [0.32, 0.72, 0.18, 1] };
+const COLLECTIONS_PARALLAX = "28%";
+
+// The pane's cast shadow reaches ~52px past its own right edge, so at x=-100%
+// the slide looks finished while the shadow still sits over the list; unmount
+// then snaps it away. Fading only the tail of the exit clears the shadow with
+// the pane instead, and keeps it fully opaque for the part you actually watch.
+const COLLECTIONS_PANE_TRANSITION = {
+  ...COLLECTIONS_TRANSITION,
+  opacity: { duration: 0.12, delay: 0.18, ease: "linear" },
+};
+
+/**
+ * Body slot for Collections mode: the list layer recedes while the chosen
+ * collection slides over it. Both layers stay mounted through the transition,
+ * which is why this owns a positioned frame instead of swapping children.
+ *
+ * Once a collection is open, a strip of the user's other collections rides
+ * above it for lateral switching, so hopping between them doesn't mean going
+ * back out to the list first.
+ *
+ * @param {{
+ *   selected: { key: string, scope: "page"|"global" } | null,
+ *   onSelect: (collectionKey: string) => void,
+ *   collections: import("../lib/schemas.js").MyCollectionResponse[],
+ *   dirtyKeys: Set<string>,
+ * }} props
+ */
+function CollectionsMode({ selected, onSelect, collections, dirtyKeys }) {
+  const isOpen = selected != null;
+
+  return (
+    <section style={{ ...paneStyle, position: "relative", overflow: "hidden" }}>
+      <motion.div
+        initial={false}
+        animate={isOpen
+          ? { x: COLLECTIONS_PARALLAX, opacity: 0.4 }
+          : { x: "0%", opacity: 1 }}
+        transition={COLLECTIONS_TRANSITION}
+        style={{
+          ...collectionsLayerStyle,
+          // The opaque pane covers the layer at rest; this only guards clicks
+          // and tab focus during the transition frames.
+          pointerEvents: isOpen ? "none" : "auto",
+        }}
+        aria-hidden={isOpen}
+      >
+        <AdminCollectionsPane onSelect={onSelect} />
+      </motion.div>
+
+      {/* `initial={false}`: switching to the page and back remounts this whole
+          mode, and without it the already-open collection would replay its
+          entrance every time. Opening one from the list still animates, since
+          that child is added after mount rather than present on first render. */}
+      <AnimatePresence initial={false}>
+        {selected ? (
+          // The key is deliberately constant: the slide is the "went inside"
+          // gesture, so switching collections from the strip must not replay it.
+          // Only the panel below remounts, which still drops any open item pane.
+          <motion.div
+            key="collection-pane"
+            initial={{ x: "-100%" }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: "-100%", opacity: 0 }}
+            transition={COLLECTIONS_PANE_TRANSITION}
+            style={collectionsPaneStyle}
+          >
+            <TabBar
+              tabs={collections.map((c) => ({
+                id: c.collectionKey,
+                label: c.collectionKey,
+                dirty: dirtyKeys.has(c.collectionKey),
+              }))}
+              activeTab={selected.key}
+              // Re-selecting the active tab would re-open it in global scope
+              // and silently drop a page-scoped arrival's filter.
+              onChange={(key) => { if (key !== selected.key) onSelect(key); }}
+              accent={COLLECTION_ACCENT}
+            />
+            <AdminCollectionRegionPanel
+              key={selected.key}
+              collectionKey={selected.key}
+              scope={selected.scope}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </section>
+  );
+}
+
+const collectionsLayerStyle = /** @type {React.CSSProperties} */ ({
+  flex: 1,
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
+  // Framer drives these transitions by writing inline transform/opacity each
+  // frame, which does not promote the element on its own. Without a layer the
+  // whole list repaints per frame instead of being composited.
+  willChange: "transform, opacity",
+});
+
+const collectionsPaneStyle = /** @type {React.CSSProperties} */ ({
+  position: "absolute",
+  inset: 0,
+  display: "flex",
+  flexDirection: "column",
+  background: BG,
+  // Matches the item detail pane: right-edge hairline plus a soft cast shadow
+  // so the entering pane separates from the receding list.
+  boxShadow: `1px 0 0 ${HAIRLINE}, 16px 0 36px rgba(0, 0, 0, 0.35)`,
+  // The 36px blur above is the expensive part: promoted, it is rasterised once
+  // and only moved afterwards. This pane is mounted solely while open, so the
+  // layer's cost is scoped to the transition.
+  willChange: "transform",
+});
+
+// ---------------------------------------------------------------------------
 // Header
 // ---------------------------------------------------------------------------
 
 /**
  * @param {{
- *   breadcrumbs: { label: string }[],
+ *   mode: "page"|"collections",
+ *   segments: { label: string, href: string }[],
+ *   collectionKey: string | null,
+ *   onNavigate: (href: string) => void,
+ *   onBackToCollections: () => void,
  *   dirty: boolean,
  *   draftSyncStatus: "idle"|"saving"|"saved"|"failed",
  *   isSaving: boolean,
@@ -643,38 +941,149 @@ export function AdminDrawer() {
  *   publishedFlash: boolean,
  * }} props
  */
-function PanelHeader({ breadcrumbs, dirty, draftSyncStatus, isSaving, lastSavedAt, publishedFlash }) {
-  const pageLabel = breadcrumbs[breadcrumbs.length - 1]?.label ?? "";
+function PanelHeader({
+  mode, segments, collectionKey, onNavigate, onBackToCollections,
+  dirty, draftSyncStatus, isSaving, lastSavedAt, publishedFlash,
+}) {
+  const isCollections = mode === "collections";
 
   return (
     <header style={headerStyle}>
-      <nav style={breadcrumbStyle} aria-label="Breadcrumb">
-        <span style={breadcrumbHomeStyle}>~</span>
-        {breadcrumbs.slice(1).map((crumb, i, arr) => (
-          <span key={i} style={breadcrumbItemWrapStyle}>
-            <span style={breadcrumbSepStyle}>/</span>
-            <span
-              style={i === arr.length - 1 ? breadcrumbCurrentStyle : breadcrumbInactiveStyle}
-            >
-              {crumb.label}
-            </span>
-          </span>
-        ))}
+      <span
+        style={isCollections
+          ? { ...headerBadgeStyle, ...headerBadgeCollectionStyle }
+          : headerBadgeStyle}
+        aria-hidden="true"
+      >
+        {isCollections ? <Layers size={12} /> : <FileText size={12} />}
+      </span>
+
+      <nav style={headerPathStyle} aria-label="Konum">
+        {isCollections ? (
+          <CollectionsPath
+            collectionKey={collectionKey}
+            onBack={onBackToCollections}
+          />
+        ) : (
+          <PagePath segments={segments} onNavigate={onNavigate} />
+        )}
       </nav>
 
-      <div style={titleBarStyle}>
-        <h2 style={pageTitleStyle}>{pageLabel}</h2>
-        <HeaderStatusPill
-          dirty={dirty}
-          draftSyncStatus={draftSyncStatus}
-          isSaving={isSaving}
-          lastSavedAt={lastSavedAt}
-          publishedFlash={publishedFlash}
-        />
-      </div>
+      <HeaderStatusPill
+        dirty={dirty}
+        draftSyncStatus={draftSyncStatus}
+        isSaving={isSaving}
+        lastSavedAt={lastSavedAt}
+        publishedFlash={publishedFlash}
+      />
     </header>
   );
 }
+
+// Deep paths collapse their middle rather than wrapping. Keeping the last two
+// segments preserves the "which section am I in" cue that a bare filename loses.
+const MAX_VISIBLE_SEGMENTS = 2;
+
+/**
+ * `~ / about / team`, where every part except the last navigates the host app.
+ *
+ * @param {{
+ *   segments: { label: string, href: string }[],
+ *   onNavigate: (href: string) => void,
+ * }} props
+ */
+function PagePath({ segments, onNavigate }) {
+  const isCollapsed = segments.length > MAX_VISIBLE_SEGMENTS;
+  const shown = isCollapsed ? segments.slice(-MAX_VISIBLE_SEGMENTS) : segments;
+  const hidden = isCollapsed ? segments.slice(0, -MAX_VISIBLE_SEGMENTS) : [];
+
+  return (
+    <>
+      <Crumb label="Anasayfa" title="Anasayfa" onClick={() => onNavigate("/")} />
+      {isCollapsed ? (
+        <>
+          <span style={headerSepStyle}>/</span>
+          {/* Jumps to the deepest hidden ancestor; the title spells out what
+              was folded away so the path stays readable. */}
+          <Crumb
+            label="…"
+            title={hidden.map((s) => s.label).join(" / ")}
+            onClick={() => onNavigate(hidden[hidden.length - 1].href)}
+          />
+        </>
+      ) : null}
+      {shown.map((segment, i) => {
+        const isLast = i === shown.length - 1;
+        return (
+          <span key={segment.href} style={crumbWrapStyle}>
+            <span style={headerSepStyle}>/</span>
+            {isLast ? (
+              <span style={headerCrumbCurrentStyle} title={segment.label}>
+                {segment.label}
+              </span>
+            ) : (
+              <Crumb
+                label={segment.label}
+                title={segment.href}
+                onClick={() => onNavigate(segment.href)}
+              />
+            )}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * `collections / news`. The parent doubles as the way back to the list, which
+ * is why the mode needs no separate back bar.
+ *
+ * @param {{ collectionKey: string | null, onBack: () => void }} props
+ */
+function CollectionsPath({ collectionKey, onBack }) {
+  if (!collectionKey) {
+    // Styled as a crumb, not as the emphasised current segment, so the area's
+    // own landing page reads the same as the site root does on `/`. Nowhere to
+    // navigate from here, so it drops the button's pointer cursor.
+    return (
+      <span style={{ ...headerCrumbStyle, cursor: "default" }}>Koleksiyonlar</span>
+    );
+  }
+  return (
+    <>
+      <Crumb label="Koleksiyonlar" title="Koleksiyon listesi" onClick={onBack} />
+      <span style={headerSepStyle}>/</span>
+      <span style={headerCrumbCurrentStyle} title={collectionKey}>
+        {collectionKey}
+      </span>
+    </>
+  );
+}
+
+/**
+ * @param {{ label: string, title: string, onClick: () => void }} props
+ */
+function Crumb({ label, title, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inscribed-crumb"
+      style={headerCrumbStyle}
+      title={title}
+    >
+      {label}
+    </button>
+  );
+}
+
+const crumbWrapStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 2,
+  minWidth: 0,
+});
 
 /**
  * Header pill surfacing the page-level autosave state: coloured dot + label +
@@ -847,7 +1256,8 @@ const headerPillLabelStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const headerPillTimeStyle = /** @type {React.CSSProperties} */ ({
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
+  fontVariantNumeric: "tabular-nums",
   fontSize: 11,
   color: TEXT_FAINT,
 });
@@ -858,12 +1268,13 @@ const headerPillTimeStyle = /** @type {React.CSSProperties} */ ({
 
 /**
  * @param {{
- *   tabs: { id: string, label: string, count: number, dirty?: boolean }[],
+ *   tabs: { id: string, label: string, count?: number, dirty?: boolean }[],
  *   activeTab: string,
  *   onChange: (tab: string) => void,
+ *   accent?: string,
  * }} props
  */
-function TabBar({ tabs, activeTab, onChange }) {
+function TabBar({ tabs, activeTab, onChange, accent = ACCENT }) {
   const scrollRef = useRef(/** @type {HTMLDivElement|null} */ (null));
   const [overflow, setOverflow] = useState({ left: false, right: false });
   const [indicator, setIndicator] = useState(/** @type {{ left: number, width: number, color: string } | null} */ (null));
@@ -892,14 +1303,10 @@ function TabBar({ tabs, activeTab, onChange }) {
     const btn = el.querySelector(`[data-tab-id="${CSS.escape(activeTab)}"]`);
     if (btn instanceof HTMLElement) {
       btn.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
-      setIndicator({
-        left: btn.offsetLeft,
-        width: btn.offsetWidth,
-        color: activeTab.startsWith("collection:") ? COLLECTION_ACCENT : ACCENT,
-      });
+      setIndicator({ left: btn.offsetLeft, width: btn.offsetWidth, color: accent });
     }
     requestAnimationFrame(measure);
-  }, [activeTab, tabs, measure]);
+  }, [activeTab, tabs, measure, accent]);
 
   const nudge = (dir) => {
     const el = scrollRef.current;
@@ -935,6 +1342,7 @@ function TabBar({ tabs, activeTab, onChange }) {
             count={tab.count}
             dirty={Boolean(tab.dirty)}
             active={activeTab === tab.id}
+            accent={accent}
             onClick={() => onChange(tab.id)}
           />
         ))}
@@ -972,18 +1380,13 @@ function TabBar({ tabs, activeTab, onChange }) {
 
 /**
  * @param {{
- *   id: string, label: string, count: number,
- *   active: boolean, dirty: boolean, onClick: () => void,
+ *   id: string, label: string, count?: number,
+ *   active: boolean, dirty: boolean, accent?: string, onClick: () => void,
  * }} props
  */
-function TabButton({ id, label, count, active, dirty, onClick }) {
-  const isCollection = id.startsWith("collection:");
+function TabButton({ id, label, count, active, dirty, accent = ACCENT, onClick }) {
   const activeStyle = active
-    ? {
-        ...tabButtonStyle,
-        ...tabButtonActiveStyle,
-        ...(isCollection ? { color: COLLECTION_ACCENT } : null),
-      }
+    ? { ...tabButtonStyle, ...tabButtonActiveStyle }
     : tabButtonStyle;
   return (
     <button
@@ -996,16 +1399,18 @@ function TabButton({ id, label, count, active, dirty, onClick }) {
       style={activeStyle}
     >
       <span style={tabLabelStyle}>{label}</span>
-      <span
-        style={active ? { ...tabCountBadgeStyle, ...tabCountBadgeActiveStyle } : tabCountBadgeStyle}
-      >
-        {count}
-      </span>
+      {count != null ? (
+        <span
+          style={active ? { ...tabCountBadgeStyle, ...tabCountBadgeActiveStyle } : tabCountBadgeStyle}
+        >
+          {count}
+        </span>
+      ) : null}
       {dirty ? (
         <span
-          style={isCollection
-            ? { ...tabDirtyDotStyle, background: COLLECTION_ACCENT, boxShadow: `0 0 6px ${COLLECTION_ACCENT}80` }
-            : tabDirtyDotStyle}
+          style={accent === ACCENT
+            ? tabDirtyDotStyle
+            : { ...tabDirtyDotStyle, background: accent, boxShadow: `0 0 6px ${accent}80` }}
           aria-label="kaydedilmemiş değişiklik var"
         />
       ) : null}
@@ -1150,6 +1555,9 @@ function GroupCard({
   return (
     <div style={groupCardStyle}>
       <button type="button" className="inscribed-group-header" style={groupHeaderStyle} onClick={onToggle} aria-expanded={isOpen}>
+        <span style={groupIconStyle} aria-hidden="true">
+          <Folder size={13} />
+        </span>
         <span style={groupNameStyle}>{groupName}</span>
         <span style={groupCountStyle}>
           {blocks.length}
@@ -1291,6 +1699,107 @@ function PreviewHeader({ count, onBack }) {
   );
 }
 
+/**
+ * Page-side pointer to the collections this page renders as regions. Now that
+ * collections are a rail area instead of page tabs, this keeps "the list on
+ * this page" one click away; opening a row stays page-scoped so the page's
+ * filters survive the jump.
+ *
+ * @param {{
+ *   refs: { key: string, label: string, count: number }[],
+ *   dirtyKeys: Set<string>,
+ *   onOpen: (key: string) => void,
+ * }} props
+ */
+function CollectionRefStrip({ refs, dirtyKeys, onOpen }) {
+  return (
+    <div style={refStripStyle}>
+      {refs.map((ref) => (
+        <button
+          key={ref.key}
+          type="button"
+          onClick={() => onOpen(ref.key)}
+          className="inscribed-collection-ref"
+          style={refRowStyle}
+        >
+          <span style={refIconStyle}>
+            <Layers size={12} />
+          </span>
+          <span style={refLabelStyle} title={ref.key}>{ref.label}</span>
+          {ref.count > 0 ? <span style={refCountStyle}>{ref.count}</span> : null}
+          {dirtyKeys.has(ref.key) ? (
+            <span style={refDirtyDotStyle} aria-label="kaydedilmemiş değişiklik var" />
+          ) : null}
+          <span style={refChevronStyle} aria-hidden="true">
+            <ChevronRight size={12} />
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const refStripStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+  padding: "0 16px 8px",
+});
+
+const refRowStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  width: "100%",
+  padding: "7px 10px",
+  borderRadius: R_MD,
+  border: 0,
+  cursor: "pointer",
+  textAlign: "left",
+  fontFamily: "inherit",
+});
+
+const refIconStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  color: COLLECTION_ACCENT,
+  flexShrink: 0,
+});
+
+const refLabelStyle = /** @type {React.CSSProperties} */ ({
+  flex: 1,
+  minWidth: 0,
+  font: `500 11px/1.2 ${FONT_MONO}`,
+  color: TEXT_MID,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
+const refCountStyle = /** @type {React.CSSProperties} */ ({
+  font: `500 10px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
+  padding: "2px 6px",
+  borderRadius: 99,
+  background: SURFACE_2,
+  color: TEXT_FAINT,
+  flexShrink: 0,
+});
+
+const refDirtyDotStyle = /** @type {React.CSSProperties} */ ({
+  width: 5,
+  height: 5,
+  borderRadius: "50%",
+  background: COLLECTION_ACCENT,
+  boxShadow: `0 0 5px color-mix(in srgb, ${COLLECTION_ACCENT} 50%, transparent)`,
+  flexShrink: 0,
+});
+
+const refChevronStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  color: TEXT_FAINT,
+  flexShrink: 0,
+});
+
 // Shared enter/exit choreography for StatusBar action buttons: a small upward
 // slide on enter, fade out on exit, with `layout` handling the horizontal
 // stagger as sibling buttons appear/disappear. Mirrors the header pill's easing.
@@ -1329,13 +1838,16 @@ const previewTitleStyle = /** @type {React.CSSProperties} */ ({
   alignItems: "center",
   gap: 8,
   color: TEXT_MUTED,
-  font: `500 10px/1 ${FONT_MONO}`,
-  letterSpacing: "0.10em",
+  // Same caps tuning as `groupNameStyle`: the sans doesn't want the tracking
+  // and weight the mono did.
+  font: `500 10.5px/1 ${FONT_SANS}`,
+  letterSpacing: "0.055em",
   textTransform: "uppercase",
 });
 
 const previewCountStyle = /** @type {React.CSSProperties} */ ({
-  font: `500 10px/1 ${FONT_MONO}`,
+  font: `500 10px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
   padding: "3px 6px",
   borderRadius: 99,
   background: SURFACE_2,
@@ -1504,7 +2016,6 @@ function StatusBar({
               layoutDependency={actionsLayoutKey}
             >
               {isPreviewOpen ? <Pencil size={13} /> : <Eye size={13} />}
-              <span>{isPreviewOpen ? "Düzenle" : "Önizle"}</span>
             </motion.button>
           ) : null}
           {isContentDirty ? (
@@ -1619,16 +2130,23 @@ function PanelFooter({ userInfo, onSignOut }) {
 // ---------------------------------------------------------------------------
 
 /**
- * `/about/team` → `[{label:"Anasayfa"}, {label:"about"}, {label:"team"}]`.
- * `/` → `[{label:"Anasayfa"}]`. Slug segments stay lowercase mono so the
- * mono breadcrumb reads like a filesystem path.
+ * `/about/team` → `[{label:"about", href:"/about"}, {label:"team",
+ * href:"/about/team"}]`; `/` → `[]`. The `~` root is rendered by the header
+ * itself, so it isn't a segment here. Each href is cumulative, which is what
+ * makes an ancestor clickable.
  *
  * @param {string} pathname
+ * @returns {{ label: string, href: string }[]}
  */
-function pathnameToBreadcrumbs(pathname) {
-  if (pathname === "/") return [{ label: "Anasayfa" }];
-  const segments = pathname.replace(/^\//, "").replace(/\/$/, "").split("/");
-  const crumbs = [{ label: "Anasayfa" }];
-  for (const seg of segments) crumbs.push({ label: seg });
-  return crumbs;
+function pathnameToSegments(pathname) {
+  const clean = pathname.replace(/^\//, "").replace(/\/$/, "");
+  if (!clean) return [];
+  /** @type {{ label: string, href: string }[]} */
+  const out = [];
+  let href = "";
+  for (const label of clean.split("/")) {
+    href += `/${label}`;
+    out.push({ label, href });
+  }
+  return out;
 }

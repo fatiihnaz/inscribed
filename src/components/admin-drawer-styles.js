@@ -2,7 +2,8 @@
  * @file Visual tokens, style objects, and the inline CSS string for the
  * admin drawer. Refined direction:
  *
- *   - 4px spacing grid, Inter Tight headings + JetBrains Mono
+ *   - 4px spacing grid; sans carries labels, prose, and (with tabular figures)
+ *     numbers, while mono is reserved for literal identifiers
  *   - explicit type ramp (textHi / text / textMid / textMuted / textFaint)
  *   - inset box-shadow as "borders" so the drawer can layer panes
  *     without hard 1px edges
@@ -23,6 +24,13 @@
 export const PANEL_WIDTH = 460;
 export const HANDLE_WIDTH = 22;
 export const HANDLE_OVERLAP = 4;
+// The mode rail lives inside PANEL_WIDTH rather than widening the panel, so the
+// drawer keeps the same screen footprint and the pane gets the remainder.
+export const RAIL_WIDTH = 48;
+// Rounding on the rail's inner edge, where it meets the pane. The pane's fill
+// shows through the cut corners, so the rail reads as a dark column the content
+// area wraps around.
+export const RAIL_EDGE_RADIUS = 14;
 
 export const PANEL_TRANSITION = {
   type: "tween",
@@ -59,7 +67,7 @@ export const FS_MICRO = 9;   // uppercase micro-labels / mode chips
 export const FS_2XS   = 10;  // section labels
 export const FS_XS    = 11;  // metadata, hints
 export const FS_SM    = 12;  // default UI text / buttons
-export const FS_MD    = 13;  // field input text
+export const FS_MD    = 12;  // field input text
 
 // Motion. One fast step for hovers/color swaps, one base step for layout.
 export const DUR_FAST = "140ms";
@@ -81,6 +89,9 @@ export const EASE = "cubic-bezier(0.32, 0.72, 0.18, 1)";
 // Surfaces. `--ins-bg` is the warm-dark base; raised/sunken shift from it so
 // a custom bg carries the elevation shades along.
 export const BG          = "var(--ins-bg, #1c1815)";
+// The rail sits a full step below the pane so the two areas read as different
+// planes, not one surface with a divider.
+export const BG_RAIL     = "color-mix(in srgb, var(--ins-bg, #1c1815), #000 22%)";
 export const BG_RAISED   = "color-mix(in srgb, var(--ins-bg, #1c1815), #fff 5%)";
 export const BG_SUNKEN   = "color-mix(in srgb, var(--ins-bg, #1c1815), #000 6%)";
 
@@ -123,7 +134,11 @@ export const STATUS_FAILED = STATUS_DANGER;
 
 // Typography
 export const FONT_SANS = 'var(--ins-font-sans, "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif)';
-export const FONT_MONO = 'var(--ins-font-mono, "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace)';
+// Deliberately unbranded: the platform's own code face, not a shipped
+// developer font. Mono is reserved for literal identifiers (block paths,
+// slugs, raw values); anything that is prose, a label, or a number uses the
+// sans with tabular figures instead.
+export const FONT_MONO = 'var(--ins-font-mono, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace)';
 
 // ---------------------------------------------------------------------------
 // Legacy aliases, consumed by surfaces that didn't migrate to the new tokens.
@@ -205,14 +220,81 @@ export const panelStyle = {
   letterSpacing: "-0.005em",
   fontFeatureSettings: '"ss01", "cv11"',
   boxShadow: "0 0 40px rgba(0,0,0,0.35)",
+  // Row: [mode rail][pane column]. The handle is absolutely positioned, so it
+  // stays out of this flow.
+  display: "flex",
 };
 
 export const paneContainerStyle = {
-  width: "100%",
+  flex: 1,
+  minWidth: 0,
   height: "100%",
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
+};
+
+// ---------------------------------------------------------------------------
+// Mode rail
+// ---------------------------------------------------------------------------
+
+export const railStyle = {
+  width: RAIL_WIDTH,
+  flexShrink: 0,
+  height: "100%",
+  // Required: nothing resets box-sizing here, so under the default content-box
+  // the top padding would push the rail 18px past the panel's bottom and take
+  // the rounded bottom-right corner off-screen with it.
+  boxSizing: "border-box",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 4,
+  // Drops the first icon to the header's own top padding, so the rail starts on
+  // the same line as the breadcrumb instead of above it.
+  paddingTop: 18,
+  background: BG_RAIL,
+  borderRight: `1px solid ${HAIRLINE}`,
+  borderTopRightRadius: RAIL_EDGE_RADIUS,
+  borderBottomRightRadius: RAIL_EDGE_RADIUS,
+};
+
+export const railButtonStyle = {
+  position: "relative",
+  width: 38,
+  height: 38,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: 0,
+  borderRadius: R_MD,
+  cursor: "pointer",
+  padding: 0,
+};
+
+// Dirty marker on a rail icon, offset to the badge corner so it reads as a
+// property of the mode rather than part of the glyph.
+export const railDirtyDotStyle = {
+  position: "absolute",
+  top: 7,
+  right: 7,
+  width: 5,
+  height: 5,
+  borderRadius: "50%",
+  boxShadow: `0 0 0 2px ${BG_RAIL}`,
+};
+
+// Active-mode bar on the rail's outer edge. Rendered by the active button and
+// animated between buttons with a framer `layoutId`, so switching modes slides
+// it instead of snapping.
+export const railIndicatorStyle = {
+  position: "absolute",
+  left: -5,
+  top: 7,
+  bottom: 7,
+  width: 2,
+  borderRadius: 1,
+  pointerEvents: "none",
 };
 
 export const paneStyle = {
@@ -226,68 +308,89 @@ export const paneStyle = {
 // Header
 // ---------------------------------------------------------------------------
 
+// One fixed-height row: mode badge, path, status pill. There is no separate
+// title because the path's last segment already is one; a second line would
+// print the same word twice.
 export const headerStyle = {
-  padding: "18px 20px 14px",
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  minHeight: 40,
+  boxSizing: "border-box",
+  padding: "0 16px",
   borderBottom: `1px solid ${HAIRLINE}`,
 };
 
-export const breadcrumbStyle = {
-  display: "flex",
-  alignItems: "center",
-  flexWrap: "wrap",
-  gap: 4,
-  font: `11px/1 ${FONT_MONO}`,
-  color: TEXT_FAINT,
-  marginBottom: 10,
-  letterSpacing: "0.01em",
-};
-
-export const breadcrumbHomeStyle = {
-  color: TEXT_MUTED,
-};
-
-export const breadcrumbSepStyle = {
-  color: TEXT_FAINT,
-};
-
-export const breadcrumbCurrentStyle = {
-  color: TEXT,
-  fontWeight: 500,
-};
-
-export const breadcrumbInactiveStyle = {
-  color: TEXT_MUTED,
-};
-
-export const breadcrumbItemWrapStyle = {
+// Echoes the rail's active glyph, so the header restates the current area in
+// the same language rather than with a heading.
+export const headerBadgeStyle = {
+  flexShrink: 0,
+  width: 22,
+  height: 22,
+  borderRadius: R_SM,
   display: "inline-flex",
   alignItems: "center",
-  gap: 4,
+  justifyContent: "center",
+  background: SURFACE_1,
+  boxShadow: `inset 0 0 0 1px ${HAIRLINE}`,
+  color: TEXT_MID,
 };
 
-export const titleBarStyle = {
-  display: "flex",
-  alignItems: "baseline",
-  gap: 12,
+export const headerBadgeCollectionStyle = {
+  background: COLLECTION_SOFT,
+  color: COLLECTION_ACCENT,
 };
 
-export const pageTitleStyle = {
-  margin: 0,
+// Never wraps: a deep path collapses its middle instead of growing the header,
+// so the row's height is independent of how far down the tree the user is.
+// Sans, not mono: this row is navigation, not an identifier. Mono here (plus a
+// `~` root) made the header read as a terminal prompt.
+export const headerPathStyle = {
   flex: 1,
-  fontSize: 20,
-  lineHeight: 1.15,
-  letterSpacing: "-0.022em",
+  minWidth: 0,
+  display: "flex",
+  alignItems: "center",
+  gap: 3,
+  font: `500 12px/1 ${FONT_SANS}`,
+  letterSpacing: "-0.005em",
+  overflow: "hidden",
+};
+
+export const headerCrumbStyle = {
+  flexShrink: 0,
+  padding: "3px 5px",
+  borderRadius: 4,
+  border: 0,
+  background: "transparent",
+  font: "inherit",
+  fontFamily: "inherit",
+  color: TEXT_MUTED,
+  cursor: "pointer",
+};
+
+// The segment the user is on: carries the weight a separate title used to, and
+// the only part allowed to shrink since it can be arbitrarily long.
+export const headerCrumbCurrentStyle = {
+  minWidth: 0,
+  padding: "3px 2px",
+  fontSize: 13,
   fontWeight: 600,
+  letterSpacing: "-0.01em",
   color: TEXT_HI,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
 };
 
+export const headerSepStyle = {
+  flexShrink: 0,
+  color: TEXT_FAINT,
+};
+
 // Mini "İZLENİYOR / DÜZENLENİYOR" mode chip. Replaces the loud status
 // pill from the original.
 export const modeChipStyle = {
-  font: `9.5px/1 ${FONT_MONO}`,
+  font: `9.5px/1 ${FONT_SANS}`,
   letterSpacing: "0.12em",
   color: TEXT_FAINT,
   padding: "4px 7px",
@@ -343,7 +446,12 @@ export const tabButtonStyle = {
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  padding: "10px 10px",
+  // Fixed height so a tab strip without count badges (the collection switcher)
+  // matches one with them (the page tabs): the badge is 4px taller than a bare
+  // label, which otherwise made the two strips different heights.
+  boxSizing: "border-box",
+  minHeight: 32,
+  padding: "7px 10px",
   marginBottom: -1,
   background: "transparent",
   border: 0,
@@ -365,7 +473,8 @@ export const tabLabelStyle = {
 };
 
 export const tabCountBadgeStyle = {
-  font: `500 10px/1 ${FONT_MONO}`,
+  font: `500 10px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
   padding: "3px 6px",
   borderRadius: R_PILL,
   background: SURFACE_2,
@@ -448,19 +557,32 @@ export const groupHeaderStyle = {
   textAlign: "left",
 };
 
+// The name is the block path's prefix (`hero.title` -> `hero`), so it stays an
+// identifier: same mono and weight as the child rows, separated from them by one
+// size step and one tone step only. The folder glyph already says "group", so
+// the type doesn't need bold or full-brightness to carry it.
 export const groupNameStyle = {
   flex: 1,
-  font: `600 10.5px/1 ${FONT_MONO}`,
-  letterSpacing: "0.10em",
-  textTransform: "uppercase",
-  color: TEXT_MID,
+  minWidth: 0,
+  font: `500 12px/1 ${FONT_MONO}`,
+  color: TEXT,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+export const groupIconStyle = {
+  flexShrink: 0,
+  display: "inline-flex",
+  color: TEXT_MUTED,
 };
 
 export const groupCountStyle = {
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  font: `500 10px/1 ${FONT_MONO}`,
+  font: `500 10px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
   padding: "2px 6px",
   borderRadius: R_PILL,
   background: SURFACE_2,
@@ -531,7 +653,8 @@ export const sectionLabelStyle = {
 };
 
 export const sectionLabelCountStyle = {
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
+  fontVariantNumeric: "tabular-nums",
   letterSpacing: 0,
   textTransform: "none",
   fontSize: 10,
@@ -704,8 +827,10 @@ export const statusBarStyle = {
   // Fixed height so the bar keeps a steady height whether or not the action
   // buttons are mounted. The button row (~27px) is taller than the idle status
   // line (~17px), so a content-driven height jumped ~10px on every dirty
-  // toggle; alignItems centres both states into the same box instead.
-  minHeight: 46,
+  // toggle; alignItems centres both states into the same box instead. Sized to
+  // the button plus a hair of breathing room: the controls keep their own
+  // dimensions, the bar just stops padding around them.
+  minHeight: 36,
   padding: "0 16px",
   borderTop: `1px solid ${HAIRLINE}`,
   background: BG_RAISED,
@@ -747,7 +872,8 @@ export const statusMsgEmphasisStyle = {
 };
 
 export const statusTsStyle = {
-  font: `11px/1 ${FONT_MONO}`,
+  font: `11px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
   color: TEXT_FAINT,
   marginLeft: 6,
 };
@@ -817,7 +943,7 @@ export const footerStyle = {
   display: "flex",
   alignItems: "center",
   gap: 10,
-  padding: "10px 16px 12px",
+  padding: "9px 16px 10px",
   borderTop: `1px solid ${HAIRLINE}`,
   background: BG_SUNKEN,
 };
@@ -863,7 +989,7 @@ export const userNameStyle = {
 };
 
 export const userEmailStyle = {
-  font: `10px/1.2 ${FONT_MONO}`,
+  font: `10.5px/1.2 ${FONT_SANS}`,
   color: TEXT_FAINT,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -918,6 +1044,9 @@ export const handleButtonStyle = {
   transform: `translateX(calc(100% - ${HANDLE_OVERLAP}px))`,
   width: HANDLE_WIDTH,
   height: "100%",
+  // Same content-box guard as the rail: the top/bottom hairlines would
+  // otherwise make the handle 2px taller than the panel.
+  boxSizing: "border-box",
   background: BG_RAISED,
   border: 0,
   borderTop: `1px solid ${HAIRLINE}`,
@@ -1222,4 +1351,36 @@ export const panelCss = `
   .inscribed-row-chevron { color: ${TEXT_MUTED}; }
   .inscribed-disclosure-header:hover .inscribed-row-label { color: ${TEXT}; }
   .inscribed-disclosure-header:hover .inscribed-row-chevron { color: ${TEXT}; }
+
+  /* Mode rail. Active is carried by a bar on the rail's outer edge (not a fill
+     alone) so the current mode stays legible at icon size. */
+  /* No transform here: the indicator is a framer layout child measured against
+     this box, so scaling the button mid-press would skew where it lands. */
+  .inscribed-rail-btn {
+    background: transparent;
+    color: ${TEXT_MUTED};
+    transition: color 140ms ease, background 140ms ease;
+  }
+  .inscribed-rail-btn:hover { color: ${TEXT}; background: ${SURFACE_1}; }
+  .inscribed-rail-btn.is-active { color: ${TEXT_HI}; background: ${SURFACE_2}; }
+  .inscribed-rail-btn-collection.is-active { color: ${COLLECTION_ACCENT}; }
+
+  /* Header path: ancestors are real navigation, so they get a hover chip. The
+     current segment is inert and deliberately has no hover. */
+  .inscribed-crumb {
+    transition: color 140ms ease, background 140ms ease;
+  }
+  .inscribed-crumb:hover { color: ${TEXT_HI}; background: ${SURFACE_1}; }
+
+  /* Page-side collection reference rows: neutral at rest, collection-tinted on
+     hover, matching the region panel's "+ Yeni" row. */
+  .inscribed-collection-ref {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px ${HAIRLINE};
+    transition: background 140ms ease, box-shadow 140ms ease;
+  }
+  .inscribed-collection-ref:hover {
+    background: ${COLLECTION_SOFT};
+    box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
+  }
 `;

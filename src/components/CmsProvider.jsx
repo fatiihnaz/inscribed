@@ -616,16 +616,19 @@ export function CmsProvider({
     };
   }, [contentDraftsStore, stableGetAccessToken, flashDraftStatus]);
 
-  // Silent server-draft cleanup for discard. PUTs each block's published value
-  // (the only way the API drops a Redis draft: it auto-cleans when
-  // draft===published) without the debounce or `draftSyncStatus`, so the pill
-  // doesn't flash a save for a request that removes a draft. Per-slug chaining
-  // mirrors autosave so a mid-flight discard can't overtake a pending PUT.
+  // Silent server-draft cleanup for discard. DELETEs each affected slug's
+  // draft set without the debounce or `draftSyncStatus`, so the pill doesn't
+  // flash a save for a request that removes a draft. DELETE over an echo-PUT
+  // of the published value: an echo can lose a race with a concurrent
+  // publish (the "old" value it sends is no longer the current published
+  // one, so it recreates a draft instead of clearing it) — DELETE can't.
+  // Per-slug chaining mirrors autosave so a mid-flight discard can't overtake
+  // a pending PUT.
   const discardServerDrafts = useCallback(
     /** @param {string[]} blockPaths */
     (blockPaths) => {
       if (blockPaths.length === 0) return;
-      /** @type {Map<string, import("../lib/schemas.js").UpdateBlockItem[]>} */
+      /** @type {Map<string, string[]>} */
       const bySlug = new Map();
       const currentBlocks = blocksRef.current;
       const currentPathname = draftPathnameRef.current ?? "/";
@@ -634,11 +637,7 @@ export function CmsProvider({
         if (!block || block.draftValue == null) continue;
         const slug = block._slug ?? currentPathname;
         const list = bySlug.get(slug) ?? [];
-        list.push({
-          blockPath: block.blockPath,
-          value: block.value,
-          version: block.version,
-        });
+        list.push(blockPath);
         bySlug.set(slug, list);
       }
       if (bySlug.size === 0) return;
@@ -648,36 +647,31 @@ export function CmsProvider({
       setBlocksState((prev) => {
         let mutated = false;
         const next = new Map(prev);
-        for (const [, blocksForSlug] of bySlug) {
-          for (const u of blocksForSlug) {
-            const cur = next.get(u.blockPath);
+        for (const pathsForSlug of bySlug.values()) {
+          for (const blockPath of pathsForSlug) {
+            const cur = next.get(blockPath);
             if (!cur || cur.draftValue == null) continue;
-            next.set(u.blockPath, { ...cur, draftValue: null });
+            next.set(blockPath, { ...cur, draftValue: null });
             mutated = true;
           }
         }
         return mutated ? next : prev;
       });
 
-      // Fire-and-forget cleanup PUTs, per-slug chained so a concurrent autosave
-      // can't sneak a stale draft in after cleanup.
+      // Fire-and-forget cleanup DELETEs, per-slug chained so a concurrent
+      // autosave can't sneak a stale draft in after cleanup.
       const currentConfig = draftConfigRef.current;
       (async () => {
         const accessToken = (await stableGetAccessToken()) || undefined;
-        for (const [slug, blocksForSlug] of bySlug) {
+        for (const slug of bySlug.keys()) {
           const previous =
             inFlightDraftPerSlug.current.get(slug) ?? Promise.resolve();
           const next = previous
             .catch(() => {})
-            .then(() =>
-              currentConfig.transport.updateDraft(
-                { slug, blocks: blocksForSlug },
-                { accessToken },
-              ),
-            )
+            .then(() => currentConfig.transport.deleteDraft(slug, { accessToken }))
             .catch((err) => {
               // eslint-disable-next-line no-console
-              console.warn("[inscribed] discard cleanup PUT failed:", err);
+              console.warn("[inscribed] discard cleanup DELETE failed:", err);
             });
           inFlightDraftPerSlug.current.set(slug, next);
         }

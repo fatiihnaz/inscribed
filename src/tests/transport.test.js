@@ -187,6 +187,51 @@ describe("updateContent", () => {
   });
 });
 
+describe("draft discard", () => {
+  it("DELETEs /cms/draft?slug= for deleteDraft", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves(undefined, 204);
+
+    await t.deleteDraft("home", { accessToken: "tok" });
+
+    const [url, init] = lastCall();
+    expect(url).toContain(`${BASE}/cms/draft`);
+    expect(new URL(url).searchParams.get("slug")).toBe("home");
+    expect(init.method).toBe("DELETE");
+    expect(init.headers.Authorization).toBe("Bearer tok");
+  });
+
+  it("DELETEs /cms/collections/{key}/{slug}/draft for deleteCollectionItemDraft", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves(undefined, 204);
+
+    await t.deleteCollectionItemDraft("News", "my-slug", { accessToken: "tok" });
+
+    const [url, init] = lastCall();
+    expect(url).toBe(`${BASE}/cms/collections/News/my-slug/draft`);
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("DELETEs /cms/collections/{key}/drafts for deleteCollectionNewDraft", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves(undefined, 204);
+
+    await t.deleteCollectionNewDraft("News", { accessToken: "tok" });
+
+    const [url, init] = lastCall();
+    expect(url).toBe(`${BASE}/cms/collections/News/drafts`);
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("throws CmsApiError on a non-2xx delete", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves({ title: "Not Found", detail: "no draft", status: 404 }, 404);
+    const err = await t.deleteDraft("home").catch((e) => e);
+    expect(err).toBeInstanceOf(CmsApiError);
+    expect(err.isNotFound).toBe(true);
+  });
+});
+
 describe("baseUrl normalisation", () => {
   it("strips trailing slashes before building paths", async () => {
     const t = createRestTransport({ baseUrl: "https://api.test///" });

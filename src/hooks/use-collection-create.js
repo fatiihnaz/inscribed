@@ -139,14 +139,10 @@ export function useCollectionCreate({
     seededRef.current = false;
   };
 
-  // The backend has no draft DELETE; writing all-null data empties the slot.
   const deleteDraft = async () => {
     try {
       const token = await getAccessToken();
-      const nullData = Object.fromEntries(
-        schema.fields.filter((f) => !f.readOnly).map((f) => [f.name, null]),
-      );
-      await config.transport.saveCollectionNewDraft(collectionKey, { data: nullData }, { accessToken: token });
+      await config.transport.deleteCollectionNewDraft(collectionKey, { accessToken: token });
       invalidateCollectionList(collectionKey);
       invalidateCollectionItem(collectionKey, null);
     } catch (err) {

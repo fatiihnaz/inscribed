@@ -146,6 +146,17 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
       if (!res.ok) throw await toApiError(res);
     },
 
+    // Idempotent (204, no-op on a missing draft): unlike an echo-PUT of the
+    // published value, this can't race a concurrent publish into creating a
+    // stale draft, so discard flows should always prefer this over echoing.
+    async deleteDraft(slug, opts = {}) {
+      const res = await fetch(url("/draft", { slug }), {
+        method: "DELETE",
+        headers: headers(opts.accessToken),
+      });
+      if (!res.ok) throw await toApiError(res);
+    },
+
     async upsertCollectionItem(key, slug, payload, opts = {}) {
       const res = await fetch(
         `${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}`,
@@ -173,6 +184,14 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
       if (!res.ok) throw await toApiError(res);
     },
 
+    async deleteCollectionItemDraft(key, slug, opts = {}) {
+      const res = await fetch(
+        `${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}/draft`,
+        { method: "DELETE", headers: headers(opts.accessToken) },
+      );
+      if (!res.ok) throw await toApiError(res);
+    },
+
     async saveCollectionNewDraft(key, payload, opts = {}) {
       const res = await fetch(`${base}/cms/collections/${encodeURIComponent(key)}/drafts`, {
         method: "POST",
@@ -182,6 +201,13 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
       if (!res.ok) throw await toApiError(res);
     },
 
+    async deleteCollectionNewDraft(key, opts = {}) {
+      const res = await fetch(`${base}/cms/collections/${encodeURIComponent(key)}/drafts`, {
+        method: "DELETE",
+        headers: headers(opts.accessToken),
+      });
+      if (!res.ok) throw await toApiError(res);
+    },
 
     async syncManifests(manifests, opts = {}) {
       const res = await fetch(url("/sync"), {

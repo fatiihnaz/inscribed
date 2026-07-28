@@ -47,10 +47,13 @@
  * @property {(opts?: CmsRequestOptions) => Promise<MyCollectionResponse[]>} getMyCollections
  * @property {(request: UpdatePageRequest, opts?: CmsRequestOptions) => Promise<UpdatePageResponse>} updateContent
  * @property {(request: UpdatePageRequest, opts?: CmsRequestOptions) => Promise<void>} updateDraft
+ * @property {(slug: string, opts?: CmsRequestOptions) => Promise<void>} deleteDraft
  * @property {(key: string, slug: string, payload: { data: *, version: number | null }, opts?: CmsRequestOptions) => Promise<CollectionItemResponse>} upsertCollectionItem
  * @property {(key: string, payload: { data: * }, opts?: CmsRequestOptions) => Promise<CollectionItemResponse>} createCollectionItem
  * @property {(key: string, slug: string, payload: { data: * }, opts?: CmsRequestOptions) => Promise<void>} saveCollectionItemDraft
+ * @property {(key: string, slug: string, opts?: CmsRequestOptions) => Promise<void>} deleteCollectionItemDraft
  * @property {(key: string, payload: { slug?: string, data: * }, opts?: CmsRequestOptions) => Promise<void>} saveCollectionNewDraft
+ * @property {(key: string, opts?: CmsRequestOptions) => Promise<void>} deleteCollectionNewDraft
  * @property {(file: File, opts?: { onProgress?: (progress: number) => void, accessToken?: string | null }) => Promise<{ data: { url: string } }>} uploadImage
  * @property {(manifests: SyncManifestRequest[], opts?: CmsRequestOptions) => Promise<SyncResultResponse>} syncManifests
  */

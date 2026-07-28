@@ -292,23 +292,23 @@ export function useCollectionEditor(collection, slug) {
   // icon disappear) the moment the user clicks Geri al. The seeding
   // effect then reseeds `values` + `lastSyncedRef` from `item.data`, so
   // the autosave effect's next pass is a no-op (no re-overlay, no PUT).
-  // Backend cleanup is a fire-and-forget PUT of the published payload:
-  // there's no draft DELETE endpoint, but the backend auto-clears its
-  // Redis slot when draft === published.
+  // Backend cleanup is a fire-and-forget DELETE, not an echo-PUT of the
+  // published payload: an echo can lose a race with a concurrent publish
+  // (the payload it sends is no longer the current published value, so it
+  // recreates a draft instead of clearing one) — DELETE can't.
   const undoDraft = () => {
     clearCollectionDraft(collection, slug);
     if (!schema || !item || item.draftData == null) return;
     setError(null);
-    const publishedData = item.data;
     // In-place patch, not `updateCollectionItem`, so list windows don't refetch
-    // and re-seed from the server's still-dirty state before the cleanup PUT.
+    // and re-seed from the server's still-dirty state before the cleanup DELETE.
     patchCollectionItem(collection, slug, { ...item, draftData: null });
     if (item.version === 0) return;
     (async () => {
       try {
         const token = await getAccessToken();
-        await config.transport.saveCollectionItemDraft(
-          collection, slug, { data: publishedData }, { accessToken: token },
+        await config.transport.deleteCollectionItemDraft(
+          collection, slug, { accessToken: token },
         );
       } catch (err) {
         // eslint-disable-next-line no-console

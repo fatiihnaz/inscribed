@@ -12,11 +12,12 @@
  * is written back via `updateCollectionItem` so other surfaces re-render.
  */
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { useCmsContext } from "../lib/context.js";
 import { useCollectionContext } from "../lib/collection-context.js";
+import { useStoreSelector } from "../lib/store.js";
 import { useCollectionItem } from "../hooks/use-collection.js";
 import { useMyCollections } from "../hooks/use-my-collections.js";
 import { CmsApiError } from "../lib/errors.js";
@@ -88,11 +89,26 @@ const DRAFT_DEBOUNCE_MS = 1000;
  *
  * @param {string} collection
  * @param {string} slug
+ * @param {{ active?: boolean, mirror?: boolean }} [options]
+ *   One record can be open in two places at once (the page's
+ *   `<CollectionField>`s and this card), and they share one draft, so the two
+ *   flags split what each surface is allowed to do with it:
+ *
+ *   - `active` owns the network: only this surface runs the debounced PUT, and
+ *     it sends whatever the shared draft holds, whoever typed it. Two surfaces
+ *     PUTting one draft slot race, so exactly one may be active.
+ *   - `mirror` keeps the surface in step with the draft: it re-seeds as the
+ *     other surface types, and its own edits go into the draft for them to see.
+ *     A surface nobody is looking at (a collapsed card, a hidden drawer) passes
+ *     `false` and stops re-seeding on every keystroke.
+ *
+ *   A surface that is neither reads the record once and leaves the draft alone.
  * @returns {CollectionEditorState}
  */
-export function useCollectionEditor(collection, slug) {
+export function useCollectionEditor(collection, slug, { active = true, mirror = true } = {}) {
   const { config, getAccessToken } = useCmsContext();
   const {
+    collectionStore,
     updateCollectionItem,
     patchCollectionItem,
     setCollectionDraft,
@@ -137,24 +153,58 @@ export function useCollectionEditor(collection, slug) {
   const failedResetRef = useRef(
     /** @type {ReturnType<typeof setTimeout>|null} */ (null),
   );
+  // Whether `values` carries an edit made *here*. Re-seeding clears it, so a
+  // surface that is only mirroring never writes what it was handed back into
+  // the draft (which would race the surface the user is actually typing in).
+  const userEditRef = useRef(false);
 
-  // Seed form state once schema + item arrive, preferring the draft over
-  // published data so in-flight edits survive reloads. Skip the reseed when the
-  // baseline matches `lastSyncedRef` (the cache change is our own autosave), so
-  // we don't clobber keystrokes the user typed after the PUT fired.
+  /**
+   * The shared draft: what any surface editing this record has typed but not
+   * published. Both the overlay `<CollectionItem>` renders and the value the
+   * autosave PUTs come from here.
+   */
+  const localDraft = useStoreSelector(
+    collectionStore,
+    (s) => s.drafts.get(`${collection}:${slug}`),
+  );
+
+  const setValuesFromUser = useCallback(
+    /** @param {Record<string, *>} next */
+    (next) => {
+      userEditRef.current = true;
+      setValues(next);
+    },
+    [],
+  );
+
+  // Seed form state once schema + item arrive. Precedence: the shared draft (a
+  // sibling surface may be mid-edit), then the server draft, then published
+  // data, so in-flight edits survive both a reload and a second editor.
   useEffect(() => {
     if (!schema) return;
-    const baseline = item?.draftData ?? item?.data ?? {};
+    // An edit of our own is still in hand: re-seeding now would type over the
+    // user. It reaches the shared draft on the next pass, and from there
+    // everyone else picks it up.
+    if (userEditRef.current) return;
+    const fromDraft = mirror && localDraft !== undefined;
+    const baseline = fromDraft ? localDraft : (item?.draftData ?? item?.data ?? {});
     const seeded = seedValues(schema.fields, baseline);
     // Normalise through the same seed->buildPayload pipeline the autosave
     // compares against; storing the raw baseline would leave `lastSyncedRef` out
     // of step (readOnly strip, default-fill, Number->null) and the first
     // autosave would PUT a phantom diff.
     const serialized = stableStringify(buildPayload(schema.fields, seeded));
-    if (serialized === lastSyncedRef.current) return;
+    // Already holding this, typically our own draft write coming back around.
+    // Re-seeding here would restart the debounce we just started. This is the
+    // only skip: matching `lastSyncedRef` must *not* be one, or a revert back
+    // to the published value would never reach a surface that never PUT it
+    // (its `lastSyncedRef` still holds exactly that value).
+    if (values && serialized === stableStringify(buildPayload(schema.fields, values))) return;
     setValues(seeded);
-    lastSyncedRef.current = serialized;
-  }, [schema, item]);
+    // Only the server's view counts as synced. Claiming a sibling's unsent
+    // draft here would make the next autosave pass clear it instead of PUT it.
+    if (!fromDraft) lastSyncedRef.current = serialized;
+  }, [schema, item, localDraft, mirror, values]);
 
   useEffect(() => () => {
     if (failedResetRef.current) clearTimeout(failedResetRef.current);
@@ -166,26 +216,44 @@ export function useCollectionEditor(collection, slug) {
     if (item?.draftData == null) setLastDraftSavedAt(null);
   }, [item?.draftData]);
 
-  // Debounced draft autosave (1s after the last change), PUT to the item-draft
-  // endpoint for published rows or the new-item-draft endpoint for virtual ones.
-  // Write-only: a publish auto-clears the slot and the seeding effect resyncs
-  // `lastSyncedRef`, preventing a loop against the just-saved value.
+  // Hand an edit made here to the shared draft, which is both the live-preview
+  // overlay page consumers render and the payload the autosave below sends.
+  // Only our own edits go in: a surface that is merely mirroring would
+  // otherwise write what it was handed back, racing whoever is typing.
   useEffect(() => {
-    if (!schema || !values) return undefined;
-    if (!item?.canEdit) return undefined;
-    if (isPending) return undefined;
+    if (!active && !mirror) return;
+    if (!userEditRef.current) return;
+    if (!schema || !values) return;
+    if (!item?.canEdit) return;
 
-    const payload = buildPayload(schema.fields, values);
-    const serialized = stableStringify(payload);
-
-    // Live-preview overlay for page-side consumers, pushed on every change so
-    // they re-render in lockstep. Typing back to the server's view drops the
-    // overlay so they fall back to `draftData ?? data`.
+    const serialized = stableStringify(buildPayload(schema.fields, values));
+    // Typed back to the server's view: drop the overlay so consumers fall back
+    // to `draftData ?? data` instead of holding an identical copy.
     if (serialized === lastSyncedRef.current) {
       clearCollectionDraft(collection, slug);
-      return undefined;
+    } else {
+      setCollectionDraft(collection, slug, buildPayload(schema.fields, values));
     }
-    setCollectionDraft(collection, slug, payload);
+    // Handed over: from here the draft is the shared copy, and re-seeding from
+    // it is safe again.
+    userEditRef.current = false;
+  }, [active, mirror, values, schema, item, collection, slug, setCollectionDraft, clearCollectionDraft]);
+
+  // Debounced draft autosave (1s after the last change), PUT to the item-draft
+  // endpoint for published rows or the new-item-draft endpoint for virtual ones.
+  // Reads the shared draft rather than local `values`, so the driver sends an
+  // edit whichever surface typed it. Write-only: a publish auto-clears the slot
+  // and the seeding effect resyncs `lastSyncedRef`, preventing a loop against
+  // the just-saved value.
+  useEffect(() => {
+    if (!active) return undefined;
+    if (!schema || !item?.canEdit) return undefined;
+    if (isPending) return undefined;
+    if (localDraft === undefined) return undefined;
+
+    const payload = localDraft;
+    const serialized = stableStringify(payload);
+    if (serialized === lastSyncedRef.current) return undefined;
 
     const isVirtualNow = !item || item.version === 0;
     let cancelled = false;
@@ -232,7 +300,7 @@ export function useCollectionEditor(collection, slug) {
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values, item, schema, slugSource, slug, collection, isPending]);
+  }, [active, localDraft, item, schema, slugSource, slug, collection, isPending]);
 
   const isVirtual = !item || item.version === 0;
   const canEdit = item?.canEdit ?? false;
@@ -241,6 +309,8 @@ export function useCollectionEditor(collection, slug) {
   const save = () => {
     setError(null);
     if (!schema || !values) return;
+    // Publishing resets the baseline, so let the seeding effect take over again.
+    userEditRef.current = false;
     const missing = requiredMissing(schema.fields, values);
     if (missing) {
       setError(`Zorunlu alan eksik: ${missing}`);
@@ -297,6 +367,8 @@ export function useCollectionEditor(collection, slug) {
   // (the payload it sends is no longer the current published value, so it
   // recreates a draft instead of clearing one) — DELETE can't.
   const undoDraft = () => {
+    // Same as `save`: the baseline moves, so stop holding local edits over it.
+    userEditRef.current = false;
     clearCollectionDraft(collection, slug);
     if (!schema || !item || item.draftData == null) return;
     setError(null);
@@ -322,7 +394,7 @@ export function useCollectionEditor(collection, slug) {
     slugSource,
     item,
     values,
-    setValues,
+    setValues: setValuesFromUser,
     save,
     undoDraft,
     hasDraft,
@@ -392,7 +464,10 @@ export function AdminCollectionEditor({ editor, showMetaRow = true, showActions 
       {showMetaRow ? (
         <div style={metaRowStyle}>
           <span style={metaVersionStyle}>
-            {isVirtual ? "Yeni kayıt" : `Sürüm ${item.version}`}
+            {/* With a draft pending, the number reads ahead by one: that is the
+                version this edit becomes on publish, and the badge beside it
+                says it isn't there yet. */}
+            {isVirtual ? "Yeni kayıt" : `Sürüm ${hasDraft ? item.version + 1 : item.version}`}
           </span>
           {hasDraft ? <span style={draftBadgeStyle}>taslak</span> : null}
           {!canEdit ? <span style={metaReadonlyStyle}>salt okunur</span> : null}

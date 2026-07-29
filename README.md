@@ -399,6 +399,42 @@ override the placement and the card text without changing which record is bound:
 <CollectionItem collection="News" slug={slug} label="Öne çıkan haber" />
 ```
 
+#### Editing a field in place
+
+`<CollectionField>` renders one field of the enclosing item and, for an admin
+who may edit the record, turns it into the same in-place editor
+`<EditableRegion>` uses. The item's ring then carries publish and revert, so a
+quick fix never has to travel to the drawer:
+
+```jsx
+<CollectionItem collection="News" slug={slug}>
+  {(item, { isLoading }) => isLoading ? <Skeleton /> : (
+    <article>
+      <CollectionField name="title" as="h1" style={titleStyle} />
+      <CollectionField name="summary" as="p" style={summaryStyle} />
+    </article>
+  )}
+</CollectionItem>
+```
+
+An `Image` field gets the same treatment as an image region: hover the picture
+for replace/remove, or drop one onto the empty field. Alt text stays in the
+drawer, where a text input belongs.
+
+The element is the same for visitors and admins, so the page doesn't shift when
+you sign in. **`ShortText`, `LongText` and `Image` edit in place**; every other
+type renders read-only and keeps its drawer editor, which remains the complete
+surface for the record. Two reasons for the limit: a date picker or a repeatable
+sub-form has no sensible affordance mid-paragraph, and the field's type comes
+from `/me`, which visitors never see, so nothing that renders for them may
+depend on knowing it. Text and `{ src, alt }` are recognisable without it.
+
+Page fields and the drawer card edit **one** draft and stay in step both ways:
+type on the page and the open card follows along, type in the card and the page
+does. Only one surface runs the autosave, so a keystroke is one request no
+matter how many places show it, and a card nobody can see (collapsed, or behind
+a shut panel) stops mirroring until it's back in view.
+
 Editing a collection item is schema-driven: the backend's `/schema` describes
 each field's `type`, and the exported `<CollectionFieldsForm>` renders one input
 per type:
@@ -714,7 +750,7 @@ bundle:
 | Import | Side | Highlights |
 | ------ | ---- | ---------- |
 | `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
-| `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionComposer`, `useCollection`, `useCollectionItem`, `useMyCollections`, `useCollectionCreate`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
+| `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `CollectionComposer`, `useCollection`, `useCollectionItem`, `useMyCollections`, `useCollectionCreate`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
 | `inscribed/server` | server only | `getCmsContent`, `getCmsPageBlocks`, `syncCmsManifest`, `syncAll`, `cmsCacheTag` |
 | `inscribed/page` | server only | `createCmsPage`, `withCms` |
 | `inscribed/actions` | Server Action | `revalidateCmsSlug` |

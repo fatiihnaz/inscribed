@@ -23,18 +23,24 @@
  * same item twice on a page yields one drawer card, not two.
  */
 
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useId, useMemo, useState } from "react";
 
 import { useCmsContext } from "../lib/context.js";
 import { collectionItemBindingId, useCollectionContext } from "../lib/collection-context.js";
+import { CollectionItemContext } from "../lib/collection-item-context.js";
 import { CmsGroupContext } from "../lib/group-context.js";
 import { useCollectionItem } from "../hooks/use-collection.js";
 import { useStoreSelector } from "../lib/store.js";
-import { COLLECTION_ACCENT, FONT_MONO, TYPE_META } from "./admin-drawer-styles.js";
+import { useCollectionEditor } from "./AdminCollectionEditor.jsx";
+import {
+  COLLECTION_ACCENT, FONT_MONO, STATUS_DANGER, TEXT_MID, TYPE_META,
+} from "./admin-drawer-styles.js";
 import {
   BLOCK_TAGS,
   regionBoxStyle,
   regionChipStyle,
+  regionActionsStyle,
+  regionActionButtonStyle,
   chipDirtyDotStyle,
 } from "./page-region-chrome.js";
 
@@ -72,6 +78,9 @@ export function CollectionItem({ collection, slug, group, label, scope: _scope, 
     registerCollectionBinding, unregisterCollectionBinding, collectionStore,
   } = useCollectionContext();
   const groupPrefix = useContext(CmsGroupContext);
+  // Distinguishes this element from any other bound to the same record, which
+  // is how the provider elects one of them to drive the shared draft.
+  const scopeId = useId();
 
   const bindingId = collectionItemBindingId(collection, slug);
   const cardGroup = group ?? groupPrefix;
@@ -91,18 +100,160 @@ export function CollectionItem({ collection, slug, group, label, scope: _scope, 
   const drafts = useStoreSelector(collectionStore, (st) => st.drafts);
   const rendered = /** @type {*} */ (children(item, { isLoading, error, refetch }));
 
-  if (!isAdmin || !item || !item.canEdit) return rendered;
+  // Readers still get a scope: `<CollectionField>` renders the value for them,
+  // it just has no editor behind it.
+  const readScope = useMemo(
+    () => ({ collection, slug, scopeId, item, editor: null }),
+    [collection, slug, scopeId, item],
+  );
+
+  if (!isAdmin || !item || !item.canEdit) {
+    return (
+      <CollectionItemContext.Provider value={readScope}>
+        {rendered}
+      </CollectionItemContext.Provider>
+    );
+  }
 
   return (
-    <CollectionEditWrapper
-      onClick={() => setActiveBlock(bindingId)}
-      isActive={activeBlock === bindingId}
+    <CollectionEditScope
+      collection={collection}
+      slug={slug}
+      scopeId={scopeId}
+      item={item}
+      bindingId={bindingId}
       label={cardLabel}
       tag={typeof rendered?.type === "string" ? rendered.type : null}
       dirty={drafts.has(`${collection}:${slug}`) || item.draftData != null}
+      activeBlock={activeBlock}
+      setActiveBlock={setActiveBlock}
     >
       {rendered}
-    </CollectionEditWrapper>
+    </CollectionEditScope>
+  );
+}
+
+/**
+ * The editing half, split out so the editor engine (schema lookup, seeded
+ * values, autosave) never mounts for a visitor or a record they can't edit.
+ *
+ * It drives the draft only while the page actually carries `<CollectionField>`s
+ * for this record; otherwise the drawer's card stays the driver and this scope
+ * is just the ring plus a read-only view of the same values.
+ *
+ * @param {{
+ *   collection: string,
+ *   slug: string,
+ *   scopeId: string,
+ *   item: CollectionItemResponse,
+ *   bindingId: string,
+ *   label: string,
+ *   tag: string | null,
+ *   dirty: boolean,
+ *   activeBlock: string | null,
+ *   setActiveBlock: (path: string | null) => void,
+ *   children: React.ReactNode,
+ * }} props
+ */
+function CollectionEditScope({
+  collection, slug, scopeId, item, bindingId, label, tag, dirty,
+  activeBlock, setActiveBlock, children,
+}) {
+  const { inlineFieldRecords } = useCollectionContext();
+  const driver = inlineFieldRecords.get(`${collection}:${slug}`);
+  const hasInlineFields = driver !== undefined;
+  // Without fields on the page there is nothing here to show or type into, so
+  // the record's draft is left entirely to the drawer. With them, the page
+  // mirrors the draft, but only the elected scope PUTs it.
+  const editor = useCollectionEditor(collection, slug, {
+    active: driver === scopeId,
+    mirror: hasInlineFields,
+  });
+
+  const scope = useMemo(
+    () => ({ collection, slug, scopeId, item, editor }),
+    [collection, slug, scopeId, item, editor],
+  );
+
+  return (
+    <CollectionItemContext.Provider value={scope}>
+      <CollectionEditWrapper
+        onClick={() => setActiveBlock(bindingId)}
+        isActive={activeBlock === bindingId}
+        label={label}
+        tag={tag}
+        dirty={dirty}
+        actions={
+          // Without fields there is nothing to publish from here: the record's
+          // edits happen in the drawer, which carries its own actions.
+          hasInlineFields ? <RecordActions editor={editor} dirty={dirty} /> : null
+        }
+      >
+        {children}
+      </CollectionEditWrapper>
+    </CollectionItemContext.Provider>
+  );
+}
+
+/**
+ * Publish / revert for edits made through the page's own fields, so an in-place
+ * change doesn't have to travel to the drawer to be published. Both call the
+ * same handlers the drawer card uses.
+ *
+ * @param {{ editor: import("./AdminCollectionEditor.jsx").CollectionEditorState, dirty: boolean }} props
+ */
+function RecordActions({ editor, dirty }) {
+  const busy = editor.isPending;
+  return (
+    <>
+      {editor.error ? (
+        <span
+          title={editor.error}
+          style={{
+            maxWidth: 180,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            padding: "0 4px",
+            color: STATUS_DANGER,
+            fontFamily: FONT_MONO,
+            fontSize: 9.5,
+          }}
+        >
+          {editor.error}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.stopPropagation();
+          editor.undoDraft();
+        }}
+        disabled={!dirty || busy}
+        title="Bu kaydın taslağını geri al"
+        style={regionActionButtonStyle({ font: FONT_MONO, accent: TEXT_MID, disabled: !dirty || busy })}
+      >
+        Geri al
+      </button>
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.stopPropagation();
+          editor.save();
+        }}
+        disabled={!dirty || busy}
+        title="Bu kaydı yayınla"
+        style={regionActionButtonStyle({
+          font: FONT_MONO,
+          accent: COLLECTION_ACCENT,
+          disabled: !dirty || busy,
+        })}
+      >
+        {busy ? "Kaydediliyor…" : "Kaydet"}
+      </button>
+    </>
   );
 }
 
@@ -117,10 +268,11 @@ export function CollectionItem({ collection, slug, group, label, scope: _scope, 
  *   label: string,
  *   dirty: boolean,
  *   tag: string | null,
+ *   actions?: React.ReactNode,
  *   children: React.ReactNode,
  * }} props
  */
-function CollectionEditWrapper({ onClick, isActive, label, dirty, tag, children }) {
+function CollectionEditWrapper({ onClick, isActive, label, dirty, tag, actions, children }) {
   const [isHovered, setIsHovered] = useState(false);
   const showChip = isHovered || isActive;
 
@@ -164,6 +316,9 @@ function CollectionEditWrapper({ onClick, isActive, label, dirty, tag, children 
             <span aria-label="Kaydedilmemiş değişiklik" style={chipDirtyDotStyle} />
           ) : null}
         </button>
+      ) : null}
+      {actions && showChip ? (
+        <span style={regionActionsStyle({ roomy })}>{actions}</span>
       ) : null}
     </span>
   );

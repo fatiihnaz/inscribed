@@ -57,30 +57,40 @@ export function regionBoxStyle({ display, roomy, highlight, hovered, accent }) {
   };
 }
 
+// Translucent ink + blur rather than a solid fill, so anything floating on the
+// ring line reads lightly over a bright page.
+const INK_SURFACE = /** @type {React.CSSProperties} */ ({
+  background: "color-mix(in srgb, var(--ins-bg, #1c1815) 82%, transparent)",
+  backdropFilter: "blur(8px)",
+  WebkitBackdropFilter: "blur(8px)",
+});
+
+// On a roomy card the floating row straddles the ring line (it sits in the
+// padding gap); on a tight region it clears the content entirely.
+const floatOnRing = (roomy) => ({
+  position: /** @type {const} */ ("absolute"),
+  top: 0,
+  transform: roomy ? "translateY(-50%)" : "translateY(-100%)",
+  zIndex: 9999,
+});
+
 /**
- * Translucent ink + blur rather than a solid fill, so the chip reads lightly
- * over a bright page. On a roomy card it straddles the ring line (it sits in
- * the padding gap); on a tight region it floats fully above so it clears the
- * content.
+ * The label chip: a real button, not a decorative tag, anchored ring-left.
  *
  * @param {{ roomy: boolean, highlight: boolean, accent: string, font: string }} args
  * @returns {React.CSSProperties}
  */
 export function regionChipStyle({ roomy, highlight, accent, font }) {
   return {
-    position: "absolute",
-    top: 0,
+    ...floatOnRing(roomy),
+    ...INK_SURFACE,
     left: roomy ? 8 : 0,
-    transform: roomy ? "translateY(-50%)" : "translateY(-100%)",
     display: "inline-flex",
     alignItems: "center",
     gap: 4,
     padding: "2px 6px",
     border: 0,
     borderRadius: 6,
-    background: "color-mix(in srgb, var(--ins-bg, #1c1815) 82%, transparent)",
-    backdropFilter: "blur(8px)",
-    WebkitBackdropFilter: "blur(8px)",
     color: highlight ? accent : "var(--ins-text, #fff)",
     fontFamily: font,
     fontSize: 9.5,
@@ -89,7 +99,54 @@ export function regionChipStyle({ roomy, highlight, accent, font }) {
     lineHeight: 1.5,
     whiteSpace: "nowrap",
     cursor: "pointer",
-    zIndex: 9999,
+  };
+}
+
+/**
+ * Row of per-region actions, anchored opposite the label chip so a region
+ * carrying both reads as one line rather than two stacked pills.
+ *
+ * @param {{ roomy: boolean }} args
+ * @returns {React.CSSProperties}
+ */
+export function regionActionsStyle({ roomy }) {
+  return {
+    ...floatOnRing(roomy),
+    ...INK_SURFACE,
+    right: roomy ? 8 : 0,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 2,
+    padding: 2,
+    borderRadius: 6,
+  };
+}
+
+/**
+ * One button inside `regionActionsStyle`. Ink comes from the row behind it, so
+ * the button itself stays transparent.
+ *
+ * @param {{ font: string, accent?: string, disabled?: boolean }} args
+ * @returns {React.CSSProperties}
+ */
+export function regionActionButtonStyle({ font, accent, disabled }) {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 3,
+    padding: "2px 6px",
+    border: 0,
+    borderRadius: 4,
+    background: "transparent",
+    color: accent ?? "var(--ins-text, #fff)",
+    fontFamily: font,
+    fontSize: 9.5,
+    fontWeight: 500,
+    letterSpacing: "0.02em",
+    lineHeight: 1.5,
+    whiteSpace: "nowrap",
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.45 : 1,
   };
 }
 

@@ -101,6 +101,79 @@ export function CollectionProvider({ children }) {
     [publishCollectionBindings],
   );
 
+  // Records that currently have `<CollectionField>`s on the page. Two surfaces
+  // can edit one record (page fields and the drawer card), and both would run
+  // their own debounced autosave against the same draft slot, so this is how
+  // they agree on a single driver: page fields win while they exist.
+  //
+  // Provider-level because the drawer is a sibling of the page tree, not a
+  // descendant, so a context published from `<CollectionItem>` can't reach it.
+  // Counted per record *and* per `<CollectionItem>` scope, because one record
+  // can be rendered twice on a page: the record's presence is what stands the
+  // drawer down, while the first scope to claim it is the one that drives.
+  const inlineFieldCountsRef = useRef(
+    /** @type {Map<string, Map<string, number>>} */ (new Map()),
+  );
+  const [inlineFieldRecords, setInlineFieldRecords] = useState(
+    /** @returns {Map<string, string>} */
+    () => new Map(),
+  );
+
+  const publishInlineFieldRecords = useCallback(() => {
+    /** @type {Map<string, string>} */
+    const next = new Map();
+    for (const [key, scopes] of inlineFieldCountsRef.current) {
+      // Insertion order: the scope that claimed the record first keeps it, and
+      // hands over to the next one only when it unmounts.
+      const first = scopes.keys().next();
+      if (!first.done) next.set(key, first.value);
+    }
+    setInlineFieldRecords(next);
+  }, []);
+
+  const registerInlineField = useCallback(
+    /**
+     * @param {string} collection
+     * @param {string} slug
+     * @param {string} scopeId
+     */
+    (collection, slug, scopeId) => {
+      const key = `${collection}:${slug}`;
+      let scopes = inlineFieldCountsRef.current.get(key);
+      if (!scopes) {
+        scopes = new Map();
+        inlineFieldCountsRef.current.set(key, scopes);
+      }
+      const count = scopes.get(scopeId) ?? 0;
+      scopes.set(scopeId, count + 1);
+      // Only a scope's first field can change the answer, so the rest are free.
+      if (count === 0) publishInlineFieldRecords();
+    },
+    [publishInlineFieldRecords],
+  );
+
+  const unregisterInlineField = useCallback(
+    /**
+     * @param {string} collection
+     * @param {string} slug
+     * @param {string} scopeId
+     */
+    (collection, slug, scopeId) => {
+      const key = `${collection}:${slug}`;
+      const scopes = inlineFieldCountsRef.current.get(key);
+      const count = scopes?.get(scopeId);
+      if (!scopes || !count) return;
+      if (count > 1) {
+        scopes.set(scopeId, count - 1);
+        return;
+      }
+      scopes.delete(scopeId);
+      if (scopes.size === 0) inlineFieldCountsRef.current.delete(key);
+      publishInlineFieldRecords();
+    },
+    [publishInlineFieldRecords],
+  );
+
   // /cms/collections/me state. The fetch (further down) runs once so the
   // drawer's cards and tabs share one round-trip instead of each fetching.
   const [myCollectionsState, setMyCollectionsState] = useState(
@@ -503,6 +576,9 @@ export function CollectionProvider({ children }) {
       collectionBindings,
       registerCollectionBinding,
       unregisterCollectionBinding,
+      inlineFieldRecords,
+      registerInlineField,
+      unregisterInlineField,
       myCollections: myCollectionsState.data,
       myCollectionsLoading: myCollectionsState.isLoading,
       myCollectionsError: myCollectionsState.error,
@@ -525,6 +601,9 @@ export function CollectionProvider({ children }) {
       collectionBindings,
       registerCollectionBinding,
       unregisterCollectionBinding,
+      inlineFieldRecords,
+      registerInlineField,
+      unregisterInlineField,
       myCollectionsState,
       refetchMyCollections,
       collectionStore,

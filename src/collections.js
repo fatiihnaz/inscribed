@@ -17,6 +17,9 @@
 export { CollectionProvider } from "./components/CollectionProvider.jsx";
 export { CollectionRegion } from "./components/CollectionRegion.jsx";
 export { CollectionItem } from "./components/CollectionItem.jsx";
+// Edits one text field of the enclosing <CollectionItem> in place; anything
+// else about the record stays in the drawer's schema form.
+export { CollectionField } from "./components/CollectionField.jsx";
 // Chrome-free "add one item" form the host mounts on its own page; renders
 // nothing for visitors without create access.
 export { CollectionComposer } from "./components/CollectionComposer.jsx";

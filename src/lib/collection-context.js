@@ -92,6 +92,16 @@ export function collectionRegionBindingId(collection, filter) {
  *   Refcounted: the same binding registered twice is one entry, and the first
  *   registration's value wins.
  * @property {(bindingId: string) => void} unregisterCollectionBinding
+ * @property {Map<string, string>} inlineFieldRecords
+ *   Every record (`"{key}:{slug}"`) with `<CollectionField>`s mounted, mapped
+ *   to the `<CollectionItem>` scope that drives its draft. One record can be
+ *   open in several places at once (page fields, possibly twice over, plus the
+ *   drawer's card) and they share one draft, so exactly one of them runs the
+ *   autosave: presence here stands the drawer card down, and the scope named
+ *   here is the page-side driver. Lives in this context rather than a per-item
+ *   one because the drawer is a sibling of the page tree, not a descendant.
+ * @property {(collection: string, slug: string, scopeId: string) => void} registerInlineField
+ * @property {(collection: string, slug: string, scopeId: string) => void} unregisterInlineField
  * @property {MyCollectionResponse[]} myCollections
  *   `GET /cms/collections/me`, fetched once per session when `isAdmin` (empty
  *   for public visitors). All drawer surfaces read schemas from here instead

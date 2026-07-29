@@ -21,6 +21,8 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Undo2, Lock, List as ListIcon } from "./icons.jsx";
 
 import { stableStringify } from "../lib/stable-stringify.js";
+import { useCmsContext } from "../lib/context.js";
+import { useCollectionContext } from "../lib/collection-context.js";
 
 import { FieldEditor } from "./editors/FieldEditor.jsx";
 import { ListEditor } from "./editors/ListEditor.jsx";
@@ -357,10 +359,18 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
  */
 function CollectionBlockCard({ block, collection, slug, isActive, onFocus, topLevel, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
-  const editor = useCollectionEditor(collection, slug);
-  const isDirty = editor.hasDraft && editor.canEdit;
-
+  const { isDrawerOpen } = useCmsContext();
+  // The page's own `<CollectionField>`s drive the draft when they exist; this
+  // card then shows the same values without a second autosave loop behind them.
+  const { inlineFieldRecords } = useCollectionContext();
   const [isOpen, setIsOpen] = useState(false);
+  const editor = useCollectionEditor(collection, slug, {
+    active: !inlineFieldRecords.has(`${collection}:${slug}`),
+    // Nobody is looking at a collapsed card behind a shut panel, so it stops
+    // re-seeding on every keystroke until it comes back into view.
+    mirror: isDrawerOpen && isOpen,
+  });
+  const isDirty = editor.hasDraft && editor.canEdit;
 
   useEffect(() => {
     if (isActive) setIsOpen(true);

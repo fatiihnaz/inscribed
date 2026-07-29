@@ -33,7 +33,7 @@ import { useCollectionItem } from "../hooks/use-collection.js";
 import { useStoreSelector } from "../lib/store.js";
 import { useCollectionEditor } from "./AdminCollectionEditor.jsx";
 import {
-  COLLECTION_ACCENT, FONT_MONO, STATUS_DANGER, TEXT_MID, TYPE_META,
+  COLLECTION_ACCENT, FONT_MONO, STATUS_DANGER, STATUS_OK, TEXT_MID, TYPE_META,
 } from "./admin-drawer-styles.js";
 import {
   BLOCK_TAGS,
@@ -204,25 +204,19 @@ function CollectionEditScope({
  */
 function RecordActions({ editor, dirty }) {
   const busy = editor.isPending;
+  // The button carries the outcome: there is no room beside it for a banner,
+  // and a publish that failed silently is worse than one that says so.
+  const state = busy ? "saving"
+    : editor.error ? "failed"
+    : editor.publishedFlash ? "saved"
+    : "idle";
+  const { label, accent } = SAVE_STATES[state];
+  // Only a plain idle button goes quiet when there is nothing to publish; a
+  // result the user still needs to read stays at full strength.
+  const inert = state === "idle" && !dirty;
+
   return (
     <>
-      {editor.error ? (
-        <span
-          title={editor.error}
-          style={{
-            maxWidth: 180,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            padding: "0 4px",
-            color: STATUS_DANGER,
-            fontFamily: FONT_MONO,
-            fontSize: 9.5,
-          }}
-        >
-          {editor.error}
-        </span>
-      ) : null}
       <button
         type="button"
         onMouseDown={(e) => e.preventDefault()}
@@ -243,19 +237,22 @@ function RecordActions({ editor, dirty }) {
           e.stopPropagation();
           editor.save();
         }}
-        disabled={!dirty || busy}
-        title="Bu kaydı yayınla"
-        style={regionActionButtonStyle({
-          font: FONT_MONO,
-          accent: COLLECTION_ACCENT,
-          disabled: !dirty || busy,
-        })}
+        disabled={inert || busy}
+        title={editor.error ?? "Bu kaydı yayınla"}
+        style={regionActionButtonStyle({ font: FONT_MONO, accent, disabled: inert })}
       >
-        {busy ? "Kaydediliyor…" : "Kaydet"}
+        {label}
       </button>
     </>
   );
 }
+
+const SAVE_STATES = {
+  idle:   { label: "Kaydet", accent: COLLECTION_ACCENT },
+  saving: { label: "Kaydediliyor…", accent: TEXT_MID },
+  saved:  { label: "Kaydedildi", accent: STATUS_OK },
+  failed: { label: "Hata", accent: STATUS_DANGER },
+};
 
 /**
  * Same shell as `EditableRegion`, in the collection accent: a neutral ring on

@@ -189,7 +189,7 @@ export function CollectionProvider({ children }) {
   // external store, not React state, so it stays out of the context value and a
   // write only re-renders the consumers reading that slice. (See lib/store.js.)
   const collectionStoreRef = useRef(
-    /** @type {import("../lib/store.js").Store<{ itemCache: Map<string, CollectionItemCacheEntry>, listCache: Map<string, CollectionListCacheEntry>, drafts: Map<string, *> }> | null} */
+    /** @type {import("../lib/store.js").Store<{ itemCache: Map<string, CollectionItemCacheEntry>, listCache: Map<string, CollectionListCacheEntry>, drafts: Map<string, *>, draftSavedAt: Map<string, string> }> | null} */
     (null),
   );
   if (collectionStoreRef.current === null) {
@@ -197,6 +197,7 @@ export function CollectionProvider({ children }) {
       itemCache: new Map(),
       listCache: new Map(),
       drafts: new Map(),
+      draftSavedAt: new Map(),
     });
   }
   const collectionStore = collectionStoreRef.current;
@@ -269,6 +270,26 @@ export function CollectionProvider({ children }) {
       });
     },
     [],
+  );
+
+  const setCollectionDraftSavedAt = useCallback(
+    /**
+     * @param {string} key
+     * @param {string} slug
+     * @param {string | null} at  `null` drops it, e.g. once the draft is gone.
+     */
+    (key, slug, at) => {
+      const cacheKey = `${key}:${slug}`;
+      collectionStore.set((st) => {
+        const has = st.draftSavedAt.has(cacheKey);
+        if (at === null ? !has : st.draftSavedAt.get(cacheKey) === at) return st;
+        const draftSavedAt = new Map(st.draftSavedAt);
+        if (at === null) draftSavedAt.delete(cacheKey);
+        else draftSavedAt.set(cacheKey, at);
+        return { ...st, draftSavedAt };
+      });
+    },
+    [collectionStore],
   );
 
   const clearCollectionDrafts = useCallback(() => {
@@ -595,6 +616,7 @@ export function CollectionProvider({ children }) {
       setCollectionDraft,
       clearCollectionDraft,
       clearCollectionDrafts,
+      setCollectionDraftSavedAt,
     }),
     [
       activeCollectionItem,

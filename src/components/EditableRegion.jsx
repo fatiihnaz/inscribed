@@ -19,6 +19,7 @@ import DOMPurify from "isomorphic-dompurify";
 
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
+import { useImageOverlayFits } from "../hooks/use-image-overlay-fits.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
 import { ACCENT, TYPE_META } from "./admin-drawer-styles.js";
 import {
@@ -37,10 +38,6 @@ import { InlineImagePlaceholder } from "./InlineImagePlaceholder.jsx";
 const InlineRichText = lazy(() =>
   import("./InlineRichText.jsx").then((m) => ({ default: m.InlineRichText })),
 );
-
-// Below this the on-image scrim buttons don't fit; the block falls back to the
-// label chip → drawer for editing.
-const IMAGE_OVERLAY_MIN = { w: 150, h: 64 };
 
 /**
  * @import { BlockType } from "../lib/schemas.js"
@@ -90,9 +87,6 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   const groupVisibility = useContext(CmsGroupVisibilityContext);
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
-  const [wrapperSize, setWrapperSize] = useState(
-    /** @type {{ w: number, h: number } | null} */ (null),
-  );
   const wrapperRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
 
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
@@ -123,23 +117,9 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
     ? renderPlaceholder(as, rest, isAdmin)
     : renderBlock(blockType, value, { as, ...rest });
 
-  // Track the rendered image's box so the on-image overlay can stand down when
-  // the picture is too small to hold the scrim buttons. Admin + Image only.
-  useEffect(() => {
-    if (!isAdmin || blockType !== "Image") return undefined;
-    const el = wrapperRef.current;
-    if (!el) return undefined;
-    const measure = () => {
-      const w = el.offsetWidth;
-      const h = el.offsetHeight;
-      setWrapperSize((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [isAdmin, blockType]);
+  // Stand the on-image overlay down when the picture is too small to hold the
+  // scrim buttons. Admin + Image only.
+  const imageOverlayFits = useImageOverlayFits(wrapperRef, isAdmin && blockType === "Image");
 
   if (!isAdmin || visibilityMode) return rendered;
 
@@ -150,8 +130,6 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   const highlight = isActive || isFocused;
   const canInlineEdit = INLINE_TEXT_TYPES.has(/** @type {string} */ (blockType));
   const isImageType = blockType === "Image";
-  const imageOverlayFits =
-    !wrapperSize || (wrapperSize.w >= IMAGE_OVERLAY_MIN.w && wrapperSize.h >= IMAGE_OVERLAY_MIN.h);
 
   const dirty = block
     ? (hasLocalDraft

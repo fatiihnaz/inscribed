@@ -42,6 +42,7 @@ const newsMeta = {
     fields: [
       field("title", "ShortText"),
       field("body", "LongText"),
+      field("article", "RichText"),
       field("publishedAt", "Date"),
       field("hero", "Image"),
       field("locked", "ShortText", { readOnly: true }),
@@ -60,6 +61,7 @@ function mockFetch({ me = [newsMeta], canEdit = true, hero = null } = {}) {
         slug: "q1",
         data: {
           title: "Q1 raporu", body: "Uzun metin", publishedAt: "2026-01-01",
+          article: '<p>Kalın <strong>metin</strong></p><script>alert(1)</script>',
           hero, locked: "sabit",
         },
         version: 3,
@@ -258,6 +260,33 @@ describe("two presentations of one record", () => {
     // the draft holds the published value in `lastSyncedRef`, which used to
     // make it skip exactly this re-seed.
     await waitFor(() => expect(editablesOf("Q1 raporu")).toHaveLength(2));
+  });
+});
+
+describe("rich text fields", () => {
+  it("renders sanitised markup for a visitor when told the field holds html", async () => {
+    mockFetch();
+    renderItem({ isAdmin: false, children: <CollectionField name="article" as="div" html /> });
+    await waitFor(() => expect(document.querySelector("strong")).toBeTruthy());
+    expect(document.querySelector("strong").textContent).toBe("metin");
+    // Sanitised on the read path too, or pasted markup would reach visitors.
+    expect(document.querySelector("script")).toBeNull();
+  });
+
+  it("renders the markup as text without the flag, and says so in dev", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockFetch();
+    renderItem({ children: <CollectionField name="article" as="div" /> });
+    await waitFor(() =>
+      expect(warn.mock.calls.some(([m]) => String(m).includes("pass `html`"))).toBe(true),
+    );
+    expect(document.querySelector("strong")).toBeNull();
+  });
+
+  it("claims the record so the field can be edited in place", async () => {
+    mockFetch();
+    renderItem({ children: <CollectionField name="article" as="div" html /> });
+    await waitFor(() => expect(claimed.has("news:q1")).toBe(true));
   });
 });
 

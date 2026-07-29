@@ -109,7 +109,7 @@ export function collectionRegionBindingId(collection, filter) {
  * @property {boolean} myCollectionsLoading
  * @property {Error|null} myCollectionsError
  * @property {() => void} refetchMyCollections   Bump-token style; the provider re-runs the /me effect.
- * @property {import("./store.js").Store<{ itemCache: Map<string, CollectionItemCacheEntry>, listCache: Map<string, CollectionListCacheEntry>, drafts: Map<string, *> }>} collectionStore
+ * @property {import("./store.js").Store<{ itemCache: Map<string, CollectionItemCacheEntry>, listCache: Map<string, CollectionListCacheEntry>, drafts: Map<string, *>, draftSavedAt: Map<string, string> }>} collectionStore
  *   High-churn collection state, kept out of the context value so a write
  *   doesn't re-render every consumer. Slices, read via `useStoreSelector`:
  *   - `itemCache`: cache for `useCollectionItem`, keyed `"{key}:{slug}"`.
@@ -140,6 +140,11 @@ export function collectionRegionBindingId(collection, filter) {
  * @property {(key: string, slug: string, payload: *) => void} setCollectionDraft
  * @property {(key: string, slug: string) => void} clearCollectionDraft
  * @property {() => void} clearCollectionDrafts
+ * @property {(key: string, slug: string, at: string | null) => void} setCollectionDraftSavedAt
+ *   Clock of the last successful draft autosave, kept per record rather than
+ *   per surface: only the driver runs the PUT, so a local copy would leave
+ *   every other view of the record showing nothing for a draft that saved.
+ *   `null` drops it, once the draft itself is gone.
  * @property {(key: string, params?: import("./schemas.js").CollectionListParams, force?: boolean) => Promise<void>} requestCollectionList
  * @property {(key: string, params?: import("./schemas.js").CollectionListParams) => void} invalidateCollectionList
  *   With `params`: drop only that cache entry. Without `params`: drop

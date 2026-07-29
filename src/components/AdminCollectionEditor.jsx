@@ -113,6 +113,7 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     patchCollectionItem,
     setCollectionDraft,
     clearCollectionDraft,
+    setCollectionDraftSavedAt,
   } = useCollectionContext();
   const { collections: my, isLoading: meLoading, error: meError } = useMyCollections();
   // Read the raw item (overlayDrafts: false): consuming our own overlay would
@@ -132,11 +133,6 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   const [isPending, startTransition] = useTransition();
   const [draftStatus, setDraftStatus] = useState(
     /** @type {"idle"|"saving"|"failed"} */ ("idle"),
-  );
-  // HH:MM of the last successful autosave, held in the indicator (cleared when
-  // the server draft disappears on publish/undo) so the admin sees when it landed.
-  const [lastDraftSavedAt, setLastDraftSavedAt] = useState(
-    /** @type {string | null} */ (null),
   );
   // Post-publish pulse driven by `save()`: a green "Veri kaydedildi" chip for a
   // couple of seconds. Distinct from `lastDraftSavedAt`, which tracks the draft slot.
@@ -166,6 +162,14 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   const localDraft = useStoreSelector(
     collectionStore,
     (s) => s.drafts.get(`${collection}:${slug}`),
+  );
+
+  // HH:MM of the last successful autosave. Shared rather than per-surface: only
+  // the driver runs the PUT, so a local copy would leave every other surface
+  // showing nothing for a draft that plainly saved.
+  const lastDraftSavedAt = useStoreSelector(
+    collectionStore,
+    (s) => s.draftSavedAt.get(`${collection}:${slug}`) ?? null,
   );
 
   const setValuesFromUser = useCallback(
@@ -213,8 +217,8 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   // Clear the timestamp when the server draft goes away (publish/undo drop
   // `draftData`), so it doesn't point at a draft that no longer exists.
   useEffect(() => {
-    if (item?.draftData == null) setLastDraftSavedAt(null);
-  }, [item?.draftData]);
+    if (item?.draftData == null) setCollectionDraftSavedAt(collection, slug, null);
+  }, [item?.draftData, collection, slug, setCollectionDraftSavedAt]);
 
   // Hand an edit made here to the shared draft, which is both the live-preview
   // overlay page consumers render and the payload the autosave below sends.
@@ -281,7 +285,7 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
           patchCollectionItem(collection, slug, { ...item, draftData: payload });
         }
         setDraftStatus("idle");
-        setLastDraftSavedAt(formatClock(new Date()));
+        setCollectionDraftSavedAt(collection, slug, formatClock(new Date()));
       } catch (err) {
         if (cancelled) return;
         // eslint-disable-next-line no-console

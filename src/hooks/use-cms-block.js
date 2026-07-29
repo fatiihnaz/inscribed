@@ -9,6 +9,7 @@
 import { useCallback } from "react";
 
 import { useCmsContext } from "../lib/context.js";
+import { useStoreSelector } from "../lib/store.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
 
 /**
@@ -42,10 +43,11 @@ import { useCmsAdmin } from "./use-cms-admin.js";
  */
 export function useCmsBlock(blockPath, _meta) {
   void _meta;
-  const { blocks } = useCmsContext();
+  const { blocksStore } = useCmsContext();
   const { save } = useCmsAdmin();
 
-  const block = blocks.get(blockPath) ?? null;
+  // Just this block's entry, so another block's save doesn't re-render us.
+  const block = useStoreSelector(blocksStore, (m) => m.get(blockPath) ?? null);
 
   const update = useCallback(
     /**

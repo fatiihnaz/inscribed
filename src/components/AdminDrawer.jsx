@@ -25,7 +25,7 @@
  * layout + state only.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -41,7 +41,7 @@ import { useMyCollections } from "../hooks/use-my-collections.js";
 import { CmsApiError } from "../lib/errors.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 
-import { BlockCard, resetBlock } from "./AdminBlockCard.jsx";
+import { BlockCard } from "./AdminBlockCard.jsx";
 import { AdminCollectionRegionPanel } from "./AdminCollectionRegionPanel.jsx";
 import { AdminCollectionsPane } from "./AdminCollectionsPane.jsx";
 import { AdminChangesPanel } from "./AdminChangesPanel.jsx";
@@ -133,20 +133,25 @@ import {
 
 export function AdminDrawer() {
   const {
-    activeBlock,
     setActiveBlock,
-    blocks,
-    contentDraftsStore,
-    setDraft,
-    clearDraft,
-    isDrawerOpen,
     setDrawerOpen,
-    itemSchemas,
-    editorVisibility,
+    blocksStore,
+    contentDraftsStore,
+    uiStore,
+    registryStore,
     userInfo,
     onSignOut,
-    draftSyncStatus,
   } = useCmsContext();
+  // The drawer aggregates over everything, so unlike a page region it selects
+  // whole slices. As a single admin surface, re-rendering on each write is fine
+  // as long as the memoised card list below can still bail out.
+  const blocks = useStoreSelector(blocksStore, (m) => m);
+  const drafts = useStoreSelector(contentDraftsStore, (m) => m);
+  const activeBlock = useStoreSelector(uiStore, (s) => s.activeBlock);
+  const isDrawerOpen = useStoreSelector(uiStore, (s) => s.isDrawerOpen);
+  const draftSyncStatus = useStoreSelector(uiStore, (s) => s.draftSyncStatus);
+  const itemSchemas = useStoreSelector(registryStore, (s) => s.itemSchemas);
+  const editorVisibility = useStoreSelector(registryStore, (s) => s.editorVisibility);
   // Collection state lives in its own provider, which CmsProvider always wraps
   // the drawer in, so the throwing reader is safe here.
   const {
@@ -155,12 +160,9 @@ export function AdminDrawer() {
     collectionBindings,
     collectionStore,
   } = useCollectionContext();
-  // The drawer aggregates the whole draft/collection state, so it subscribes to
-  // full slices. As a single admin surface, re-rendering on every write is fine.
   const collectionListCache = useStoreSelector(collectionStore, (s) => s.listCache);
   const collectionItemCache = useStoreSelector(collectionStore, (s) => s.itemCache);
   const collectionDrafts = useStoreSelector(collectionStore, (s) => s.drafts);
-  const drafts = useStoreSelector(contentDraftsStore, (m) => m);
   const myCollections = useMyCollections().collections;
   const {
     dirtyCount, isSaving, error,
@@ -189,16 +191,15 @@ export function AdminDrawer() {
   // filter inside their own panel.
   const [search, setSearch] = useState("");
 
-  // Split blocks into page/global lists and compute a per-block dirty flag here
-  // so the tab bar's dot doesn't re-derive it per card. CollectionItem bindings
-  // are synthesised into the page list as virtual Collection blocks.
-  const { pageBlockList, globalBlockList, dirtyByPath } = useMemo(() => {
+  // Split blocks into page/global lists. Deliberately independent of `drafts`:
+  // the drawer re-renders on every keystroke, and if these arrays were rebuilt
+  // each time, the memoised card list below would never get to bail out.
+  // CollectionItem bindings are synthesised in as virtual Collection blocks.
+  const { pageBlockList, globalBlockList } = useMemo(() => {
     /** @type {BlockResponse[]} */
     const pages = [];
     /** @type {BlockResponse[]} */
     const globals = [];
-    /** @type {Map<string, boolean>} */
-    const dirty = new Map();
 
     for (const block of blocks.values()) {
       // `visible={false}` regions register as "hidden": drop them entirely.
@@ -206,12 +207,6 @@ export function AdminDrawer() {
 
       const slug = block._slug ?? pathname;
       (slug === pathname ? pages : globals).push(block);
-
-      const local = drafts.get(block.blockPath);
-      const isDirty = local !== undefined
-        ? stableStringify(local) !== stableStringify(block.value)
-        : block.draftValue != null;
-      dirty.set(block.blockPath, isDirty);
     }
     pages.sort((a, b) => a.sortOrder - b.sortOrder);
     globals.sort((a, b) => a.sortOrder - b.sortOrder);
@@ -234,8 +229,26 @@ export function AdminDrawer() {
       }));
     }
 
-    return { pageBlockList: pages, globalBlockList: globals, dirtyByPath: dirty };
-  }, [blocks, pathname, collectionBindings, drafts, editorVisibility]);
+    return { pageBlockList: pages, globalBlockList: globals };
+  }, [blocks, pathname, collectionBindings, editorVisibility]);
+
+  // Per-block dirty flag for the rail dot, tab dots and preview counts. Its own
+  // memo (rebuilt per keystroke) so it can't drag the block lists with it. Cards
+  // don't read it: each one derives its own dirty state from its own draft.
+  const dirtyByPath = useMemo(() => {
+    /** @type {Map<string, boolean>} */
+    const dirty = new Map();
+    for (const block of blocks.values()) {
+      const local = drafts.get(block.blockPath);
+      dirty.set(
+        block.blockPath,
+        local !== undefined
+          ? stableStringify(local) !== stableStringify(block.value)
+          : block.draftValue != null,
+      );
+    }
+    return dirty;
+  }, [blocks, drafts]);
 
   // Collections this page binds as a region and the user can reach (per /me).
   // These are reference rows in the page list, not tabs: a collection is a
@@ -423,19 +436,34 @@ export function AdminDrawer() {
   // discovery default to expanded.
   const [closedGroups, setClosedGroups] = useState(/** @type {Set<string>} */ (new Set()));
 
-  const toggleGroup = (group) => {
-    const closing = !closedGroups.has(group);
-    setClosedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(group)) next.delete(group);
-      else next.add(group);
-      return next;
-    });
-    const activeRow = activeBlock ? rowsByPath.get(activeBlock) : undefined;
-    if (closing && activeRow && groupOfBlock(activeRow) === group) {
-      setActiveBlock(null);
-    }
-  };
+  // Read through refs so `toggleGroup` keeps a stable identity: it is a prop of
+  // the memoised block list, which a keystroke-driven shell re-render must not
+  // invalidate.
+  const closedGroupsRef = useRef(closedGroups);
+  closedGroupsRef.current = closedGroups;
+  const activeBlockRef = useRef(activeBlock);
+  activeBlockRef.current = activeBlock;
+  const rowsByPathRef = useRef(rowsByPath);
+  rowsByPathRef.current = rowsByPath;
+
+  const toggleGroup = useCallback(
+    /** @param {string} group */
+    (group) => {
+      const closing = !closedGroupsRef.current.has(group);
+      setClosedGroups((prev) => {
+        const next = new Set(prev);
+        if (next.has(group)) next.delete(group);
+        else next.add(group);
+        return next;
+      });
+      const active = activeBlockRef.current;
+      const activeRow = active ? rowsByPathRef.current.get(active) : undefined;
+      if (closing && activeRow && groupOfBlock(activeRow) === group) {
+        setActiveBlock(null);
+      }
+    },
+    [setActiveBlock],
+  );
 
   // When an EditableRegion is clicked, open the panel and switch to its tab so
   // the matching card scrolls into view instead of hiding behind another tab.
@@ -620,16 +648,11 @@ export function AdminDrawer() {
               ) : null}
               <GroupedBlockList
                 blockList={activeTab === "page" ? filteredPage : filteredGlobal}
-                drafts={drafts}
-                setDraft={setDraft}
-                clearDraft={clearDraft}
                 activeBlockPath={activeBlock}
-                onFocus={setActiveBlock}
                 itemSchemas={itemSchemas}
                 editorVisibility={editorVisibility}
                 closedGroups={closedGroups}
                 onToggleGroup={toggleGroup}
-                dirtyByPath={dirtyByPath}
                 emptyHint={
                   search
                     ? `"${search}" araması için sonuç yok.`
@@ -1477,24 +1500,23 @@ function Toolbar({ value, onChange }) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Memoised, and every prop it takes is stable across a keystroke: cards read
+ * their own draft from the store, so the drawer shell can re-render for the
+ * dirty count without dragging the editor tree (Tiptap, image, list) with it.
+ *
  * @param {{
  *   blockList: BlockResponse[],
- *   drafts: Map<string, *>,
- *   setDraft: (blockPath: string, value: *) => void,
- *   clearDraft: (blockPath: string) => void,
  *   activeBlockPath: string | null,
- *   onFocus: (blockPath: string | null) => void,
  *   itemSchemas: Map<string, import("../lib/schemas.js").ItemSchema>,
  *   editorVisibility: Map<string, "hidden"|"readonly">,
  *   closedGroups: Set<string>,
  *   onToggleGroup: (group: string) => void,
- *   dirtyByPath: Map<string, boolean>,
  *   emptyHint: string,
  * }} props
  */
-function GroupedBlockList({
-  blockList, drafts, setDraft, clearDraft, activeBlockPath, onFocus,
-  itemSchemas, editorVisibility, closedGroups, onToggleGroup, dirtyByPath, emptyHint,
+const GroupedBlockList = memo(function GroupedBlockList({
+  blockList, activeBlockPath,
+  itemSchemas, editorVisibility, closedGroups, onToggleGroup, emptyHint,
 }) {
   const chunks = useMemo(() => chunkBlocksByGroup(blockList), [blockList]);
 
@@ -1511,12 +1533,7 @@ function GroupedBlockList({
                   block={chunk.block}
                   displayPath={displayLabelOf(chunk.block, null)}
                   topLevel
-                  draft={drafts.get(chunk.block.blockPath)}
-                  hasDraft={drafts.has(chunk.block.blockPath)}
                   isActive={activeBlockPath === chunk.block.blockPath}
-                  onChange={(v) => setDraft(chunk.block.blockPath, v)}
-                  onReset={() => resetBlock(chunk.block, setDraft, clearDraft)}
-                  onFocus={() => onFocus(chunk.block.blockPath)}
                   itemSchema={itemSchemas.get(chunk.block.blockPath) ?? null}
                   readOnly={editorVisibility.get(chunk.block.blockPath) === "readonly"}
                 />
@@ -1526,14 +1543,9 @@ function GroupedBlockList({
                 <GroupCard
                   groupName={chunk.name}
                   blocks={chunk.blocks}
-                  drafts={drafts}
-                  setDraft={setDraft}
-                  clearDraft={clearDraft}
                   activeBlockPath={activeBlockPath}
-                  onFocus={onFocus}
                   itemSchemas={itemSchemas}
                   editorVisibility={editorVisibility}
-                  dirty={chunk.blocks.some((b) => dirtyByPath.get(b.blockPath))}
                   isOpen={!closedGroups.has(chunk.name)}
                   onToggle={() => onToggleGroup(chunk.name)}
                 />
@@ -1550,28 +1562,40 @@ function GroupedBlockList({
       )}
     </section>
   );
-}
+});
 
 /**
  * @param {{
  *   groupName: string,
  *   blocks: BlockResponse[],
- *   drafts: Map<string, *>,
- *   setDraft: (blockPath: string, value: *) => void,
- *   clearDraft: (blockPath: string) => void,
  *   activeBlockPath: string | null,
- *   onFocus: (blockPath: string | null) => void,
  *   itemSchemas: Map<string, import("../lib/schemas.js").ItemSchema>,
  *   editorVisibility: Map<string, "hidden"|"readonly">,
- *   dirty: boolean,
  *   isOpen: boolean,
  *   onToggle: () => void,
  * }} props
  */
 function GroupCard({
-  groupName, blocks, drafts, setDraft, clearDraft, activeBlockPath, onFocus,
-  itemSchemas, editorVisibility, dirty, isOpen, onToggle,
+  groupName, blocks, activeBlockPath,
+  itemSchemas, editorVisibility, isOpen, onToggle,
 }) {
+  // The header dot is derived here rather than handed down: a `dirtyByPath` prop
+  // would change identity on every keystroke and defeat the list's memo. The
+  // selector returns a boolean, so a write outside this group is a no-op.
+  const { contentDraftsStore } = useCmsContext();
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
+  const dirty = useStoreSelector(contentDraftsStore, (m) => {
+    for (const block of blocksRef.current) {
+      const local = m.get(block.blockPath);
+      const isDirty = local !== undefined
+        ? stableStringify(local) !== stableStringify(block.value)
+        : block.draftValue != null;
+      if (isDirty) return true;
+    }
+    return false;
+  });
+
   return (
     <div style={groupCardStyle}>
       <button type="button" className="inscribed-group-header" style={groupHeaderStyle} onClick={onToggle} aria-expanded={isOpen}>
@@ -1611,12 +1635,7 @@ function GroupCard({
                   block={block}
                   displayPath={displayLabelOf(block, groupName)}
                   topLevel={false}
-                  draft={drafts.get(block.blockPath)}
-                  hasDraft={drafts.has(block.blockPath)}
                   isActive={activeBlockPath === block.blockPath}
-                  onChange={(v) => setDraft(block.blockPath, v)}
-                  onReset={() => resetBlock(block, setDraft, clearDraft)}
-                  onFocus={() => onFocus(block.blockPath)}
                   itemSchema={itemSchemas.get(block.blockPath) ?? null}
                   readOnly={editorVisibility.get(block.blockPath) === "readonly"}
                 />

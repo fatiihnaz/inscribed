@@ -1,23 +1,29 @@
 "use client";
 
 /**
- * @file Top-level provider owning CMS context state. Mount once near the root.
- * Holds the blocks map, active-block selection, draft autosave, and the refetch
+ * @file Top-level provider owning CMS state. Mount once near the root. Holds
+ * the blocks map, active-block selection, draft autosave, and the refetch
  * token. The admin drawer is lazy-loaded so public visitors don't pay for it.
+ *
+ * All of that state lives in stores (see `lib/store.js`), not React state, and
+ * the context carries only the handles and setters. A write therefore reaches
+ * the components that selected the changed slice and nobody else: a keystroke
+ * touches one region, a panel toggle touches the panel, an autosave roundtrip
+ * touches the block it saved.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 
-import { CmsContext } from "../lib/context.js";
+import { CmsContext, useCmsContext } from "../lib/context.js";
 import { createCmsConfig } from "../lib/config.js";
 import { buildThemeCss } from "../lib/theme.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
 import { stableStringify } from "../lib/stable-stringify.js";
-import { createStore } from "../lib/store.js";
+import { createStore, useStoreSelector } from "../lib/store.js";
 import { useCmsContent } from "../hooks/use-cms-content.js";
 import { CollectionProvider } from "./CollectionProvider.jsx";
 
@@ -30,6 +36,21 @@ const AdminDrawer = dynamic(
   () => import("./AdminDrawer.jsx").then((m) => m.AdminDrawer),
   { ssr: false },
 );
+
+// `useMemo` is a cache, not a guarantee: React may drop and recompute it, which
+// for a store would swap the object every subscriber holds. A ref pins it.
+const UNSET = Symbol("unset");
+
+/**
+ * @template T
+ * @param {() => T} create
+ * @returns {T}
+ */
+function useConstant(create) {
+  const ref = useRef(/** @type {T | typeof UNSET} */ (UNSET));
+  if (ref.current === UNSET) ref.current = create();
+  return /** @type {T} */ (ref.current);
+}
 
 /**
  * @param {Object} props
@@ -204,92 +225,103 @@ export function CmsProvider({
   const userSub = browserSession ? browserSession.userSub : userSubProp;
   const userInfo = browserSession ? browserSession.userInfo : userInfoProp;
 
-  // Seed the blocks map from `initialBlocks` so EditableRegion renders real
-  // values during SSR and first paint. Later updates flow through `useCmsContent`.
-  const [blocks, setBlocksState] = useState(
-    /** @returns {Map<string, BlockResponse>} */
-    () => indexBlocksByPath(initialBlocks ?? []),
+  // ---- Stores ------------------------------------------------------------
+  //
+  // Everything that changes while the app runs lives here rather than in React
+  // state, so a write reaches only the components selecting the changed slice.
+  // The context value below carries the handles and the setters, and never
+  // changes identity once the session resolves.
+
+  // Seeded from `initialBlocks` so EditableRegion renders real values during
+  // SSR and first paint. Later updates flow through `useCmsContent`.
+  const blocksStore = useConstant(() =>
+    createStore(/** @type {Map<string, BlockResponse>} */ (indexBlocksByPath(initialBlocks ?? []))),
   );
-  const [activeBlock, setActiveBlock] = useState(
-    /** @type {string|null} */ (null),
+  const contentDraftsStore = useConstant(() =>
+    createStore(/** @type {Map<string, *>} */ (new Map())),
   );
-  // Drawer-side "open this list row" signal, set when a page-side
-  // `<EditableList>` item is clicked; the matching card reads it once.
-  const [activeListItem, setActiveListItem] = useState(
-    /** @type {{ path: string, index: number } | null} */ (null),
+  const uiStore = useConstant(() =>
+    createStore(/** @type {import("../lib/context.js").CmsUiState} */ ({
+      activeBlock: null,
+      activeListItem: null,
+      isDrawerOpen: false,
+      draftSyncStatus: "idle",
+      refetchToken: 0,
+    })),
   );
-  const [refetchToken, setRefetchToken] = useState(0);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  // Per-blockPath unsaved edits (live-preview overlay). In an external store,
-  // not React state, so a keystroke only re-renders the region subscribed to
-  // that blockPath instead of every region on the page. `setDraftsState` keeps
-  // the `setState(value | prev => next)` shape, so call sites are untouched.
-  const contentDraftsStoreRef = useRef(
-    /** @type {import("../lib/store.js").Store<Map<string, *>> | null} */ (null),
+  const registryStore = useConstant(() =>
+    createStore(/** @type {import("../lib/context.js").CmsRegistryState} */ ({
+      itemSchemas: new Map(),
+      editorVisibility: new Map(),
+    })),
   );
-  if (contentDraftsStoreRef.current === null) {
-    contentDraftsStoreRef.current = createStore(new Map());
-  }
-  const contentDraftsStore = contentDraftsStoreRef.current;
+
+  const setBlocksState = blocksStore.set;
   const setDraftsState = contentDraftsStore.set;
 
-  // Registry of <EditableList> itemSchemas for the drawer's List editors. A
-  // ref + rerender counter, not setState: register/unregister fires inside
-  // child useEffects, which would otherwise warn about a setState mid-commit.
-  const itemSchemasRef = useRef(/** @type {Map<string, ItemSchema>} */ (new Map()));
-  const [itemSchemasVersion, setItemSchemasVersion] = useState(0);
+  /** @param {Partial<import("../lib/context.js").CmsUiState>} patch */
+  const patchUi = useCallback(
+    (patch) => {
+      uiStore.set((s) => {
+        for (const key of /** @type {(keyof typeof patch)[]} */ (Object.keys(patch))) {
+          if (s[key] !== patch[key]) return { ...s, ...patch };
+        }
+        return s;
+      });
+    },
+    [uiStore],
+  );
 
   const registerItemSchema = useCallback(
     /** @param {string} blockPath @param {ItemSchema} schema */
     (blockPath, schema) => {
-      itemSchemasRef.current.set(blockPath, schema);
-      setItemSchemasVersion((n) => n + 1);
+      registryStore.set((s) => {
+        if (s.itemSchemas.get(blockPath) === schema) return s;
+        const itemSchemas = new Map(s.itemSchemas);
+        itemSchemas.set(blockPath, schema);
+        return { ...s, itemSchemas };
+      });
     },
-    [],
+    [registryStore],
   );
 
   const unregisterItemSchema = useCallback(
     /** @param {string} blockPath */
     (blockPath) => {
-      if (!itemSchemasRef.current.delete(blockPath)) return;
-      setItemSchemasVersion((n) => n + 1);
+      registryStore.set((s) => {
+        if (!s.itemSchemas.has(blockPath)) return s;
+        const itemSchemas = new Map(s.itemSchemas);
+        itemSchemas.delete(blockPath);
+        return { ...s, itemSchemas };
+      });
     },
-    [],
-  );
-
-  // Registry of editor-visibility overrides from `<EditableRegion>`'s
-  // `visible`/`editable` props (runtime-only, not in the manifest), so the
-  // drawer learns to hide/lock a block. State-based so its block-list useMemo
-  // recomputes when overrides come and go.
-  const [editorVisibility, setEditorVisibility] = useState(
-    /** @returns {Map<string, "hidden"|"readonly">} */
-    () => new Map(),
+    [registryStore],
   );
 
   const registerEditorVisibility = useCallback(
     /** @param {string} blockPath @param {"hidden"|"readonly"} mode */
     (blockPath, mode) => {
-      setEditorVisibility((prev) => {
-        if (prev.get(blockPath) === mode) return prev;
-        const next = new Map(prev);
-        next.set(blockPath, mode);
-        return next;
+      registryStore.set((s) => {
+        if (s.editorVisibility.get(blockPath) === mode) return s;
+        const editorVisibility = new Map(s.editorVisibility);
+        editorVisibility.set(blockPath, mode);
+        return { ...s, editorVisibility };
       });
     },
-    [],
+    [registryStore],
   );
 
   const unregisterEditorVisibility = useCallback(
     /** @param {string} blockPath */
     (blockPath) => {
-      setEditorVisibility((prev) => {
-        if (!prev.has(blockPath)) return prev;
-        const next = new Map(prev);
-        next.delete(blockPath);
-        return next;
+      registryStore.set((s) => {
+        if (!s.editorVisibility.has(blockPath)) return s;
+        const editorVisibility = new Map(s.editorVisibility);
+        editorVisibility.delete(blockPath);
+        return { ...s, editorVisibility };
       });
     },
-    [],
+    [registryStore],
   );
 
   // Re-seed the blocks map when `initialBlocks` arrives with new content (e.g.
@@ -300,9 +332,9 @@ export function CmsProvider({
     if (initialBlocks === initialBlocksRef.current) return;
     initialBlocksRef.current = initialBlocks;
     setBlocksState(indexBlocksByPath(initialBlocks ?? []));
-    setActiveBlock(null);
+    patchUi({ activeBlock: null });
     setDraftsState(new Map());
-  }, [initialBlocks]);
+  }, [initialBlocks, setBlocksState, setDraftsState, patchUi]);
 
   // Backstop: a root-layout `<CmsPage>` survives client navigation, so its
   // `initialBlocks` prop doesn't update on URL change. `router.refresh()`
@@ -316,28 +348,32 @@ export function CmsProvider({
   useEffect(() => {
     if (pathname === lastPathnameRef.current) return;
     lastPathnameRef.current = pathname;
-    setActiveBlock(null);
+    patchUi({ activeBlock: null });
     setDraftsState(new Map());
     router.refresh();
-  }, [pathname, router]);
+  }, [pathname, router, setDraftsState, patchUi]);
 
   // Drop drafts for blocks that no longer exist (e.g. after a manifest sync
-  // removed one). Pathname-change drafts are already cleared above.
+  // removed one). Subscribed rather than keyed on a render value, since blocks
+  // now change without re-rendering the provider. Pathname-change drafts are
+  // already cleared above.
   useEffect(() => {
-    setDraftsState((prev) => {
-      if (prev.size === 0) return prev;
-      let changed = false;
-      const next = new Map();
-      for (const [path, value] of prev) {
-        if (blocks.has(path)) {
-          next.set(path, value);
-        } else {
-          changed = true;
+    const prune = () => {
+      const currentBlocks = blocksStore.get();
+      setDraftsState((prev) => {
+        if (prev.size === 0) return prev;
+        let changed = false;
+        const next = new Map();
+        for (const [path, value] of prev) {
+          if (currentBlocks.has(path)) next.set(path, value);
+          else changed = true;
         }
-      }
-      return changed ? next : prev;
-    });
-  }, [blocks]);
+        return changed ? next : prev;
+      });
+    };
+    prune();
+    return blocksStore.subscribe(prune);
+  }, [blocksStore, setDraftsState]);
 
   // Stash callbacks in refs so prop changes don't bust the memoised context
   // value (and thus don't spuriously re-render consumers).
@@ -351,8 +387,8 @@ export function CmsProvider({
   onSignOutRef.current = onSignOut ?? null;
 
   const triggerRefetch = useCallback(() => {
-    setRefetchToken((n) => n + 1);
-  }, []);
+    uiStore.set((s) => ({ ...s, refetchToken: s.refetchToken + 1 }));
+  }, [uiStore]);
 
   const setDraft = useCallback(
     /** @param {string} blockPath @param {*} value */
@@ -363,7 +399,7 @@ export function CmsProvider({
         return next;
       });
     },
-    [],
+    [setDraftsState],
   );
 
   const clearDraft = useCallback(
@@ -376,31 +412,41 @@ export function CmsProvider({
         return next;
       });
     },
-    [],
+    [setDraftsState],
   );
 
   const clearDrafts = useCallback(() => {
     discardGenRef.current += 1;
     setDraftsState((prev) => (prev.size === 0 ? prev : new Map()));
-  }, []);
+  }, [setDraftsState]);
 
   const setDrawerOpen = useCallback(
     /** @param {boolean} open */
     (open) => {
-      setIsDrawerOpen(open);
-      // Closing cancels the in-progress edit so reopening lands on the block list.
-      if (!open) setActiveBlock(null);
+      // Closing cancels the in-progress edit so reopening lands on the block
+      // list; one write so subscribers see both fields move together.
+      patchUi(open ? { isDrawerOpen: true } : { isDrawerOpen: false, activeBlock: null });
     },
-    [],
+    [patchUi],
   );
 
-  const setActiveBlockGuarded = useCallback(
+  const setActiveListItem = useCallback(
+    /** @param {{ path: string, index: number } | null} target */
+    (target) => patchUi({ activeListItem: target }),
+    [patchUi],
+  );
+
+  // Reads `isAdmin` through a ref so the callback (and with it the whole
+  // context value) keeps one identity across a sign-in.
+  const isAdminGateRef = useRef(isAdmin);
+  isAdminGateRef.current = isAdmin;
+  const setActiveBlock = useCallback(
     /** @param {string|null} blockPath */
     (blockPath) => {
-      if (!isAdmin) return;
-      setActiveBlock(blockPath);
+      if (!isAdminGateRef.current) return;
+      patchUi({ activeBlock: blockPath });
     },
-    [isAdmin],
+    [patchUi],
   );
 
   const stableOnAfterSave = useCallback(
@@ -434,12 +480,12 @@ export function CmsProvider({
   // PUT each. Block/version/config/pathname are read through refs so unrelated
   // re-renders don't reset the timer, only a real `drafts` mutation does.
 
-  const [draftSyncStatus, setDraftSyncStatus] = useState(
-    /** @type {"idle"|"saving"|"saved"|"failed"} */ ("idle"),
+  const setDraftSyncStatus = useCallback(
+    /** @param {"idle"|"saving"|"saved"|"failed"} status */
+    (status) => patchUi({ draftSyncStatus: status }),
+    [patchUi],
   );
 
-  const blocksRef = useRef(blocks);
-  blocksRef.current = blocks;
   const draftPathnameRef = useRef(pathname);
   draftPathnameRef.current = pathname;
   const isAdminRef = useRef(isAdmin);
@@ -470,7 +516,7 @@ export function CmsProvider({
         draftStatusResetRef.current = null;
       }, 900);
     },
-    [],
+    [setDraftSyncStatus],
   );
 
   useEffect(() => {
@@ -500,7 +546,7 @@ export function CmsProvider({
       autosaveTimerRef.current = null;
       const genAtDispatch = discardGenRef.current;
       const drafts = contentDraftsStore.get();
-      const currentBlocks = blocksRef.current;
+      const currentBlocks = blocksStore.get();
       const currentPathname = draftPathnameRef.current ?? "/";
       const currentConfig = draftConfigRef.current;
 
@@ -630,7 +676,7 @@ export function CmsProvider({
       if (blockPaths.length === 0) return;
       /** @type {Map<string, string[]>} */
       const bySlug = new Map();
-      const currentBlocks = blocksRef.current;
+      const currentBlocks = blocksStore.get();
       const currentPathname = draftPathnameRef.current ?? "/";
       for (const blockPath of blockPaths) {
         const block = currentBlocks.get(blockPath);
@@ -680,78 +726,71 @@ export function CmsProvider({
     [stableGetAccessToken],
   );
 
+  // Seams only: stores, setters, config, session. Nothing in here changes while
+  // the app runs (the session fields settle once at sign-in), so a consumer
+  // re-renders because a store slice it selected moved, never because the
+  // context did.
   const value = useMemo(
     () => ({
       config: normalizedConfig,
       isAdmin,
       userSub,
-      blocks,
+      userInfo,
+      onSignOut: onSignOut ? stableOnSignOut : browserSession ? browserSignOut : null,
+
+      blocksStore,
       setBlocks: setBlocksState,
-      // Live-edit drafts aren't in the value; they live in `contentDraftsStore`
-      // so a keystroke doesn't re-render every consumer.
       contentDraftsStore,
       setDraft,
       clearDraft,
       clearDrafts,
       discardServerDrafts,
-      activeBlock,
-      setActiveBlock: setActiveBlockGuarded,
-      activeListItem,
+
+      uiStore,
+      setActiveBlock,
       setActiveListItem,
-      refetchToken,
+      setDrawerOpen,
       triggerRefetch,
-      itemSchemas: itemSchemasRef.current,
+
+      registryStore,
       registerItemSchema,
       unregisterItemSchema,
-      editorVisibility,
       registerEditorVisibility,
       unregisterEditorVisibility,
+
       onAfterSave: stableOnAfterSave,
       getAccessToken: stableGetAccessToken,
-      draftSyncStatus,
-      isDrawerOpen,
-      setDrawerOpen,
-      userInfo,
-      onSignOut: onSignOut ? stableOnSignOut : browserSession ? browserSignOut : null,
     }),
     [
       normalizedConfig,
       isAdmin,
       userSub,
-      blocks,
-      contentDraftsStore,
-      setDraft,
-      clearDraft,
-      clearDrafts,
-      discardServerDrafts,
-      activeBlock,
-      setActiveBlockGuarded,
-      activeListItem,
-      refetchToken,
-      triggerRefetch,
-      itemSchemasVersion,
-      registerItemSchema,
-      unregisterItemSchema,
-      editorVisibility,
-      registerEditorVisibility,
-      unregisterEditorVisibility,
-      stableOnAfterSave,
-      stableGetAccessToken,
-      draftSyncStatus,
-      isDrawerOpen,
-      setDrawerOpen,
       userInfo,
       onSignOut,
       stableOnSignOut,
       browserSession,
       browserSignOut,
+      blocksStore,
+      setBlocksState,
+      contentDraftsStore,
+      setDraft,
+      clearDraft,
+      clearDrafts,
+      discardServerDrafts,
+      uiStore,
+      setActiveBlock,
+      setActiveListItem,
+      setDrawerOpen,
+      triggerRefetch,
+      registryStore,
+      registerItemSchema,
+      unregisterItemSchema,
+      registerEditorVisibility,
+      unregisterEditorVisibility,
+      stableOnAfterSave,
+      stableGetAccessToken,
     ],
   );
-
-  // Push the page right when the admin drawer is open so the panel doesn't
-  // overlap content. Plain CSS transition keeps `framer-motion` in the
-  // lazy-loaded admin chunk so public visitors don't pay for it.
-  const contentOffset = isAdmin && isDrawerOpen ? ADMIN_PANEL_WIDTH : 0;
 
   return (
     <CmsContext.Provider value={value}>
@@ -765,14 +804,7 @@ export function CmsProvider({
             autosave roundtrip pull fresh versions in without a navigation.
             Public visitors refresh via `router.refresh()` above instead. */}
         {isAdmin ? <ContentLoader /> : null}
-        <div
-          style={{
-            marginLeft: contentOffset,
-            transition: "margin-left 350ms cubic-bezier(0.32, 0.72, 0.18, 1)",
-          }}
-        >
-          {children}
-        </div>
+        <PageShell isAdmin={isAdmin}>{children}</PageShell>
         {isAdmin ? <AdminDrawer /> : null}
         {sessionExpired && browserAuth ? (
           <SessionExpiredNotice
@@ -782,6 +814,30 @@ export function CmsProvider({
         ) : null}
       </CollectionProvider>
     </CmsContext.Provider>
+  );
+}
+
+/**
+ * Pushes the page right while the drawer is open, so the panel doesn't overlap
+ * content. Its own component subscribing to the store, rather than a value read
+ * in the provider: a panel toggle then re-renders this wrapper alone, and
+ * `children` (a stable element) is reused untouched. The plain CSS transition
+ * keeps `framer-motion` in the lazy admin chunk, off the public bundle.
+ *
+ * @param {{ isAdmin: boolean, children: React.ReactNode }} props
+ */
+function PageShell({ isAdmin, children }) {
+  const { uiStore } = useCmsContext();
+  const isDrawerOpen = useStoreSelector(uiStore, (s) => s.isDrawerOpen);
+  return (
+    <div
+      style={{
+        marginLeft: isAdmin && isDrawerOpen ? ADMIN_PANEL_WIDTH : 0,
+        transition: "margin-left 350ms cubic-bezier(0.32, 0.72, 0.18, 1)",
+      }}
+    >
+      {children}
+    </div>
   );
 }
 

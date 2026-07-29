@@ -80,7 +80,7 @@ const INLINE_TEXT_TYPES = new Set(["ShortText", "LongText"]);
 // eslint-disable-next-line no-unused-vars
 export function EditableRegion({ blockPath, as, editable, visible, blockType: _bt, defaultValue: _dv, scope: _scope, ...rest }) {
   const {
-    isAdmin, blocks, contentDraftsStore, activeBlock, setActiveBlock, setDraft,
+    isAdmin, blocksStore, contentDraftsStore, uiStore, setActiveBlock, setDraft,
     registerEditorVisibility, unregisterEditorVisibility,
   } = useCmsContext();
   const groupPrefix = useContext(CmsGroupContext);
@@ -108,7 +108,10 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   const hasLocalDraft = useStoreSelector(contentDraftsStore, (m) => m.has(fullPath));
   const localDraft = useStoreSelector(contentDraftsStore, (m) => m.get(fullPath));
 
-  const block = blocks.get(fullPath);
+  // Own block only, and selection as a boolean: another block's save or
+  // selection leaves this region alone.
+  const block = useStoreSelector(blocksStore, (m) => m.get(fullPath));
+  const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === fullPath);
   const blockType = block ? block.blockType : null;
   const value = hasLocalDraft ? localDraft : block ? (block.draftValue ?? block.value) : undefined;
   const empty = isValueEmpty(blockType, value);
@@ -123,7 +126,6 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
 
   if (!isAdmin || visibilityMode) return rendered;
 
-  const isActive = activeBlock === fullPath;
   // Editing focus and drawer selection are decoupled: focusing an in-place text
   // block highlights the region but does NOT open the drawer. Both drive the
   // "active" ring/tint; only the label chip opens the drawer.

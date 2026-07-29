@@ -92,10 +92,10 @@ const PANEL_BORDER    = `1px solid ${BORDER}`;
 export function EditableList({ blockPath, itemSchema, children, defaultValue, scope, editable, visible, as, ...rest }) {
   void defaultValue; void scope; // discovery-only
   const {
-    isAdmin, blocks, contentDraftsStore, setDraft,
+    isAdmin, blocksStore, contentDraftsStore, uiStore, setDraft,
     registerItemSchema, unregisterItemSchema,
     registerEditorVisibility, unregisterEditorVisibility,
-    activeBlock, setActiveBlock, setActiveListItem,
+    setActiveBlock, setActiveListItem,
   } = useCmsContext();
   const groupPrefix = useContext(CmsGroupContext);
   const groupVisibility = useContext(CmsGroupVisibilityContext);
@@ -126,7 +126,8 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   const hasLocalDraft = useStoreSelector(contentDraftsStore, (m) => m.has(fullPath));
   const localDraft = useStoreSelector(contentDraftsStore, (m) => m.get(fullPath));
 
-  const block = blocks.get(fullPath);
+  const block = useStoreSelector(blocksStore, (m) => m.get(fullPath));
+  const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === fullPath);
   // Precedence (as EditableRegion): local draft > backend `draftValue` >
   // published value, so a saved-but-unpublished list survives navigation.
   const raw = hasLocalDraft
@@ -192,7 +193,6 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   if (!as) return body;
 
   const Wrapper = /** @type {*} */ (as);
-  const isActive = activeBlock === fullPath;
   const dirty = block
     ? (hasLocalDraft
         ? stableStringify(localDraft) !== stableStringify(block.value)

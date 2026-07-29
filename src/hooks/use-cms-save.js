@@ -36,12 +36,14 @@ import { useCmsAdmin } from "./use-cms-admin.js";
  */
 export function useCmsSave() {
   const {
-    blocks, contentDraftsStore, clearDraft, clearDrafts, discardServerDrafts, setActiveBlock,
+    blocksStore, contentDraftsStore, setActiveBlock,
+    clearDraft, clearDrafts, discardServerDrafts,
   } = useCmsContext();
-  // Whole-map subscription: this aggregates every dirty blockPath for the
+  // Whole-map subscriptions: this aggregates every dirty blockPath for the
   // drawer's live dirty count, so it re-renders on any draft change. Fine for
   // a single admin surface.
   const drafts = useStoreSelector(contentDraftsStore, (m) => m);
+  const blocks = useStoreSelector(blocksStore, (m) => m);
   const { savePage, isSaving, error } = useCmsAdmin();
 
   // A block is dirty when its effective value (local draft, else server-side

@@ -17,11 +17,12 @@
  * editor's draft state so the header can show the "Geri al" reset.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Undo2, Lock, List as ListIcon } from "./icons.jsx";
 
 import { stableStringify } from "../lib/stable-stringify.js";
 import { useCmsContext } from "../lib/context.js";
+import { useStoreSelector } from "../lib/store.js";
 import { useCollectionContext } from "../lib/collection-context.js";
 
 import { FieldEditor } from "./editors/FieldEditor.jsx";
@@ -71,21 +72,51 @@ function rowInsetStyle(base, topLevel) {
  */
 
 /**
+ * Everything a card needs to edit its own block, read here rather than handed
+ * down from the drawer. The drawer re-renders on every keystroke in any field
+ * (it aggregates the dirty count), so props carrying the draft or freshly-built
+ * arrow handlers would drag every card along with it; a per-path subscription
+ * plus stable callbacks let `BlockCard`'s memo hold instead.
+ *
+ * @param {BlockResponse} block
+ */
+function useBlockDraft(block) {
+  const { contentDraftsStore, setDraft, clearDraft, setActiveBlock } = useCmsContext();
+  const blockPath = block.blockPath;
+
+  // Two selectors (presence + value) so an explicit empty draft stays
+  // distinguishable from "no draft", same as `<EditableRegion>`.
+  const hasDraft = useStoreSelector(contentDraftsStore, (m) => m.has(blockPath));
+  const draft = useStoreSelector(contentDraftsStore, (m) => m.get(blockPath));
+
+  const onChange = useCallback(
+    /** @param {*} value */
+    (value) => setDraft(blockPath, value),
+    [setDraft, blockPath],
+  );
+  const onReset = useCallback(
+    () => resetBlock(block, setDraft, clearDraft),
+    [block, setDraft, clearDraft],
+  );
+  const onFocus = useCallback(
+    () => setActiveBlock(blockPath),
+    [setActiveBlock, blockPath],
+  );
+
+  return { draft, hasDraft, onChange, onReset, onFocus };
+}
+
+/**
  * @param {{
  *   block: BlockResponse,
- *   draft: *,
- *   hasDraft: boolean,
  *   isActive: boolean,
- *   onChange: (value: *) => void,
- *   onReset: () => void,
- *   onFocus: () => void,
  *   itemSchema: ItemSchema | null,
  *   readOnly?: boolean,
  *   topLevel: boolean,
  *   displayPath?: string,
  * }} props
  */
-export function BlockCard(props) {
+export const BlockCard = memo(function BlockCard(props) {
   if (props.block.blockType === "Collection") {
     const binding = /** @type {{ collection?: string, slug?: string }} */ (
       props.block.value ?? {}
@@ -105,7 +136,6 @@ export function BlockCard(props) {
         collection={binding.collection}
         slug={binding.slug}
         isActive={props.isActive}
-        onFocus={props.onFocus}
         topLevel={props.topLevel}
         displayPath={props.displayPath}
       />
@@ -115,7 +145,7 @@ export function BlockCard(props) {
     return <FieldRow {...props} />;
   }
   return <RegularBlockCard {...props} />;
-}
+});
 
 /**
  * Always-open form field for field-weight blocks: mono path label on top
@@ -125,19 +155,15 @@ export function BlockCard(props) {
  *
  * @param {{
  *   block: BlockResponse,
- *   draft: *,
- *   hasDraft: boolean,
  *   isActive: boolean,
- *   onChange: (value: *) => void,
- *   onReset: () => void,
- *   onFocus: () => void,
  *   readOnly?: boolean,
  *   topLevel: boolean,
  *   displayPath?: string,
  * }} props
  */
-function FieldRow({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, readOnly, topLevel, displayPath }) {
+function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
+  const { draft, hasDraft, onChange, onReset, onFocus } = useBlockDraft(block);
 
   const effective = block.draftValue ?? block.value;
   const value = hasDraft ? draft : effective;
@@ -274,20 +300,16 @@ function InvalidCollectionCard({ block, topLevel, displayPath }) {
 /**
  * @param {{
  *   block: BlockResponse,
- *   draft: *,
- *   hasDraft: boolean,
  *   isActive: boolean,
- *   onChange: (value: *) => void,
- *   onReset: () => void,
- *   onFocus: () => void,
  *   itemSchema: ItemSchema | null,
  *   readOnly?: boolean,
  *   topLevel: boolean,
  *   displayPath?: string,
  * }} props
  */
-function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema, readOnly, topLevel, displayPath }) {
+function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
+  const { draft, hasDraft, onChange, onReset, onFocus } = useBlockDraft(block);
 
   const effective = block.draftValue ?? block.value;
   const value = hasDraft ? draft : effective;
@@ -353,14 +375,14 @@ function RegularBlockCard({ block, draft, hasDraft, isActive, onChange, onReset,
  *   collection: string,
  *   slug: string,
  *   isActive: boolean,
- *   onFocus: () => void,
  *   topLevel: boolean,
  *   displayPath?: string,
  * }} props
  */
-function CollectionBlockCard({ block, collection, slug, isActive, onFocus, topLevel, displayPath }) {
+function CollectionBlockCard({ block, collection, slug, isActive, topLevel, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
-  const { isDrawerOpen } = useCmsContext();
+  const { setActiveBlock, uiStore } = useCmsContext();
+  const isDrawerOpen = useStoreSelector(uiStore, (s) => s.isDrawerOpen);
   // The page's own `<CollectionField>`s drive the draft when they exist; this
   // card then shows the same values without a second autosave loop behind them.
   const { inlineFieldRecords } = useCollectionContext();
@@ -372,6 +394,11 @@ function CollectionBlockCard({ block, collection, slug, isActive, onFocus, topLe
     mirror: isDrawerOpen && isOpen,
   });
   const isDirty = editor.hasDraft && editor.canEdit;
+
+  const onFocus = useCallback(
+    () => setActiveBlock(block.blockPath),
+    [setActiveBlock, block.blockPath],
+  );
 
   useEffect(() => {
     if (isActive) setIsOpen(true);
@@ -602,7 +629,7 @@ function TypeIcon({ type, compact }) {
  * @param {(blockPath: string, value: *) => void} setDraft
  * @param {(blockPath: string) => void} clearDraft
  */
-export function resetBlock(block, setDraft, clearDraft) {
+function resetBlock(block, setDraft, clearDraft) {
   if (block.draftValue != null) {
     setDraft(block.blockPath, block.value);
   } else {

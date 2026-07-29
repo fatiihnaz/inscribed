@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../lib/context.js";
+import { useStoreSelector } from "../lib/store.js";
 import { CmsApiError } from "../lib/errors.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
 
@@ -32,15 +33,16 @@ import { indexBlocksByPath } from "../lib/blocks.js";
  */
 
 export function useCmsContent() {
-  const { config, blocks: seedBlocks, setBlocks, refetchToken, triggerRefetch, getAccessToken } = useCmsContext();
+  const { config, blocksStore, setBlocks, uiStore, triggerRefetch, getAccessToken } = useCmsContext();
   const slug = usePathname() ?? "/";
+  const refetchToken = useStoreSelector(uiStore, (s) => s.refetchToken);
 
-  // Seed from the provider's blocks map (set from `initialBlocks` on the
+  // Seed from the provider's blocks store (set from `initialBlocks` on the
   // server) so the first render shows SSR content, not an empty array while
   // the admin-only refetch is in flight.
   const [state, setState] = useState(
     /** @returns {{ blocks: BlockResponse[], isLoading: boolean, error: Error|null }} */
-    () => ({ blocks: Array.from(seedBlocks.values()), isLoading: false, error: null }),
+    () => ({ blocks: Array.from(blocksStore.get().values()), isLoading: false, error: null }),
   );
 
   useEffect(() => {

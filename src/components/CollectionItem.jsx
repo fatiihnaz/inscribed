@@ -71,7 +71,7 @@ const COLLECTION_GLYPH = TYPE_META.Collection.glyph;
  * @param {CollectionItemProps} props
  */
 export function CollectionItem({ collection, slug, group, label, children }) {
-  const { isAdmin, activeBlock, setActiveBlock } = useCmsContext();
+  const { isAdmin, uiStore, setActiveBlock } = useCmsContext();
   const {
     registerCollectionBinding, unregisterCollectionBinding, collectionStore,
   } = useCollectionContext();
@@ -95,7 +95,9 @@ export function CollectionItem({ collection, slug, group, label, children }) {
   ]);
 
   const { item, isLoading, error, refetch } = useCollectionItem(collection, slug);
-  const drafts = useStoreSelector(collectionStore, (st) => st.drafts);
+  // Booleans, not the maps: editing another record leaves this binding alone.
+  const hasDraft = useStoreSelector(collectionStore, (st) => st.drafts.has(`${collection}:${slug}`));
+  const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === bindingId);
   const rendered = /** @type {*} */ (children(item, { isLoading, error, refetch }));
 
   // Readers still get a scope: `<CollectionField>` renders the value for them,
@@ -122,8 +124,8 @@ export function CollectionItem({ collection, slug, group, label, children }) {
       bindingId={bindingId}
       label={cardLabel}
       tag={typeof rendered?.type === "string" ? rendered.type : null}
-      dirty={drafts.has(`${collection}:${slug}`) || item.draftData != null}
-      activeBlock={activeBlock}
+      dirty={hasDraft || item.draftData != null}
+      isActive={isActive}
       setActiveBlock={setActiveBlock}
     >
       {rendered}
@@ -148,14 +150,14 @@ export function CollectionItem({ collection, slug, group, label, children }) {
  *   label: string,
  *   tag: string | null,
  *   dirty: boolean,
- *   activeBlock: string | null,
+ *   isActive: boolean,
  *   setActiveBlock: (path: string | null) => void,
  *   children: React.ReactNode,
  * }} props
  */
 function CollectionEditScope({
   collection, slug, scopeId, item, bindingId, label, tag, dirty,
-  activeBlock, setActiveBlock, children,
+  isActive, setActiveBlock, children,
 }) {
   const { inlineFieldRecords } = useCollectionContext();
   const driver = inlineFieldRecords.get(`${collection}:${slug}`);
@@ -177,7 +179,7 @@ function CollectionEditScope({
     <CollectionItemContext.Provider value={scope}>
       <CollectionEditWrapper
         onClick={() => setActiveBlock(bindingId)}
-        isActive={activeBlock === bindingId}
+        isActive={isActive}
         label={label}
         tag={tag}
         dirty={dirty}

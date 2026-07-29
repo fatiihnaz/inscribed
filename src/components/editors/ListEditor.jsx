@@ -15,6 +15,7 @@ import { Plus, Trash2, ChevronUp, ChevronDown } from "../icons.jsx";
 
 import { addItem, moveItem, removeItem } from "../../lib/list-ops.js";
 import { useCmsContext } from "../../lib/context.js";
+import { useStoreSelector } from "../../lib/store.js";
 import { ACCENT, TEXT_MUTED, STATUS_DANGER, R_BADGE, R_SM, emptyStateStyle } from "../admin-drawer-styles.js";
 
 import { FieldEditor } from "./FieldEditor.jsx";
@@ -122,7 +123,13 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
  * }} props
  */
 function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onFieldChange, onRemove, onMoveUp, onMoveDown }) {
-  const { activeListItem, setActiveListItem } = useCmsContext();
+  // Selects a boolean, not the signal itself: a row click elsewhere in the list
+  // leaves the other cards alone.
+  const { uiStore, setActiveListItem } = useCmsContext();
+  const isTarget = useStoreSelector(
+    uiStore,
+    (s) => s.activeListItem?.path === blockPath && s.activeListItem?.index === index,
+  );
   const [isOpen, setIsOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
@@ -131,9 +138,7 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
   // When `activeListItem` points at us (page-side row click), expand, scroll
   // into view, and clear the signal so it fires once. Matches RegionItemCard.
   useEffect(() => {
-    if (!activeListItem) return;
-    if (activeListItem.path !== blockPath) return;
-    if (activeListItem.index !== index) return;
+    if (!isTarget) return;
     setIsOpen(true);
     setActiveListItem(null);
     // Wait a frame so the parent collapse has begun laying out before we
@@ -142,7 +147,7 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
       ref.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
     return () => cancelAnimationFrame(raf);
-  }, [activeListItem, blockPath, index, setActiveListItem]);
+  }, [isTarget, setActiveListItem]);
 
   return (
     <div

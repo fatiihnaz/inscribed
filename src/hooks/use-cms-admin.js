@@ -28,7 +28,10 @@ import { CmsApiError } from "../lib/errors.js";
  * @returns {UseCmsAdminResult}
  */
 export function useCmsAdmin() {
-  const { config, isAdmin, blocks, triggerRefetch, onAfterSave, getAccessToken } =
+  // `blocksStore` is read inside `savePage`, never subscribed to: the slug
+  // lookup wants the map at call time, and subscribing would re-render every
+  // caller on each autosave roundtrip.
+  const { config, isAdmin, blocksStore, triggerRefetch, onAfterSave, getAccessToken } =
     useCmsContext();
   const pathname = usePathname() ?? "/";
 
@@ -56,6 +59,7 @@ export function useCmsAdmin() {
         // only kicks in when one batch edits both a page block and a global one.
         /** @type {Map<string, UpdateBlockItem[]>} */
         const bySlug = new Map();
+        const blocks = blocksStore.get();
         for (const update of updates) {
           const block = /** @type {BlockResponse | undefined} */ (blocks.get(update.blockPath));
           const slug = block?._slug ?? pathname;
@@ -108,7 +112,7 @@ export function useCmsAdmin() {
         setIsSaving(false);
       }
     },
-    [isAdmin, config, blocks, pathname, triggerRefetch, onAfterSave, getAccessToken],
+    [isAdmin, config, blocksStore, pathname, triggerRefetch, onAfterSave, getAccessToken],
   );
 
   const save = useCallback(

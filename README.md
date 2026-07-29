@@ -74,13 +74,20 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
 
 inscribed is a peer of your app's framework runtime:
 
-| Peer dependency | Supported range  |
-| --------------- | ---------------- |
-| `next`          | `^14.0 \|\| ^15.0` |
-| `react`         | `^18.0 \|\| ^19.0` |
-| `react-dom`     | `^18.0 \|\| ^19.0` |
+| Peer dependency | Supported range             |
+| --------------- | --------------------------- |
+| `next`          | `^14.0 \|\| ^15.0 \|\| ^16.0` |
+| `react`         | `^18.0 \|\| ^19.0`            |
+| `react-dom`     | `^18.0 \|\| ^19.0`            |
 
 Node 18+ for the `cms-sync` CLI. The package is ESM-only.
+
+**Backend contract.** 4.x talks to a backend that serves
+`/cms/public/{clientKey}/content`, issues `content:*` capabilities, accepts the
+whole manifest at `POST /cms/sync`, and exposes the draft-discard `DELETE`
+endpoints. An older backend answers some of those with 404 and the drawer will
+not mount for editors. See [Bring your own backend](#bring-your-own-backend)
+for the full surface.
 
 ## Installation
 
@@ -229,8 +236,9 @@ static discovery step turns those declarations into a backend manifest.
   slug. Pages without a root contribute nothing to the manifest; only
   `scope="global"` regions are collected without one.
 - **Discover** by running `cms-sync`. It AST-scans `app/`, follows relative
-  imports and jsconfig/tsconfig `paths` aliases (also into files outside
-  `app/`, e.g. a root-level `components/` dir), applies `<CmsGroup>` prefixes,
+  imports and jsconfig/tsconfig `paths` aliases, with or without `baseUrl` (also
+  into files outside `app/`, e.g. a root-level `components/` dir), applies
+  `<CmsGroup>` prefixes,
   collects `scope="global"` regions under the global slug, and builds one
   manifest per page slug. Files that fail to parse are skipped with a warning;
   an alias that resolves to nothing warns too instead of silently dropping the
@@ -262,8 +270,9 @@ A **block** is a single editable value addressed by a dot-notation `blockPath`
 | `List`       | array of objects shaped by `itemSchema` | repeatable items |
 | `Collection` | `{ collection, slug? }` binding (read-only) | n/a (see [Collections](#collections)) |
 
-> `Text` is a legacy alias of `LongText` (multi-line) it predates the
-> short/long split. Prefer `ShortText` / `LongText` in new code.
+> `Text` was a legacy alias of `LongText` and is gone in 4.x. Blocks that still
+> arrive typed `Text` are folded to `LongText` as they enter the runtime, so
+> older rows and custom transports keep working.
 
 For full control over rendering, read a block directly from a Client Component
 with `useCmsBlock(blockPath)`, it returns the raw `value`, `version`, and an
@@ -421,13 +430,23 @@ An `Image` field gets the same treatment as an image region: hover the picture
 for replace/remove, or drop one onto the empty field. Alt text stays in the
 drawer, where a text input belongs.
 
+A `RichText` field needs one word from you, because the field's type comes from
+`/me` and visitors never see it — without the flag they would read the markup as
+text while you edited it as prose:
+
+```jsx
+<CollectionField name="body" as="div" html />
+```
+
+It renders the toolbar editor for an editor and sanitised HTML for everyone
+else. `cms-sync` can't catch a missing `html`, so the component warns in dev.
+
 The element is the same for visitors and admins, so the page doesn't shift when
-you sign in. **`ShortText`, `LongText` and `Image` edit in place**; every other
-type renders read-only and keeps its drawer editor, which remains the complete
-surface for the record. Two reasons for the limit: a date picker or a repeatable
-sub-form has no sensible affordance mid-paragraph, and the field's type comes
-from `/me`, which visitors never see, so nothing that renders for them may
-depend on knowing it. Text and `{ src, alt }` are recognisable without it.
+you sign in. **`ShortText`, `LongText`, `RichText` and `Image` edit in place**;
+every other type renders read-only and keeps its drawer editor, which remains
+the complete surface for the record. A date picker or a repeatable sub-form has
+no sensible affordance mid-paragraph, and unlike text, markup and `{ src, alt }`
+they aren't recognisable without the schema.
 
 Page fields and the drawer card edit **one** draft and stay in step both ways:
 type on the page and the open card follows along, type in the card and the page
@@ -451,7 +470,7 @@ per type:
 | `StringArray` | `string[]` | tag input |
 | `ObjectArray` | array of objects shaped by `itemFields` | repeatable sub-form |
 
-The same `Text` → `LongText` legacy alias applies on this side too. An `Image`
+An `Image`
 field uploads through the transport's `uploadImage` and stores the returned CDN
 URL as `src`; `alt` is required once `src` is set (the backend rejects a
 half-filled image). The form is styled neutrally (it inherits the host page's

@@ -274,12 +274,12 @@ test:     tests only
 chore:    tooling / housekeeping
 ```
 
-**Breaking changes (pre-1.0):** the project is `0.x` and may break compatibility
-between minor versions. When a change is breaking, add a `BREAKING CHANGE:` footer
-describing the break and the migration:
+**Breaking changes:** mark the type with `!` and add a `BREAKING CHANGE:` footer
+describing the break *and* the migration. Breaking changes land in a major only,
+and the footer is what an upgrading consumer is left with, so write it for them:
 
 ```
-feat: rename CmsTransport.fetchPage to getContent
+feat!: rename CmsTransport.fetchPage to getContent
 
 BREAKING CHANGE: custom transports must rename `fetchPage` to `getContent`.
 ```
@@ -298,8 +298,9 @@ with a feature.
 ## Releasing
 
 `prepublishOnly` runs the build, and only `dist`, `LICENSE`, and `COPYING` are
-published (see `files` in `package.json`). Releases bump the version per semver
-(pre-1.0: breaking changes may land in minor bumps; see commit conventions).
+published (see `files` in `package.json`). Releases bump the version per semver:
+a breaking change means a major, and its `BREAKING CHANGE:` footer carries the
+migration. Note what the release needs from the backend when the contract moved.
 
 ## License of contributions
 

@@ -1,6 +1,12 @@
 {
   // JSONC on purpose: the alias loader must tolerate comments and trailing commas.
   "compilerOptions": {
+    // `baseUrl` on purpose too, deprecated though it is: plenty of Next apps
+    // still ship it, so the loader has to keep honouring it. `ignoreDeprecations`
+    // only quiets the editor's own check of this fixture; nothing compiles it.
+    // Dropping `baseUrl` resolves `paths` against this file's directory instead,
+    // which the loader also handles.
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],

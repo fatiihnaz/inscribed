@@ -21,7 +21,7 @@ import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { useImageOverlayFits } from "../hooks/use-image-overlay-fits.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
-import { ACCENT, TYPE_META } from "./admin-drawer-styles.js";
+import { ACCENT, TYPE_META, TYPE_META_FALLBACK } from "./admin-drawer-styles.js";
 import {
   BLOCK_TAGS,
   regionBoxStyle,
@@ -69,7 +69,7 @@ const EMPTY_PLACEHOLDER = "-";
 
 // Block types that edit in place as a plain string. Everything else keeps the
 // click-to-drawer flow (structured editors, RichText via Tiptap).
-const INLINE_TEXT_TYPES = new Set(["Text", "ShortText", "LongText"]);
+const INLINE_TEXT_TYPES = new Set(["ShortText", "LongText"]);
 
 
 /**
@@ -136,7 +136,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
         ? stableStringify(localDraft) !== stableStringify(block.value)
         : block.draftValue != null)
     : false;
-  const glyph = (TYPE_META[/** @type {string} */ (blockType)] ?? TYPE_META.Text).glyph;
+  const glyph = (TYPE_META[/** @type {string} */ (blockType)] ?? TYPE_META_FALLBACK).glyph;
 
   let inner;
   let innerTag;

@@ -8,8 +8,7 @@
  *
  * Value shapes per type:
  *   - ShortText / LongText / RichText: string. ShortText is a single-line
- *     `<input>`, LongText a `<textarea>`, RichText a formatting editor. `Text`
- *     is the legacy alias of LongText; prefer the explicit names in new code.
+ *     `<input>`, LongText a `<textarea>`, RichText a formatting editor.
  *   - Image: { src, alt }
  *   - Link: { href, label }
  *   - Date: ISO 8601 string, empty string when unset.
@@ -19,7 +18,7 @@
  *     resolves items separately and hands them to render-props; writes happen
  *     in the collection's own admin surface, not here.
  *
- * @typedef {"Text" | "ShortText" | "LongText" | "RichText" | "Image" | "Link" | "Date" | "List" | "Collection"} BlockType
+ * @typedef {"ShortText" | "LongText" | "RichText" | "Image" | "Link" | "Date" | "List" | "Collection"} BlockType
  */
 
 /**
@@ -85,8 +84,8 @@
  * Per-collection field metadata from `/cms/collections/{key}/schema` and the
  * `/cms/collections/me` envelope. Drives the schema-driven drawer form.
  *
- * Scalar types map to the obvious inputs (`Text` is the legacy alias of
- * `LongText`). `ObjectArray` is the only non-scalar: its value is an array of
+ * Scalar types map to the obvious inputs. `ObjectArray` is the only
+ * non-scalar: its value is an array of
  * objects shaped by `itemFields`, rendered as a repeatable sub-form.
  *
  * `Image` is a fixed-shape `{ src, alt }` object (like the CMS Image block):
@@ -94,7 +93,7 @@
  * renders an upload dropzone (`config.transport.uploadImage`) instead of a bare
  * text box.
  *
- * @typedef {"Text" | "ShortText" | "LongText" | "RichText" | "Image" | "Bool" | "Url" | "StringArray" | "Date" | "Number" | "ObjectArray"} CollectionFieldType
+ * @typedef {"ShortText" | "LongText" | "RichText" | "Image" | "Bool" | "Url" | "StringArray" | "Date" | "Number" | "ObjectArray"} CollectionFieldType
  *
  * @typedef {Object} CollectionFieldDescriptor
  * @property {string} name

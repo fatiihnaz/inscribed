@@ -4,8 +4,8 @@ import { makeDefaultItem, moveItem, removeItem, addItem } from "../lib/list-ops.
 describe("makeDefaultItem", () => {
   it("builds an object from each field's defaultValue", () => {
     const schema = {
-      title: { blockType: "Text", defaultValue: "" },
-      count: { blockType: "Text", defaultValue: 0 },
+      title: { blockType: "LongText", defaultValue: "" },
+      count: { blockType: "LongText", defaultValue: 0 },
     };
     expect(makeDefaultItem(schema)).toEqual({ title: "", count: 0 });
   });
@@ -21,7 +21,7 @@ describe("makeDefaultItem", () => {
   });
 
   it("passes null/undefined defaults through without cloning", () => {
-    const schema = { a: { blockType: "Text", defaultValue: null } };
+    const schema = { a: { blockType: "LongText", defaultValue: null } };
     expect(makeDefaultItem(schema)).toEqual({ a: null });
   });
 
@@ -66,14 +66,14 @@ describe("removeItem", () => {
 
 describe("addItem", () => {
   it("appends a fresh schema-defaulted item", () => {
-    const schema = { title: { blockType: "Text", defaultValue: "" } };
+    const schema = { title: { blockType: "LongText", defaultValue: "" } };
     const next = addItem([{ title: "x" }], schema);
     expect(next).toEqual([{ title: "x" }, { title: "" }]);
   });
 
   it("does not mutate the input array", () => {
     const items = [];
-    addItem(items, { title: { blockType: "Text", defaultValue: "" } });
+    addItem(items, { title: { blockType: "LongText", defaultValue: "" } });
     expect(items).toEqual([]);
   });
 });

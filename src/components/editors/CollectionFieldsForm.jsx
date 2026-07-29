@@ -200,8 +200,6 @@ function FieldInput({ field, value, onChange, disabled }) {
           </div>
         );
 
-      // `Text` is the legacy alias of `LongText` (multi-line textarea).
-      case "Text":
       case "LongText":
         return (
           <label style={labelStyle}>

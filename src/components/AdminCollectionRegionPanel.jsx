@@ -108,7 +108,7 @@ function buildListParams(filter, offset, limit) {
 // Field names that conventionally hold an item's human title, in priority
 // order; anything else falls back to the schema's first textual field.
 const TITLE_FIELD_NAMES = ["title", "name", "heading", "başlık", "baslik", "ad"];
-const TEXTUAL_FIELD_TYPES = new Set(["ShortText", "Text", "LongText"]);
+const TEXTUAL_FIELD_TYPES = new Set(["ShortText", "LongText"]);
 
 /**
  * Name of the field whose value should headline a row, or null when the schema

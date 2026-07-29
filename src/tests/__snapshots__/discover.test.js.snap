@@ -25,13 +25,13 @@ exports[`discoverManifests > discovers blocks, scopes, groups and DFS order acro
       },
       {
         "blockPath": "shared.meta",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "m",
         "sortOrder": 2,
       },
       {
         "blockPath": "shared.cta",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "x",
         "sortOrder": 3,
       },
@@ -42,13 +42,13 @@ exports[`discoverManifests > discovers blocks, scopes, groups and DFS order acro
     "blocks": [
       {
         "blockPath": "hero.title",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "Welcome",
         "sortOrder": 1,
       },
       {
         "blockPath": "hero.subtitle",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "sub",
         "sortOrder": 2,
       },
@@ -62,7 +62,7 @@ exports[`discoverManifests > discovers blocks, scopes, groups and DFS order acro
             "defaultValue": 0,
           },
           "title": {
-            "blockType": "Text",
+            "blockType": "LongText",
             "defaultValue": "",
           },
         },
@@ -70,25 +70,25 @@ exports[`discoverManifests > discovers blocks, scopes, groups and DFS order acro
       },
       {
         "blockPath": "cta.label",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "Buy",
         "sortOrder": 4,
       },
       {
         "blockPath": "shared.meta",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "m",
         "sortOrder": 5,
       },
       {
         "blockPath": "shared.cta",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "x",
         "sortOrder": 6,
       },
       {
         "blockPath": "deep.note",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "",
         "sortOrder": 7,
       },
@@ -106,25 +106,25 @@ exports[`discoverManifests > emits warnings for non-static / malformed declarati
     "blocks": [
       {
         "blockPath": "ok.region",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "ok",
         "sortOrder": 1,
       },
       {
         "blockPath": "a.c",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "",
         "sortOrder": 2,
       },
       {
         "blockPath": "a.e",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "x",
         "sortOrder": 3,
       },
       {
         "blockPath": "a.g",
-        "blockType": "Text",
+        "blockType": "LongText",
         "defaultValue": "x",
         "sortOrder": 4,
       },

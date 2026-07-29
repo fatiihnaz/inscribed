@@ -4,7 +4,7 @@ import Broken from "./broken";
 function Page() {
   return (
     <main>
-      <EditableRegion blockPath="ok.title" blockType="Text" defaultValue="ok" />
+      <EditableRegion blockPath="ok.title" blockType="LongText" defaultValue="ok" />
       <Broken />
     </main>
   );

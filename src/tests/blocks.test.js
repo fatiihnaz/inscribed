@@ -8,10 +8,10 @@ import {
 
 /** @type {import("../lib/schemas.js").BlockResponse[]} */
 const blocks = [
-  { blockPath: "hero.title", blockType: "Text", value: "Welcome", sortOrder: 0, version: 1 },
-  { blockPath: "hero.subtitle", blockType: "Text", value: "Sub", sortOrder: 1, version: 1 },
-  { blockPath: "hero", blockType: "Text", value: "exact", sortOrder: 2, version: 1 },
-  { blockPath: "footer.note", blockType: "Text", value: "Note", sortOrder: 3, version: 1 },
+  { blockPath: "hero.title", blockType: "LongText", value: "Welcome", sortOrder: 0, version: 1 },
+  { blockPath: "hero.subtitle", blockType: "LongText", value: "Sub", sortOrder: 1, version: 1 },
+  { blockPath: "hero", blockType: "LongText", value: "exact", sortOrder: 2, version: 1 },
+  { blockPath: "footer.note", blockType: "LongText", value: "Note", sortOrder: 3, version: 1 },
 ];
 
 describe("getBlock", () => {
@@ -48,13 +48,27 @@ describe("groupBlocksByPrefix", () => {
   it("does not match a prefix that is only a string prefix of another segment", () => {
     // "footer" must not match "footer.note" via bare startsWith without the dot
     // boundary check - here we assert a non-dotted near-miss is excluded.
-    const near = [{ blockPath: "heroic.x", blockType: "Text", value: 1, sortOrder: 0, version: 1 }];
+    const near = [{ blockPath: "heroic.x", blockType: "LongText", value: 1, sortOrder: 0, version: 1 }];
     expect(groupBlocksByPrefix(near, "hero")).toEqual([]);
   });
 
   it("preserves input order and works over a Map", () => {
     const map = indexBlocksByPath(blocks);
     expect(groupBlocksByPrefix(map, "footer").map((b) => b.blockPath)).toEqual(["footer.note"]);
+  });
+});
+
+describe("indexBlocksByPath legacy types", () => {
+  it("folds the pre-4.0 `Text` alias into LongText", () => {
+    const map = indexBlocksByPath([
+      { blockPath: "a", blockType: "Text", value: "x", sortOrder: 0, version: 1 },
+    ]);
+    expect(map.get("a").blockType).toBe("LongText");
+  });
+
+  it("hands back the same object when nothing needs rewriting", () => {
+    const block = { blockPath: "a", blockType: "LongText", value: "x", sortOrder: 0, version: 1 };
+    expect(indexBlocksByPath([block]).get("a")).toBe(block);
   });
 });
 

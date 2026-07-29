@@ -36,9 +36,6 @@ import { useCollection } from "../hooks/use-collection.js";
  *   dedupes by `stableStringify`.
  * @property {number} [limit]   Page size (default 50, max 100, min 1).
  * @property {number} [offset]  Pagination offset (default 0).
- * @property {"global"} [scope]
- *   Reserved; currently ignored. Collection bindings are runtime-only, so
- *   neither discovery nor the registry reads it.
  * @property {(items: CollectionItemResponse[], meta: CollectionRegionMeta) => React.ReactNode} children
  */
 
@@ -55,8 +52,7 @@ import { useCollection } from "../hooks/use-collection.js";
 /**
  * @param {CollectionRegionProps} props
  */
-// eslint-disable-next-line no-unused-vars
-export function CollectionRegion({ collection, filter, limit, offset, scope: _scope, children }) {
+export function CollectionRegion({ collection, filter, limit, offset, children }) {
   const { registerCollectionBinding, unregisterCollectionBinding } = useCollectionContext();
 
   const bindingId = collectionRegionBindingId(collection, filter);

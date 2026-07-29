@@ -64,15 +64,13 @@ const COLLECTION_GLYPH = TYPE_META.Collection.glyph;
  * @property {string} slug         Item slug (lowercased server-side).
  * @property {string} [group]
  * @property {string} [label]      Drawer card and page chip text (default: `"{collection} · {slug}"`).
- * @property {"global"} [scope]    Reserved; currently ignored (bindings are runtime-only).
  * @property {(item: CollectionItemResponse | null, meta: CollectionItemMeta) => React.ReactNode} children
  */
 
 /**
  * @param {CollectionItemProps} props
  */
-// eslint-disable-next-line no-unused-vars
-export function CollectionItem({ collection, slug, group, label, scope: _scope, children }) {
+export function CollectionItem({ collection, slug, group, label, children }) {
   const { isAdmin, activeBlock, setActiveBlock } = useCmsContext();
   const {
     registerCollectionBinding, unregisterCollectionBinding, collectionStore,

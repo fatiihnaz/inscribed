@@ -4,7 +4,7 @@ import Hero from "../components/Hero";
 function Page() {
   return (
     <main>
-      <EditableRegion blockPath="home.title" blockType="Text" defaultValue="hi" />
+      <EditableRegion blockPath="home.title" blockType="LongText" defaultValue="hi" />
       <Hero />
     </main>
   );

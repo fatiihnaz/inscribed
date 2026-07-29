@@ -3,7 +3,7 @@
 /**
  * @file One block row in the drawer's block list, weight-dispatched:
  *
- * Field-weight types (ShortText/Text/LongText/Date/Link) render as
+ * Field-weight types (ShortText/LongText/Date/Link) render as
  * `FieldRow` — an always-open labeled form field (mono path label + editor),
  * no collapse chrome. Heavy types (RichText/Image/List/Collection/unknown)
  * stay collapsible cards whose closed header shows a value preview.
@@ -40,6 +40,7 @@ import {
   FONT_MONO,
   R_MD,
   TYPE_META,
+  TYPE_META_FALLBACK,
   blockResetStyle,
   dirtyDotStyle,
   rowContainerStyle,
@@ -53,7 +54,7 @@ import {
 // Field-weight types: a single light editor, rendered always-open as a form
 // field. Everything else (RichText/Image/List/Collection/unknown) keeps the
 // collapsible card surface.
-const INLINE_TYPES = new Set(["ShortText", "Text", "LongText", "Date", "Link"]);
+const INLINE_TYPES = new Set(["ShortText", "LongText", "Date", "Link"]);
 
 /**
  * @param {React.CSSProperties} base
@@ -576,7 +577,7 @@ function blockPreview(blockType, value) {
 const TYPE_ICON_OVERRIDES = { List: ListIcon };
 
 function TypeIcon({ type, compact }) {
-  const meta = TYPE_META[type] ?? TYPE_META.Text;
+  const meta = TYPE_META[type] ?? TYPE_META_FALLBACK;
   const Override = TYPE_ICON_OVERRIDES[type];
   return (
     <span

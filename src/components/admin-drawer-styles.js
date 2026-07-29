@@ -147,9 +147,16 @@ export const TEXT_PRIMARY  = TEXT_HI;
 // type label on each block card header.
 // ---------------------------------------------------------------------------
 
+/**
+ * Badge for a blockType this build doesn't know, e.g. an older SDK against a
+ * newer backend. Keeps the row rendering instead of throwing on the lookup.
+ *
+ * @type {{ glyph: string, color: string, label: string }}
+ */
+export const TYPE_META_FALLBACK = { glyph: "Aa", color: "rgb(186, 204, 230)", label: "Unknown" };
+
 /** @type {Record<string, { glyph: string, color: string, label: string }>} */
 export const TYPE_META = {
-  Text:       { glyph: "Aa", color: "rgb(186, 204, 230)", label: "Text" },
   ShortText:  { glyph: "Aa", color: "rgb(186, 204, 230)", label: "Short" },
   LongText:   { glyph: "≡a", color: "rgb(186, 204, 230)", label: "Long" },
   RichText:   { glyph: "¶", color: "rgb(208, 192, 230)", label: "Rich" },

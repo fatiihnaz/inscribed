@@ -25,15 +25,15 @@ const works = {
   options: null,
   help: null,
   itemFields: [
-    { name: "title", type: "Text", label: "Başlık", required: true, readOnly: false, filterable: false, options: null, help: null, itemFields: null },
+    { name: "title", type: "LongText", label: "Başlık", required: true, readOnly: false, filterable: false, options: null, help: null, itemFields: null },
     { name: "image", type: "Url", label: "Görsel", required: false, readOnly: false, filterable: false, options: null, help: null, itemFields: null },
     { name: "tags", type: "StringArray", label: "Etiketler", required: false, readOnly: false, filterable: false, options: null, help: null, itemFields: null },
-    { name: "internal", type: "Text", label: "İç", required: false, readOnly: true, filterable: false, options: null, help: null, itemFields: null },
+    { name: "internal", type: "LongText", label: "İç", required: false, readOnly: true, filterable: false, options: null, help: null, itemFields: null },
   ],
 };
 
 const scalarTitle = {
-  name: "name", type: "Text", label: "Ad", required: true,
+  name: "name", type: "LongText", label: "Ad", required: true,
   readOnly: false, filterable: false, options: null, help: null, itemFields: null,
 };
 

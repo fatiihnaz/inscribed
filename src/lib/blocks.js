@@ -59,11 +59,22 @@ export function groupBlocksByPrefix(blocks, prefix) {
 /**
  * Build a Map keyed by `blockPath` from a block array.
  *
+ * Every block reaching the runtime passes through here (SSR seed, refetch,
+ * merge), which is why the one legacy type is folded here rather than in each
+ * type switch downstream: `Text` was the pre-4.0 alias of `LongText`, and while
+ * the reference backend rewrites it on write, a custom transport can still hand
+ * one over. Blocks that need no rewrite keep their identity.
+ *
  * @param {BlockResponse[]} blocks
  * @returns {Map<string, BlockResponse>}
  */
 export function indexBlocksByPath(blocks) {
   const map = new Map();
-  for (const block of blocks) map.set(block.blockPath, block);
+  for (const block of blocks) {
+    map.set(
+      block.blockPath,
+      block.blockType === "Text" ? { ...block, blockType: "LongText" } : block,
+    );
+  }
   return map;
 }

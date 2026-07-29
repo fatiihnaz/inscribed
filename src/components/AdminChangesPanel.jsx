@@ -58,7 +58,7 @@ const DIFF_REMOVED = STATUS_DANGER;
 const DIFF_CHANGED = STATUS_WARN;
 
 // RichText is excluded on purpose: it strips HTML before diffing.
-const TEXTY_BLOCK_TYPES = new Set(["Text", "ShortText", "LongText"]);
+const TEXTY_BLOCK_TYPES = new Set(["ShortText", "LongText"]);
 
 /**
  * @param {{
@@ -175,7 +175,7 @@ function CollectionDraftCard({ collectionKey, count, onGoToCollection }) {
  * }} props
  */
 function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
-  const meta = TYPE_META[block.blockType] ?? TYPE_META.Text;
+  const meta = TYPE_META[block.blockType] ?? TYPE_META_FALLBACK;
   const next = draft !== undefined ? draft : block.draftValue;
   const prev = block.value;
 
@@ -238,7 +238,6 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
  */
 function DiffContent({ blockType, prev, next, itemSchema, sharedOps }) {
   switch (blockType) {
-    case "Text":
     case "ShortText":
     case "LongText":
       return (
@@ -1059,7 +1058,6 @@ function SoloValue({ blockType, value, tone }) {
     return <span style={emptyValueStyle}>—</span>;
   }
   switch (blockType) {
-    case "Text":
     case "ShortText":
     case "LongText":
     case "Date":

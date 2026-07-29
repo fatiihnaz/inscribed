@@ -1,3 +1,3 @@
 export default function Hero() {
-  return <EditableRegion blockPath="alias.hero" blockType="Text" defaultValue="a" />;
+  return <EditableRegion blockPath="alias.hero" blockType="LongText" defaultValue="a" />;
 }

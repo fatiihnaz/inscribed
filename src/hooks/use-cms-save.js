@@ -14,7 +14,7 @@ import { useCallback, useMemo } from "react";
 
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
-import { stableStringify } from "../lib/stable-stringify.js";
+import { deepEqual } from "../lib/deep-equal.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
 
 /**
@@ -58,7 +58,7 @@ export function useCmsSave() {
     for (const [blockPath, value] of drafts) {
       const block = blocks.get(blockPath);
       if (!block) continue;
-      if (stableStringify(value) === stableStringify(block.value)) continue;
+      if (deepEqual(value, block.value)) continue;
       out.push({ blockPath, value, version: block.version });
       seen.add(blockPath);
     }
@@ -67,7 +67,7 @@ export function useCmsSave() {
       if (seen.has(block.blockPath)) continue;
       // Backend auto-clean already filters draft===published; defensive
       // against a stale optimistic update reaching us first.
-      if (stableStringify(block.draftValue) === stableStringify(block.value)) continue;
+      if (deepEqual(block.draftValue, block.value)) continue;
       out.push({
         blockPath: block.blockPath,
         value: block.draftValue,

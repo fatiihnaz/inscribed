@@ -15,6 +15,7 @@ import { useCmsContext } from "../lib/context.js";
 import { CollectionContext } from "../lib/collection-context.js";
 import { createStore } from "../lib/store.js";
 import { stableStringify } from "../lib/stable-stringify.js";
+import { deepEqual } from "../lib/deep-equal.js";
 
 /**
  * @import { CollectionItemCacheEntry, CollectionListCacheEntry } from "../lib/collection-context.js"
@@ -72,7 +73,7 @@ export function CollectionProvider({ children }) {
         // hold the entry open.
         if (
           process.env.NODE_ENV !== "production" &&
-          stableStringify(existing.binding) !== stableStringify(binding)
+          !deepEqual(existing.binding, binding)
         ) {
           // eslint-disable-next-line no-console
           console.warn(
@@ -247,7 +248,7 @@ export function CollectionProvider({ children }) {
       const cacheKey = `${key}:${slug}`;
       setCollectionDraftsState((prev) => {
         const existing = prev.get(cacheKey);
-        if (existing !== undefined && stableStringify(existing) === stableStringify(payload)) {
+        if (existing !== undefined && deepEqual(existing, payload)) {
           return prev;
         }
         const next = new Map(prev);

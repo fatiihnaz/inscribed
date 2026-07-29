@@ -39,7 +39,7 @@ import { useStoreSelector } from "../lib/store.js";
 import { useCmsSave } from "../hooks/use-cms-save.js";
 import { useMyCollections } from "../hooks/use-my-collections.js";
 import { CmsApiError } from "../lib/errors.js";
-import { stableStringify } from "../lib/stable-stringify.js";
+import { deepEqual } from "../lib/deep-equal.js";
 
 import { BlockCard } from "./AdminBlockCard.jsx";
 import { AdminCollectionRegionPanel } from "./AdminCollectionRegionPanel.jsx";
@@ -243,7 +243,7 @@ export function AdminDrawer() {
       dirty.set(
         block.blockPath,
         local !== undefined
-          ? stableStringify(local) !== stableStringify(block.value)
+          ? !deepEqual(local, block.value)
           : block.draftValue != null,
       );
     }
@@ -1589,7 +1589,7 @@ function GroupCard({
     for (const block of blocksRef.current) {
       const local = m.get(block.blockPath);
       const isDirty = local !== undefined
-        ? stableStringify(local) !== stableStringify(block.value)
+        ? !deepEqual(local, block.value)
         : block.draftValue != null;
       if (isDirty) return true;
     }

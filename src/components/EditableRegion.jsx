@@ -19,6 +19,7 @@ import DOMPurify from "isomorphic-dompurify";
 
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
+import { deepEqual } from "../lib/deep-equal.js";
 import { useImageOverlayFits } from "../hooks/use-image-overlay-fits.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
 import { ACCENT, TYPE_META, TYPE_META_FALLBACK } from "./admin-drawer-styles.js";
@@ -28,7 +29,6 @@ import {
   regionChipStyle,
   chipDirtyDotStyle,
 } from "./page-region-chrome.js";
-import { stableStringify } from "../lib/stable-stringify.js";
 import { InlineTextEditor } from "./InlineTextEditor.jsx";
 import { InlineImageOverlay } from "./InlineImageOverlay.jsx";
 import { InlineImagePlaceholder } from "./InlineImagePlaceholder.jsx";
@@ -135,7 +135,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
 
   const dirty = block
     ? (hasLocalDraft
-        ? stableStringify(localDraft) !== stableStringify(block.value)
+        ? !deepEqual(localDraft, block.value)
         : block.draftValue != null)
     : false;
   const glyph = (TYPE_META[/** @type {string} */ (blockType)] ?? TYPE_META_FALLBACK).glyph;

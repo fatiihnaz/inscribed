@@ -32,14 +32,15 @@
  * the page-side ring + label chip on the block as a whole.
  */
 
-import { Fragment, useContext, useEffect, useState } from "react";
+import { Fragment, useContext, useEffect, useRef, useState } from "react";
 import { Plus, Trash2, ChevronUp, ChevronDown } from "./icons.jsx";
 
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
+import { deepEqual } from "../lib/deep-equal.js";
+import { stableStringify } from "../lib/stable-stringify.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
 import { addItem, makeDefaultItem, moveItem, removeItem } from "../lib/list-ops.js";
-import { stableStringify } from "../lib/stable-stringify.js";
 import { ACCENT, FONT_MONO, STATUS_DANGER, BG_RAISED, BORDER, TYPE_META } from "./admin-drawer-styles.js";
 import {
   BLOCK_TAGS,
@@ -110,10 +111,17 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   const visibilityMode = strongerVisibility(groupVisibility, ownMode);
 
   // Hand the schema to the drawer so it can build the per-field item editor.
+  // Keyed on the schema's *shape*, not its identity: consumers write it as an
+  // inline literal, so a re-render of the parent would otherwise unregister and
+  // re-register an unchanged schema and churn the drawer for nothing.
+  const schemaKey = stableStringify(itemSchema);
+  const itemSchemaRef = useRef(itemSchema);
+  itemSchemaRef.current = itemSchema;
   useEffect(() => {
-    registerItemSchema(fullPath, itemSchema);
+    registerItemSchema(fullPath, itemSchemaRef.current);
     return () => unregisterItemSchema(fullPath);
-  }, [fullPath, itemSchema, registerItemSchema, unregisterItemSchema]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullPath, schemaKey, registerItemSchema, unregisterItemSchema]);
 
   useEffect(() => {
     if (!isAdmin || !visibilityMode) return undefined;
@@ -195,7 +203,7 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   const Wrapper = /** @type {*} */ (as);
   const dirty = block
     ? (hasLocalDraft
-        ? stableStringify(localDraft) !== stableStringify(block.value)
+        ? !deepEqual(localDraft, block.value)
         : block.draftValue != null)
     : false;
   const roomy = BLOCK_TAGS.has(Wrapper);

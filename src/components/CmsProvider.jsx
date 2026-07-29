@@ -22,7 +22,7 @@ import { buildThemeCss } from "../lib/theme.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
-import { stableStringify } from "../lib/stable-stringify.js";
+import { deepEqual } from "../lib/deep-equal.js";
 import { createStore, useStoreSelector } from "../lib/store.js";
 import { useCmsContent } from "../hooks/use-cms-content.js";
 import { CollectionProvider } from "./CollectionProvider.jsx";
@@ -560,7 +560,7 @@ export function CmsProvider({
         const block = currentBlocks.get(blockPath);
         if (!block) continue;
         const effective = block.draftValue ?? block.value;
-        if (stableStringify(value) === stableStringify(effective)) continue;
+        if (deepEqual(value, effective)) continue;
         const slug = block._slug ?? currentPathname;
         const list = bySlug.get(slug) ?? [];
         list.push({ blockPath, value, version: block.version });
@@ -573,7 +573,7 @@ export function CmsProvider({
       const isAllReset = [...bySlug.values()].every((blocksForSlug) =>
         blocksForSlug.every((item) => {
           const b = currentBlocks.get(item.blockPath);
-          return b == null || stableStringify(item.value) === stableStringify(b.value);
+          return b == null || deepEqual(item.value, b.value);
         }),
       );
 
@@ -619,15 +619,9 @@ export function CmsProvider({
           for (const sent of blocksForSlug) {
             const cur = nextMap.get(sent.blockPath);
             if (!cur) continue;
-            const matchesPublished =
-              stableStringify(sent.value) === stableStringify(cur.value);
+            const matchesPublished = deepEqual(sent.value, cur.value);
             const newDraftValue = matchesPublished ? null : sent.value;
-            if (
-              stableStringify(cur.draftValue ?? null) ===
-              stableStringify(newDraftValue)
-            ) {
-              continue;
-            }
+            if (deepEqual(cur.draftValue ?? null, newDraftValue)) continue;
             nextMap.set(sent.blockPath, { ...cur, draftValue: newDraftValue });
             mutated = true;
           }

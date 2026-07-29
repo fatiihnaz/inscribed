@@ -20,8 +20,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Undo2, Lock, List as ListIcon } from "./icons.jsx";
 
-import { stableStringify } from "../lib/stable-stringify.js";
 import { useCmsContext } from "../lib/context.js";
+import { deepEqual } from "../lib/deep-equal.js";
 import { useStoreSelector } from "../lib/store.js";
 import { useCollectionContext } from "../lib/collection-context.js";
 
@@ -168,7 +168,7 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
   const effective = block.draftValue ?? block.value;
   const value = hasDraft ? draft : effective;
   const isDirty = !readOnly && (hasDraft
-    ? stableStringify(draft) !== stableStringify(block.value)
+    ? !deepEqual(draft, block.value)
     : block.draftValue != null);
 
   useEffect(() => {
@@ -316,7 +316,7 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
   // A read-only block carries no dirty state to surface, so suppress the
   // dot/reset/rail and let it read as a passive, locked view.
   const isDirty = !readOnly && (hasDraft
-    ? stableStringify(draft) !== stableStringify(block.value)
+    ? !deepEqual(draft, block.value)
     : block.draftValue != null);
 
   const [isOpen, setIsOpen] = useState(false);

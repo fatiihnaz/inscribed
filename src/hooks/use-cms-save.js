@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useMemo } from "react";
+import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
@@ -20,6 +21,9 @@ import { useCmsAdmin } from "./use-cms-admin.js";
 /**
  * @import { UpdateBlockItem } from "../lib/schemas.js"
  */
+
+/** @type {Map<string, import("../lib/schemas.js").BlockResponse>} */
+const EMPTY_BLOCKS = new Map();
 
 /**
  * @typedef {Object} UseCmsSaveResult
@@ -43,7 +47,8 @@ export function useCmsSave() {
   // drawer's live dirty count, so it re-renders on any draft change. Fine for
   // a single admin surface.
   const drafts = useStoreSelector(contentDraftsStore, (m) => m);
-  const blocks = useStoreSelector(blocksStore, (m) => m);
+  const pathname = usePathname() ?? "/";
+  const blocks = useStoreSelector(blocksStore, (s) => s.get(pathname) ?? EMPTY_BLOCKS);
   const { savePage, isSaving, error } = useCmsAdmin();
 
   // A block is dirty when its effective value (local draft, else server-side

@@ -16,6 +16,7 @@
 
 import { cloneElement, lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
+import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
@@ -108,9 +109,11 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   const hasLocalDraft = useStoreSelector(contentDraftsStore, (m) => m.has(fullPath));
   const localDraft = useStoreSelector(contentDraftsStore, (m) => m.get(fullPath));
 
-  // Own block only, and selection as a boolean: another block's save or
-  // selection leaves this region alone.
-  const block = useStoreSelector(blocksStore, (m) => m.get(fullPath));
+  // Own block on the current route only, and selection as a boolean: another
+  // block's save or selection leaves this region alone, and a navigation reads
+  // the new route's cached blocks on its very first render.
+  const slug = usePathname() ?? "/";
+  const block = useStoreSelector(blocksStore, (s) => s.get(slug)?.get(fullPath));
   const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === fullPath);
   const blockType = block ? block.blockType : null;
   const value = hasLocalDraft ? localDraft : block ? (block.draftValue ?? block.value) : undefined;

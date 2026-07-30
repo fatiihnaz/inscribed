@@ -33,7 +33,7 @@ import { indexBlocksByPath } from "../lib/blocks.js";
  */
 
 export function useCmsContent() {
-  const { config, blocksStore, setBlocks, uiStore, triggerRefetch, getAccessToken } = useCmsContext();
+  const { config, blocksStore, commitBlocks, uiStore, triggerRefetch, getAccessToken } = useCmsContext();
   const slug = usePathname() ?? "/";
   const refetchToken = useStoreSelector(uiStore, (s) => s.refetchToken);
 
@@ -42,11 +42,16 @@ export function useCmsContent() {
   // the admin-only refetch is in flight.
   const [state, setState] = useState(
     /** @returns {{ blocks: BlockResponse[], isLoading: boolean, error: Error|null }} */
-    () => ({ blocks: Array.from(blocksStore.get().values()), isLoading: false, error: null }),
+    () => ({ blocks: Array.from((blocksStore.get().get(slug) ?? new Map()).values()), isLoading: false, error: null }),
   );
 
   useEffect(() => {
     let cancelled = false;
+    // Aborts on unmount and on every re-run, so a fast navigation drops the
+    // previous page's requests instead of leaving them to finish unread. This
+    // hook owns them outright, unlike the collection fetchers, whose in-flight
+    // table is shared between consumers.
+    const controller = new AbortController();
     setState((s) => ({ ...s, isLoading: true, error: null }));
 
     (async () => {
@@ -61,9 +66,11 @@ export function useCmsContent() {
           : null;
 
         const [pageResponse, globalResponse] = await Promise.all([
-          config.transport.getContent(slug, { accessToken: token }),
+          config.transport.getContent(slug, { accessToken: token, signal: controller.signal }),
           globalSlug
-            ? config.transport.getContent(globalSlug, { accessToken: token }).catch(() => ({ slug: globalSlug, blocks: [] }))
+            ? config.transport
+                .getContent(globalSlug, { accessToken: token, signal: controller.signal })
+                .catch(() => ({ slug: globalSlug, blocks: [] }))
             : Promise.resolve({ slug: "", blocks: [] }),
         ]);
         if (cancelled) return;
@@ -77,8 +84,7 @@ export function useCmsContent() {
           : [];
 
         const merged = [...pageBlocks, ...globalBlocks];
-        const indexed = indexBlocksByPath(merged);
-        setBlocks(() => indexed);
+        commitBlocks(slug, indexBlocksByPath(merged));
         setState({ blocks: merged, isLoading: false, error: null });
       } catch (err) {
         if (cancelled) return;
@@ -90,8 +96,9 @@ export function useCmsContent() {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [config, slug, refetchToken, setBlocks, getAccessToken]);
+  }, [config, slug, refetchToken, commitBlocks, getAccessToken]);
 
   return {
     blocks: state.blocks,

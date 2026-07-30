@@ -131,7 +131,11 @@ import {
  * @import { BlockResponse } from "../lib/schemas.js"
  */
 
+/** @type {Map<string, BlockResponse>} */
+const EMPTY_BLOCKS = new Map();
+
 export function AdminDrawer() {
+  const pathname = usePathname() ?? "/";
   const {
     setActiveBlock,
     setDrawerOpen,
@@ -145,7 +149,7 @@ export function AdminDrawer() {
   // The drawer aggregates over everything, so unlike a page region it selects
   // whole slices. As a single admin surface, re-rendering on each write is fine
   // as long as the memoised card list below can still bail out.
-  const blocks = useStoreSelector(blocksStore, (m) => m);
+  const blocks = useStoreSelector(blocksStore, (s) => s.get(pathname) ?? EMPTY_BLOCKS);
   const drafts = useStoreSelector(contentDraftsStore, (m) => m);
   const activeBlock = useStoreSelector(uiStore, (s) => s.activeBlock);
   const isDrawerOpen = useStoreSelector(uiStore, (s) => s.isDrawerOpen);
@@ -168,7 +172,6 @@ export function AdminDrawer() {
     dirtyCount, isSaving, error,
     save: onSaveAll, discard: onDiscardAll,
   } = useCmsSave();
-  const pathname = usePathname() ?? "/";
   // Header path ancestors navigate the host app; the drawer already follows the
   // route via `usePathname`, so it re-renders into the new page on its own.
   const router = useRouter();

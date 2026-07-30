@@ -232,10 +232,22 @@ export function CmsProvider({
   // The context value below carries the handles and the setters, and never
   // changes identity once the session resolves.
 
-  // Seeded from `initialBlocks` so EditableRegion renders real values during
-  // SSR and first paint. Later updates flow through `useCmsContent`.
+  const pathname = usePathname() ?? "/";
+  const router = useRouter();
+  // Only read while the blocks store is created, so it is the mount-time route.
+  const initialPathname = pathname;
+
+  // Keyed by slug, then by blockPath. The slug dimension is what makes a return
+  // visit instant: a region reads `get(slug).get(path)`, so the moment the route
+  // commits it already sees the blocks it fetched last time, with no effect in
+  // between to leave a frame of placeholders. Seeded from `initialBlocks` so
+  // regions render real values during SSR and first paint.
   const blocksStore = useConstant(() =>
-    createStore(/** @type {Map<string, BlockResponse>} */ (indexBlocksByPath(initialBlocks ?? []))),
+    createStore(
+      /** @type {Map<string, Map<string, BlockResponse>>} */ (
+        new Map([[initialPathname, indexBlocksByPath(initialBlocks ?? [])]])
+      ),
+    ),
   );
   const contentDraftsStore = useConstant(() =>
     createStore(/** @type {Map<string, *>} */ (new Map())),
@@ -256,8 +268,42 @@ export function CmsProvider({
     })),
   );
 
-  const setBlocksState = blocksStore.set;
   const setDraftsState = contentDraftsStore.set;
+
+  // Replace one slug's blocks wholesale; what `useCmsContent` calls once a
+  // fetch lands. Other slugs' entries stay, which is the cache.
+  const commitBlocks = useCallback(
+    /** @param {string} slug @param {Map<string, BlockResponse>} blocks */
+    (slug, blocks) => {
+      blocksStore.set((s) => {
+        const next = new Map(s);
+        next.set(slug, blocks);
+        return next;
+      });
+    },
+    [blocksStore],
+  );
+
+  // Patch the blocks of one slug in place, for the autosave mirror and discard.
+  // An updater returning its input is a no-op, as with the plain store.
+  const patchBlocks = useCallback(
+    /**
+     * @param {string} slug
+     * @param {(prev: Map<string, BlockResponse>) => Map<string, BlockResponse>} updater
+     */
+    (slug, updater) => {
+      blocksStore.set((s) => {
+        const prev = s.get(slug);
+        if (!prev) return s;
+        const blocks = updater(prev);
+        if (blocks === prev) return s;
+        const next = new Map(s);
+        next.set(slug, blocks);
+        return next;
+      });
+    },
+    [blocksStore],
+  );
 
   /** @param {Partial<import("../lib/context.js").CmsUiState>} patch */
   const patchUi = useCallback(
@@ -327,39 +373,51 @@ export function CmsProvider({
   // Re-seed the blocks map when `initialBlocks` arrives with new content (e.g.
   // navigation re-renders `<CmsPage>` for a new slug). Lazy init only runs once
   // on mount, so without this the panel would show stale blocks.
+  // One effect for both triggers, because the refetch decision below needs to
+  // see them together: whether fresh server blocks arrived *with* this
+  // navigation is exactly what says if another fetch is needed.
   const initialBlocksRef = useRef(initialBlocks);
-  useEffect(() => {
-    if (initialBlocks === initialBlocksRef.current) return;
-    initialBlocksRef.current = initialBlocks;
-    setBlocksState(indexBlocksByPath(initialBlocks ?? []));
-    patchUi({ activeBlock: null });
-    setDraftsState(new Map());
-  }, [initialBlocks, setBlocksState, setDraftsState, patchUi]);
-
-  // Backstop: a root-layout `<CmsPage>` survives client navigation, so its
-  // `initialBlocks` prop doesn't update on URL change. `router.refresh()`
-  // re-runs the layout's server components, `getCmsPageBlocks` fetches for the
-  // new pathname (via the `x-pathname` header), and the fresh blocks flow back
-  // through the watcher above. Works for public visitors too, since the server
-  // fetch uses the service token, not the user session.
-  const pathname = usePathname();
-  const router = useRouter();
   const lastPathnameRef = useRef(pathname);
   useEffect(() => {
-    if (pathname === lastPathnameRef.current) return;
+    const blocksChanged = initialBlocks !== initialBlocksRef.current;
+    const pathChanged = pathname !== lastPathnameRef.current;
+    if (!blocksChanged && !pathChanged) return;
+    initialBlocksRef.current = initialBlocks;
     lastPathnameRef.current = pathname;
+
+    // New server content lands under the route it describes.
+    if (blocksChanged) commitBlocks(pathname, indexBlocksByPath(initialBlocks ?? []));
     patchUi({ activeBlock: null });
     setDraftsState(new Map());
+
+    // A navigation needs at most one refetch, and only when there is nothing to
+    // show. A slug already in the store renders from it immediately and
+    // `<ContentLoader>` revalidates behind that, so no nudge is warranted.
+    if (!pathChanged || blocksChanged) return;
+    if (blocksStore.get().has(pathname)) return;
+    // Nothing cached for this route. An editor's client refetch will fill it,
+    // and `router.refresh()` could not help them anyway: the SSR fetch carries
+    // a service token and its response is ISR-cached under one tag for every
+    // visitor, so it structurally cannot carry an admin's `draftValue`. Public
+    // visitors run no client fetch at all, so for them the server is the only
+    // path, and a root-layout `<CmsPage>` (whose props survive a route change)
+    // is what actually needs the nudge.
+    if (isAdmin) return;
     router.refresh();
-  }, [pathname, router, setDraftsState, patchUi]);
+  }, [initialBlocks, pathname, isAdmin, router, blocksStore, commitBlocks, setDraftsState, patchUi]);
 
   // Drop drafts for blocks that no longer exist (e.g. after a manifest sync
   // removed one). Subscribed rather than keyed on a render value, since blocks
   // now change without re-rendering the provider. Pathname-change drafts are
   // already cleared above.
+  const prunePathnameRef = useRef(pathname);
+  prunePathnameRef.current = pathname;
   useEffect(() => {
     const prune = () => {
-      const currentBlocks = blocksStore.get();
+      // Only the route being edited: drafts belong to the page they were typed
+      // on, and navigation already clears them.
+      const currentBlocks = blocksStore.get().get(prunePathnameRef.current);
+      if (!currentBlocks) return;
       setDraftsState((prev) => {
         if (prev.size === 0) return prev;
         let changed = false;
@@ -546,8 +604,8 @@ export function CmsProvider({
       autosaveTimerRef.current = null;
       const genAtDispatch = discardGenRef.current;
       const drafts = contentDraftsStore.get();
-      const currentBlocks = blocksStore.get();
       const currentPathname = draftPathnameRef.current ?? "/";
+      const currentBlocks = blocksStore.get().get(currentPathname) ?? new Map();
       const currentConfig = draftConfigRef.current;
 
       // Skip entries that no longer differ from the effective value
@@ -613,7 +671,7 @@ export function CmsProvider({
       results.forEach((r, i) => {
         if (r.status !== "fulfilled") return;
         const [, blocksForSlug] = slugEntries[i];
-        setBlocksState((prev) => {
+        patchBlocks(currentPathname, (prev) => {
           let mutated = false;
           const nextMap = new Map(prev);
           for (const sent of blocksForSlug) {
@@ -654,7 +712,7 @@ export function CmsProvider({
       unsubscribe();
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [contentDraftsStore, stableGetAccessToken, flashDraftStatus]);
+  }, [contentDraftsStore, blocksStore, patchBlocks, stableGetAccessToken, flashDraftStatus, setDraftSyncStatus]);
 
   // Silent server-draft cleanup for discard. DELETEs each affected slug's
   // draft set without the debounce or `draftSyncStatus`, so the pill doesn't
@@ -670,8 +728,8 @@ export function CmsProvider({
       if (blockPaths.length === 0) return;
       /** @type {Map<string, string[]>} */
       const bySlug = new Map();
-      const currentBlocks = blocksStore.get();
       const currentPathname = draftPathnameRef.current ?? "/";
+      const currentBlocks = blocksStore.get().get(currentPathname) ?? new Map();
       for (const blockPath of blockPaths) {
         const block = currentBlocks.get(blockPath);
         if (!block || block.draftValue == null) continue;
@@ -684,7 +742,7 @@ export function CmsProvider({
 
       // Optimistic: null draftValue locally so dirtyCount and downstream
       // surfaces update without waiting for the round-trip.
-      setBlocksState((prev) => {
+      patchBlocks(currentPathname, (prev) => {
         let mutated = false;
         const next = new Map(prev);
         for (const pathsForSlug of bySlug.values()) {
@@ -717,7 +775,7 @@ export function CmsProvider({
         }
       })();
     },
-    [stableGetAccessToken],
+    [stableGetAccessToken, blocksStore, patchBlocks],
   );
 
   // Seams only: stores, setters, config, session. Nothing in here changes while
@@ -733,7 +791,7 @@ export function CmsProvider({
       onSignOut: onSignOut ? stableOnSignOut : browserSession ? browserSignOut : null,
 
       blocksStore,
-      setBlocks: setBlocksState,
+      commitBlocks,
       contentDraftsStore,
       setDraft,
       clearDraft,
@@ -765,7 +823,8 @@ export function CmsProvider({
       browserSession,
       browserSignOut,
       blocksStore,
-      setBlocksState,
+      commitBlocks,
+      patchBlocks,
       contentDraftsStore,
       setDraft,
       clearDraft,

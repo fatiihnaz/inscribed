@@ -59,7 +59,7 @@ export function useCmsAdmin() {
         // only kicks in when one batch edits both a page block and a global one.
         /** @type {Map<string, UpdateBlockItem[]>} */
         const bySlug = new Map();
-        const blocks = blocksStore.get();
+        const blocks = blocksStore.get().get(pathname) ?? new Map();
         for (const update of updates) {
           const block = /** @type {BlockResponse | undefined} */ (blocks.get(update.blockPath));
           const slug = block?._slug ?? pathname;
@@ -93,14 +93,18 @@ export function useCmsAdmin() {
 
         // Drop ISR cache for every slug we wrote. Page and global slugs are
         // independent tags, so a header save must not leave page renders stale.
-        for (const [slug] of groups) {
-          try {
-            await onAfterSave(slug);
-          } catch (revalidateErr) {
-            // eslint-disable-next-line no-console
-            console.warn("[inscribed] onAfterSave failed:", revalidateErr);
-          }
-        }
+        // In parallel: each one is its own Server Action round-trip, and the
+        // save button waits on all of them.
+        await Promise.all(
+          groups.map(async ([slug]) => {
+            try {
+              await onAfterSave(slug);
+            } catch (revalidateErr) {
+              // eslint-disable-next-line no-console
+              console.warn("[inscribed] onAfterSave failed:", revalidateErr);
+            }
+          }),
+        );
         return result;
       } catch (err) {
         setError(/** @type {Error} */ (err));

@@ -7,6 +7,7 @@
  */
 
 import { useCallback } from "react";
+import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
@@ -45,9 +46,11 @@ export function useCmsBlock(blockPath, _meta) {
   void _meta;
   const { blocksStore } = useCmsContext();
   const { save } = useCmsAdmin();
+  const slug = usePathname() ?? "/";
 
-  // Just this block's entry, so another block's save doesn't re-render us.
-  const block = useStoreSelector(blocksStore, (m) => m.get(blockPath) ?? null);
+  // Just this block's entry on this route, so another block's save doesn't
+  // re-render us and a navigation resolves against the new page at once.
+  const block = useStoreSelector(blocksStore, (s) => s.get(slug)?.get(blockPath) ?? null);
 
   const update = useCallback(
     /**

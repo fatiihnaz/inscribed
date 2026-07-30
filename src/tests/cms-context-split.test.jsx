@@ -132,9 +132,9 @@ describe("context seams / store state", () => {
     await waitFor(() => expect(handle()).not.toBeNull());
 
     const before = pageRenders;
-    // What an autosave roundtrip does: rewrite the map with one block changed.
+    // What a refetch does: replace one route's blocks.
     act(() => {
-      handle().setBlocks(() => new Map([
+      handle().commitBlocks("/", new Map([
         ["hero.title", {
           blockPath: "hero.title",
           blockType: "ShortText",
@@ -146,7 +146,7 @@ describe("context seams / store state", () => {
       ]));
     });
 
-    expect(handle().blocksStore.get().size).toBe(1);
+    expect(handle().blocksStore.get().get("/").size).toBe(1);
     expect(pageRenders).toBe(before);
   });
 

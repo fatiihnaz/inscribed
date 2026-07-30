@@ -70,11 +70,21 @@ import { createContext, useContext } from "react";
  * @property {{ name: string|null, email: string|null, image: string|null } | null} userInfo  Admin-only: identity for the panel footer. Null when no session.
  * @property {(() => void) | null} onSignOut  Admin-only: invoked by the panel's logout button. Null when no auth wiring.
  *
- * @property {Store<Map<string, BlockResponse>>} blocksStore
- *   The page's blocks, keyed by blockPath. Regions select their own entry, so
- *   one block's autosave roundtrip doesn't re-render the rest; the drawer and
- *   `useCmsSave` select the whole map because they aggregate over it.
- * @property {(updater: (prev: Map<string, BlockResponse>) => Map<string, BlockResponse>) => void} setBlocks
+ * @property {Store<Map<string, Map<string, BlockResponse>>>} blocksStore
+ *   Blocks keyed by slug, then by blockPath, and it keeps every route visited
+ *   this session. Consumers select through their own pathname
+ *   (`s.get(slug)?.get(path)`), which is what makes a return visit paint
+ *   instantly: the moment the route commits, the selector already resolves
+ *   against the blocks fetched last time, with no effect in between to leave a
+ *   frame of placeholders. Regions select a single entry so one block's autosave
+ *   roundtrip doesn't re-render the rest; the drawer and `useCmsSave` select the
+ *   whole map for their route because they aggregate over it.
+ * @property {(slug: string, blocks: Map<string, BlockResponse>) => void} commitBlocks
+ *   Replace one route's blocks, as `useCmsContent` does once a fetch lands.
+ *   Other routes' entries stay: that is the cache.
+ * @property {(slug: string, updater: (prev: Map<string, BlockResponse>) => Map<string, BlockResponse>) => void} patchBlocks
+ *   Patch one route's blocks in place (the autosave mirror, discard). Returning
+ *   the input map is a no-op.
  * @property {Store<Map<string, *>>} contentDraftsStore
  *   Per-blockPath unsaved edits (live-preview overlay while typing). Regions
  *   subscribe to their own blockPath; the drawer and `useCmsSave` to the whole

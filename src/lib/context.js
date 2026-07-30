@@ -109,6 +109,10 @@ import { createContext, useContext } from "react";
  * @property {(blockPath: string) => void} unregisterEditorVisibility
  *
  * @property {((slug: string) => void | Promise<void>) | null} onAfterSave  Called after a successful save (typically a Server Action that calls `revalidateTag(cmsCacheTag(slug))`).
+ * @property {(key: string, slug?: string) => Promise<void>} onAfterCollectionSave
+ *   Called after a collection record is published, typically a Server Action
+ *   running `revalidateCmsCollection`. Required once collections are rendered on
+ *   the server: without it a publish leaves the ISR cache serving the old row.
  * @property {(() => Promise<string>) | null} getAccessToken  Returns the current user's JWT access token; added as `Authorization: Bearer {token}` on write requests. Null in public/demo mode.
  */
 

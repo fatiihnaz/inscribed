@@ -1,29 +1,30 @@
 "use client";
 
 /**
- * @file `<CollectionItem>`: render-prop primitive for one collection row.
+ * @file `<CollectionItem>`: one collection record, rendered by element children.
  *
- * Public visitors get the children function's output. Admins with
- * `item.canEdit` also get a click-to-focus wrapper (like EditableRegion) that
- * opens the matching drawer card; edits and re-render happen there.
+ * Public visitors get the children as-is. Admins with `item.canEdit` also get a
+ * click-to-focus wrapper (like EditableRegion) that opens the matching drawer
+ * card, plus publish/revert on the ring once the page carries fields.
  *
- * `item` is null while loading and on error, so branch on `meta.isLoading` /
- * `meta.error` first. 404s arrive as `meta.error` with `error.isNotFound`.
- *
- *   <CollectionItem collection="News" slug="q1-release-notes">
- *     {(item, { isLoading, error }) => (
- *       isLoading            ? <Skeleton /> :
- *       error?.isNotFound    ? <NotFound /> :
- *       error                ? <ErrorBanner message={error.message} /> :
- *                              <Article {...item.data} />
- *     )}
+ *   <CollectionItem collection="news" slug="q1-release-notes">
+ *     <article>
+ *       <CollectionField name="title" as="h1" />
+ *       <CollectionField name="body" as="div" html />
+ *     </article>
  *   </CollectionItem>
+ *
+ * Children are elements, not a function, so the same markup works from a Server
+ * Component: `createCmsPage` returns a server `<CollectionItem>` that awaits the
+ * record and hands it to `<CollectionRecord>` below. Markup that has to compute
+ * with the record (a link built from the slug) reads it through
+ * `useCollectionRecord()` in a small client component of its own.
  *
  * The binding identifies itself by the record it points at, so rendering the
  * same item twice on a page yields one drawer card, not two.
  */
 
-import { useContext, useEffect, useId, useMemo, useState } from "react";
+import { isValidElement, useContext, useEffect, useId, useMemo, useState } from "react";
 
 import { useCmsContext } from "../lib/context.js";
 import { collectionItemBindingId, useCollectionContext } from "../lib/collection-context.js";
@@ -48,14 +49,6 @@ const COLLECTION_GLYPH = TYPE_META.Collection.glyph;
 
 /**
  * @import { CollectionItemResponse } from "../lib/schemas.js"
- * @import { CmsApiError } from "../lib/errors.js"
- */
-
-/**
- * @typedef {Object} CollectionItemMeta
- * @property {boolean} isLoading
- * @property {CmsApiError|Error|null} error
- * @property {() => Promise<void>} refetch
  */
 
 /**
@@ -64,13 +57,66 @@ const COLLECTION_GLYPH = TYPE_META.Collection.glyph;
  * @property {string} slug         Item slug (lowercased server-side).
  * @property {string} [group]
  * @property {string} [label]      Drawer card and page chip text (default: `"{collection} · {slug}"`).
- * @property {(item: CollectionItemResponse | null, meta: CollectionItemMeta) => React.ReactNode} children
+ * @property {React.ReactNode} [fallback]
+ *   Shown while the record loads. Client path only; the server one has awaited
+ *   the record before rendering anything.
+ * @property {React.ReactNode} [missing]
+ *   Shown when the record does not exist (404). Defaults to nothing.
+ * @property {React.ReactNode} [error]
+ *   Shown when the read failed for any other reason, kept apart from `missing`
+ *   so a broken backend doesn't read as "no such record". Defaults to `missing`.
+ *   Retry needs a callback, which no longer crosses the children boundary: build
+ *   one with `useCollectionItem` in your own client component.
+ * @property {React.ReactNode} children
  */
 
 /**
+ * Client entry point: fetches the record, then hands it to `CollectionRecord`.
+ *
  * @param {CollectionItemProps} props
  */
-export function CollectionItem({ collection, slug, group, label, children }) {
+export function CollectionItem({
+  collection, slug, group, label, fallback, missing, error: errorNode, children,
+}) {
+  const { item, isLoading, error } = useCollectionItem(collection, slug);
+
+  if (isLoading) return fallback ?? null;
+  if (error) {
+    return /** @type {*} */ (error).isNotFound
+      ? (missing ?? null)
+      : (errorNode ?? missing ?? null);
+  }
+  if (!item) return missing ?? null;
+
+  return (
+    <CollectionRecord
+      collection={collection}
+      slug={slug}
+      item={item}
+      group={group}
+      label={label}
+    >
+      {children}
+    </CollectionRecord>
+  );
+}
+
+/**
+ * Everything about a record except fetching it: the drawer binding, the scope
+ * `<CollectionField>` reads, and the admin editing chrome. Split out so both
+ * entry points share it: the client one above, and the server one from
+ * `createCmsPage`, which awaits `getCmsCollectionItem` and passes `item` down.
+ *
+ * @param {{
+ *   collection: string,
+ *   slug: string,
+ *   item: CollectionItemResponse,
+ *   group?: string,
+ *   label?: string,
+ *   children: React.ReactNode,
+ * }} props
+ */
+export function CollectionRecord({ collection, slug, item, group, label, children }) {
   const { isAdmin, uiStore, setActiveBlock } = useCmsContext();
   const {
     registerCollectionBinding, unregisterCollectionBinding, collectionStore,
@@ -94,11 +140,9 @@ export function CollectionItem({ collection, slug, group, label, children }) {
     registerCollectionBinding, unregisterCollectionBinding,
   ]);
 
-  const { item, isLoading, error, refetch } = useCollectionItem(collection, slug);
   // Booleans, not the maps: editing another record leaves this binding alone.
   const hasDraft = useStoreSelector(collectionStore, (st) => st.drafts.has(`${collection}:${slug}`));
   const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === bindingId);
-  const rendered = /** @type {*} */ (children(item, { isLoading, error, refetch }));
 
   // Readers still get a scope: `<CollectionField>` renders the value for them,
   // it just has no editor behind it.
@@ -107,10 +151,10 @@ export function CollectionItem({ collection, slug, group, label, children }) {
     [collection, slug, scopeId, item],
   );
 
-  if (!isAdmin || !item || !item.canEdit) {
+  if (!isAdmin || !item.canEdit) {
     return (
       <CollectionItemContext.Provider value={readScope}>
-        {rendered}
+        {children}
       </CollectionItemContext.Provider>
     );
   }
@@ -123,14 +167,28 @@ export function CollectionItem({ collection, slug, group, label, children }) {
       item={item}
       bindingId={bindingId}
       label={cardLabel}
-      tag={typeof rendered?.type === "string" ? rendered.type : null}
+      tag={elementTag(children)}
       dirty={hasDraft || item.draftData != null}
       isActive={isActive}
       setActiveBlock={setActiveBlock}
     >
-      {rendered}
+      {children}
     </CollectionEditScope>
   );
+}
+
+/**
+ * The wrapper's display mode follows the children's own element, so a record
+ * around a `<div>` gets the padded card and one inside a sentence stays tight.
+ * Only a single element can answer; anything else falls back to inline.
+ *
+ * @param {React.ReactNode} children
+ * @returns {string | null}
+ */
+function elementTag(children) {
+  return isValidElement(children) && typeof children.type === "string"
+    ? children.type
+    : null;
 }
 
 /**

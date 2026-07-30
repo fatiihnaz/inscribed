@@ -106,7 +106,7 @@ const DRAFT_DEBOUNCE_MS = 1000;
  * @returns {CollectionEditorState}
  */
 export function useCollectionEditor(collection, slug, { active = true, mirror = true } = {}) {
-  const { config, getAccessToken } = useCmsContext();
+  const { config, getAccessToken, onAfterCollectionSave } = useCmsContext();
   const {
     collectionStore,
     updateCollectionItem,
@@ -344,6 +344,15 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         // Indicator flashes "Veri kaydedildi" for a beat before the row
         // settles into its idle dot.
         setPublishedFlash(true);
+        // Drop the ISR cache: server-rendered pages hold the pre-publish row
+        // until its tags are invalidated. The record's own tag and the
+        // collection's both go, since a write can move it between windows.
+        try {
+          await onAfterCollectionSave(collection, saved.slug ?? slug);
+        } catch (revalidateErr) {
+          // eslint-disable-next-line no-console
+          console.warn("[inscribed] onAfterCollectionSave failed:", revalidateErr);
+        }
       } catch (err) {
         if (err instanceof CmsApiError && err.isConflict) {
           setError("Versiyon çakışması — liste yenilendi, kontrol edip tekrar dene.");

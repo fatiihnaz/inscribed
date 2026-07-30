@@ -111,7 +111,12 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
     async getCollectionItem(key, slug, opts = {}) {
       const res = await fetch(
         `${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}`,
-        { method: "GET", headers: headers(opts.accessToken), signal: opts.signal },
+        {
+          method: "GET",
+          headers: headers(opts.accessToken),
+          signal: opts.signal,
+          ...cacheInit(opts.cache),
+        },
       );
       if (!res.ok) throw await toApiError(res);
       return /** @type {*} */ (await res.json());

@@ -7,7 +7,7 @@
 
 import { revalidateTag } from "next/cache";
 
-import { cmsCacheTag } from "./get-content.js";
+import { cmsCacheTag, cmsCollectionItemTag, cmsCollectionTag } from "./get-content.js";
 
 /**
  * Drop the ISR cache for a page slug after an admin save.
@@ -17,4 +17,21 @@ import { cmsCacheTag } from "./get-content.js";
  */
 export async function revalidateCmsSlug(slug) {
   revalidateTag(cmsCacheTag(slug));
+}
+
+/**
+ * Drop the ISR cache for a collection after publishing one of its records. Pass
+ * as `onAfterCollectionSave` to `createCmsPage` or `CmsProvider`.
+ *
+ * Always drops the whole collection, not just the record: a write can move rows
+ * between filter windows, reorder a list or change its total, so every window
+ * that mentions the collection is suspect. With `slug`, the record's own tag
+ * goes too, which is what a detail page is cached under.
+ *
+ * @param {string} key
+ * @param {string} [slug]
+ */
+export async function revalidateCmsCollection(key, slug) {
+  revalidateTag(cmsCollectionTag(key));
+  if (slug) revalidateTag(cmsCollectionItemTag(key, slug));
 }

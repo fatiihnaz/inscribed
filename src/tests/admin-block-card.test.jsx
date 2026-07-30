@@ -4,7 +4,7 @@
  * re-render another block's editor. The card reads its own draft from the store
  * and builds its own handlers, so `BlockCard`'s memo holds even though the
  * drawer around it re-renders on every keystroke (it aggregates the dirty
- * count). Both halves matter — the memo alone can't survive a fresh `draft`
+ * count). Both halves matter: the memo alone can't survive a fresh `draft`
  * prop or a new arrow handler per render.
  *
  * `FieldEditor` is stubbed as the render counter: it is the leaf every

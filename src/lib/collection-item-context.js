@@ -41,6 +41,9 @@ export const CollectionItemContext = createContext(
  * Read the enclosing record. Throws outside `<CollectionItem>`, where a field
  * has no record to name.
  *
+ * Internal: the whole scope, editor included. Consumers get the narrow
+ * `useCollectionRecord` below instead.
+ *
  * @returns {CollectionItemScope}
  */
 export function useCollectionItemScope() {
@@ -51,4 +54,32 @@ export function useCollectionItemScope() {
     );
   }
   return scope;
+}
+
+/**
+ * One record's identity and values, for markup that has to *compute* with them
+ * rather than render a field: a link built from the slug, a conditional, a
+ * formatted date. `<CollectionField>` covers the render-it case; this covers the
+ * rest, and it is why the binding components need no render-prop.
+ *
+ * Client-only, so reach for it in a small `"use client"` component nested inside
+ * the record:
+ *
+ *   "use client";
+ *   export function NewsCardLink({ children }) {
+ *     const { slug } = useCollectionRecord();
+ *     return <Link href={`/news/${slug}`}>{children}</Link>;
+ *   }
+ *
+ * `data` is draft-overlaid, so an editor sees what they are typing and a visitor
+ * sees what is published. Empty (`{}`) while the record loads.
+ *
+ * @returns {{ collection: string, slug: string, data: Record<string, *> }}
+ */
+export function useCollectionRecord() {
+  const { collection, slug, item, editor } = useCollectionItemScope();
+  // An open editor holds the live values; without one the overlaid item is
+  // already the effective record.
+  const data = editor?.values ?? item?.data ?? {};
+  return { collection, slug, data };
 }

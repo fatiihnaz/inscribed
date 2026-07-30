@@ -90,8 +90,8 @@ function renderItem({ isAdmin = true, children } = {}) {
   return render(
     <CmsProvider config={{ baseUrl: BASE }} isAdmin={isAdmin} getAccessToken={async () => "tok"}>
       <Probe />
-      <CollectionItem collection="news" slug="q1">
-        {(item, { isLoading }) => (isLoading ? <p>…</p> : children)}
+      <CollectionItem collection="news" slug="q1" fallback={<p>…</p>}>
+        {children}
       </CollectionItem>
     </CmsProvider>,
   );
@@ -109,8 +109,8 @@ function renderTwice(name = "title") {
     <CmsProvider config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
       <Probe />
       {[0, 1].map((i) => (
-        <CollectionItem key={i} collection="news" slug="q1">
-          {(item, { isLoading }) => (isLoading ? <p>…</p> : <CollectionField name={name} as="h1" />)}
+        <CollectionItem key={i} collection="news" slug="q1" fallback={<p>…</p>}>
+          <CollectionField name={name} as="h1" />
         </CollectionItem>
       ))}
     </CmsProvider>,
@@ -202,7 +202,7 @@ describe("in-place editing", () => {
       <CmsProvider config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
         <Probe />
         <CollectionItem collection="news" slug="q1">
-          {(item) => <h1>{item ? item.data.title : null}</h1>}
+          <h1>bare</h1>
         </CollectionItem>
       </CmsProvider>,
     );
@@ -337,8 +337,8 @@ describe("driver election", () => {
       <CmsProvider config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
         <Probe />
         {[0, 1].map((i) => (
-          <CollectionItem key={i} collection="news" slug="q1">
-            {(item, { isLoading }) => (isLoading ? <p>…</p> : <CollectionField name="title" as="h1" />)}
+          <CollectionItem key={i} collection="news" slug="q1" fallback={<p>…</p>}>
+            <CollectionField name="title" as="h1" />
           </CollectionItem>
         ))}
       </CmsProvider>,

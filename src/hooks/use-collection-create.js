@@ -61,7 +61,7 @@ export function useCollectionCreate({
   active = true,
   onSeedFromDraft,
 }) {
-  const { config, getAccessToken } = useCmsContext();
+  const { config, getAccessToken, onAfterCollectionSave } = useCmsContext();
   const { updateCollectionItem, invalidateCollectionList, invalidateCollectionItem } =
     useCollectionContext();
 
@@ -167,6 +167,13 @@ export function useCollectionCreate({
           { accessToken: token },
         );
         updateCollectionItem(collectionKey, created.slug, created);
+        // A new row changes every server-rendered window of this collection.
+        try {
+          await onAfterCollectionSave(collectionKey, created.slug);
+        } catch (revalidateErr) {
+          // eslint-disable-next-line no-console
+          console.warn("[inscribed] onAfterCollectionSave failed:", revalidateErr);
+        }
         reset();
         onCreated?.(created);
       } catch (err) {

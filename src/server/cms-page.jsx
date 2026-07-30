@@ -35,9 +35,10 @@
  * survives bundling (tsup doesn't preserve the directive across entries).
  */
 
+import { Suspense } from "react";
 import { headers } from "next/headers";
 
-import { getCmsPageBlocks } from "./get-content.js";
+import { getCmsCollection, getCmsCollectionItem, getCmsPageBlocks } from "./get-content.js";
 import { createCmsConfig } from "../lib/config.js";
 import { publicAuth } from "../defaults/auth.js";
 
@@ -83,6 +84,16 @@ const PATHNAME_HEADER = "x-pathname";
  *   Decides admin from the session. Default: `session != null`.
  * @property {(session: *) => string | null} [deriveUserSub]
  *   Default: `session?.user?.id ?? null`.
+ * @property {CollectionPrimitives} [collections]
+ *   Opt in to the server-rendered `<CollectionRegion>` / `<CollectionItem>`,
+ *   which the factory then returns alongside `CmsPage`. Pass
+ *   `{ CollectionRecord, CollectionRows }` imported from
+ *   `inscribed/collections`; omit it and an app that doesn't use collections
+ *   pulls none of that in.
+ * @property {(key: string, slug?: string) => void | Promise<void>} [onAfterCollectionSave]
+ *   Server Action run after a collection record is published, typically
+ *   `revalidateCmsCollection` from `inscribed/actions`. Needed whenever
+ *   collections render on the server, or a publish leaves the ISR cache stale.
  * @property {(slug: string) => void | Promise<void>} [onAfterSave]
  *   Server Action run after a successful admin save, typically
  *   `revalidateCmsSlug` from `inscribed/actions`. Import it consumer-side and
@@ -91,8 +102,26 @@ const PATHNAME_HEADER = "x-pathname";
  */
 
 /**
+ * The client components the server-rendered binding components render into.
+ * Import both from `inscribed/collections` and pass them here.
+ *
+ * They are options rather than imports because only a module's own exports
+ * become client references across the RSC boundary: reached from this server
+ * entry's graph they would lose their `"use client"` boundary, and wrapped in an
+ * object built here they would arrive `undefined`.
+ *
+ * @typedef {Object} CollectionPrimitives
+ * @property {*} CollectionRecord
+ * @property {*} CollectionRows
+ */
+
+/**
  * @param {CreateCmsPageOptions} options
- * @returns {(props: { slug?: string, children: React.ReactNode }) => Promise<React.ReactElement>}
+ * @returns {{
+ *   CmsPage: (props: { slug?: string, children: React.ReactNode }) => Promise<React.ReactElement>,
+ *   CollectionRegion?: *,
+ *   CollectionItem?: *,
+ * }}
  */
 export function createCmsPage(options) {
   const {
@@ -104,6 +133,8 @@ export function createCmsPage(options) {
     deriveAdmin = publicAuth.deriveAdmin,
     deriveUserSub = publicAuth.deriveUserSub,
     onAfterSave,
+    onAfterCollectionSave,
+    collections,
   } = options;
 
   if (!Provider) {
@@ -132,7 +163,7 @@ export function createCmsPage(options) {
         }
       : normalizedConfig;
 
-  return async function CmsPage({ slug, children }) {
+  async function CmsPage({ slug, children }) {
     const resolvedSlug = slug ?? (await resolveSlugFromHeaders());
     const session = await getSession();
 
@@ -149,12 +180,113 @@ export function createCmsPage(options) {
 
     return (
       <Provider config={normalizedConfig} isAdmin={deriveAdmin(session)} userSub={deriveUserSub(session)}
-        initialBlocks={initialBlocks} onAfterSave={onAfterSave} session={session}
+        initialBlocks={initialBlocks} onAfterSave={onAfterSave}
+        onAfterCollectionSave={onAfterCollectionSave} session={session}
       >
         {children}
       </Provider>
     );
-  };
+  }
+
+  if (!collections) return { CmsPage };
+  return { CmsPage, ...createServerCollections(serverConfig, collections) };
+}
+
+/**
+ * The server-rendered binding components. Each is a synchronous shell returning
+ * a `<Suspense>` around an async inner component, which is what lets a slow
+ * collection stream in *after* the page shell has already been flushed: the
+ * consumer writes no boundary of their own, and a collection reading external
+ * data can never hold the document back.
+ *
+ * @param {import("../lib/config.js").CmsConfig} serverConfig
+ * @param {CollectionPrimitives} primitives
+ */
+function createServerCollections(serverConfig, { CollectionRecord, CollectionRows }) {
+  async function RegionRows({ collection, filter, limit, offset, as, empty, children, rest }) {
+    /** @type {import("../lib/schemas.js").CollectionListParams | undefined} */
+    const params = filter || typeof limit === "number" || typeof offset === "number"
+      ? {
+          ...(filter ? { filter } : {}),
+          ...(typeof limit === "number" ? { limit } : {}),
+          ...(typeof offset === "number" ? { offset } : {}),
+        }
+      : undefined;
+
+    let items = [];
+    try {
+      ({ items } = await getCmsCollection(serverConfig, collection, params));
+    } catch (err) {
+      // Same posture as the block fetch: a page whose collection is unreachable
+      // still renders, with the region's own empty branch.
+      if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.warn(`[inscribed] SSR collection fetch failed for "${collection}":`, err);
+      }
+    }
+
+    // `CollectionRows` registers the window with the drawer itself: that needs
+    // hooks, and it is already the client boundary here.
+    return (
+      <CollectionRows
+        collection={collection} items={items} filter={filter} limit={limit} offset={offset}
+        as={as} empty={empty} {...rest}
+      >
+        {children}
+      </CollectionRows>
+    );
+  }
+
+  /** @param {Record<string, *>} props */
+  function CollectionRegion({ collection, filter, limit, offset, as, fallback, empty, children, ...rest }) {
+    return (
+      <Suspense fallback={fallback ?? null}>
+        <RegionRows
+          collection={collection} filter={filter} limit={limit} offset={offset}
+          as={as} empty={empty} rest={rest}
+        >
+          {children}
+        </RegionRows>
+      </Suspense>
+    );
+  }
+
+  async function RecordBody({ collection, slug, group, label, missing, error: errorNode, children }) {
+    let item = null;
+    try {
+      item = await getCmsCollectionItem(serverConfig, collection, slug);
+    } catch (err) {
+      if (/** @type {*} */ (err)?.isNotFound) return missing ?? null;
+      if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.warn(`[inscribed] SSR collection item fetch failed for "${collection}/${slug}":`, err);
+      }
+      return errorNode ?? missing ?? null;
+    }
+    if (!item) return missing ?? null;
+
+    return (
+      <CollectionRecord collection={collection} slug={slug} item={item} group={group} label={label}>
+        {children}
+      </CollectionRecord>
+    );
+  }
+
+  /** @param {Record<string, *>} props */
+  function CollectionItem({ collection, slug, group, label, fallback, missing, error: errorNode, children }) {
+    return (
+      <Suspense fallback={fallback ?? null}>
+        <RecordBody
+          collection={collection} slug={slug} group={group} label={label}
+          missing={missing} error={errorNode}
+        >
+          {children}
+        </RecordBody>
+      </Suspense>
+    );
+  }
+
+  return { CollectionRegion, CollectionItem };
 }
 
 /**

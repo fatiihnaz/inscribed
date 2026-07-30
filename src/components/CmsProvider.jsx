@@ -62,6 +62,7 @@ function useConstant(create) {
  * @param {() => Promise<string>} [props.getAccessToken]   Returns the user's JWT, added as `Authorization: Bearer` on writes. When omitted and `config.clientKey` is set, the built-in browser auth (reference backend `/auth/*`) takes over; omit both for public mode.
  * @param {import("../lib/transport.js").CmsTransport} [props.transport]   Custom client transport. Defaults to REST from `config`. Passed here, not via `config`, because it holds functions that can't cross the RSC boundary.
  * @param {{ name: string|null, email: string|null, image: string|null } | null} [props.userInfo]   Identity for the admin panel footer. Null in public mode.
+ * @param {(key: string, slug?: string) => void | Promise<void>} [props.onAfterCollectionSave]   Server Action run after a collection record is published, typically `revalidateCmsCollection` from `inscribed/actions`.
  * @param {() => void} [props.onSignOut]   Invoked by the admin panel's logout button.
  * @param {React.ReactNode} props.children
  */
@@ -71,6 +72,7 @@ export function CmsProvider({
   isAdmin: isAdminProp = false,
   initialBlocks,
   onAfterSave,
+  onAfterCollectionSave,
   getAccessToken,
   transport,
   userInfo: userInfoProp = null,
@@ -438,6 +440,9 @@ export function CmsProvider({
   const onAfterSaveRef = useRef(onAfterSave ?? null);
   onAfterSaveRef.current = onAfterSave ?? null;
 
+  const onAfterCollectionSaveRef = useRef(onAfterCollectionSave ?? null);
+  onAfterCollectionSaveRef.current = onAfterCollectionSave ?? null;
+
   const getAccessTokenRef = useRef(getAccessToken ?? null);
   getAccessTokenRef.current = getAccessToken ?? browserAuth?.getAccessToken ?? null;
 
@@ -523,6 +528,16 @@ export function CmsProvider({
       const fn = getAccessTokenRef.current;
       if (!fn) return "";
       return fn();
+    },
+    [],
+  );
+
+  const stableOnAfterCollectionSave = useCallback(
+    /** @param {string} key @param {string} [slug] */
+    async (key, slug) => {
+      const fn = onAfterCollectionSaveRef.current;
+      if (!fn) return;
+      await fn(key, slug);
     },
     [],
   );
@@ -811,6 +826,7 @@ export function CmsProvider({
       unregisterEditorVisibility,
 
       onAfterSave: stableOnAfterSave,
+      onAfterCollectionSave: stableOnAfterCollectionSave,
       getAccessToken: stableGetAccessToken,
     }),
     [
@@ -841,6 +857,7 @@ export function CmsProvider({
       registerEditorVisibility,
       unregisterEditorVisibility,
       stableOnAfterSave,
+      stableOnAfterCollectionSave,
       stableGetAccessToken,
     ],
   );

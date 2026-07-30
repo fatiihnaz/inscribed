@@ -14,7 +14,7 @@ import { noServiceToken } from "../defaults/service-token.js";
 /**
  * @import { CmsConfig } from "../lib/config.js"
  * @import { ServiceTokenProvider } from "../lib/service-token.js"
- * @import { BlockResponse, ContentResponse, SyncManifestRequest, SyncResultResponse } from "../lib/schemas.js"
+ * @import { BlockResponse, CollectionItemResponse, CollectionListParams, ContentResponse, PagedListResponse, SyncManifestRequest, SyncResultResponse } from "../lib/schemas.js"
  */
 
 /**
@@ -23,6 +23,31 @@ import { noServiceToken } from "../defaults/service-token.js";
  */
 export function cmsCacheTag(slug) {
   return `cms-${slug}`;
+}
+
+/**
+ * Cache tag for a whole collection. Every window (filter/offset/limit) of a
+ * collection shares it, because a single write can move rows between windows:
+ * membership, ordering and totals all shift, so there is nothing finer to
+ * invalidate safely.
+ *
+ * @param {string} key
+ * @returns {string}
+ */
+export function cmsCollectionTag(key) {
+  return `cms-collection-${key}`;
+}
+
+/**
+ * Cache tag for one record. Held alongside `cmsCollectionTag` so a detail page
+ * can be dropped on its own, without rebuilding every list that mentions it.
+ *
+ * @param {string} key
+ * @param {string} slug
+ * @returns {string}
+ */
+export function cmsCollectionItemTag(key, slug) {
+  return `cms-collection-${key}-${slug}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +128,60 @@ export async function getCmsPageBlocks(config, slug, options) {
     .map((b) => ({ ...b, _slug: globalSlug }));
 
   return [...pageBlocks, ...stampedGlobal];
+}
+
+/**
+ * Fetch one window of a collection from a Server Component.
+ *
+ * Unlike `getCmsContent` this never sees a draft: the response is ISR-cached
+ * under one tag for every visitor, so it carries published `data` only. An
+ * editor's unpublished draft reaches the page through the client store instead
+ * (see `CollectionProvider`).
+ *
+ * @param {CmsConfig} config
+ * @param {string} key                       Backend collection key, e.g. "news".
+ * @param {CollectionListParams} [params]    Filter / offset / limit.
+ * @param {GetCmsContentOptions} [options]
+ * @returns {Promise<PagedListResponse<CollectionItemResponse>>}
+ */
+export async function getCmsCollection(config, key, params, options) {
+  const getServiceToken = config.getServiceToken ?? noServiceToken;
+  const accessToken = options?.accessToken ?? (await getServiceToken());
+  const transport = config.transport ?? createRestTransport(config);
+  return transport.getCollection(key, params, {
+    accessToken,
+    cache: {
+      revalidate: options?.revalidate ?? false,
+      tags: [cmsCollectionTag(key), ...(options?.tags ?? [])],
+    },
+  });
+}
+
+/**
+ * Fetch a single collection record from a Server Component. Carries both tags,
+ * so publishing the record or rebuilding the collection drops it.
+ *
+ * @param {CmsConfig} config
+ * @param {string} key
+ * @param {string} slug
+ * @param {GetCmsContentOptions} [options]
+ * @returns {Promise<CollectionItemResponse>}
+ */
+export async function getCmsCollectionItem(config, key, slug, options) {
+  const getServiceToken = config.getServiceToken ?? noServiceToken;
+  const accessToken = options?.accessToken ?? (await getServiceToken());
+  const transport = config.transport ?? createRestTransport(config);
+  return transport.getCollectionItem(key, slug, {
+    accessToken,
+    cache: {
+      revalidate: options?.revalidate ?? false,
+      tags: [
+        cmsCollectionItemTag(key, slug),
+        cmsCollectionTag(key),
+        ...(options?.tags ?? []),
+      ],
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------

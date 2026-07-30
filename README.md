@@ -58,10 +58,11 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
   registers a manifest of every region with your backend. It is idempotent, fits in a
   `predev` / `prebuild` hook.
 - **Rich content types.** Short/long plain text, RichText (Tiptap), Image, Link,
-  Date, repeatable Lists, and read-only Collection bindings.
+  Date, repeatable Lists, and bindings into collections of structured records.
 - **App Router native.** Server Components fetch content (ISR-cacheable),
   Client Components edit it, Server Actions revalidate it. SSR-seeded, no
-  layout-shift flicker.
+  layout-shift flicker. Collections fetch on the server too and stream behind
+  their own Suspense boundary, so a slow one never holds up the page.
 - **Draft autosave.** Edits debounce to a draft endpoint as you type; publish is
   an explicit save.
 - **Backend-agnostic core.** A single `CmsTransport` seam isolates all data
@@ -150,11 +151,13 @@ import { CmsProvider } from "inscribed";
 
 import { cmsConfig } from "./cms-config.js";
 
-export const CmsPage = createCmsPage({
+export const { CmsPage } = createCmsPage({
   config: cmsConfig,
   Provider: CmsProvider,
   // Public read-only by default. Add getSession / deriveAdmin / onAfterSave
   // and a getServiceToken provider to enable editing - see "Editing & drafts".
+  // Add `collections` to get the server-rendered binding components too, see
+  // "Collections".
 });
 ```
 
@@ -369,44 +372,141 @@ label chip on the block as a whole:
 The `as` wrapper renders in public mode too, so the layout is identical for
 visitors and admins, only the ring and chip are admin-only.
 
-> `<EditableList>` (and the Collection components below) use a render-prop,
-> a function child, so they must live in a `"use client"` component. Wrap the
-> usage and import that wrapper into your server page.
+> `<EditableList>` uses a render-prop, a function child, so it must live in a
+> `"use client"` component. Wrap the usage and import that wrapper into your
+> server page. The Collection components below take element children instead,
+> precisely so they don't need this.
 
 ### Collections
 
-Collections are a separate, read-only namespace for structured data that lives
-outside the page (e.g. all News articles, all Teams). The page **binds** to a
-collection and renders its items; editing happens in that collection's own admin
-surface, not inline.
+Collections are a separate namespace for structured data that lives outside the
+page (e.g. all News articles, all Teams). The page **binds** to a collection and
+renders its records.
 
 The collection layer is an **opt-in capability** with its own entry point: import
 it from `inscribed/collections`, not `inscribed`, so apps that don't use
-collections never pull it into their bundle:
+collections never pull it into their bundle.
 
-```jsx
-import { CollectionRegion, CollectionItem } from "inscribed/collections";
-```
-
-- `<CollectionRegion collection="News" filter={...} limit={...}>` to render a list.
-- `<CollectionItem collection="News" slug="q1-notes">` to render one item.
-
-Both take a render-prop receiving the resolved items plus `{ isLoading, error,
-refetch, ... }`. Items are fetched at render time and cached under
-`cms-collection-{key}`, independent of the page slug. The hooks `useCollection`
-and `useCollectionItem` (also from `inscribed/collections`) expose the same data
-directly. The `<CollectionProvider>` that backs them is mounted for you inside
-`<CmsProvider>`, so the components and hooks work without extra wiring.
+- `<CollectionRegion collection="news" filter={...} limit={...}>` renders a list.
+- `<CollectionItem collection="news" slug="q1-notes">` renders one record.
 
 Neither takes a `blockPath`. A binding is identified by what it points at, the
 record for an item and the (collection, filter) window for a region, so the same
 article rendered in two places on a page is one drawer card, not two. Inside a
 `<CmsGroup>` an item's card is filed under that group; `group` and `label`
-override the placement and the card text without changing which record is bound:
+override the placement and the card text without changing which record is bound.
+
+#### Fetching on the server
+
+Both components come in two forms with the **same children contract**. Which one
+you import decides where the data is fetched:
+
+| Import from | Fetches | Use when |
+| ----------- | ------- | -------- |
+| your `createCmsPage` factory | server, streamed | the default: content reaches the HTML a crawler sees |
+| `inscribed/collections` | client, on mount | you are already inside a `"use client"` component |
+
+Opt in with the `collections` option; the factory then returns the components
+beside `CmsPage`:
 
 ```jsx
-<CollectionItem collection="News" slug={slug} label="Öne çıkan haber" />
+// app/lib/cms.jsx
+import { CmsProvider } from "inscribed";
+import { CollectionRecord, CollectionRows } from "inscribed/collections";
+import { createCmsConfig, createCmsPage } from "inscribed/page";
+import { revalidateCmsCollection, revalidateCmsSlug } from "inscribed/actions";
+
+export const { CmsPage, CollectionRegion, CollectionItem } = createCmsPage({
+  config: createCmsConfig({ baseUrl: process.env.CMS_URL }),
+  Provider: CmsProvider,
+  collections: { CollectionRecord, CollectionRows },
+  onAfterSave: revalidateCmsSlug,
+  onAfterCollectionSave: revalidateCmsCollection,
+});
 ```
+
+`CollectionRecord` and `CollectionRows` are internals; they appear in your wiring
+for the same reason `Provider` does. Only a module's own **exports** become client
+references across the Server → Client boundary, so the client half of these
+components has to be handed in by name: reached from the server entry's own
+imports it would lose its `"use client"` boundary, and wrapped in an object it
+would arrive `undefined`.
+
+Each server component is a synchronous shell wrapping its own `<Suspense>` around
+an async fetch. That is what keeps a slow collection off the critical path: the
+page shell flushes immediately and the records stream in behind it, still landing
+in the document. You write no boundary of your own, which matters because a
+collection may be reading external data whose latency you don't control.
+
+```jsx
+// app/page.jsx  (a Server Component)
+import { CollectionField } from "inscribed/collections";
+import { CollectionRegion } from "./lib/cms.jsx";
+
+export default function Home() {
+  return (
+    <CollectionRegion
+      collection="news"
+      limit={5}
+      as="ul"
+      fallback={<NewsSkeleton />}
+      empty={<p>No news yet.</p>}
+    >
+      <li>
+        <CollectionField name="title" as="h3" />
+        <CollectionField name="summary" as="p" />
+      </li>
+    </CollectionRegion>
+  );
+}
+```
+
+Children are **elements, not a function**, which is what lets them cross the
+Server → Client boundary. A region renders its children once per record, each
+under that record's own scope, so `<CollectionField>` resolves against the row it
+sits in. `as` folds a wrapper element (here `<ul>`) into the region and takes any
+extra props.
+
+Every state other than "records resolved" is a prop:
+
+| Prop | Shown when |
+| ---- | ---------- |
+| `fallback` | the read is in flight (client form only; the server form has awaited it) |
+| `empty` | a region resolves to zero records |
+| `missing` | an item's record does not exist (404) |
+| `error` | the read failed for any other reason; defaults to `missing` |
+
+Server-fetched records are cached under `cms-collection-{key}` (plus
+`cms-collection-{key}-{slug}` for a single record), so publishing one must drop
+those tags: that is what `onAfterCollectionSave` is for. Omit it and the page
+keeps serving the pre-publish row.
+
+#### Computing with a record
+
+`<CollectionField>` renders a field. When markup needs to *compute* with one, an
+href built from the slug, a conditional, a formatted date, reach for
+`useCollectionRecord()` in a small client component nested inside the record:
+
+```jsx
+// app/news-card-link.jsx
+"use client";
+import Link from "next/link";
+import { useCollectionRecord } from "inscribed/collections";
+
+export function NewsCardLink({ children }) {
+  const { slug } = useCollectionRecord();
+  return <Link href={`/news/${slug}`}>{children}</Link>;
+}
+```
+
+`data` on that record is draft-overlaid, so an editor sees what they are typing
+and a visitor sees what is published.
+
+> **Interactive windows stay on the client.** A filter or pagination driven by
+> user input can't be resolved on the server, so build those with `useCollection`
+> / `useCollectionItem` in your own component. Those hooks remain the full
+> client-side API, and `refetch` (which needs a callback, and so no longer
+> crosses the children boundary) lives there too.
 
 #### Editing a field in place
 
@@ -416,13 +516,11 @@ who may edit the record, turns it into the same in-place editor
 quick fix never has to travel to the drawer:
 
 ```jsx
-<CollectionItem collection="News" slug={slug}>
-  {(item, { isLoading }) => isLoading ? <Skeleton /> : (
-    <article>
-      <CollectionField name="title" as="h1" style={titleStyle} />
-      <CollectionField name="summary" as="p" style={summaryStyle} />
-    </article>
-  )}
+<CollectionItem collection="news" slug={slug} missing={<NotFound />}>
+  <article>
+    <CollectionField name="title" as="h1" style={titleStyle} />
+    <CollectionField name="summary" as="p" style={summaryStyle} />
+  </article>
 </CollectionItem>
 ```
 
@@ -431,8 +529,8 @@ for replace/remove, or drop one onto the empty field. Alt text stays in the
 drawer, where a text input belongs.
 
 A `RichText` field needs one word from you, because the field's type comes from
-`/me` and visitors never see it — without the flag they would read the markup as
-text while you edited it as prose:
+`/me` and visitors never see it: without the flag they would read the markup as
+text while you edited it as prose.
 
 ```jsx
 <CollectionField name="body" as="div" html />
@@ -534,7 +632,7 @@ beat after hydration - the server always renders the public view.
    session and decide `isAdmin`:
 
    ```jsx
-   export const CmsPage = createCmsPage({
+   export const { CmsPage } = createCmsPage({
      config: cmsConfig,
      Provider: AdminCmsProvider,            // your wrapper, see below
      getServiceToken,                        // server-only read token (optional)
@@ -656,12 +754,27 @@ normal), so a child can *tighten* the section's mode but not loosen it:
 
 ### Caching & revalidation
 
-Server reads (`getCmsPageBlocks`) are ISR-cacheable and tagged `cms-{slug}`.
-After an admin publishes, call `revalidateCmsSlug(slug)` (a Server Action from
-`inscribed/actions`); pass it as `onAfterSave` and stale visitor content is dropped
-on the next request. The global slug (header/footer/site-wide blocks) is fetched
-in parallel and merged into the same blocks map, so a shared block edited on any
-page reflects everywhere.
+Server reads are ISR-cacheable and tagged, so each publish drops exactly what it
+invalidates:
+
+| Read | Tag | Dropped by |
+| ---- | --- | ---------- |
+| `getCmsPageBlocks` | `cms-{slug}` | `revalidateCmsSlug` as `onAfterSave` |
+| `getCmsCollection` | `cms-collection-{key}` | `revalidateCmsCollection` as `onAfterCollectionSave` |
+| `getCmsCollectionItem` | `cms-collection-{key}-{slug}` (plus the collection's) | the same, which drops both |
+
+Pass those two Server Actions and stale visitor content is gone on the next
+request; omit one and the page keeps serving the pre-publish version. Publishing a
+record always drops the **whole** collection, not just the record: a write can
+move rows between filter windows, reorder a list or change its total, so every
+window that mentions the collection is suspect.
+
+The global slug (header/footer/site-wide blocks) is fetched in parallel and merged
+into the same blocks map, so a shared block edited on any page reflects everywhere.
+
+On the client, blocks are cached per route for the life of the session. Returning
+to a page you have already visited renders from that cache on the first render and
+revalidates behind it, so a soft navigation shows no gap.
 
 ---
 
@@ -769,10 +882,10 @@ bundle:
 | Import | Side | Highlights |
 | ------ | ---- | ---------- |
 | `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
-| `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `CollectionComposer`, `useCollection`, `useCollectionItem`, `useMyCollections`, `useCollectionCreate`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
-| `inscribed/server` | server only | `getCmsContent`, `getCmsPageBlocks`, `syncCmsManifest`, `syncAll`, `cmsCacheTag` |
+| `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `CollectionComposer`, `useCollection`, `useCollectionItem`, `useCollectionRecord`, `useMyCollections`, `useCollectionCreate`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
+| `inscribed/server` | server only | `getCmsContent`, `getCmsPageBlocks`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
 | `inscribed/page` | server only | `createCmsPage`, `withCms` |
-| `inscribed/actions` | Server Action | `revalidateCmsSlug` |
+| `inscribed/actions` | Server Action | `revalidateCmsSlug`, `revalidateCmsCollection` |
 
 Import `inscribed/server` and `inscribed/page` only from Server Components, route
 handlers, or build scripts, never from a Client Component.

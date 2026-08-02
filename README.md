@@ -639,8 +639,17 @@ beat after hydration - the server always renders the public view.
      getSession: () => auth(),               // your session resolver
      deriveAdmin: (session) => Boolean(session?.user?.isAdmin),
      onAfterSave: revalidateCmsSlug,         // from "inscribed/actions"
+     // Only if your wrapper needs a session on the client (see the note below):
+     // sessionForClient: (session) => ({ user: session.user }),
    });
    ```
+
+   > **The session stays on the server unless you opt in.** `Provider` is a
+   > Client Component, so every prop it receives is serialized into the page
+   > payload and shipped to the browser. Sessions routinely carry an access
+   > token, a refresh token or internal claims, none of which inscribed reads.
+   > If your wrapper feeds a session provider (NextAuth's `<SessionProvider>`,
+   > say), add `sessionForClient` and return only the fields that may travel.
 
 2. **Client side:** `CmsProvider` needs `getAccessToken` to attach a Bearer
    token to write requests. Since that's a client concern, wrap `CmsProvider` in
@@ -752,6 +761,12 @@ normal), so a child can *tighten* the section's mode but not loosen it:
 </CmsGroup>
 ```
 
+The cascade covers **collection records** too. A `<CollectionItem>` inside a
+locked group renders read-only on the page and its drawer card is locked; inside
+a hidden one it leaves the drawer entirely. Fields the record's own `canEdit`
+already denies stay read-only regardless: the group can tighten access, never
+widen it.
+
 ### Caching & revalidation
 
 Server reads are ISR-cacheable and tagged, so each publish drops exactly what it
@@ -771,6 +786,20 @@ window that mentions the collection is suspect.
 
 The global slug (header/footer/site-wide blocks) is fetched in parallel and merged
 into the same blocks map, so a shared block edited on any page reflects everywhere.
+Tags you pass yourself stay off that shared entry: `__global` backs every page, so
+one page's revalidation must not rebuild everyone's header and footer.
+
+**Drafts never survive a server read.** `getCmsContent`, `getCmsPageBlocks`,
+`getCmsCollection` and `getCmsCollectionItem` drop `draftValue` and `draftData`
+before returning. These responses are ISR-cached under one tag for **every**
+visitor, so a draft that survived would be served to the public. An editor's
+unpublished work reaches the page through the client store instead, fetched with
+their own token.
+
+> **Building a preview route?** Pass `includeDrafts: true` to keep drafts in the
+> response, and cache that route separately (or not at all). The flag is explicit
+> because intent cannot be read off the credential: a deliberate preview and a
+> service key that is merely over-scoped look exactly the same from here.
 
 On the client, blocks are cached per route for the life of the session. Returning
 to a page you have already visited renders from that cache on the first render and

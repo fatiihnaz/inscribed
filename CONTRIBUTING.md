@@ -38,6 +38,19 @@ and most "where should this go?" questions answer themselves.
 - **Server-only vs client-only is explicit.** Client code lives behind the
   `inscribed` entry's `"use client"` boundary; server code lives under
   `inscribed/server` and `inscribed/page`. Never import server modules from client code.
+- **Context carries seams, stores carry state.** A provider's context value holds
+  stores and callbacks whose identity never changes. Anything that *moves*
+  (drafts, caches, registries, editor form values) lives in an external store and
+  is read with `useStoreSelector`, so a write re-renders only the components
+  selecting that slice. The tell: you added a `useState` whose value ends up in a
+  context value, and now every consumer on the page re-renders on each change.
+  `tests/cms-context-split.test.jsx` and `tests/collection-context-split.test.jsx`
+  are render-count guards and fail loudly when state migrates back.
+- **One rule, one home.** Value precedence, dirty state, block merging, list
+  params and draft scheduling each live in exactly one `lib/` module. They were
+  previously hand-written at a dozen call sites and had already drifted into
+  disagreeing spellings. If you are about to write `draftValue ?? value`, import
+  it instead.
 - **JavaScript + JSDoc, not TypeScript source.** We author `.js`/`.jsx` with JSDoc
   type annotations and emit `.d.ts` from them. There is no `.ts` source.
 
@@ -70,15 +83,22 @@ src/
   collections.js        # `inscribed/collections` (opt-in collection entry, "use client")
   components/           # React components (EditableRegion, drawer UI, CollectionProvider, ...)
   hooks/                # client hooks (useCmsContent, useCmsBlock, useCollection, ...)
+    use-draft-driver.js #   elects the single surface allowed to write a draft
   lib/                  # framework-agnostic logic + JSDoc typedefs
-    config.js           #   createCmsConfig (serializable config)
-    context.js          #   CmsContext (core block state)
-    collection-context.js #   CollectionContext (opt-in collection state, separate from core)
+    config.js           #   createCmsConfig / ensureCmsConfig (serializable config)
+    context.js          #   CmsContext (core seams; state lives in its stores)
+    collection-context.js #   CollectionContext (opt-in collection seams + store shape)
     transport.js        #   CmsTransport contract (typedef only)
     service-token.js    #   ServiceTokenProvider contract
     auth.js             #   CmsAuthAdapter contract
     schemas.js          #   backend request/response typedefs
     store.js            #   external store (per-slice subscriptions)
+    resolve.js          #   value precedence: local draft > server draft > published
+    dirty.js            #   what carries unpublished changes (blocks and records)
+    merge-blocks.js     #   page + global merge, shared by server and client reads
+    collection-params.js #   one list-params builder, so every caller shares a cache key
+    draft-queue.js      #   debounced, per-key-ordered lane behind every draft write
+    draft-keys.js       #   queue keys, named by target endpoint rather than record
   defaults/             # default seam implementations
     transport.js        #   createRestTransport (the /cms/* REST adapter)
     service-token.js    #   noServiceToken
@@ -221,9 +241,10 @@ Keep the method's options shape consistent: `(…, opts?)` where `opts` is
    interactive surface. Read-only blocks (`editable={false}`, or anything inside
    a locked `<CmsGroup>`) flow a `disabled` flag down through `FieldEditor`; an
    editor that ignores it stays editable when it shouldn't. The
-   `editorVisibility` context registry (populated by `<EditableRegion>` /
-   `<EditableList>`, consumed by the drawer) is what drives this it follows the
-   same register/unregister pattern as `itemSchemas` and `collectionBindings`.
+   `editorVisibility` registry (populated by `<EditableRegion>` /
+   `<EditableList>`, consumed by the drawer) is what drives this; it follows the
+   same register/unregister pattern as `itemSchemas` in `registryStore` and
+   `bindings` in `collectionStore`.
 
 Two conventions worth knowing before you add one:
 

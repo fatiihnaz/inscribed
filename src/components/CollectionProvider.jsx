@@ -14,6 +14,7 @@ import { usePathname } from "next/navigation";
 import { useCmsContext } from "../lib/context.js";
 import { CollectionContext } from "../lib/collection-context.js";
 import { createStore } from "../lib/store.js";
+import { createDraftQueue } from "../lib/draft-queue.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 import { deepEqual } from "../lib/deep-equal.js";
 
@@ -30,35 +31,87 @@ export function CollectionProvider({ children }) {
   // and the access-token getter (forwarded as Bearer on every request).
   const { config, isAdmin, getAccessToken } = useCmsContext();
 
+  // Read through refs inside the request handlers so those keep one identity
+  // for the life of the provider. They are published on the context value, and
+  // anything unstable there re-renders every consumer (see lib/context.js).
+  // The /me effect below still depends on them directly: it *should* re-run
+  // when the session changes.
+  const configRef = useRef(config);
+  configRef.current = config;
+  const getAccessTokenRef = useRef(getAccessToken);
+  getAccessTokenRef.current = getAccessToken;
+
+  // Every collection slice lives in one external store, not React state, so a
+  // write only re-renders the consumers selecting that slice and the context
+  // value stays put for the whole session. (See lib/store.js.)
+  //
+  //   itemCache/listCache/drafts/draftSavedAt - request + overlay state
+  //   bindings      - what the page points at, for the drawer's lanes
+  //   inlineFields  - which scope drives a record's shared draft
+  //   activeItem    - the drawer's one-shot "open this row" signal
+  //   meta          - /cms/collections/me, by key and in server order
+  const collectionStoreRef = useRef(
+    /** @type {import("../lib/store.js").Store<import("../lib/collection-context.js").CollectionStoreState> | null} */
+    (null),
+  );
+  if (collectionStoreRef.current === null) {
+    collectionStoreRef.current = createStore({
+      itemCache: new Map(),
+      listCache: new Map(),
+      drafts: new Map(),
+      draftSavedAt: new Map(),
+      bindings: new Map(),
+      inlineFields: new Map(),
+      createLanes: new Map(),
+      editorValues: new Map(),
+      activeItem: null,
+      meta: { byKey: new Map(), order: [], isLoading: false, error: null },
+    });
+  }
+  const collectionStore = collectionStoreRef.current;
+
+  // One queue for every collection draft write. Keyed by target endpoint (see
+  // lib/draft-keys.js), so the surfaces that write the same slot share a lane
+  // and their requests can't reorder. Pinned in a ref for the same reason the
+  // store is: a `useMemo` React may drop would swap the queue out from under
+  // in-flight writes.
+  const draftQueueRef = useRef(
+    /** @type {import("../lib/draft-queue.js").DraftQueue | null} */ (null),
+  );
+  if (draftQueueRef.current === null) {
+    draftQueueRef.current = createDraftQueue();
+  }
+  const draftQueue = draftQueueRef.current;
+  useEffect(() => () => draftQueue.dispose(), [draftQueue]);
+
   // Drawer-side "open this row" signal: set by the StatusBar's "Aç" jump, read
   // once by the matching RegionItemCard to auto-expand.
-  const [activeCollectionItem, setActiveCollectionItem] = useState(
-    /** @type {{ key: string, slug: string } | null} */ (null),
+  const setActiveCollectionItem = useCallback(
+    /** @param {{ key: string, slug: string } | null} next */
+    (next) => {
+      collectionStore.set((s) => (s.activeItem === next ? s : { ...s, activeItem: next }));
+    },
+    [collectionStore],
   );
 
   // Registry of `<CollectionItem>` / `<CollectionRegion>` bindings. Collections
   // aren't in the manifest, so the drawer learns them via this runtime registry.
-  // State-based so consumer useMemos recompute when bindings come and go.
   //
-  // Refcounts live in a ref and the published Map in state: a binding is keyed
-  // by the record (or filter window) it addresses, so the same one can be
+  // Refcounts live in a ref and the published Map in the store: a binding is
+  // keyed by the record (or filter window) it addresses, so the same one can be
   // rendered many times on a page, and only the last unmount may drop it. The
   // ref also means a re-registration of something already bound publishes
   // nothing, keeping the drawer's memos off the churn path.
   const bindingEntriesRef = useRef(
     /** @type {Map<string, { binding: CollectionBinding, count: number }>} */ (new Map()),
   );
-  const [collectionBindings, setCollectionBindings] = useState(
-    /** @returns {Map<string, CollectionBinding>} */
-    () => new Map(),
-  );
 
   const publishCollectionBindings = useCallback(() => {
     /** @type {Map<string, CollectionBinding>} */
     const next = new Map();
     for (const [id, entry] of bindingEntriesRef.current) next.set(id, entry.binding);
-    setCollectionBindings(next);
-  }, []);
+    collectionStore.set((s) => ({ ...s, bindings: next }));
+  }, [collectionStore]);
 
   const registerCollectionBinding = useCallback(
     /**
@@ -115,10 +168,6 @@ export function CollectionProvider({ children }) {
   const inlineFieldCountsRef = useRef(
     /** @type {Map<string, Map<string, number>>} */ (new Map()),
   );
-  const [inlineFieldRecords, setInlineFieldRecords] = useState(
-    /** @returns {Map<string, string>} */
-    () => new Map(),
-  );
 
   const publishInlineFieldRecords = useCallback(() => {
     /** @type {Map<string, string>} */
@@ -129,8 +178,8 @@ export function CollectionProvider({ children }) {
       const first = scopes.keys().next();
       if (!first.done) next.set(key, first.value);
     }
-    setInlineFieldRecords(next);
-  }, []);
+    collectionStore.set((s) => ({ ...s, inlineFields: next }));
+  }, [collectionStore]);
 
   const registerInlineField = useCallback(
     /**
@@ -175,33 +224,104 @@ export function CollectionProvider({ children }) {
     [publishInlineFieldRecords],
   );
 
-  // /cms/collections/me state. The fetch (further down) runs once so the
-  // drawer's cards and tabs share one round-trip instead of each fetching.
-  const [myCollectionsState, setMyCollectionsState] = useState(
-    /** @returns {{ data: import("../lib/schemas.js").MyCollectionResponse[], isLoading: boolean, error: Error|null }} */
-    () => ({ data: [], isLoading: false, error: null }),
+  // Editor form state, keyed per surface rather than per record: two surfaces
+  // editing one record each keep their own working copy and reconcile through
+  // the shared draft, which is what the userEditRef/lastSyncedRef protocol in
+  // `useCollectionEditor` is built on.
+  const setEditorValues = useCallback(
+    /**
+     * @param {string} editorId
+     * @param {Record<string, *> | ((prev: Record<string, *> | null) => Record<string, *>)} updater
+     */
+    (editorId, updater) => {
+      collectionStore.set((s) => {
+        const prev = s.editorValues.get(editorId) ?? null;
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        if (next === prev) return s;
+        const editorValues = new Map(s.editorValues);
+        editorValues.set(editorId, next);
+        return { ...s, editorValues };
+      });
+    },
+    [collectionStore],
   );
+
+  const clearEditorValues = useCallback(
+    /** @param {string} editorId */
+    (editorId) => {
+      collectionStore.set((s) => {
+        if (!s.editorValues.has(editorId)) return s;
+        const editorValues = new Map(s.editorValues);
+        editorValues.delete(editorId);
+        return { ...s, editorValues };
+      });
+    },
+    [collectionStore],
+  );
+
+  // A collection has one new-item draft slot, so two composers for the same key
+  // would write it at once. Same election as `inlineFields`, minus the record:
+  // the first to claim the lane keeps it until it unmounts.
+  const createLaneCountsRef = useRef(
+    /** @type {Map<string, Map<string, number>>} */ (new Map()),
+  );
+
+  const publishCreateLanes = useCallback(() => {
+    /** @type {Map<string, string>} */
+    const next = new Map();
+    for (const [collection, scopes] of createLaneCountsRef.current) {
+      const first = scopes.keys().next();
+      if (!first.done) next.set(collection, first.value);
+    }
+    collectionStore.set((s) => ({ ...s, createLanes: next }));
+  }, [collectionStore]);
+
+  const claimCreateLane = useCallback(
+    /** @param {string} collection @param {string} scopeId */
+    (collection, scopeId) => {
+      let scopes = createLaneCountsRef.current.get(collection);
+      if (!scopes) {
+        scopes = new Map();
+        createLaneCountsRef.current.set(collection, scopes);
+      }
+      const count = scopes.get(scopeId) ?? 0;
+      scopes.set(scopeId, count + 1);
+      if (count === 0) publishCreateLanes();
+    },
+    [publishCreateLanes],
+  );
+
+  const releaseCreateLane = useCallback(
+    /** @param {string} collection @param {string} scopeId */
+    (collection, scopeId) => {
+      const scopes = createLaneCountsRef.current.get(collection);
+      const count = scopes?.get(scopeId);
+      if (!scopes || !count) return;
+      if (count > 1) {
+        scopes.set(scopeId, count - 1);
+        return;
+      }
+      scopes.delete(scopeId);
+      if (scopes.size === 0) createLaneCountsRef.current.delete(collection);
+      publishCreateLanes();
+    },
+    [publishCreateLanes],
+  );
+
+  // Bumping this re-runs the /me effect. It is the one piece of React state
+  // left here, and it is a fetch trigger only: it never reaches the value.
   const [myCollectionsToken, setMyCollectionsToken] = useState(0);
   const refetchMyCollections = useCallback(() => {
     setMyCollectionsToken((n) => n + 1);
   }, []);
 
-  // High-churn state (item cache, list cache, draft overlays) lives in an
-  // external store, not React state, so it stays out of the context value and a
-  // write only re-renders the consumers reading that slice. (See lib/store.js.)
-  const collectionStoreRef = useRef(
-    /** @type {import("../lib/store.js").Store<{ itemCache: Map<string, CollectionItemCacheEntry>, listCache: Map<string, CollectionListCacheEntry>, drafts: Map<string, *>, draftSavedAt: Map<string, string> }> | null} */
-    (null),
+  const setCollectionMeta = useCallback(
+    /** @param {import("../lib/collection-context.js").CollectionMeta} meta */
+    (meta) => {
+      collectionStore.set((s) => ({ ...s, meta }));
+    },
+    [collectionStore],
   );
-  if (collectionStoreRef.current === null) {
-    collectionStoreRef.current = createStore({
-      itemCache: new Map(),
-      listCache: new Map(),
-      drafts: new Map(),
-      draftSavedAt: new Map(),
-    });
-  }
-  const collectionStore = collectionStoreRef.current;
 
   // Per-slice setters preserving the `setState(prev => next)` contract;
   // returning the same reference is a no-op in the store.
@@ -430,8 +550,8 @@ export function CollectionProvider({ children }) {
 
       const promise = (async () => {
         try {
-          const token = await getAccessToken();
-          const item = await config.transport.getCollectionItem(key, slug, { accessToken: token });
+          const token = await getAccessTokenRef.current();
+          const item = await configRef.current.transport.getCollectionItem(key, slug, { accessToken: token });
           setCollectionItemCache((prev) => {
             const next = new Map(prev);
             next.set(cacheKey, { item, isLoading: false, error: null });
@@ -457,14 +577,19 @@ export function CollectionProvider({ children }) {
             return next;
           });
         } finally {
-          inFlightCollectionItems.current.delete(cacheKey);
+          // Only our own entry: a forced refetch may have replaced it, and
+          // deleting that one would leave a genuinely in-flight request
+          // invisible to the dedupe check.
+          if (inFlightCollectionItems.current.get(cacheKey) === promise) {
+            inFlightCollectionItems.current.delete(cacheKey);
+          }
         }
       })();
 
       inFlightCollectionItems.current.set(cacheKey, promise);
       return promise;
     },
-    [config, getAccessToken],
+    [collectionStore, setCollectionItemCache],
   );
 
   const requestCollectionList = useCallback(
@@ -499,8 +624,8 @@ export function CollectionProvider({ children }) {
 
       const promise = (async () => {
         try {
-          const token = await getAccessToken();
-          const response = await config.transport.getCollection(key, params, { accessToken: token });
+          const token = await getAccessTokenRef.current();
+          const response = await configRef.current.transport.getCollection(key, params, { accessToken: token });
           setCollectionListCache((prev) => {
             const next = new Map(prev);
             next.set(cacheKey, {
@@ -546,40 +671,54 @@ export function CollectionProvider({ children }) {
             return next;
           });
         } finally {
-          inFlightCollectionLists.current.delete(cacheKey);
+          // Same ownership check as the item variant above.
+          if (inFlightCollectionLists.current.get(cacheKey) === promise) {
+            inFlightCollectionLists.current.delete(cacheKey);
+          }
         }
       })();
 
       inFlightCollectionLists.current.set(cacheKey, promise);
       return promise;
     },
-    [config, getAccessToken],
+    [collectionStore, setCollectionListCache, setCollectionItemCache],
   );
 
   // Provider-level /me fetch: one request per admin session; re-fetches go
   // through `refetchMyCollections`.
   useEffect(() => {
     if (!isAdmin) {
-      setMyCollectionsState({ data: [], isLoading: false, error: null });
+      setCollectionMeta({ byKey: new Map(), order: [], isLoading: false, error: null });
       return undefined;
     }
     let cancelled = false;
-    setMyCollectionsState((s) => ({ ...s, isLoading: true, error: null }));
+    setCollectionMeta({
+      ...collectionStore.get().meta, isLoading: true, error: null,
+    });
     (async () => {
       try {
         const token = await getAccessToken();
         const data = await config.transport.getMyCollections({ accessToken: token });
         if (cancelled) return;
-        setMyCollectionsState({ data, isLoading: false, error: null });
+        // Indexed for the per-card lookup and kept in server order for the
+        // drawer's rail, which lists them as they come back.
+        setCollectionMeta({
+          byKey: new Map(data.map((c) => [c.collectionKey, c])),
+          order: data,
+          isLoading: false,
+          error: null,
+        });
       } catch (err) {
         if (cancelled) return;
         // eslint-disable-next-line no-console
         console.error("[inscribed] fetchMyCollections failed:", err);
-        setMyCollectionsState({ data: [], isLoading: false, error: /** @type {Error} */ (err) });
+        setCollectionMeta({
+          byKey: new Map(), order: [], isLoading: false, error: /** @type {Error} */ (err),
+        });
       }
     })();
     return () => { cancelled = true; };
-  }, [config, isAdmin, getAccessToken, myCollectionsToken]);
+  }, [config, isAdmin, getAccessToken, myCollectionsToken, setCollectionMeta, collectionStore]);
 
   // Soft-nav cleanup: drop draft overlays on route change so a stale one
   // doesn't leak onto another page's rows.
@@ -591,23 +730,25 @@ export function CollectionProvider({ children }) {
     setCollectionDraftsState(new Map());
   }, [pathname, setCollectionDraftsState]);
 
+  // Seams only. Every entry below is identity-stable for the life of the
+  // provider, so mounting a record, claiming a field or resolving /me cannot
+  // re-render an unrelated consumer. State reaches consumers through
+  // `collectionStore` selectors instead. Guarded by
+  // tests/collection-context-split.test.jsx.
   const value = useMemo(
     () => ({
-      activeCollectionItem,
+      collectionStore,
+      draftQueue,
       setActiveCollectionItem,
-      collectionBindings,
       registerCollectionBinding,
       unregisterCollectionBinding,
-      inlineFieldRecords,
       registerInlineField,
       unregisterInlineField,
-      myCollections: myCollectionsState.data,
-      myCollectionsLoading: myCollectionsState.isLoading,
-      myCollectionsError: myCollectionsState.error,
+      claimCreateLane,
+      releaseCreateLane,
+      setEditorValues,
+      clearEditorValues,
       refetchMyCollections,
-      // Caches and draft overlays aren't in the value; they live in
-      // `collectionStore` so a keystroke doesn't re-render every consumer.
-      collectionStore,
       requestCollectionItem,
       updateCollectionItem,
       patchCollectionItem,
@@ -620,16 +761,18 @@ export function CollectionProvider({ children }) {
       setCollectionDraftSavedAt,
     }),
     [
-      activeCollectionItem,
-      collectionBindings,
+      collectionStore,
+      draftQueue,
+      setActiveCollectionItem,
       registerCollectionBinding,
       unregisterCollectionBinding,
-      inlineFieldRecords,
       registerInlineField,
       unregisterInlineField,
-      myCollectionsState,
+      claimCreateLane,
+      releaseCreateLane,
+      setEditorValues,
+      clearEditorValues,
       refetchMyCollections,
-      collectionStore,
       requestCollectionItem,
       updateCollectionItem,
       patchCollectionItem,
@@ -639,6 +782,7 @@ export function CollectionProvider({ children }) {
       setCollectionDraft,
       clearCollectionDraft,
       clearCollectionDrafts,
+      setCollectionDraftSavedAt,
     ],
   );
 

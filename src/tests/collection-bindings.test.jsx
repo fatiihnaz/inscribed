@@ -30,6 +30,7 @@ import {
   collectionRegionBindingId,
   useCollectionContext,
 } from "../lib/collection-context.js";
+import { useStoreSelector } from "../lib/store.js";
 
 const BASE = "https://api.test";
 
@@ -60,7 +61,8 @@ function mockFetch() {
 let published;
 
 function Probe() {
-  const { collectionBindings } = useCollectionContext();
+  const { collectionStore } = useCollectionContext();
+  const collectionBindings = useStoreSelector(collectionStore, (s) => s.bindings);
   useEffect(() => {
     published.push(collectionBindings);
   }, [collectionBindings]);

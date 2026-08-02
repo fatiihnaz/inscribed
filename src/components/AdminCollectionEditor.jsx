@@ -12,14 +12,15 @@
  * is written back via `updateCollectionItem` so other surfaces re-render.
  */
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { useCmsContext } from "../lib/context.js";
 import { useCollectionContext } from "../lib/collection-context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { useCollectionItem } from "../hooks/use-collection.js";
-import { useMyCollections } from "../hooks/use-my-collections.js";
+import { useCollectionMeta, useMyCollections } from "../hooks/use-my-collections.js";
+import { itemDraftKey, newDraftKey } from "../lib/draft-keys.js";
 import { CmsApiError } from "../lib/errors.js";
 import { stableStringify } from "../lib/stable-stringify.js";
 
@@ -50,14 +51,19 @@ import {
   buttonBaseStyle,
 } from "./admin-drawer-styles.js";
 
-const DRAFT_DEBOUNCE_MS = 1000;
 
 /**
  * @typedef {Object} CollectionEditorState
  * @property {import("../lib/schemas.js").CollectionSchema | null} schema
  * @property {string | null} slugSource
  * @property {import("../lib/schemas.js").CollectionItemResponse | null} item
- * @property {Record<string, *> | null} values
+ * @property {string} editorId
+ *   Where this surface's form values sit in `collectionStore.editorValues`.
+ *   Handed out rather than the values themselves so a keystroke re-renders the
+ *   fields reading it, not everything holding the editor object. Read it with
+ *   `useEditorValues` (whole form) or `useEditorField` (one field).
+ * @property {() => Record<string, *> | null} readValues
+ *   The current values without subscribing, for handlers that patch one key.
  * @property {(next: Record<string, *>) => void} setValues
  * @property {() => void} save
  * @property {() => void} undoDraft
@@ -105,17 +111,27 @@ const DRAFT_DEBOUNCE_MS = 1000;
  *   A surface that is neither reads the record once and leaves the draft alone.
  * @returns {CollectionEditorState}
  */
-export function useCollectionEditor(collection, slug, { active = true, mirror = true } = {}) {
+export function useCollectionEditor(collection, slug, { active = true, mirror = true, scopeId } = {}) {
   const { config, getAccessToken, onAfterCollectionSave } = useCmsContext();
   const {
     collectionStore,
+    draftQueue,
     updateCollectionItem,
     patchCollectionItem,
     setCollectionDraft,
     clearCollectionDraft,
     setCollectionDraftSavedAt,
+    setEditorValues,
+    clearEditorValues,
   } = useCollectionContext();
-  const { collections: my, isLoading: meLoading, error: meError } = useMyCollections();
+  // Form state lives in the store under this surface's own id, so a keystroke
+  // re-renders the fields that read it rather than everything holding the
+  // record's scope. Per surface, not per record: two surfaces editing one
+  // record keep separate working copies and meet at the shared draft below.
+  const ownId = useId();
+  const editorId = scopeId ?? ownId;
+  useEffect(() => () => clearEditorValues(editorId), [editorId, clearEditorValues]);
+  const { isLoading: meLoading, error: meError } = useMyCollections();
   // Read the raw item (overlayDrafts: false): consuming our own overlay would
   // re-fire the seeding effect every keystroke and stall the autosave debounce.
   const { item, isLoading: itemLoading, error: itemError, refetch } = useCollectionItem(
@@ -124,11 +140,10 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     { overlayDrafts: false },
   );
 
-  const meta = my.find((c) => c.collectionKey === collection) ?? null;
+  const meta = useCollectionMeta(collection);
   const schema = meta?.schema ?? null;
   const slugSource = meta?.slugSource ?? null;
 
-  const [values, setValues] = useState(/** @type {Record<string, *> | null} */ (null));
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [isPending, startTransition] = useTransition();
   const [draftStatus, setDraftStatus] = useState(
@@ -149,10 +164,11 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   const failedResetRef = useRef(
     /** @type {ReturnType<typeof setTimeout>|null} */ (null),
   );
-  // Whether `values` carries an edit made *here*. Re-seeding clears it, so a
-  // surface that is only mirroring never writes what it was handed back into
-  // the draft (which would race the surface the user is actually typing in).
-  const userEditRef = useRef(false);
+  // Read inside the edit handler so it keeps one identity: the item moves on
+  // every cache write (roughly once per autosave), and re-binding the handler
+  // that often would churn the record scope the fields hang off.
+  const itemRef = useRef(item);
+  itemRef.current = item;
 
   /**
    * The shared draft: what any surface editing this record has typed but not
@@ -172,13 +188,34 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     (s) => s.draftSavedAt.get(`${collection}:${slug}`) ?? null,
   );
 
+  /** This surface's working copy, read without subscribing (see `editorId`). */
+  const readValues = useCallback(
+    () => collectionStore.get().editorValues.get(editorId) ?? null,
+    [collectionStore, editorId],
+  );
+
+  // A user edit and its handoff to the shared draft happen together, rather
+  // than the edit landing and an effect noticing it a render later. The draft
+  // is what every other surface renders, so the two must not drift apart.
   const setValuesFromUser = useCallback(
     /** @param {Record<string, *>} next */
     (next) => {
-      userEditRef.current = true;
-      setValues(next);
+      setEditorValues(editorId, next);
+      if (!active && !mirror) return;
+      if (!schema || !itemRef.current?.canEdit) return;
+      const payload = buildPayload(schema.fields, next);
+      // Typed back to the server's view: drop the overlay so consumers fall
+      // back to `draftData ?? data` instead of holding an identical copy.
+      if (stableStringify(payload) === lastSyncedRef.current) {
+        clearCollectionDraft(collection, slug);
+      } else {
+        setCollectionDraft(collection, slug, payload);
+      }
     },
-    [],
+    [
+      editorId, setEditorValues, active, mirror, schema, collection, slug,
+      setCollectionDraft, clearCollectionDraft,
+    ],
   );
 
   // Seed form state once schema + item arrive. Precedence: the shared draft (a
@@ -186,10 +223,6 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   // data, so in-flight edits survive both a reload and a second editor.
   useEffect(() => {
     if (!schema) return;
-    // An edit of our own is still in hand: re-seeding now would type over the
-    // user. It reaches the shared draft on the next pass, and from there
-    // everyone else picks it up.
-    if (userEditRef.current) return;
     const fromDraft = mirror && localDraft !== undefined;
     const baseline = fromDraft ? localDraft : (item?.draftData ?? item?.data ?? {});
     const seeded = seedValues(schema.fields, baseline);
@@ -203,12 +236,13 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     // only skip: matching `lastSyncedRef` must *not* be one, or a revert back
     // to the published value would never reach a surface that never PUT it
     // (its `lastSyncedRef` still holds exactly that value).
-    if (values && serialized === stableStringify(buildPayload(schema.fields, values))) return;
-    setValues(seeded);
+    const current = readValues();
+    if (current && serialized === stableStringify(buildPayload(schema.fields, current))) return;
+    setEditorValues(editorId, seeded);
     // Only the server's view counts as synced. Claiming a sibling's unsent
     // draft here would make the next autosave pass clear it instead of PUT it.
     if (!fromDraft) lastSyncedRef.current = serialized;
-  }, [schema, item, localDraft, mirror, values]);
+  }, [schema, item, localDraft, mirror, readValues, setEditorValues, editorId]);
 
   useEffect(() => () => {
     if (failedResetRef.current) clearTimeout(failedResetRef.current);
@@ -219,29 +253,6 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   useEffect(() => {
     if (item?.draftData == null) setCollectionDraftSavedAt(collection, slug, null);
   }, [item?.draftData, collection, slug, setCollectionDraftSavedAt]);
-
-  // Hand an edit made here to the shared draft, which is both the live-preview
-  // overlay page consumers render and the payload the autosave below sends.
-  // Only our own edits go in: a surface that is merely mirroring would
-  // otherwise write what it was handed back, racing whoever is typing.
-  useEffect(() => {
-    if (!active && !mirror) return;
-    if (!userEditRef.current) return;
-    if (!schema || !values) return;
-    if (!item?.canEdit) return;
-
-    const serialized = stableStringify(buildPayload(schema.fields, values));
-    // Typed back to the server's view: drop the overlay so consumers fall back
-    // to `draftData ?? data` instead of holding an identical copy.
-    if (serialized === lastSyncedRef.current) {
-      clearCollectionDraft(collection, slug);
-    } else {
-      setCollectionDraft(collection, slug, buildPayload(schema.fields, values));
-    }
-    // Handed over: from here the draft is the shared copy, and re-seeding from
-    // it is safe again.
-    userEditRef.current = false;
-  }, [active, mirror, values, schema, item, collection, slug, setCollectionDraft, clearCollectionDraft]);
 
   // Debounced draft autosave (1s after the last change), PUT to the item-draft
   // endpoint for published rows or the new-item-draft endpoint for virtual ones.
@@ -260,8 +271,14 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     if (serialized === lastSyncedRef.current) return undefined;
 
     const isVirtualNow = !item || item.version === 0;
-    let cancelled = false;
-    const timer = setTimeout(async () => {
+    // Endpoint-keyed, so a virtual row and an open composer share one lane
+    // instead of racing for the collection's single new-item slot.
+    const queueKey = isVirtualNow ? newDraftKey(collection) : itemDraftKey(collection, slug);
+
+    // No cleanup that cancels: re-scheduling the same key already replaces the
+    // pending write, and a draft the user typed should still reach the server
+    // when the surface showing it unmounts.
+    draftQueue.schedule(queueKey, async (ctx) => {
       try {
         const token = await getAccessToken();
         setDraftStatus("saving");
@@ -277,7 +294,9 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         } else {
           await config.transport.saveCollectionItemDraft(collection, slug, { data: payload }, { accessToken: token });
         }
-        if (cancelled) return;
+        // An undo landed while this was in flight: it already cleared the
+        // draft, so writing our sent value back would re-create it.
+        if (ctx.isStale()) return;
         lastSyncedRef.current = serialized;
         // Patch the cache so `hasDraft` flips immediately. In-place so list
         // windows don't refetch and overwrite it with the pre-cleanup state.
@@ -287,7 +306,7 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         setDraftStatus("idle");
         setCollectionDraftSavedAt(collection, slug, formatClock(new Date()));
       } catch (err) {
-        if (cancelled) return;
+        if (ctx.isStale()) return;
         // eslint-disable-next-line no-console
         console.warn("[inscribed] collection draft autosave failed:", err);
         setDraftStatus("failed");
@@ -297,12 +316,8 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
           failedResetRef.current = null;
         }, 4000);
       }
-    }, DRAFT_DEBOUNCE_MS);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+    });
+    return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, localDraft, item, schema, slugSource, slug, collection, isPending]);
 
@@ -310,11 +325,10 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   const canEdit = item?.canEdit ?? false;
   const hasDraft = item?.draftData != null;
 
-  const save = () => {
+  const save = useCallback(() => {
     setError(null);
+    const values = readValues();
     if (!schema || !values) return;
-    // Publishing resets the baseline, so let the seeding effect take over again.
-    userEditRef.current = false;
     const missing = requiredMissing(schema.fields, values);
     if (missing) {
       setError(`Zorunlu alan eksik: ${missing}`);
@@ -328,7 +342,7 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
           slug,
           {
             data: buildPayload(schema.fields, values),
-            version: isVirtual ? null : item.version,
+            version: itemRef.current && itemRef.current.version !== 0 ? itemRef.current.version : null,
           },
           { accessToken: token },
         );
@@ -368,7 +382,10 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         }
       }
     });
-  };
+  }, [
+    schema, collection, slug, readValues, getAccessToken, config,
+    updateCollectionItem, clearCollectionDraft, onAfterCollectionSave, refetch,
+  ]);
 
   // Revert local edits to the published baseline. Optimistically clears
   // `draftData` on the cached item so `hasDraft` flips off (badge + dirty
@@ -379,17 +396,21 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   // published payload: an echo can lose a race with a concurrent publish
   // (the payload it sends is no longer the current published value, so it
   // recreates a draft instead of clearing one) — DELETE can't.
-  const undoDraft = () => {
-    // Same as `save`: the baseline moves, so stop holding local edits over it.
-    userEditRef.current = false;
+  const undoDraft = useCallback(() => {
     clearCollectionDraft(collection, slug);
+    const item = itemRef.current;
     if (!schema || !item || item.draftData == null) return;
     setError(null);
     // In-place patch, not `updateCollectionItem`, so list windows don't refetch
     // and re-seed from the server's still-dirty state before the cleanup DELETE.
     patchCollectionItem(collection, slug, { ...item, draftData: null });
     if (item.version === 0) return;
-    (async () => {
+    // Cancel first, then queue: a pending autosave for this record is now
+    // obsolete, and one already in flight must land before the DELETE or the
+    // cleanup would be undone by the write it overtook.
+    const queueKey = itemDraftKey(collection, slug);
+    draftQueue.cancel(queueKey);
+    draftQueue.enqueue(queueKey, async () => {
       try {
         const token = await getAccessToken();
         await config.transport.deleteCollectionItemDraft(
@@ -399,33 +420,80 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         // eslint-disable-next-line no-console
         console.warn("[inscribed] collection undo draft cleanup failed:", err);
       }
-    })();
-  };
+    });
+  }, [
+    schema, collection, slug, clearCollectionDraft, patchCollectionItem,
+    draftQueue, getAccessToken, config,
+  ]);
 
-  return {
-    schema,
-    slugSource,
-    item,
-    values,
-    setValues: setValuesFromUser,
-    save,
-    undoDraft,
-    hasDraft,
-    canEdit,
-    isVirtual,
-    isPending,
-    error,
-    draftStatus,
-    lastDraftSavedAt,
-    publishedFlash,
-    meLoading,
-    meError: /** @type {Error | null} */ (meError ?? null),
-    itemLoading,
-    itemError: /** @type {Error | null} */ (itemError ?? null),
-    refetch,
-    collection,
-    slug,
-  };
+  // Memoised, and deliberately free of anything that moves per keystroke: this
+  // object goes into the record's scope, so its identity is what decides
+  // whether typing in one field re-renders the whole record. The values
+  // themselves are reached through `editorId`.
+  return useMemo(
+    () => ({
+      schema,
+      slugSource,
+      item,
+      editorId,
+      readValues,
+      setValues: setValuesFromUser,
+      save,
+      undoDraft,
+      hasDraft,
+      canEdit,
+      isVirtual,
+      isPending,
+      error,
+      draftStatus,
+      lastDraftSavedAt,
+      publishedFlash,
+      meLoading,
+      meError: /** @type {Error | null} */ (meError ?? null),
+      itemLoading,
+      itemError: /** @type {Error | null} */ (itemError ?? null),
+      refetch,
+      collection,
+      slug,
+    }),
+    [
+      schema, slugSource, item, editorId, readValues, setValuesFromUser,
+      save, undoDraft, hasDraft, canEdit, isVirtual, isPending, error,
+      draftStatus, lastDraftSavedAt, publishedFlash, meLoading, meError,
+      itemLoading, itemError, refetch, collection, slug,
+    ],
+  );
+}
+
+/**
+ * One surface's whole form state. For the drawer's schema-driven form, which
+ * renders every field at once and so re-renders with any of them.
+ *
+ * @param {string | undefined} editorId
+ * @returns {Record<string, *> | null}
+ */
+export function useEditorValues(editorId) {
+  const { collectionStore } = useCollectionContext();
+  return useStoreSelector(
+    collectionStore,
+    (s) => (editorId ? s.editorValues.get(editorId) ?? null : null),
+  );
+}
+
+/**
+ * One field of one surface. The narrow read is the point: typing in a record's
+ * title must not re-render its body, image and the rest.
+ *
+ * @param {string | undefined} editorId
+ * @param {string} name
+ * @returns {*}
+ */
+export function useEditorField(editorId, name) {
+  const { collectionStore } = useCollectionContext();
+  return useStoreSelector(
+    collectionStore,
+    (s) => (editorId ? s.editorValues.get(editorId)?.[name] : undefined),
+  );
 }
 
 /**
@@ -439,16 +507,20 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
  *   editor: CollectionEditorState,
  *   showMetaRow?: boolean,
  *   showActions?: boolean,
+ *   readOnly?: boolean,
  * }} props
+ *   `readOnly` locks the form from outside the record's own permissions: an
+ *   enclosing `<CmsGroup editable={false}>` covers its collection rows too.
  */
-export function AdminCollectionEditor({ editor, showMetaRow = true, showActions = true }) {
+export function AdminCollectionEditor({ editor, showMetaRow = true, showActions = true, readOnly = false }) {
   const {
-    collection, slug,
-    schema, item, values, setValues,
+    collection, slug, editorId,
+    schema, item, setValues,
     save, hasDraft, canEdit, isVirtual,
     isPending, error, draftStatus, lastDraftSavedAt, publishedFlash,
     meLoading, meError, itemLoading, itemError,
   } = editor;
+  const values = useEditorValues(editorId);
 
   if (meLoading || itemLoading) {
     return <div style={hintStyle}>Yükleniyor…</div>;
@@ -470,7 +542,9 @@ export function AdminCollectionEditor({ editor, showMetaRow = true, showActions 
     return null;
   }
 
-  const disabled = isPending || !canEdit;
+  // A group-level lock is as final as the record's own permissions here.
+  const editable = canEdit && !readOnly;
+  const disabled = isPending || !editable;
 
   return (
     <div style={containerStyle}>
@@ -483,11 +557,11 @@ export function AdminCollectionEditor({ editor, showMetaRow = true, showActions 
             {isVirtual ? "Yeni kayıt" : `Sürüm ${hasDraft ? item.version + 1 : item.version}`}
           </span>
           {hasDraft ? <span style={draftBadgeStyle}>taslak</span> : null}
-          {!canEdit ? <span style={metaReadonlyStyle}>salt okunur</span> : null}
+          {!editable ? <span style={metaReadonlyStyle}>salt okunur</span> : null}
         </div>
       ) : null}
 
-      {isVirtual && canEdit ? (
+      {isVirtual && editable ? (
         <div style={virtualHintStyle}>
           Bu kayıt henüz yok — ilk Kaydet'te oluşturulur.
         </div>
@@ -502,7 +576,7 @@ export function AdminCollectionEditor({ editor, showMetaRow = true, showActions 
 
       {error ? <div style={errorStyle}>{error}</div> : null}
 
-      {canEdit && showActions ? (
+      {editable && showActions ? (
         <div style={actionsRowStyle}>
           <DraftIndicator
             status={draftStatus}

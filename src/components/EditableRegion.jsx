@@ -20,7 +20,7 @@ import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
-import { deepEqual } from "../lib/deep-equal.js";
+import { isBlockDirty, resolveBlockValue } from "../lib/resolve.js";
 import { useImageOverlayFits } from "../hooks/use-image-overlay-fits.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../lib/group-context.js";
 import { ACCENT, TYPE_META, TYPE_META_FALLBACK } from "./admin-drawer-styles.js";
@@ -116,7 +116,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   const block = useStoreSelector(blocksStore, (s) => s.get(slug)?.get(fullPath));
   const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === fullPath);
   const blockType = block ? block.blockType : null;
-  const value = hasLocalDraft ? localDraft : block ? (block.draftValue ?? block.value) : undefined;
+  const value = resolveBlockValue(block, hasLocalDraft, localDraft);
   const empty = isValueEmpty(blockType, value);
 
   const rendered = empty
@@ -136,11 +136,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   const canInlineEdit = INLINE_TEXT_TYPES.has(/** @type {string} */ (blockType));
   const isImageType = blockType === "Image";
 
-  const dirty = block
-    ? (hasLocalDraft
-        ? !deepEqual(localDraft, block.value)
-        : block.draftValue != null)
-    : false;
+  const dirty = isBlockDirty(block, hasLocalDraft, localDraft);
   const glyph = (TYPE_META[/** @type {string} */ (blockType)] ?? TYPE_META_FALLBACK).glyph;
 
   let inner;

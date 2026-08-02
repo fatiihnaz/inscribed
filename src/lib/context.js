@@ -82,9 +82,6 @@ import { createContext, useContext } from "react";
  * @property {(slug: string, blocks: Map<string, BlockResponse>) => void} commitBlocks
  *   Replace one route's blocks, as `useCmsContent` does once a fetch lands.
  *   Other routes' entries stay: that is the cache.
- * @property {(slug: string, updater: (prev: Map<string, BlockResponse>) => Map<string, BlockResponse>) => void} patchBlocks
- *   Patch one route's blocks in place (the autosave mirror, discard). Returning
- *   the input map is a no-op.
  * @property {Store<Map<string, *>>} contentDraftsStore
  *   Per-blockPath unsaved edits (live-preview overlay while typing). Regions
  *   subscribe to their own blockPath; the drawer and `useCmsSave` to the whole

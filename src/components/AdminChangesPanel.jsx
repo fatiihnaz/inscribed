@@ -37,6 +37,7 @@ import {
   STATUS_DANGER,
   STATUS_WARN,
   TYPE_META,
+  TYPE_META_FALLBACK,
   paneStyle,
   listStyle,
   emptyStateStyle,

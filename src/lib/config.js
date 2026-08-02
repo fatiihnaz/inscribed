@@ -62,3 +62,19 @@ export function createCmsConfig({ baseUrl, cdnUrl, clientKey, globalSlug, theme 
     theme: normalizeTheme(theme),
   });
 }
+
+/**
+ * Accept either an already-normalized config or a plain options object.
+ *
+ * Normalizing matters beyond tidiness: a plain `{ baseUrl }` literal has no
+ * `globalSlug`, so the caller would skip the `__global` fetch and every page
+ * would render its header/footer as placeholders.
+ *
+ * @param {CmsConfig | Object} config
+ * @returns {CmsConfig}
+ */
+export function ensureCmsConfig(config) {
+  return "baseUrl" in config && Object.isFrozen(config)
+    ? /** @type {CmsConfig} */ (config)
+    : createCmsConfig(/** @type {*} */ (config));
+}

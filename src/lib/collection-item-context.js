@@ -12,6 +12,10 @@
 
 import { createContext, useContext } from "react";
 
+// Imported from the component module rather than the other way round: the
+// editor owns where its values live, this is only a reader.
+import { useEditorValues } from "../components/AdminCollectionEditor.jsx";
+
 /**
  * @import { CollectionItemResponse } from "./schemas.js"
  * @import { CollectionEditorState } from "../components/AdminCollectionEditor.jsx"
@@ -79,7 +83,10 @@ export function useCollectionItemScope() {
 export function useCollectionRecord() {
   const { collection, slug, item, editor } = useCollectionItemScope();
   // An open editor holds the live values; without one the overlaid item is
-  // already the effective record.
-  const data = editor?.values ?? item?.data ?? {};
+  // already the effective record. This subscribes to the whole record on
+  // purpose, unlike `<CollectionField>`: a caller computing with the data has
+  // no single field to narrow to.
+  const values = useEditorValues(editor?.editorId);
+  const data = values ?? item?.data ?? {};
   return { collection, slug, data };
 }

@@ -36,10 +36,11 @@ import {
 import { useCmsContext } from "../lib/context.js";
 import { useCollectionContext } from "../lib/collection-context.js";
 import { useStoreSelector } from "../lib/store.js";
+import { collectDirtyBlocks, collectDirtyRecords, dirtyCollectionKeys } from "../lib/dirty.js";
+import { isBlockDirty } from "../lib/resolve.js";
 import { useCmsSave } from "../hooks/use-cms-save.js";
 import { useMyCollections } from "../hooks/use-my-collections.js";
 import { CmsApiError } from "../lib/errors.js";
-import { deepEqual } from "../lib/deep-equal.js";
 
 import { BlockCard } from "./AdminBlockCard.jsx";
 import { AdminCollectionRegionPanel } from "./AdminCollectionRegionPanel.jsx";
@@ -158,12 +159,9 @@ export function AdminDrawer() {
   const editorVisibility = useStoreSelector(registryStore, (s) => s.editorVisibility);
   // Collection state lives in its own provider, which CmsProvider always wraps
   // the drawer in, so the throwing reader is safe here.
-  const {
-    activeCollectionItem,
-    setActiveCollectionItem,
-    collectionBindings,
-    collectionStore,
-  } = useCollectionContext();
+  const { setActiveCollectionItem, collectionStore } = useCollectionContext();
+  const activeCollectionItem = useStoreSelector(collectionStore, (s) => s.activeItem);
+  const collectionBindings = useStoreSelector(collectionStore, (s) => s.bindings);
   const collectionListCache = useStoreSelector(collectionStore, (s) => s.listCache);
   const collectionItemCache = useStoreSelector(collectionStore, (s) => s.itemCache);
   const collectionDrafts = useStoreSelector(collectionStore, (s) => s.drafts);
@@ -217,6 +215,13 @@ export function AdminDrawer() {
     let nextSort = pages.length > 0 ? pages[pages.length - 1].sortOrder + 1 : 1;
     for (const [bindingId, binding] of collectionBindings) {
       if (!binding.slug) continue;
+      // A region's rows already have a home: the reference row below lists the
+      // window and drills into them. Only a record placed directly on the page
+      // earns its own card.
+      if (binding.fromRegion) continue;
+      // Same rule the block loop applies above: a record inside a hidden group
+      // leaves the drawer entirely.
+      if (editorVisibility.get(bindingId) === "hidden") continue;
       pages.push(/** @type {BlockResponse} */ ({
         blockPath: bindingId,
         blockType: "Collection",
@@ -238,20 +243,7 @@ export function AdminDrawer() {
   // Per-block dirty flag for the rail dot, tab dots and preview counts. Its own
   // memo (rebuilt per keystroke) so it can't drag the block lists with it. Cards
   // don't read it: each one derives its own dirty state from its own draft.
-  const dirtyByPath = useMemo(() => {
-    /** @type {Map<string, boolean>} */
-    const dirty = new Map();
-    for (const block of blocks.values()) {
-      const local = drafts.get(block.blockPath);
-      dirty.set(
-        block.blockPath,
-        local !== undefined
-          ? !deepEqual(local, block.value)
-          : block.draftValue != null,
-      );
-    }
-    return dirty;
-  }, [blocks, drafts]);
+  const dirtyByPath = useMemo(() => collectDirtyBlocks(blocks, drafts), [blocks, drafts]);
 
   // Collections this page binds as a region and the user can reach (per /me).
   // These are reference rows in the page list, not tabs: a collection is a
@@ -282,20 +274,10 @@ export function AdminDrawer() {
   // Per-key dirty flag for the tab dot, unioning the live overlay map and
   // cached items carrying server `draftData`. The cache pass is needed because
   // the overlay clears once autosave lands, which would otherwise drop the dot.
-  const collectionDirtyByKey = useMemo(() => {
-    /** @type {Set<string>} */
-    const set = new Set();
-    for (const draftKey of collectionDrafts.keys()) {
-      const i = draftKey.indexOf(":");
-      if (i > 0) set.add(draftKey.slice(0, i));
-    }
-    for (const [cacheKey, entry] of collectionItemCache) {
-      if (!entry.item || entry.item.draftData == null) continue;
-      const i = cacheKey.indexOf(":");
-      if (i > 0) set.add(cacheKey.slice(0, i));
-    }
-    return set;
-  }, [collectionDrafts, collectionItemCache]);
+  const collectionDirtyByKey = useMemo(
+    () => dirtyCollectionKeys(collectDirtyRecords(collectionDrafts, collectionItemCache)),
+    [collectionDrafts, collectionItemCache],
+  );
 
   const pageDirty = pageBlockList.some((b) => dirtyByPath.get(b.blockPath));
   const globalDirty = globalBlockList.some((b) => dirtyByPath.get(b.blockPath));
@@ -1590,11 +1572,7 @@ function GroupCard({
   blocksRef.current = blocks;
   const dirty = useStoreSelector(contentDraftsStore, (m) => {
     for (const block of blocksRef.current) {
-      const local = m.get(block.blockPath);
-      const isDirty = local !== undefined
-        ? !deepEqual(local, block.value)
-        : block.draftValue != null;
-      if (isDirty) return true;
+      if (isBlockDirty(block, m.has(block.blockPath), m.get(block.blockPath))) return true;
     }
     return false;
   });

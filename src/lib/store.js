@@ -82,6 +82,10 @@ export function useStoreSelector(store, selector, isEqual) {
         : Object.is(memo.value, next);
       if (equal) return memo.value;
     }
+    // Writing a ref during render (getSnapshot runs there) is technically
+    // impure, tolerated because the write is idempotent for a given store
+    // state: re-running it under StrictMode or a concurrent replay stores the
+    // same value again. Revisit if snapshots ever become state-dependent.
     memoRef.current = { value: next };
     return next;
   }, [store]);

@@ -15,6 +15,7 @@ import { ChevronRight, Search } from "./icons.jsx";
 
 import { useCollectionContext } from "../lib/collection-context.js";
 import { useStoreSelector } from "../lib/store.js";
+import { collectDirtyRecords, dirtyCollectionKeys } from "../lib/dirty.js";
 import { useMyCollections } from "../hooks/use-my-collections.js";
 
 import {
@@ -44,30 +45,21 @@ import {
  * @param {{ onSelect: (collectionKey: string) => void }} props
  */
 export const AdminCollectionsPane = memo(function AdminCollectionsPane({ onSelect }) {
-  const { collectionBindings, collectionStore } = useCollectionContext();
+  const { collectionStore } = useCollectionContext();
   const { collections, isLoading } = useMyCollections();
   const [search, setSearch] = useState("");
 
   const drafts = useStoreSelector(collectionStore, (s) => s.drafts);
   const itemCache = useStoreSelector(collectionStore, (s) => s.itemCache);
+  const collectionBindings = useStoreSelector(collectionStore, (s) => s.bindings);
 
   // Per-collection dirty, unioning live overlay drafts with cached items that
   // carry a server draft. Same two-source union the drawer's dirty dots use:
   // the overlay clears once autosave lands, which would otherwise drop the mark.
-  const dirtyKeys = useMemo(() => {
-    /** @type {Set<string>} */
-    const set = new Set();
-    for (const key of drafts.keys()) {
-      const i = key.indexOf(":");
-      if (i > 0) set.add(key.slice(0, i));
-    }
-    for (const [key, entry] of itemCache) {
-      if (!entry.item || entry.item.draftData == null) continue;
-      const i = key.indexOf(":");
-      if (i > 0) set.add(key.slice(0, i));
-    }
-    return set;
-  }, [drafts, itemCache]);
+  const dirtyKeys = useMemo(
+    () => dirtyCollectionKeys(collectDirtyRecords(drafts, itemCache)),
+    [drafts, itemCache],
+  );
 
   const boundKeys = useMemo(() => {
     /** @type {Set<string>} */

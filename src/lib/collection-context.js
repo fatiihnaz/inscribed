@@ -73,55 +73,80 @@ export function collectionRegionBindingId(collection, filter) {
  */
 
 /**
- * Shape of the value held in `CollectionContext`.
+ * `GET /cms/collections/me`, fetched once per session when `isAdmin` (empty for
+ * public visitors). All drawer surfaces read schemas from here instead of
+ * re-fetching /me per card.
  *
- * @typedef {Object} CollectionContextValue
- * @property {{ key: string, slug: string } | null} activeCollectionItem
- *   Drawer-side "open this row" signal. Set alongside the active tab when the
- *   StatusBar's "Aç" CTA targets an item; the matching card auto-expands on
- *   render, then clears it so revisiting the tab doesn't re-open the row.
- * @property {(target: { key: string, slug: string } | null) => void} setActiveCollectionItem
- * @property {Map<string, CollectionBinding>} collectionBindings
+ * Indexed *and* ordered on purpose: cards look a single key up, while the
+ * drawer's rail lists them in the order the server returned.
+ *
+ * @typedef {Object} CollectionMeta
+ * @property {Map<string, MyCollectionResponse>} byKey
+ * @property {MyCollectionResponse[]} order
+ * @property {boolean} isLoading
+ * @property {Error | null} error
+ */
+
+/**
+ * Everything the collection namespace holds. All of it lives in one external
+ * store rather than the context value, so a write re-renders only the
+ * consumers selecting the slice that moved.
+ *
+ * @typedef {Object} CollectionStoreState
+ * @property {Map<string, CollectionItemCacheEntry>} itemCache
+ *   Cache for `useCollectionItem`, keyed `"{key}:{slug}"`. Shared by page-side
+ *   `<CollectionItem>` and the drawer's editor, so a drawer save reaches the
+ *   page without a second fetch.
+ * @property {Map<string, CollectionListCacheEntry>} listCache
+ *   Cache for `useCollection(key, params?)`, keyed
+ *   `"{key}|{stableStringify(params)}"` so each filter/offset/limit window is
+ *   its own entry.
+ * @property {Map<string, *>} drafts
+ *   In-progress editor edits keyed `"{key}:{slug}"`, pushed on every keystroke
+ *   before the debounced autosave. `useCollectionItem` / `useCollection`
+ *   overlay them onto `item.data` for live preview. Cleared on publish, undo,
+ *   and pathname change.
+ * @property {Map<string, string>} draftSavedAt
+ * @property {Map<string, CollectionBinding>} bindings
  *   Runtime registry populated by `<CollectionItem>` / `<CollectionRegion>` on
  *   mount. Collections aren't in the CMS block namespace, so this is how the
  *   AdminDrawer learns the bindings on the current page. Keyed by the binding's
  *   own identity (see `collectionItemBindingId` / `collectionRegionBindingId`);
  *   `slug` is set for items, omitted for list regions. Region bindings also
  *   carry filter/limit/offset so the drawer mirrors them.
- * @property {(bindingId: string, binding: CollectionBinding) => void} registerCollectionBinding
- *   Refcounted: the same binding registered twice is one entry, and the first
- *   registration's value wins.
- * @property {(bindingId: string) => void} unregisterCollectionBinding
- * @property {Map<string, string>} inlineFieldRecords
+ * @property {Map<string, string>} inlineFields
  *   Every record (`"{key}:{slug}"`) with `<CollectionField>`s mounted, mapped
  *   to the `<CollectionItem>` scope that drives its draft. One record can be
  *   open in several places at once (page fields, possibly twice over, plus the
  *   drawer's card) and they share one draft, so exactly one of them runs the
  *   autosave: presence here stands the drawer card down, and the scope named
- *   here is the page-side driver. Lives in this context rather than a per-item
- *   one because the drawer is a sibling of the page tree, not a descendant.
+ *   here is the page-side driver. Provider-level rather than per-item because
+ *   the drawer is a sibling of the page tree, not a descendant.
+ * @property {{ key: string, slug: string } | null} activeItem
+ *   Drawer-side "open this row" signal. Set alongside the active tab when the
+ *   StatusBar's "Aç" CTA targets an item; the matching card auto-expands on
+ *   render, then clears it so revisiting the tab doesn't re-open the row.
+ * @property {CollectionMeta} meta
+ */
+
+/**
+ * Shape of the value held in `CollectionContext`.
+ *
+ * Seams only: every entry is identity-stable for the life of the provider, so
+ * the value never changes after mount and no consumer re-renders because of it.
+ * Anything that *moves* belongs in `collectionStore` and is read with
+ * `useStoreSelector`. Guarded by tests/collection-context-split.test.jsx.
+ *
+ * @typedef {Object} CollectionContextValue
+ * @property {import("./store.js").Store<CollectionStoreState>} collectionStore
+ * @property {(target: { key: string, slug: string } | null) => void} setActiveCollectionItem
+ * @property {(bindingId: string, binding: CollectionBinding) => void} registerCollectionBinding
+ *   Refcounted: the same binding registered twice is one entry, and the first
+ *   registration's value wins.
+ * @property {(bindingId: string) => void} unregisterCollectionBinding
  * @property {(collection: string, slug: string, scopeId: string) => void} registerInlineField
  * @property {(collection: string, slug: string, scopeId: string) => void} unregisterInlineField
- * @property {MyCollectionResponse[]} myCollections
- *   `GET /cms/collections/me`, fetched once per session when `isAdmin` (empty
- *   for public visitors). All drawer surfaces read schemas from here instead
- *   of re-fetching /me per card.
- * @property {boolean} myCollectionsLoading
- * @property {Error|null} myCollectionsError
  * @property {() => void} refetchMyCollections   Bump-token style; the provider re-runs the /me effect.
- * @property {import("./store.js").Store<{ itemCache: Map<string, CollectionItemCacheEntry>, listCache: Map<string, CollectionListCacheEntry>, drafts: Map<string, *>, draftSavedAt: Map<string, string> }>} collectionStore
- *   High-churn collection state, kept out of the context value so a write
- *   doesn't re-render every consumer. Slices, read via `useStoreSelector`:
- *   - `itemCache`: cache for `useCollectionItem`, keyed `"{key}:{slug}"`.
- *     Shared by page-side `<CollectionItem>` and the drawer's editor, so a
- *     drawer save reaches the page without a second fetch.
- *   - `listCache`: cache for `useCollection(key, params?)`, keyed
- *     `"{key}|{stableStringify(params)}"` so each filter/offset/limit window
- *     is its own entry.
- *   - `drafts`: in-progress editor edits keyed `"{key}:{slug}"`, pushed on
- *     every keystroke before the debounced autosave. `useCollectionItem` /
- *     `useCollection` overlay it onto `item.data` for live preview. Cleared
- *     on publish, undo, and pathname change.
  * @property {(key: string, slug: string, force?: boolean) => Promise<void>} requestCollectionItem
  *   Ensure a fresh cache entry for `(key, slug)`. Cache hit is a no-op unless
  *   `force`. Concurrent calls for the same pair are deduped in-flight.

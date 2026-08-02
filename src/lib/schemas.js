@@ -75,6 +75,12 @@
  * @property {string} [slug]       When set, the block resolves a single item via `GET /cms/collections/{key}/{slug}`. Omit for list bindings (`GET /cms/collections/{key}`).
  * @property {string|null} [group] Item bindings only: the enclosing `<CmsGroup>` name, so the drawer can file the card under it.
  * @property {string} [label]      Item bindings only: what the drawer card and the page chip read.
+ * @property {string} [fromRegion]
+ *   Item bindings only: the region binding id this row came from. A row of a
+ *   window the page already points at is reachable through that region's
+ *   reference row, so the drawer skips it when synthesising Collection blocks;
+ *   a `<CollectionItem>` placed directly on the page has no origin and keeps
+ *   its own card.
  * @property {Record<string, *>} [filter]  List bindings only: the filter window the region declares, mirrored by the drawer's region panel.
  * @property {number} [limit]      List bindings only.
  * @property {number} [offset]     List bindings only.

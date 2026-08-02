@@ -29,9 +29,10 @@ import { isValidElement, useContext, useEffect, useId, useMemo, useState } from 
 import { useCmsContext } from "../lib/context.js";
 import { collectionItemBindingId, useCollectionContext } from "../lib/collection-context.js";
 import { CollectionItemContext } from "../lib/collection-item-context.js";
-import { CmsGroupContext } from "../lib/group-context.js";
+import { CmsGroupContext, CmsGroupVisibilityContext } from "../lib/group-context.js";
 import { useCollectionItem } from "../hooks/use-collection.js";
 import { useStoreSelector } from "../lib/store.js";
+import { useRecordDraftRole } from "../hooks/use-draft-driver.js";
 import { useCollectionEditor } from "./AdminCollectionEditor.jsx";
 import {
   COLLECTION_ACCENT, FONT_MONO, STATUS_DANGER, STATUS_OK, TEXT_MID, TYPE_META,
@@ -78,7 +79,14 @@ const COLLECTION_GLYPH = TYPE_META.Collection.glyph;
 export function CollectionItem({
   collection, slug, group, label, fallback, missing, error: errorNode, children,
 }) {
-  const { item, isLoading, error } = useCollectionItem(collection, slug);
+  // Raw, not draft-overlaid: the overlay would rebuild `item` on every
+  // keystroke and carry that through the record's scope to every field, which
+  // is exactly what field-level selection avoids. Fields read live values from
+  // the editor (`useEditorField`) or the record (`useCollectionRecord`), both of
+  // which subscribe to the draft themselves.
+  const { item, isLoading, error } = useCollectionItem(collection, slug, {
+    overlayDrafts: false,
+  });
 
   if (isLoading) return fallback ?? null;
   if (error) {
@@ -116,8 +124,11 @@ export function CollectionItem({
  *   children: React.ReactNode,
  * }} props
  */
-export function CollectionRecord({ collection, slug, item, group, label, children }) {
-  const { isAdmin, uiStore, setActiveBlock } = useCmsContext();
+export function CollectionRecord({ collection, slug, item, group, label, fromRegion, children }) {
+  const {
+    isAdmin, uiStore, setActiveBlock,
+    registerEditorVisibility, unregisterEditorVisibility,
+  } = useCmsContext();
   const {
     registerCollectionBinding, unregisterCollectionBinding, collectionStore,
   } = useCollectionContext();
@@ -133,12 +144,25 @@ export function CollectionRecord({ collection, slug, item, group, label, childre
   // Hand the binding to the drawer for its Page-tab card. Public visitors
   // register too, keeping register/unregister symmetric across mode switches.
   useEffect(() => {
-    registerCollectionBinding(bindingId, { collection, slug, group: cardGroup, label: cardLabel });
+    /** @type {import("../lib/schemas.js").CollectionBinding} */
+    const binding = { collection, slug, group: cardGroup, label: cardLabel };
+    if (fromRegion) binding.fromRegion = fromRegion;
+    registerCollectionBinding(bindingId, binding);
     return () => unregisterCollectionBinding(bindingId);
   }, [
-    bindingId, collection, slug, cardGroup, cardLabel,
+    bindingId, collection, slug, cardGroup, cardLabel, fromRegion,
     registerCollectionBinding, unregisterCollectionBinding,
   ]);
+
+  // A record inside a hidden or locked `<CmsGroup>` follows the group, the same
+  // way content blocks do. Registered under the binding id because that is what
+  // the drawer files the synthesised Collection row under.
+  const groupVisibility = useContext(CmsGroupVisibilityContext);
+  useEffect(() => {
+    if (!isAdmin || !groupVisibility) return undefined;
+    registerEditorVisibility(bindingId, groupVisibility);
+    return () => unregisterEditorVisibility(bindingId);
+  }, [isAdmin, bindingId, groupVisibility, registerEditorVisibility, unregisterEditorVisibility]);
 
   // Booleans, not the maps: editing another record leaves this binding alone.
   const hasDraft = useStoreSelector(collectionStore, (st) => st.drafts.has(`${collection}:${slug}`));
@@ -151,7 +175,7 @@ export function CollectionRecord({ collection, slug, item, group, label, childre
     [collection, slug, scopeId, item],
   );
 
-  if (!isAdmin || !item.canEdit) {
+  if (!isAdmin || !item.canEdit || groupVisibility) {
     return (
       <CollectionItemContext.Provider value={readScope}>
         {children}
@@ -217,16 +241,11 @@ function CollectionEditScope({
   collection, slug, scopeId, item, bindingId, label, tag, dirty,
   isActive, setActiveBlock, children,
 }) {
-  const { inlineFieldRecords } = useCollectionContext();
-  const driver = inlineFieldRecords.get(`${collection}:${slug}`);
-  const hasInlineFields = driver !== undefined;
   // Without fields on the page there is nothing here to show or type into, so
   // the record's draft is left entirely to the drawer. With them, the page
-  // mirrors the draft, but only the elected scope PUTs it.
-  const editor = useCollectionEditor(collection, slug, {
-    active: driver === scopeId,
-    mirror: hasInlineFields,
-  });
+  // mirrors the draft, but only the elected scope writes it.
+  const role = useRecordDraftRole(collection, slug, scopeId);
+  const editor = useCollectionEditor(collection, slug, role);
 
   const scope = useMemo(
     () => ({ collection, slug, scopeId, item, editor }),
@@ -244,7 +263,7 @@ function CollectionEditScope({
         actions={
           // Without fields there is nothing to publish from here: the record's
           // edits happen in the drawer, which carries its own actions.
-          hasInlineFields ? <RecordActions editor={editor} dirty={dirty} /> : null
+          role.mirror ? <RecordActions editor={editor} dirty={dirty} /> : null
         }
       >
         {children}

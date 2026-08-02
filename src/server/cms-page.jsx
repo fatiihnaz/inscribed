@@ -39,7 +39,8 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 
 import { getCmsCollection, getCmsCollectionItem, getCmsPageBlocks } from "./get-content.js";
-import { createCmsConfig } from "../lib/config.js";
+import { ensureCmsConfig } from "../lib/config.js";
+import { buildListParams } from "../lib/collection-params.js";
 import { publicAuth } from "../defaults/auth.js";
 
 // Re-exported here (not from the client entry) because pages calling it are
@@ -80,10 +81,19 @@ const PATHNAME_HEADER = "x-pathname";
  *
  * @property {import("../lib/auth.js").GetSession} [getSession]
  *   Resolves the server session. Default: `publicAuth.getSession` (always null → public).
+ *   Its result stays on the server unless `sessionForClient` says otherwise.
  * @property {(session: *) => boolean} [deriveAdmin]
  *   Decides admin from the session. Default: `session != null`.
  * @property {(session: *) => string | null} [deriveUserSub]
  *   Default: `session?.user?.id ?? null`.
+ * @property {(session: *) => *} [sessionForClient]
+ *   What of the session, if anything, to forward to `Provider` as `session`.
+ *   Omitted by default, and that default is the point: `Provider` is a client
+ *   component, so every prop it takes is serialized into the RSC payload and
+ *   shipped to the browser. A session commonly carries an access token, a
+ *   refresh token or internal claims, none of which the CMS reads. Wrappers that
+ *   need one (feeding NextAuth's `<SessionProvider>`, say) opt in here and pick
+ *   the fields that may travel: `sessionForClient: (s) => ({ user: s.user })`.
  * @property {CollectionPrimitives} [collections]
  *   Opt in to the server-rendered `<CollectionRegion>` / `<CollectionItem>`,
  *   which the factory then returns alongside `CmsPage`. Pass
@@ -132,6 +142,7 @@ export function createCmsPage(options) {
     getSession = publicAuth.getSession,
     deriveAdmin = publicAuth.deriveAdmin,
     deriveUserSub = publicAuth.deriveUserSub,
+    sessionForClient,
     onAfterSave,
     onAfterCollectionSave,
     collections,
@@ -144,12 +155,8 @@ export function createCmsPage(options) {
     throw new Error("createCmsPage: `config` option is required");
   }
 
-  // Normalize once at build time. A plain `{ baseUrl }` literal would miss
-  // defaulted fields (notably `globalSlug`), making the server skip the
-  // __global fetch so public visitors see header/footer placeholders.
-  const normalizedConfig = "baseUrl" in config && Object.isFrozen(config)
-    ? /** @type {import("../lib/config.js").CmsConfig} */ (config)
-    : createCmsConfig(config);
+  // Normalized once at module scope, so every request reuses one object.
+  const normalizedConfig = ensureCmsConfig(config);
 
   // Server-only view: the service token (secrets) and transport (functions)
   // must never reach the client, so they ride on a separate object used only
@@ -165,23 +172,28 @@ export function createCmsPage(options) {
 
   async function CmsPage({ slug, children }) {
     const resolvedSlug = slug ?? (await resolveSlugFromHeaders());
-    const session = await getSession();
 
-    let initialBlocks = [];
-    try {
-      initialBlocks = await getCmsPageBlocks(serverConfig, resolvedSlug);
-    } catch (err) {
-      // Backend offline or page not yet synced: render with empty blocks.
-      if (process.env.NODE_ENV !== "production") {
-        // eslint-disable-next-line no-console
-        console.warn(`[inscribed] SSR content fetch failed for "${resolvedSlug}":`, err);
-      }
-    }
+    // The session and the content are independent, so they overlap rather than
+    // queue: a session that hits a database or decrypts a JWT would otherwise
+    // sit in front of every content request.
+    const [session, blocksResult] = await Promise.all([
+      getSession(),
+      getCmsPageBlocks(serverConfig, resolvedSlug).catch((err) => {
+        // Backend offline or page not yet synced: render with empty blocks.
+        if (process.env.NODE_ENV !== "production") {
+          // eslint-disable-next-line no-console
+          console.warn(`[inscribed] SSR content fetch failed for "${resolvedSlug}":`, err);
+        }
+        return [];
+      }),
+    ]);
+    const initialBlocks = blocksResult;
 
     return (
       <Provider config={normalizedConfig} isAdmin={deriveAdmin(session)} userSub={deriveUserSub(session)}
         initialBlocks={initialBlocks} onAfterSave={onAfterSave}
-        onAfterCollectionSave={onAfterCollectionSave} session={session}
+        onAfterCollectionSave={onAfterCollectionSave}
+        session={sessionForClient ? sessionForClient(session) : undefined}
       >
         {children}
       </Provider>
@@ -204,14 +216,7 @@ export function createCmsPage(options) {
  */
 function createServerCollections(serverConfig, { CollectionRecord, CollectionRows }) {
   async function RegionRows({ collection, filter, limit, offset, as, empty, children, rest }) {
-    /** @type {import("../lib/schemas.js").CollectionListParams | undefined} */
-    const params = filter || typeof limit === "number" || typeof offset === "number"
-      ? {
-          ...(filter ? { filter } : {}),
-          ...(typeof limit === "number" ? { limit } : {}),
-          ...(typeof offset === "number" ? { offset } : {}),
-        }
-      : undefined;
+    const params = buildListParams({ filter, limit, offset });
 
     let items = [];
     try {

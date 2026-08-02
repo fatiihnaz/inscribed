@@ -29,6 +29,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 
 import { useCollectionContext } from "../lib/collection-context.js";
+import { useEditorField } from "./AdminCollectionEditor.jsx";
 import { useCollectionItemScope } from "../lib/collection-item-context.js";
 import { useImageOverlayFits } from "../hooks/use-image-overlay-fits.js";
 import { InlineTextEditor } from "./InlineTextEditor.jsx";
@@ -99,8 +100,14 @@ export function CollectionField({ name, as, html, placeholder = "Metin ekle…",
   }, [editor?.schema, field, html, name, collection]);
 
   const Tag = /** @type {*} */ (as ?? "span");
-  const raw = editor ? editor.values?.[name] : item?.data?.[name];
+  // Subscribed to this one field, so a sibling's keystroke leaves us alone.
+  const edited = useEditorField(editor?.editorId, name);
+  const raw = editor ? edited : item?.data?.[name];
   const readOnlyNode = renderReadOnly({ Tag, raw, html, rest });
+
+  // Patching through the store rather than spreading `editor.values` here: that
+  // spread is what forced every field to hold the whole record.
+  const setField = (next) => editor.setValues({ ...editor.readValues(), [name]: next });
 
   if (!editable) return readOnlyNode;
 
@@ -108,7 +115,7 @@ export function CollectionField({ name, as, html, placeholder = "Metin ekle…",
     return (
       <ImageField
         value={isImageValue(raw) ? raw : null}
-        onChange={(next) => editor.setValues({ ...editor.values, [name]: next })}
+        onChange={setField}
         rest={rest}
       />
     );
@@ -124,7 +131,7 @@ export function CollectionField({ name, as, html, placeholder = "Metin ekle…",
         <Suspense fallback={readOnlyNode}>
           <InlineRichText
             value={typeof raw === "string" ? raw : ""}
-            onChange={(next) => editor.setValues({ ...editor.values, [name]: next })}
+            onChange={setField}
             anchorRef={richAnchorRef}
             style={{ cursor: "text", ...(rest.style ?? {}) }}
           />
@@ -143,7 +150,7 @@ export function CollectionField({ name, as, html, placeholder = "Metin ekle…",
       singleLine={field.type === "ShortText"}
       placeholder={placeholder}
       data-collection-field={name}
-      onInput={(text) => editor.setValues({ ...editor.values, [name]: text })}
+      onInput={setField}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       style={{

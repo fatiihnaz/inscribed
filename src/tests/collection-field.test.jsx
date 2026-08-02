@@ -23,6 +23,7 @@ import { CmsProvider } from "../components/CmsProvider.jsx";
 import { CollectionItem } from "../components/CollectionItem.jsx";
 import { CollectionField } from "../components/CollectionField.jsx";
 import { useCollectionContext } from "../lib/collection-context.js";
+import { useCollectionItemScope } from "../lib/collection-item-context.js";
 import { useStoreSelector } from "../lib/store.js";
 
 const BASE = "https://api.test";
@@ -78,9 +79,9 @@ let claimed;
 let sharedDrafts;
 
 function Probe() {
-  const { inlineFieldRecords, collectionStore } = useCollectionContext();
-  claimed = inlineFieldRecords;
+  const { collectionStore } = useCollectionContext();
   // Subscribed, not read once: the point is to see the draft land as it's typed.
+  claimed = useStoreSelector(collectionStore, (s) => s.inlineFields);
   sharedDrafts = useStoreSelector(collectionStore, (s) => s.drafts);
   return null;
 }
@@ -228,6 +229,43 @@ describe("live draft", () => {
     await waitFor(() => expect(sharedDrafts.get("news:q1")?.title).toBe("Yeni başlık"));
     // The rest of the record rides along, so a publish from here is complete.
     expect(sharedDrafts.get("news:q1").body).toBe("Uzun metin");
+  });
+
+  it("holds the record scope still while a field is typed in", async () => {
+    // Every `<CollectionField>` reads the scope, so the scope is what decides
+    // whether one field's keystroke re-renders the whole record. While `values`
+    // lived on the editor object it moved with each character, and a schema of
+    // any size paid for a single field's edit. Fields select their own value
+    // out of the store instead, leaving the scope alone.
+    mockFetch();
+    let scopeRenders = 0;
+    function ScopeProbe() {
+      useCollectionItemScope();
+      scopeRenders += 1;
+      return null;
+    }
+
+    renderItem({
+      children: (
+        <>
+          <CollectionField name="title" as="h1" />
+          <ScopeProbe />
+        </>
+      ),
+    });
+    const el = await waitFor(() => {
+      const found = editableOf("Q1 raporu");
+      expect(found).toBeTruthy();
+      return found;
+    });
+    await waitFor(() => expect(scopeRenders).toBeGreaterThan(0));
+
+    const before = scopeRenders;
+    el.textContent = "Yeni başlık";
+    fireEvent.input(el);
+    await waitFor(() => expect(sharedDrafts.get("news:q1")?.title).toBe("Yeni başlık"));
+
+    expect(scopeRenders).toBe(before);
   });
 });
 

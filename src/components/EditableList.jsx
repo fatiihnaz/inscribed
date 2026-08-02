@@ -119,10 +119,14 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   const itemSchemaRef = useRef(itemSchema);
   itemSchemaRef.current = itemSchema;
   useEffect(() => {
+    // Admin-only like the visibility effect below, but NOT gated on
+    // visibilityMode: a readonly list still needs its schema so the drawer can
+    // render the disabled editor.
+    if (!isAdmin) return undefined;
     registerItemSchema(fullPath, itemSchemaRef.current);
     return () => unregisterItemSchema(fullPath);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullPath, schemaKey, registerItemSchema, unregisterItemSchema]);
+  }, [isAdmin, fullPath, schemaKey, registerItemSchema, unregisterItemSchema]);
 
   useEffect(() => {
     if (!isAdmin || !visibilityMode) return undefined;

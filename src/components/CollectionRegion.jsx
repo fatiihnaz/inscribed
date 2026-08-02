@@ -27,6 +27,7 @@ import { useEffect } from "react";
 import { collectionRegionBindingId, useCollectionContext } from "../lib/collection-context.js";
 import { CollectionRecord } from "./CollectionItem.jsx";
 import { useCollection } from "../hooks/use-collection.js";
+import { buildListParams } from "../lib/collection-params.js";
 
 /**
  * @import { CollectionItemResponse, CollectionListParams } from "../lib/schemas.js"
@@ -66,10 +67,7 @@ import { useCollection } from "../hooks/use-collection.js";
 export function CollectionRegion({
   collection, filter, limit, offset, as, fallback, empty, error: errorNode, children, ...rest
 }) {
-  /** @type {CollectionListParams | undefined} */
-  const params = filter || typeof limit === "number" || typeof offset === "number"
-    ? { ...(filter ? { filter } : {}), ...(typeof limit === "number" ? { limit } : {}), ...(typeof offset === "number" ? { offset } : {}) }
-    : undefined;
+  const params = buildListParams({ filter, limit, offset });
 
   const { items, isLoading, error } = useCollection(collection, params);
 
@@ -147,12 +145,21 @@ export function CollectionRows({
   collection, items, filter, limit, offset, as, empty, children, ...rest
 }) {
   // Before the early return: an empty collection still deserves its drawer lane.
-  useRegionBinding(collection, filter, limit, offset);
+  const regionBindingId = useRegionBinding(collection, filter, limit, offset);
 
   if (items.length === 0) return empty ?? null;
 
+  // Rows carry their origin so the drawer can tell "a record placed on the page"
+  // from "a row of a window the page already points at", and list the second
+  // kind only once, behind the region's reference row.
   const rows = items.map((item) => (
-    <CollectionRecord key={item.slug} collection={collection} slug={item.slug} item={item}>
+    <CollectionRecord
+      key={item.slug}
+      collection={collection}
+      slug={item.slug}
+      item={item}
+      fromRegion={regionBindingId}
+    >
       {children}
     </CollectionRecord>
   ));

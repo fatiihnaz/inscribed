@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { useCmsContext } from "../lib/context.js";
 import { useCollectionContext } from "../lib/collection-context.js";
+import { itemDraftKey, newDraftKey } from "../lib/draft-keys.js";
 import { useCollection } from "./use-collection.js";
 import { NEW_DRAFT_GUID } from "../lib/schemas.js";
 import { CmsApiError } from "../lib/errors.js";
@@ -25,7 +26,6 @@ import {
   humanizeCollectionError,
 } from "../components/editors/CollectionFieldsForm.jsx";
 
-const DRAFT_DEBOUNCE_MS = 1000;
 
 /**
  * @typedef {Object} CollectionCreateState
@@ -62,7 +62,7 @@ export function useCollectionCreate({
   onSeedFromDraft,
 }) {
   const { config, getAccessToken, onAfterCollectionSave } = useCmsContext();
-  const { updateCollectionItem, invalidateCollectionList, invalidateCollectionItem } =
+  const { updateCollectionItem, invalidateCollectionList, draftQueue } =
     useCollectionContext();
 
   const [values, setValues] = useState(() => seedValues(schema.fields, {}));
@@ -112,23 +112,21 @@ export function useCollectionCreate({
       return undefined;
     }
 
-    let cancelled = false;
-    const timer = setTimeout(async () => {
+    // Same lane as a virtual row's editor: both POST to the collection's single
+    // new-item slot, so they must not be able to overlap.
+    draftQueue.schedule(newDraftKey(collectionKey), async (ctx) => {
       try {
         const token = await getAccessToken();
         await config.transport.saveCollectionNewDraft(collectionKey, { data: payload }, { accessToken: token });
-        if (cancelled) return;
+        if (ctx.isStale()) return;
         lastSyncedRef.current = serialized;
       } catch (err) {
-        if (cancelled) return;
+        if (ctx.isStale()) return;
         // eslint-disable-next-line no-console
         console.warn("[inscribed] collection new-draft autosave failed:", err);
       }
-    }, DRAFT_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+    });
+    return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values, active, isPending, collectionKey]);
 
@@ -140,11 +138,15 @@ export function useCollectionCreate({
   };
 
   const deleteDraft = async () => {
+    // A queued autosave for this slot is now obsolete; dropping it here stops
+    // it re-creating the draft this call is removing.
+    draftQueue.cancel(newDraftKey(collectionKey));
     try {
       const token = await getAccessToken();
       await config.transport.deleteCollectionNewDraft(collectionKey, { accessToken: token });
+      // List invalidation is enough: the sentinel row only ever reaches
+      // consumers through the list window, never through the item cache.
       invalidateCollectionList(collectionKey);
-      invalidateCollectionItem(collectionKey, null);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn("[inscribed] collection new-draft delete failed:", err);
@@ -166,6 +168,10 @@ export function useCollectionCreate({
           { data: buildPayload(schema.fields, values) },
           { accessToken: token },
         );
+        // The new-item slot no longer describes anything, so a queued write
+        // against it is dropped; the record's own lane inherits whatever is
+        // still in flight, so its first draft write can't overtake the create.
+        draftQueue.rename(newDraftKey(collectionKey), itemDraftKey(collectionKey, created.slug));
         updateCollectionItem(collectionKey, created.slug, created);
         // A new row changes every server-rendered window of this collection.
         try {

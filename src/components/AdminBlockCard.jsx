@@ -21,9 +21,9 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Undo2, Lock, List as ListIcon } from "./icons.jsx";
 
 import { useCmsContext } from "../lib/context.js";
-import { deepEqual } from "../lib/deep-equal.js";
 import { useStoreSelector } from "../lib/store.js";
-import { useCollectionContext } from "../lib/collection-context.js";
+import { isBlockDirty, resolveBlockValue } from "../lib/resolve.js";
+import { useDrawerDraftRole } from "../hooks/use-draft-driver.js";
 
 import { FieldEditor } from "./editors/FieldEditor.jsx";
 import { ListEditor } from "./editors/ListEditor.jsx";
@@ -136,6 +136,7 @@ export const BlockCard = memo(function BlockCard(props) {
         collection={binding.collection}
         slug={binding.slug}
         isActive={props.isActive}
+        readOnly={props.readOnly}
         topLevel={props.topLevel}
         displayPath={props.displayPath}
       />
@@ -165,11 +166,9 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
   const { draft, hasDraft, onChange, onReset, onFocus } = useBlockDraft(block);
 
-  const effective = block.draftValue ?? block.value;
-  const value = hasDraft ? draft : effective;
-  const isDirty = !readOnly && (hasDraft
-    ? !deepEqual(draft, block.value)
-    : block.draftValue != null);
+  const effective = resolveBlockValue(block);
+  const value = resolveBlockValue(block, hasDraft, draft);
+  const isDirty = !readOnly && isBlockDirty(block, hasDraft, draft);
 
   useEffect(() => {
     if (isActive && ref.current) {
@@ -311,13 +310,11 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
   const { draft, hasDraft, onChange, onReset, onFocus } = useBlockDraft(block);
 
-  const effective = block.draftValue ?? block.value;
-  const value = hasDraft ? draft : effective;
+  const effective = resolveBlockValue(block);
+  const value = resolveBlockValue(block, hasDraft, draft);
   // A read-only block carries no dirty state to surface, so suppress the
   // dot/reset/rail and let it read as a passive, locked view.
-  const isDirty = !readOnly && (hasDraft
-    ? !deepEqual(draft, block.value)
-    : block.draftValue != null);
+  const isDirty = !readOnly && isBlockDirty(block, hasDraft, draft);
 
   const [isOpen, setIsOpen] = useState(false);
 
@@ -379,21 +376,19 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
  *   displayPath?: string,
  * }} props
  */
-function CollectionBlockCard({ block, collection, slug, isActive, topLevel, displayPath }) {
+function CollectionBlockCard({ block, collection, slug, isActive, readOnly, topLevel, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
   const { setActiveBlock, uiStore } = useCmsContext();
   const isDrawerOpen = useStoreSelector(uiStore, (s) => s.isDrawerOpen);
   // The page's own `<CollectionField>`s drive the draft when they exist; this
   // card then shows the same values without a second autosave loop behind them.
-  const { inlineFieldRecords } = useCollectionContext();
   const [isOpen, setIsOpen] = useState(false);
-  const editor = useCollectionEditor(collection, slug, {
-    active: !inlineFieldRecords.has(`${collection}:${slug}`),
-    // Nobody is looking at a collapsed card behind a shut panel, so it stops
-    // re-seeding on every keystroke until it comes back into view.
-    mirror: isDrawerOpen && isOpen,
-  });
-  const isDirty = editor.hasDraft && editor.canEdit;
+  // Nobody is looking at a collapsed card behind a shut panel, so it stops
+  // re-seeding on every keystroke until it comes back into view.
+  const role = useDrawerDraftRole(collection, slug, isDrawerOpen && isOpen);
+  const editor = useCollectionEditor(collection, slug, role);
+  // A locked card surfaces no dirty state, same as a readOnly block row.
+  const isDirty = !readOnly && editor.hasDraft && editor.canEdit;
 
   const onFocus = useCallback(
     () => setActiveBlock(block.blockPath),
@@ -440,7 +435,7 @@ function CollectionBlockCard({ block, collection, slug, isActive, topLevel, disp
         onMouseDown={onFocus}
       >
         <div style={disclosureBodyStyle}>
-          <AdminCollectionEditor editor={editor} />
+          <AdminCollectionEditor editor={editor} readOnly={readOnly} />
         </div>
       </div>
     </div>

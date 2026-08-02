@@ -8,6 +8,7 @@
  */
 
 import { useCollectionContext } from "../lib/collection-context.js";
+import { useStoreSelector } from "../lib/store.js";
 
 /**
  * @import { MyCollectionResponse } from "../lib/schemas.js"
@@ -25,16 +26,24 @@ import { useCollectionContext } from "../lib/collection-context.js";
  * @returns {UseMyCollectionsResult}
  */
 export function useMyCollections() {
-  const {
-    myCollections,
-    myCollectionsLoading,
-    myCollectionsError,
-    refetchMyCollections,
-  } = useCollectionContext();
-  return {
-    collections: myCollections,
-    isLoading: myCollectionsLoading,
-    error: myCollectionsError,
-    refetch: refetchMyCollections,
-  };
+  const { collectionStore, refetchMyCollections } = useCollectionContext();
+  // Three narrow selectors rather than one on `meta`: selecting the whole slice
+  // would re-render every caller on the loading flip, and `order` is the stored
+  // array, so no selector here allocates (see lib/store.js).
+  const collections = useStoreSelector(collectionStore, (s) => s.meta.order);
+  const isLoading = useStoreSelector(collectionStore, (s) => s.meta.isLoading);
+  const error = useStoreSelector(collectionStore, (s) => s.meta.error);
+  return { collections, isLoading, error, refetch: refetchMyCollections };
+}
+
+/**
+ * One collection's `/me` entry, or `null` while loading or when the user can't
+ * reach it. Exists so a card doesn't scan the whole list per render.
+ *
+ * @param {string} key
+ * @returns {MyCollectionResponse | null}
+ */
+export function useCollectionMeta(key) {
+  const { collectionStore } = useCollectionContext();
+  return useStoreSelector(collectionStore, (s) => s.meta.byKey.get(key) ?? null);
 }

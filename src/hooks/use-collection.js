@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useCollectionContext } from "../lib/collection-context.js";
 import { useStoreSelector } from "../lib/store.js";
 import { stableStringify } from "../lib/stable-stringify.js";
+import { resolveItemData } from "../lib/resolve.js";
 
 /**
  * @import { CollectionItemResponse } from "../lib/schemas.js"
@@ -90,7 +91,7 @@ export function useCollection(key, params) {
   // that we want promoted to `data` on first paint.
   const items = useMemo(() => {
     const raw = entry?.items ?? [];
-    return raw.map((row) => overlayItem(row, drafts.get(`${key}:${row.slug}`)));
+    return raw.map((row) => resolveItemData(row, drafts.get(`${key}:${row.slug}`)));
   }, [entry, drafts, key]);
 
   return {
@@ -105,24 +106,6 @@ export function useCollection(key, params) {
   };
 }
 
-/**
- * Apply the overlay onto an item: local draft wins, then server `draftData`,
- * then published `data`. Returns the original reference when nothing changes
- * so consumers don't see spurious identity churn.
- *
- * @param {CollectionItemResponse} row
- * @param {*} localDraft  The `drafts` entry for this row, or `undefined`.
- * @returns {CollectionItemResponse}
- */
-function overlayItem(row, localDraft) {
-  if (localDraft !== undefined) {
-    return { ...row, data: localDraft, draftData: localDraft };
-  }
-  if (row.draftData != null) {
-    return { ...row, data: row.draftData };
-  }
-  return row;
-}
 
 /**
  * @typedef {Object} UseCollectionItemResult
@@ -172,7 +155,7 @@ export function useCollectionItem(key, slug, options) {
   const overlaidItem = useMemo(() => {
     if (!item) return null;
     if (!overlayDrafts) return item;
-    return overlayItem(item, draft);
+    return resolveItemData(item, draft);
   }, [item, draft, overlayDrafts]);
 
   return {

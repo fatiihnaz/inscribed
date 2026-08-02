@@ -9,6 +9,8 @@
  */
 
 import { createRestTransport } from "../defaults/transport.js";
+import { mergePageBlocks, resolveGlobalSlug } from "../lib/merge-blocks.js";
+import { ensureCmsConfig } from "../lib/config.js";
 import { noServiceToken } from "../defaults/service-token.js";
 
 /**
@@ -59,7 +61,38 @@ export function cmsCollectionItemTag(key, slug) {
  * @property {number | false} [revalidate]   ISR window in seconds, or `false` for tag-only invalidation.
  * @property {string[]} [tags]               Extra cache tags.
  * @property {string} [accessToken]          Explicit token; wins over `config.getServiceToken`.
+ * @property {boolean} [includeDrafts]
+ *   Keep unpublished drafts in the response. Off by default, and the default is
+ *   load-bearing: these responses are ISR-cached under one tag for every
+ *   visitor, so a draft that survives here is served to the public. Opt in only
+ *   for a preview route you cache separately (or not at all).
  */
+
+/**
+ * Drop unpublished fields unless the caller asked for them.
+ *
+ * Intent is never inferred from the credential. A backend that returns drafts
+ * for a `content:write` service key is doing the right thing, and a consumer
+ * building a preview supplies exactly such a key through
+ * `config.getServiceToken` — so "has a token" cannot distinguish a preview from
+ * an ordinary page whose key is simply over-scoped.
+ *
+ * @template {{ draftValue?: * } | { draftData?: * }} T
+ * @param {T[]} rows
+ * @param {"draftValue" | "draftData"} field
+ * @param {boolean | undefined} includeDrafts
+ * @returns {T[]}
+ */
+function withoutDrafts(rows, field, includeDrafts) {
+  if (includeDrafts) return rows;
+  let mutated = false;
+  const out = rows.map((row) => {
+    if (/** @type {*} */ (row)[field] == null) return row;
+    mutated = true;
+    return { ...row, [field]: null };
+  });
+  return mutated ? out : rows;
+}
 
 // ---------------------------------------------------------------------------
 // Read helpers
@@ -77,13 +110,15 @@ export async function getCmsContent(config, slug, options) {
   const getServiceToken = config.getServiceToken ?? noServiceToken;
   const accessToken = options?.accessToken ?? (await getServiceToken());
   const transport = config.transport ?? createRestTransport(config);
-  return transport.getContent(slug, {
+  const content = await transport.getContent(slug, {
     accessToken,
     cache: {
       revalidate: options?.revalidate ?? false,
       tags: [cmsCacheTag(slug), ...(options?.tags ?? [])],
     },
   });
+  const blocks = withoutDrafts(content.blocks, "draftValue", options?.includeDrafts);
+  return blocks === content.blocks ? content : { ...content, blocks };
 }
 
 /**
@@ -104,30 +139,25 @@ export async function getCmsPageBlocks(config, slug, options) {
   const accessToken =
     options?.contentOptions?.accessToken ?? (await getServiceToken());
 
-  const globalSlug =
-    config.globalSlug && config.globalSlug !== slug ? config.globalSlug : null;
+  const globalSlug = resolveGlobalSlug(config.globalSlug, slug);
 
   const [content, globalContent] = await Promise.all([
     getCmsContent(config, slug, { ...options?.contentOptions, accessToken }),
     globalSlug
-      ? getCmsContent(config, globalSlug, { ...options?.contentOptions, accessToken })
+      // Caller tags stay off this one: the __global entry is shared by every
+      // page, and a page-specific tag on it would let that page's revalidation
+      // drop everyone's header/footer.
+      ? getCmsContent(config, globalSlug, { ...options?.contentOptions, tags: undefined, accessToken })
           .catch(() => ({ slug: globalSlug, blocks: [] }))
       : Promise.resolve({ slug: "", blocks: [] }),
   ]);
 
-  const pageBlocks = content.blocks.map((b) => ({ ...b, _slug: slug }));
-
-  if (!globalSlug || globalContent.blocks.length === 0) return pageBlocks;
-
-  // Page wins on a path collision (defensive; shouldn't happen). Global blocks
-  // append at the bottom; the AdminDrawer orders each slug group by sortOrder.
-  /** @type {Set<string>} */
-  const pagePaths = new Set(pageBlocks.map((b) => b.blockPath));
-  const stampedGlobal = globalContent.blocks
-    .filter((b) => !pagePaths.has(b.blockPath))
-    .map((b) => ({ ...b, _slug: globalSlug }));
-
-  return [...pageBlocks, ...stampedGlobal];
+  return mergePageBlocks({
+    slug,
+    globalSlug,
+    pageBlocks: content.blocks,
+    globalBlocks: globalContent.blocks,
+  });
 }
 
 /**
@@ -148,13 +178,15 @@ export async function getCmsCollection(config, key, params, options) {
   const getServiceToken = config.getServiceToken ?? noServiceToken;
   const accessToken = options?.accessToken ?? (await getServiceToken());
   const transport = config.transport ?? createRestTransport(config);
-  return transport.getCollection(key, params, {
+  const page = await transport.getCollection(key, params, {
     accessToken,
     cache: {
       revalidate: options?.revalidate ?? false,
       tags: [cmsCollectionTag(key), ...(options?.tags ?? [])],
     },
   });
+  const items = withoutDrafts(page.items, "draftData", options?.includeDrafts);
+  return items === page.items ? page : { ...page, items };
 }
 
 /**
@@ -171,7 +203,7 @@ export async function getCmsCollectionItem(config, key, slug, options) {
   const getServiceToken = config.getServiceToken ?? noServiceToken;
   const accessToken = options?.accessToken ?? (await getServiceToken());
   const transport = config.transport ?? createRestTransport(config);
-  return transport.getCollectionItem(key, slug, {
+  const item = await transport.getCollectionItem(key, slug, {
     accessToken,
     cache: {
       revalidate: options?.revalidate ?? false,
@@ -182,6 +214,7 @@ export async function getCmsCollectionItem(config, key, slug, options) {
       ],
     },
   });
+  return withoutDrafts([item], "draftData", options?.includeDrafts)[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -214,9 +247,9 @@ export function syncCmsManifest(config, manifests, accessToken) {
  * @returns {Promise<void>}
  */
 export async function syncAll(manifests, options) {
-  const config = {
+  const config = ensureCmsConfig({
     baseUrl: options?.baseUrl ?? process.env.CMS_URL ?? "http://localhost:5000",
-  };
+  });
   const transport = createRestTransport(config);
   const getServiceToken = options?.getServiceToken ?? noServiceToken;
 

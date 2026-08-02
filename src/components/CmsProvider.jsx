@@ -17,13 +17,16 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 
 import { CmsContext, useCmsContext } from "../lib/context.js";
-import { createCmsConfig } from "../lib/config.js";
+import { ensureCmsConfig } from "../lib/config.js";
 import { buildThemeCss } from "../lib/theme.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
 import { deepEqual } from "../lib/deep-equal.js";
 import { createStore, useStoreSelector } from "../lib/store.js";
+import { createDraftQueue } from "../lib/draft-queue.js";
+import { contentDraftKey } from "../lib/draft-keys.js";
+import { resolveBlockValue } from "../lib/resolve.js";
 import { useCmsContent } from "../hooks/use-cms-content.js";
 import { CollectionProvider } from "./CollectionProvider.jsx";
 
@@ -46,6 +49,9 @@ const UNSET = Symbol("unset");
  * @param {() => T} create
  * @returns {T}
  */
+/** Shared empty map for the "route not fetched yet" reads below. */
+const EMPTY_BLOCKS = new Map();
+
 function useConstant(create) {
   const ref = useRef(/** @type {T | typeof UNSET} */ (UNSET));
   if (ref.current === UNSET) ref.current = create();
@@ -82,10 +88,19 @@ export function CmsProvider({
   // `config` arrives serializable across the RSC boundary. The transport holds
   // functions, so we build it here on the client and augment it onto the config
   // the tree reads through context. A custom `transport` prop overrides it.
-  const baseConfig = useMemo(
-    () => "baseUrl" in config && Object.isFrozen(config) ? /** @type {CmsConfig} */ (config) : createCmsConfig(config),
-    [config],
-  );
+  const baseConfig = useMemo(() => ensureCmsConfig(config), [config]);
+  // An inline `config={{ baseUrl }}` literal is a new object on every render of
+  // the host, which re-normalizes here and hands the whole tree a new context
+  // value each time, quietly undoing the seams-not-state design. Cheap to fix
+  // (hoist it or use `createCmsConfig`), invisible without a warning.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (Object.isFrozen(config)) return;
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[inscribed] <CmsProvider config={...}> received an unfrozen object. Build it once with createCmsConfig() at module scope; an inline literal re-renders every consumer on each parent render.",
+    );
+  }, [config]);
   const normalizedConfig = useMemo(
     () => ({
       ...baseConfig,
@@ -263,6 +278,11 @@ export function CmsProvider({
       refetchToken: 0,
     })),
   );
+  // One lane per slug for block-draft writes. Pinned for the same reason the
+  // stores are: a queue React could drop would strand in-flight requests.
+  const draftQueue = useConstant(() => createDraftQueue());
+  useEffect(() => () => draftQueue.dispose(), [draftQueue]);
+
   const registryStore = useConstant(() =>
     createStore(/** @type {import("../lib/context.js").CmsRegistryState} */ ({
       itemSchemas: new Map(),
@@ -479,9 +499,11 @@ export function CmsProvider({
   );
 
   const clearDrafts = useCallback(() => {
-    discardGenRef.current += 1;
+    // Drops pending autosaves and marks in-flight ones stale, so a write that
+    // is mid-await can't mirror its (now discarded) value back into the blocks.
+    draftQueue.cancelAll();
     setDraftsState((prev) => (prev.size === 0 ? prev : new Map()));
-  }, [setDraftsState]);
+  }, [setDraftsState, draftQueue]);
 
   const setDrawerOpen = useCallback(
     /** @param {boolean} open */
@@ -566,14 +588,6 @@ export function CmsProvider({
   const draftConfigRef = useRef(normalizedConfig);
   draftConfigRef.current = normalizedConfig;
 
-  // Per-slug request chain: a fast typist can leave the previous PUT in flight,
-  // so chaining each slug's request onto its predecessor keeps the backend in
-  // commit order and stops an older draft clobbering a newer one. Different
-  // slugs still save in parallel.
-  const inFlightDraftPerSlug = useRef(
-    /** @type {Map<string, Promise<void>>} */ (new Map()),
-  );
-
   // Pulse-and-reset for the status dot: drop back to idle ~0.9s after a
   // saved/failed signal so the flash is transient.
   const draftStatusResetRef = useRef(
@@ -599,135 +613,115 @@ export function CmsProvider({
   }, []);
 
   // Drafts live in the store, so this effect subscribes (rather than depending
-  // on `[drafts]`) and re-arms the debounce on each change.
-  const autosaveTimerRef = useRef(
-    /** @type {ReturnType<typeof setTimeout>|null} */ (null),
-  );
-  // Bumped on every discard so an in-flight autosave PUT can tell a discard
-  // happened mid-await and skip the (now-wrong) "saved" flash.
-  const discardGenRef = useRef(0);
+  // on `[drafts]`) and re-arms the debounce on each change. One queue key per
+  // slug: pages save in parallel, but a slug's own writes stay in commit order,
+  // so a fast typist can't land an older payload after a newer one.
   useEffect(() => {
-    const armDebounce = () => {
-      if (autosaveTimerRef.current) {
-        clearTimeout(autosaveTimerRef.current);
-        autosaveTimerRef.current = null;
-      }
-      if (!isAdminRef.current) return;
-      if (contentDraftsStore.get().size === 0) return;
-
-      autosaveTimerRef.current = setTimeout(async () => {
-      autosaveTimerRef.current = null;
-      const genAtDispatch = discardGenRef.current;
-      const drafts = contentDraftsStore.get();
-      const currentPathname = draftPathnameRef.current ?? "/";
-      const currentBlocks = blocksStore.get().get(currentPathname) ?? new Map();
-      const currentConfig = draftConfigRef.current;
-
-      // Skip entries that no longer differ from the effective value
-      // (`draftValue ?? value`). Comparing against the effective value (not
-      // `value`) is deliberate: an undo back to published while a server draft
-      // exists must still send a request, so the backend draft gets cleared.
-      /** @type {Map<string, import("../lib/schemas.js").UpdateBlockItem[]>} */
-      const bySlug = new Map();
-      for (const [blockPath, value] of drafts) {
-        const block = currentBlocks.get(blockPath);
+    /**
+     * Collect one slug's dirty blocks. Runs at flush time, not when the draft
+     * lands: entries that stopped differing in the meantime are dropped here.
+     *
+     * Compared against the *effective* value (`draftValue ?? value`), not
+     * `value`: an undo back to published while a server draft exists must still
+     * send a request, so the backend draft gets cleared.
+     *
+     * @param {string} slug
+     * @param {string} pathname
+     * @param {Map<string, import("../lib/schemas.js").BlockResponse>} blocks
+     */
+    const collectForSlug = (slug, pathname, blocks) => {
+      /** @type {import("../lib/schemas.js").UpdateBlockItem[]} */
+      const items = [];
+      for (const [blockPath, value] of contentDraftsStore.get()) {
+        const block = blocks.get(blockPath);
         if (!block) continue;
-        const effective = block.draftValue ?? block.value;
-        if (deepEqual(value, effective)) continue;
-        const slug = block._slug ?? currentPathname;
-        const list = bySlug.get(slug) ?? [];
-        list.push({ blockPath, value, version: block.version });
-        bySlug.set(slug, list);
+        if ((block._slug ?? pathname) !== slug) continue;
+        if (deepEqual(value, resolveBlockValue(block))) continue;
+        items.push({ blockPath, value, version: block.version });
       }
-      if (bySlug.size === 0) return;
+      return items;
+    };
 
-      // If every PUT block equals its published value (all undone to baseline),
-      // treat it as a silent backend cleanup with no status flash.
-      const isAllReset = [...bySlug.values()].every((blocksForSlug) =>
-        blocksForSlug.every((item) => {
-          const b = currentBlocks.get(item.blockPath);
-          return b == null || deepEqual(item.value, b.value);
-        }),
-      );
+    const arm = () => {
+      if (!isAdminRef.current) return;
+      const drafts = contentDraftsStore.get();
+      if (drafts.size === 0) return;
 
-      const accessToken = (await stableGetAccessToken()) || undefined;
-      if (!isAllReset) setDraftSyncStatus("saving");
+      const pathname = draftPathnameRef.current ?? "/";
+      const blocks = blocksStore.get().get(pathname) ?? EMPTY_BLOCKS;
+      /** @type {Set<string>} */
+      const slugs = new Set();
+      for (const blockPath of drafts.keys()) {
+        const block = blocks.get(blockPath);
+        if (block) slugs.add(block._slug ?? pathname);
+      }
 
-      const slugEntries = [...bySlug.entries()];
-      const results = await Promise.allSettled(
-        slugEntries.map(([slug, blocksForSlug]) => {
-          const previous =
-            inFlightDraftPerSlug.current.get(slug) ?? Promise.resolve();
-          const next = previous
-            .catch(() => {})
-            .then(() =>
-              currentConfig.transport.updateDraft(
-                { slug, blocks: blocksForSlug },
-                { accessToken },
-              ),
+      for (const slug of slugs) {
+        draftQueue.schedule(contentDraftKey(slug), async (ctx) => {
+          const currentPathname = draftPathnameRef.current ?? "/";
+          const currentBlocks = blocksStore.get().get(currentPathname) ?? EMPTY_BLOCKS;
+          const items = collectForSlug(slug, currentPathname, currentBlocks);
+          if (items.length === 0) return;
+
+          // Everything undone back to published: a silent backend cleanup, so
+          // the status pill stays quiet rather than flashing a save.
+          const isAllReset = items.every((item) => {
+            const b = currentBlocks.get(item.blockPath);
+            return b == null || deepEqual(item.value, b.value);
+          });
+
+          const accessToken = (await stableGetAccessToken()) || undefined;
+          if (!isAllReset) setDraftSyncStatus("saving");
+
+          try {
+            await draftConfigRef.current.transport.updateDraft(
+              { slug, blocks: items },
+              { accessToken },
             );
-          inFlightDraftPerSlug.current.set(slug, next);
-          return next;
-        }),
-      );
-
-      // Discard happened during the PUT: skip the optimistic update entirely.
-      // `discardServerDrafts` already nulled draftValue, so applying our stale
-      // sent-values here would briefly re-populate it and fight the discard.
-      if (discardGenRef.current !== genAtDispatch) {
-        setDraftSyncStatus("idle");
-        return;
-      }
-
-      // Mirror the backend's post-write state locally: each PUT block gets
-      // draftValue = the value sent, or null when that equals published (the
-      // backend auto-cleans). Without it, an undo would keep `draftValue`
-      // populated until the next refetch, leaving a stale dirty count.
-      results.forEach((r, i) => {
-        if (r.status !== "fulfilled") return;
-        const [, blocksForSlug] = slugEntries[i];
-        patchBlocks(currentPathname, (prev) => {
-          let mutated = false;
-          const nextMap = new Map(prev);
-          for (const sent of blocksForSlug) {
-            const cur = nextMap.get(sent.blockPath);
-            if (!cur) continue;
-            const matchesPublished = deepEqual(sent.value, cur.value);
-            const newDraftValue = matchesPublished ? null : sent.value;
-            if (deepEqual(cur.draftValue ?? null, newDraftValue)) continue;
-            nextMap.set(sent.blockPath, { ...cur, draftValue: newDraftValue });
-            mutated = true;
-          }
-          return mutated ? nextMap : prev;
-        });
-      });
-
-      const anyFailed = results.some((r) => r.status === "rejected");
-      if (anyFailed) {
-        for (const r of results) {
-          if (r.status === "rejected") {
+          } catch (err) {
+            if (ctx.isStale()) return;
             // eslint-disable-next-line no-console
-            console.warn("[inscribed] draft autosave failed:", r.reason);
+            console.warn("[inscribed] draft autosave failed:", err);
+            if (!isAllReset) flashDraftStatus("failed");
+            return;
           }
-        }
-        if (!isAllReset) flashDraftStatus("failed");
-        return;
-      }
 
-      if (isAllReset) {
-        setDraftSyncStatus("idle");
-      } else {
-        flashDraftStatus("saved");
+          // A discard landed mid-flight: it already nulled `draftValue`, so
+          // mirroring our sent values now would re-populate it and fight it.
+          if (ctx.isStale()) {
+            setDraftSyncStatus("idle");
+            return;
+          }
+
+          // Mirror the backend's post-write state: each block gets
+          // draftValue = the value sent, or null when that equals published
+          // (the backend auto-cleans). Without it an undo would keep
+          // `draftValue` set until the next refetch, leaving a stale dirty count.
+          patchBlocks(currentPathname, (prev) => {
+            let mutated = false;
+            const nextMap = new Map(prev);
+            for (const sent of items) {
+              const cur = nextMap.get(sent.blockPath);
+              if (!cur) continue;
+              const newDraftValue = deepEqual(sent.value, cur.value) ? null : sent.value;
+              if (deepEqual(cur.draftValue ?? null, newDraftValue)) continue;
+              nextMap.set(sent.blockPath, { ...cur, draftValue: newDraftValue });
+              mutated = true;
+            }
+            return mutated ? nextMap : prev;
+          });
+
+          if (isAllReset) setDraftSyncStatus("idle");
+          else flashDraftStatus("saved");
+        });
       }
-      }, 1000);
     };
 
-    const unsubscribe = contentDraftsStore.subscribe(armDebounce);
-    return () => {
-      unsubscribe();
-      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    };
-  }, [contentDraftsStore, blocksStore, patchBlocks, stableGetAccessToken, flashDraftStatus, setDraftSyncStatus]);
+    return contentDraftsStore.subscribe(arm);
+  }, [
+    contentDraftsStore, blocksStore, patchBlocks, draftQueue,
+    stableGetAccessToken, flashDraftStatus, setDraftSyncStatus,
+  ]);
 
   // Silent server-draft cleanup for discard. DELETEs each affected slug's
   // draft set without the debounce or `draftSyncStatus`, so the pill doesn't
@@ -771,26 +765,23 @@ export function CmsProvider({
         return mutated ? next : prev;
       });
 
-      // Fire-and-forget cleanup DELETEs, per-slug chained so a concurrent
-      // autosave can't sneak a stale draft in after cleanup.
+      // Cleanup DELETEs go through the same per-slug lane as autosave, so one
+      // can't overtake a PUT still in flight and leave the draft it just
+      // removed re-created behind it.
       const currentConfig = draftConfigRef.current;
-      (async () => {
-        const accessToken = (await stableGetAccessToken()) || undefined;
-        for (const slug of bySlug.keys()) {
-          const previous =
-            inFlightDraftPerSlug.current.get(slug) ?? Promise.resolve();
-          const next = previous
-            .catch(() => {})
-            .then(() => currentConfig.transport.deleteDraft(slug, { accessToken }))
-            .catch((err) => {
-              // eslint-disable-next-line no-console
-              console.warn("[inscribed] discard cleanup DELETE failed:", err);
-            });
-          inFlightDraftPerSlug.current.set(slug, next);
-        }
-      })();
+      for (const slug of bySlug.keys()) {
+        draftQueue.enqueue(contentDraftKey(slug), async () => {
+          try {
+            const accessToken = (await stableGetAccessToken()) || undefined;
+            await currentConfig.transport.deleteDraft(slug, { accessToken });
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn("[inscribed] discard cleanup DELETE failed:", err);
+          }
+        });
+      }
     },
-    [stableGetAccessToken, blocksStore, patchBlocks],
+    [stableGetAccessToken, blocksStore, patchBlocks, draftQueue],
   );
 
   // Seams only: stores, setters, config, session. Nothing in here changes while
@@ -840,7 +831,6 @@ export function CmsProvider({
       browserSignOut,
       blocksStore,
       commitBlocks,
-      patchBlocks,
       contentDraftsStore,
       setDraft,
       clearDraft,

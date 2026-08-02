@@ -11,6 +11,7 @@ import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../lib/context.js";
 import { useStoreSelector } from "../lib/store.js";
+import { resolveBlockValue } from "../lib/resolve.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
 
 /**
@@ -72,7 +73,7 @@ export function useCmsBlock(blockPath, _meta) {
     // Effective value: backend draft overlay wins over published. Callers
     // needing the published version can read `block.value` / `block.draftValue`
     // off the returned `block`.
-    value: block ? (block.draftValue ?? block.value) : undefined,
+    value: resolveBlockValue(block),
     version: block ? block.version : null,
     blockType: block ? block.blockType : null,
     block,

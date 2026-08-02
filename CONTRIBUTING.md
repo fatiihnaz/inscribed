@@ -28,8 +28,17 @@ and most "where should this go?" questions answer themselves.
 
 - **Vendor-neutral core.** The core depends on no backend and no auth library.
   Anything backend- or auth-specific goes behind an injection seam with a default
-  in `src/defaults/`. If you find yourself importing a vendor SDK into `src/lib/`
-  or `src/components/`, stop; it belongs behind a seam.
+  in `src/defaults/`. If you find yourself importing a vendor SDK into
+  `src/shared/` or `src/core/`, stop; it belongs behind a seam.
+- **Imports only ever point down.** The client source is stacked in five layers,
+  lowest first: `shared`, `editors`, `core`, `collections`, `admin`. Each may
+  import its own layer and anything below it, never above. So the drawer can
+  reach the collections namespace, but nothing in `core/` may reach the drawer,
+  and `shared/` may reach nothing at all. This is what keeps collections opt-in
+  and the drawer out of a public visitor's bundle. The tell: you needed a style
+  object, a hook, or a type from a layer above; move the shared piece down
+  rather than importing upward. See [Project layout](#project-layout) for the
+  one sanctioned exception.
 - **The RSC boundary is sacred.** Functions can't be serialized across the React
   Server → Client boundary. Config objects that cross it (props) must stay
   serializable; anything holding functions (transport, service token) is resolved
@@ -44,13 +53,15 @@ and most "where should this go?" questions answer themselves.
   is read with `useStoreSelector`, so a write re-renders only the components
   selecting that slice. The tell: you added a `useState` whose value ends up in a
   context value, and now every consumer on the page re-renders on each change.
-  `tests/cms-context-split.test.jsx` and `tests/collection-context-split.test.jsx`
-  are render-count guards and fail loudly when state migrates back.
-- **One rule, one home.** Value precedence, dirty state, block merging, list
-  params and draft scheduling each live in exactly one `lib/` module. They were
-  previously hand-written at a dozen call sites and had already drifted into
-  disagreeing spellings. If you are about to write `draftValue ?? value`, import
-  it instead.
+  `tests/core/cms-context-split.test.jsx` and
+  `tests/collections/context-split.test.jsx` are render-count guards and fail
+  loudly when state migrates back.
+- **One rule, one home.** Value precedence (`core/resolve.js`), dirty state
+  (`admin/dirty.js`), block merging (`core/merge-blocks.js`), list params
+  (`collections/params.js`) and draft scheduling (`shared/state/draft-queue.js`)
+  each live in exactly one module. They were previously hand-written at a dozen
+  call sites and had already drifted into disagreeing spellings. If you are
+  about to write `draftValue ?? value`, import it instead.
 - **JavaScript + JSDoc, not TypeScript source.** We author `.js`/`.jsx` with JSDoc
   type annotations and emit `.d.ts` from them. There is no `.ts` source.
 
@@ -79,41 +90,79 @@ package into a consuming Next.js project (`npm link`, a workspace, or a local
 
 ```
 src/
-  index.js              # `inscribed` (client entry, "use client" lives here)
-  collections.js        # `inscribed/collections` (opt-in collection entry, "use client")
-  components/           # React components (EditableRegion, drawer UI, CollectionProvider, ...)
-  hooks/                # client hooks (useCmsContent, useCmsBlock, useCollection, ...)
-    use-draft-driver.js #   elects the single surface allowed to write a draft
-  lib/                  # framework-agnostic logic + JSDoc typedefs
-    config.js           #   createCmsConfig / ensureCmsConfig (serializable config)
-    context.js          #   CmsContext (core seams; state lives in its stores)
-    collection-context.js #   CollectionContext (opt-in collection seams + store shape)
-    transport.js        #   CmsTransport contract (typedef only)
-    service-token.js    #   ServiceTokenProvider contract
-    auth.js             #   CmsAuthAdapter contract
-    schemas.js          #   backend request/response typedefs
-    store.js            #   external store (per-slice subscriptions)
-    resolve.js          #   value precedence: local draft > server draft > published
-    dirty.js            #   what carries unpublished changes (blocks and records)
-    merge-blocks.js     #   page + global merge, shared by server and client reads
-    collection-params.js #   one list-params builder, so every caller shares a cache key
-    draft-queue.js      #   debounced, per-key-ordered lane behind every draft write
-    draft-keys.js       #   queue keys, named by target endpoint rather than record
-  defaults/             # default seam implementations
-    transport.js        #   createRestTransport (the /cms/* REST adapter)
-    service-token.js    #   noServiceToken
-    auth.js             #   publicAuth (read-only)
-  server/               # SERVER ONLY
-    get-content.js      #   `inscribed/server` entry
-    actions.js          #   `inscribed/actions` entry ("use server")
-    cms-page.jsx        #   `inscribed/page` entry (createCmsPage)
-    discover.js         #   AST manifest discovery
+  index.js               # `inscribed` (client entry, "use client" lives here)
+  collections.js         # `inscribed/collections` (opt-in collection entry, "use client")
+  shared/                # everything above depends on this; it depends on nothing
+    config.js            #   createCmsConfig / ensureCmsConfig (serializable config)
+    contracts/           #   injection seams + backend shapes, typedefs only
+      transport.js       #     CmsTransport contract
+      service-token.js   #     ServiceTokenProvider contract
+      auth.js            #     CmsAuthAdapter contract
+      schemas.js         #     backend request/response typedefs
+      errors.js          #     CmsApiError, the shape every transport throws
+    state/               #   the store primitive and the contexts read across layers
+      store.js           #     external store (per-slice subscriptions)
+      cms-context.js     #     CmsContext (core seams; state lives in its stores)
+      group-context.js   #     the enclosing <CmsGroup>'s path prefix
+      draft-queue.js     #     debounced, per-key-ordered lane behind every draft write
+      draft-keys.js      #     queue keys, named by target endpoint rather than record
+    style/
+      tokens.js          #     design tokens (--ins-*), shared by drawer and page
+      theme.js           #     the themeable subset + buildThemeCss
+      icons.jsx          #     dependency-free Lucide subset
+    util/                #   pure helpers: deep-equal, stable-stringify, list-ops
+  editors/               # the field editing surfaces
+    fields/              #   drawer-side editors + the blockType -> editor dispatch
+    rich-text/           #   Tiptap editor and toolbar, shared by drawer and page
+    inline/              #   in-place editors <EditableRegion> swaps in for admins
+    use-image-upload.js  #   upload handling behind both image surfaces
+  core/                  # the block editor
+    CmsProvider.jsx      #   composition root (see the note below)
+    EditableRegion.jsx   #   the declarative editable primitive
+    EditableList.jsx     #   List-typed blocks
+    CmsGroup.jsx         #   path prefixing + cascading visibility
+    resolve.js           #   value precedence: local draft > server draft > published
+    merge-blocks.js      #   page + global merge, shared by server and client reads
+    blocks.js            #   path-based accessors over a block array/map
+    hooks/               #   useCmsContent, useCmsBlock, useCmsAdmin, useCmsSave, ...
+  collections/           # the opt-in collections namespace
+    CollectionProvider.jsx #  owns the collection caches, drafts and bindings
+    CollectionFieldsForm.jsx # schema-driven form renderer for one record
+    context.js           #   CollectionContext (opt-in collection seams + store shape)
+    params.js            #   one list-params builder, so every caller shares a cache key
+    hooks/
+      use-collection-editor.js # headless record editor: seed, mirror, autosave, publish
+      use-draft-driver.js      # elects the single surface allowed to write a draft
+  admin/                 # the drawer; loaded only for admins
+    Drawer.jsx           #   the panel shell, lazy-loaded by CmsProvider
+    drawer-styles.js     #   drawer style objects + the inline CSS string
+    dirty.js             #   what carries unpublished changes (blocks and records)
+    word-diff.js         #   inline diff behind the change preview
+  defaults/              # default seam implementations
+    transport.js         #   createRestTransport (the /cms/* REST adapter)
+    service-token.js     #   noServiceToken
+    auth.js              #   publicAuth (read-only)
+  server/                # SERVER ONLY
+    get-content.js       #   `inscribed/server` entry
+    actions.js           #   `inscribed/actions` entry ("use server")
+    cms-page.jsx         #   `inscribed/page` entry (createCmsPage)
+    discover.js          #   AST manifest discovery
+    with-cms.js          #   the discovery root marker
   cli/
-    sync.js             #   `cms-sync` binary
-  tests/                # Vitest specs + discovery fixtures & snapshots
+    sync.js              #   `cms-sync` binary
+  tests/                 # Vitest specs, mirroring the folders above
 ```
 
-Tests live under `src/tests/` as `*.test.js` (fixtures in `src/tests/__fixtures__/`).
+Tests live under `src/tests/<layer>/` as `*.test.js`. The discovery fixtures and
+snapshots sit with their only consumer, in `src/tests/server/`.
+
+The folder order is the dependency order, so a file's path tells you what it is
+allowed to import (see [Philosophy](#philosophy)). **`core/CmsProvider.jsx` is
+the one sanctioned exception**: as the composition root it mounts
+`collections/CollectionProvider` so apps don't have to, and `admin/Drawer`
+behind `next/dynamic`. Both edges are deliberate and code-split; every other
+module in `core/` imports downward only. To check a change,
+`npx madge --circular --extensions js,jsx src` must stay clean.
 
 ## Build
 
@@ -160,25 +209,28 @@ hand-written TypeScript.
 
 - Annotate public API with accurate JSDoc, since it _is_ the published type surface.
 - Use `@typedef`, `@param`, `@returns`, and `@import { X } from "..."` for shared
-  shapes. `src/lib/schemas.js` holds the backend request/response typedefs;
-  reference them rather than redefining shapes inline.
+  shapes. `src/shared/contracts/schemas.js` holds the backend request/response
+  typedefs; reference them rather than redefining shapes inline.
 - `checkJs` is currently off, but write JSDoc as if it were on; incorrect
   annotations ship as incorrect types.
 
 ## Testing
 
-Tests run on [Vitest](https://vitest.dev/) in a Node environment (no DOM yet;
-the current suite covers pure logic and the transport contract).
+Tests run on [Vitest](https://vitest.dev/). The default environment is Node,
+which covers the pure logic and the transport contract; component and hook specs
+opt into jsdom per file.
 
 ```bash
 npm test           # run once
 npm run test:watch # watch mode
 ```
 
-- Place tests under `src/tests/` as `*.test.js`.
+- Place a test under `src/tests/<layer>/` beside the layer it covers, as
+  `*.test.js` (or `.test.jsx` for anything rendering).
 - Keep tests in the Node environment unless you're testing a component/hook, in
-  which case add an `environment: "jsdom"` override for that file.
-- Cover new `lib/` logic and any new `CmsTransport` method against the contract.
+  which case add a `// @vitest-environment jsdom` docblock at the top of that file.
+- Cover new `shared/` and `core/` logic, and any new `CmsTransport` method
+  against the contract.
 
 ## Code style & conventions
 
@@ -189,7 +241,7 @@ npm run test:watch # watch mode
   subscriptions). Preserve and extend that style; don't strip context.
 - **Server/client hygiene.** Never import `inscribed/server`, `inscribed/page`, or any
   `src/server/**` module from client code, and vice versa. Keep browser-only
-  types out of `src/lib/config.js` (it's read on both sides).
+  types out of `src/shared/config.js` (it's read on both sides).
 - **No functions across the RSC boundary.** Anything that becomes a prop on a
   Client Component must be serializable. Resolve function-bearing seams at the use
   site.
@@ -200,10 +252,10 @@ npm run test:watch # watch mode
 ## Working with the seams
 
 Three injection seams keep the core vendor-neutral. Each is a contract in
-`src/lib/` with a default in `src/defaults/`:
+`src/shared/contracts/` with a default in `src/defaults/`:
 
-| Seam | Contract (`src/lib/`) | Default (`src/defaults/`) |
-| ---- | --------------------- | ------------------------- |
+| Seam | Contract (`src/shared/contracts/`) | Default (`src/defaults/`) |
+| ---- | ---------------------------------- | ------------------------- |
 | Transport | `transport.js` (`CmsTransport`) | `transport.js` (`createRestTransport`) |
 | Service token | `service-token.js` | `service-token.js` (`noServiceToken`) |
 | Auth adapter | `auth.js` (`CmsAuthAdapter`) | `auth.js` (`publicAuth`) |
@@ -218,10 +270,11 @@ headers, and `CmsApiError` mapping.
 
 ### Add a `CmsTransport` method
 
-1. Add the method signature to the `CmsTransport` typedef in `src/lib/transport.js`.
+1. Add the method signature to the `CmsTransport` typedef in
+   `src/shared/contracts/transport.js`.
 2. Implement it in `src/defaults/transport.js` (the REST adapter).
 3. Call it from the relevant hook/component/server helper via `config.transport`.
-4. Add a contract test in `src/tests/transport.test.js`.
+4. Add a contract test in `src/tests/shared/transport.test.js`.
 
 Keep the method's options shape consistent: `(…, opts?)` where `opts` is
 `{ accessToken?, cache?, signal? }`.
@@ -229,13 +282,13 @@ Keep the method's options shape consistent: `(…, opts?)` where `opts` is
 ### Add a block type
 
 1. Extend the `BlockType` union and document its value shape in
-   `src/lib/schemas.js`.
+   `src/shared/contracts/schemas.js`.
 2. Teach `<EditableRegion>` (and discovery in `src/server/discover.js`) to render
    and recognise it.
-3. Add the editor UI in the admin drawer components.
-   If the type should edit on the page too, add its in-place surface alongside
-   the existing `Inline*` components (`InlineTextEditor`, `InlineRichText`,
-   `InlineImageOverlay` / `InlineImagePlaceholder`) that `<EditableRegion>`
+3. Add the editor UI in `src/editors/fields/`, dispatched from `FieldEditor`.
+   If the type should edit on the page too, add its in-place surface in
+   `src/editors/inline/` alongside `InlineTextEditor`, `InlineRichText` and
+   `InlineImageOverlay` / `InlineImagePlaceholder`, which `<EditableRegion>`
    swaps in for admins; keep heavy deps lazy (see the RichText note below).
 4. Thread the `disabled` prop through the editor and honour it on every
    interactive surface. Read-only blocks (`editable={false}`, or anything inside
@@ -264,17 +317,18 @@ response, never through the manifest, so there's no discovery step. The frontend
 only renders what the backend declares.
 
 1. Extend `CollectionFieldType` and document its value shape in
-   `src/lib/schemas.js`.
-2. Add a `case` in `CollectionFieldsForm`'s `FieldInput` that renders the editor.
+   `src/shared/contracts/schemas.js`.
+2. Add a `case` in `CollectionFieldsForm`'s `FieldInput` that renders the editor
+   (`src/collections/CollectionFieldsForm.jsx`).
 3. Teach the pure helpers in the same file: `defaultFor` (empty value for
    `seedValues`), `buildPayload` (only if the type isn't a plain pass-through,
    like `ObjectArray`), and `requiredMissing` (its validity rule).
-4. Cover 2–3 in `src/tests/collection-fields-form.test.js`.
+4. Cover 2–3 in `src/tests/collections/fields-form.test.js`.
 
 The backend must emit the new `type` for the editor to show; until then the field
 arrives as whatever type the schema currently reports. Keep any shared editor
-**portable** (neutral colours + `currentColor`, no `admin-drawer-styles` tokens,
-no framer-motion) if it's reused by `<CollectionComposer>` or the CMS block side:
+**portable** (neutral colours + `currentColor`, no `shared/style/tokens.js`
+palette, no framer-motion) if it's reused by `<CollectionComposer>` or the CMS block side:
 those surfaces render on light host pages and the drawer alike, and the
 collections entry must stay framer-free. `ImageEditor` is the reference: one
 component shared by the CMS Image block and the collection `Image` field.

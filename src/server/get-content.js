@@ -9,14 +9,14 @@
  */
 
 import { createRestTransport } from "../defaults/transport.js";
-import { mergePageBlocks, resolveGlobalSlug } from "../lib/merge-blocks.js";
-import { ensureCmsConfig } from "../lib/config.js";
+import { mergePageBlocks, resolveGlobalSlug } from "../core/merge-blocks.js";
+import { ensureCmsConfig } from "../shared/config.js";
 import { noServiceToken } from "../defaults/service-token.js";
 
 /**
- * @import { CmsConfig } from "../lib/config.js"
- * @import { ServiceTokenProvider } from "../lib/service-token.js"
- * @import { BlockResponse, CollectionItemResponse, CollectionListParams, ContentResponse, PagedListResponse, SyncManifestRequest, SyncResultResponse } from "../lib/schemas.js"
+ * @import { CmsConfig } from "../shared/config.js"
+ * @import { ServiceTokenProvider } from "../shared/contracts/service-token.js"
+ * @import { BlockResponse, CollectionItemResponse, CollectionListParams, ContentResponse, PagedListResponse, SyncManifestRequest, SyncResultResponse } from "../shared/contracts/schemas.js"
  */
 
 /**

@@ -1,0 +1,398 @@
+"use client";
+
+/**
+ * @file `ListEditor`: drawer-side editor for `List`-typed blocks, mirroring
+ * `<EditableList>` (per-item move/delete + "+ Add"). Each item is a sub-card
+ * whose body is the per-field editor stack keyed by the registered itemSchema.
+ *
+ * `itemSchema` comes from the CmsContext registry, populated when an
+ * `<EditableList>` mounts. Without it we render a hint instead of editors.
+ */
+
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Plus, Trash2, ChevronUp, ChevronDown } from "../../shared/style/icons.jsx";
+
+import { addItem, moveItem, removeItem } from "../../shared/util/list-ops.js";
+import { useCmsContext } from "../../shared/state/cms-context.js";
+import { useStoreSelector } from "../../shared/state/store.js";
+import { emptyStateStyle } from "./styles.js";
+import { ACCENT, TEXT_MUTED, STATUS_DANGER, R_BADGE, R_SM } from "../../shared/style/tokens.js";
+
+import { FieldEditor } from "./FieldEditor.jsx";
+
+/**
+ * @import { ItemSchema } from "../../shared/contracts/schemas.js"
+ */
+
+/**
+ * @param {{
+ *   blockPath?: string,
+ *   value: *,
+ *   onChange: (value: *) => void,
+ *   itemSchema: ItemSchema | null,
+ *   disabled?: boolean,
+ * }} props
+ */
+export function ListEditor({ blockPath, value, onChange, itemSchema, disabled }) {
+  /** @type {Record<string, *>[]} */
+  const items = Array.isArray(value) ? value : [];
+
+  if (!itemSchema) {
+    return (
+      <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
+        Bu liste için <code>itemSchema</code> bulunamadı. Sayfada{" "}
+        <code>&lt;EditableList&gt;</code> render ediliyor mu?
+      </div>
+    );
+  }
+
+  /** @param {Record<string, *>[]} next */
+  const setItems = (next) => onChange(next);
+
+  const onAdd = () => setItems(addItem(items, itemSchema));
+
+  /** @param {number} i */
+  const onRemove = (i) => setItems(removeItem(items, i));
+
+  /** @param {number} i @param {-1|1} dir */
+  const onMove = (i, dir) => {
+    const next = moveItem(items, i, dir);
+    if (next === items) return;
+    setItems(next);
+  };
+
+  /** @param {number} i @param {string} fieldKey @param {*} fieldValue */
+  const onFieldChange = (i, fieldKey, fieldValue) => {
+    const next = items.slice();
+    next[i] = { ...next[i], [fieldKey]: fieldValue };
+    setItems(next);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {items.length === 0 ? (
+        <div style={emptyStateStyle}>
+          Liste boş. "+ Öğe ekle" butonuyla başlayabilirsin.
+        </div>
+      ) : null}
+
+      {items.map((item, i) => (
+        <ListItemCard
+          key={i}
+          blockPath={blockPath}
+          index={i}
+          total={items.length}
+          item={item}
+          itemSchema={itemSchema}
+          disabled={disabled}
+          onFieldChange={(k, v) => onFieldChange(i, k, v)}
+          onRemove={() => onRemove(i)}
+          onMoveUp={i > 0 ? () => onMove(i, -1) : null}
+          onMoveDown={i < items.length - 1 ? () => onMove(i, 1) : null}
+        />
+      ))}
+
+      {/* No "add item" affordance in read-only mode. */}
+      {!disabled && (
+        <button
+          type="button"
+          onClick={onAdd}
+          style={listAddButtonStyle}
+          className="inscribed-icon-action"
+        >
+          <Plus size={13} />
+          <span>Öğe ekle</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   blockPath?: string,
+ *   index: number,
+ *   total: number,
+ *   item: Record<string, *>,
+ *   itemSchema: ItemSchema,
+ *   disabled?: boolean,
+ *   onFieldChange: (fieldKey: string, value: *) => void,
+ *   onRemove: () => void,
+ *   onMoveUp: (() => void) | null,
+ *   onMoveDown: (() => void) | null,
+ * }} props
+ */
+function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onFieldChange, onRemove, onMoveUp, onMoveDown }) {
+  // Selects a boolean, not the signal itself: a row click elsewhere in the list
+  // leaves the other cards alone.
+  const { uiStore, setActiveListItem } = useCmsContext();
+  const isTarget = useStoreSelector(
+    uiStore,
+    (s) => s.activeListItem?.path === blockPath && s.activeListItem?.index === index,
+  );
+  const [isOpen, setIsOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
+  const summary = listItemSummary(itemSchema, item);
+
+  // When `activeListItem` points at us (page-side row click), expand, scroll
+  // into view, and clear the signal so it fires once. Matches RegionItemCard.
+  useEffect(() => {
+    if (!isTarget) return;
+    setIsOpen(true);
+    setActiveListItem(null);
+    // Wait a frame so the parent collapse has begun laying out before we
+    // scroll, else the target's position is stale.
+    const raf = requestAnimationFrame(() => {
+      ref.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [isTarget, setActiveListItem]);
+
+  return (
+    <div
+      ref={ref}
+      style={{ ...listItemCardStyle, ...(hovered ? listItemCardHoverStyle : null) }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div
+        style={{ ...listItemHeaderStyle, cursor: "pointer", userSelect: "none" }}
+        onClick={() => setIsOpen((v) => !v)}
+      >
+        <span style={listItemIndexStyle} title={`#${index + 1} / ${total}`}>{index + 1}</span>
+        <span style={summary ? listItemSummaryStyle : listItemSummaryEmptyStyle}>
+          {summary || "Boş öğe"}
+        </span>
+
+        {/* Reorder/delete are edit affordances, omitted in read-only mode. */}
+        {!disabled && (
+        <div style={{ display: "inline-flex", gap: 2, marginLeft: "auto" }}>
+          {onMoveUp ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
+              style={listItemIconStyle}
+              title="Yukarı taşı"
+              aria-label="Yukarı taşı"
+            >
+              <ChevronUp size={12} />
+            </button>
+          ) : null}
+          {onMoveDown ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
+              style={listItemIconStyle}
+              title="Aşağı taşı"
+              aria-label="Aşağı taşı"
+            >
+              <ChevronDown size={12} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            style={listItemDangerStyle}
+            title="Sil"
+            aria-label="Sil"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+        )}
+
+        <motion.span
+          initial={false}
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+          style={{ display: "inline-flex", color: TEXT_MUTED, marginLeft: disabled ? "auto" : 4 }}
+        >
+          <ChevronDown size={13} />
+        </motion.span>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {isOpen ? (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.32, 0.72, 0.18, 1] }}
+            style={{ overflow: "hidden" }}
+          >
+            <div style={listItemBodyStyle}>
+              {Object.entries(itemSchema).map(([key, field]) => {
+                const editor = FieldEditor({
+                  blockType: field.blockType,
+                  value: item[key],
+                  onChange: (v) => onFieldChange(key, v),
+                  disabled,
+                  // The field key is already printed above, so drop the editor's
+                  // own caption to avoid a double label.
+                  hideLabel: true,
+                });
+                return (
+                  <div key={key} style={listFieldStyle}>
+                    <div style={listFieldLabelStyle}>{key}</div>
+                    {editor ?? (
+                      <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
+                        <code>{field.blockType}</code> tipi list itemschema'sında desteklenmiyor.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * One-line summary for a collapsed list item: the first Text/RichText field
+ * holding a non-empty string (RichText stripped of tags), so the header reads
+ * like the item instead of a bare index. Returns null when nothing usable.
+ *
+ * @param {ItemSchema} itemSchema
+ * @param {Record<string, *> | undefined} item
+ * @returns {string | null}
+ */
+function listItemSummary(itemSchema, item) {
+  if (!item) return null;
+  const TEXTY = new Set(["Text", "ShortText", "LongText", "RichText"]);
+  for (const [key, field] of Object.entries(itemSchema)) {
+    if (!TEXTY.has(field.blockType)) continue;
+    const raw = item[key];
+    if (typeof raw !== "string") continue;
+    const text = (field.blockType === "RichText" ? raw.replace(/<[^>]*>/g, " ") : raw).trim();
+    if (text) return text;
+  }
+  return null;
+}
+
+// ---- Styles ---------------------------------------------------------------
+
+// Border in longhand props so hover can override `borderColor` alone without
+// React's shorthand/longhand-mix warning (which would stick the border after
+// un-hover). Gold/cream tones keep it distinct from the Collection editor.
+const listItemCardStyle = /** @type {React.CSSProperties} */ ({
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: `color-mix(in srgb, ${ACCENT} 16%, transparent)`,
+  borderRadius: R_SM,
+  background: `color-mix(in srgb, ${ACCENT} 3%, transparent)`,
+  overflow: "hidden",
+  transition: "background-color 140ms ease, border-color 140ms ease",
+});
+
+const listItemCardHoverStyle = /** @type {React.CSSProperties} */ ({
+  borderColor: `color-mix(in srgb, ${ACCENT} 34%, transparent)`,
+  background: `color-mix(in srgb, ${ACCENT} 6%, transparent)`,
+});
+
+const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "7px 8px 7px 9px",
+  fontSize: 12,
+  color: TEXT_MUTED,
+});
+
+// Gold index chip, tinted to keep this surface distinct from the Collection editor.
+const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
+  flexShrink: 0,
+  width: 20,
+  height: 20,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: R_SM,
+  fontFamily: "ui-monospace, 'SF Mono', monospace",
+  fontSize: 11,
+  fontWeight: 600,
+  color: ACCENT,
+  background: `color-mix(in srgb, ${ACCENT} 12%, transparent)`,
+});
+
+const listItemSummaryStyle = /** @type {React.CSSProperties} */ ({
+  flex: 1,
+  minWidth: 0,
+  fontSize: 12,
+  fontWeight: 450,
+  marginTop: -1,
+  color: "color-mix(in srgb, var(--ins-text, #fff) 90%, transparent)",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
+const listItemSummaryEmptyStyle = /** @type {React.CSSProperties} */ ({
+  ...listItemSummaryStyle,
+  color: TEXT_MUTED,
+  fontWeight: 400,
+  fontStyle: "italic",
+});
+
+const listItemIconStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 22,
+  height: 22,
+  border: "none",
+  background: "transparent",
+  color: TEXT_MUTED,
+  borderRadius: R_BADGE,
+  cursor: "pointer",
+  padding: 0,
+});
+
+const listItemDangerStyle = /** @type {React.CSSProperties} */ ({
+  ...listItemIconStyle,
+  color: STATUS_DANGER,
+});
+
+const listItemBodyStyle = /** @type {React.CSSProperties} */ ({
+  padding: "8px 10px 12px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  borderTop: `1px solid color-mix(in srgb, ${ACCENT} 8%, transparent)`,
+});
+
+const listFieldStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+});
+
+const listFieldLabelStyle = /** @type {React.CSSProperties} */ ({
+  fontSize: 10,
+  fontWeight: 600,
+  color: TEXT_MUTED,
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+});
+
+const listAddButtonStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  width: "100%",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+  padding: "9px 12px",
+  background: "transparent",
+  border: `1px dashed color-mix(in srgb, ${ACCENT} 35%, transparent)`,
+  borderRadius: R_SM,
+  color: ACCENT,
+  fontSize: 12,
+  fontWeight: 500,
+  fontFamily: "inherit",
+  cursor: "pointer",
+});

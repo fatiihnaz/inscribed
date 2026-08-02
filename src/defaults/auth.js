@@ -8,7 +8,7 @@
  */
 
 /**
- * @type {import("../lib/auth.js").CmsAuthAdapter}
+ * @type {import("../shared/contracts/auth.js").CmsAuthAdapter}
  */
 export const publicAuth = {
   getSession: async () => null,

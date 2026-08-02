@@ -1,0 +1,2091 @@
+"use client";
+
+/**
+ * @file Slide-in admin panel for inline editing. Mounted only for admins
+ * (gated by `CmsProvider`); always in the DOM but translated off-screen when
+ * closed, with a chevron handle at x=0 to reopen.
+ *
+ * Layout: a left `ModeRail` (Sayfa / Koleksiyonlar) beside a pane column.
+ * Collections are a top-level area, not per-page tabs: the rail opens every
+ * collection the user can reach, while the page only points at the ones it
+ * binds via `CollectionRefStrip`.
+ *
+ * Pane column (top to bottom):
+ *   - Header:   mode badge + navigable path + status pill, on one row. The
+ *               path's last segment is the title; ancestors route the host app
+ *               (and in collections mode, step back to the list).
+ *   - TabBar:   Sayfa / Genel, with a count badge and a dirty dot. Swapped for
+ *               `PreviewHeader` while the changes overlay is open.
+ *   - Toolbar:  block-list search (blockPath/blockType), page mode only.
+ *   - Body:     per-tab block list, the collections list, or a region panel.
+ *   - StatusBar: bottom lane: idle / saving / dirty (count + Geri al / Kaydet).
+ *   - Footer:   user info + sign-out.
+ *
+ * Visual tokens live in `shared/style/tokens.js` and styles in `drawer-styles.js`; this file is
+ * layout + state only.
+ */
+
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  ChevronsLeft, ChevronDown, ChevronLeft, ChevronRight,
+  Check, Undo2, LogOut, Search, Eye, Pencil, FileText, Layers, Folder,
+} from "../shared/style/icons.jsx";
+
+import { useCmsContext } from "../shared/state/cms-context.js";
+import { useCollectionContext } from "../collections/context.js";
+import { useStoreSelector } from "../shared/state/store.js";
+import { collectDirtyBlocks, collectDirtyRecords, dirtyCollectionKeys } from "./dirty.js";
+import { isBlockDirty } from "../core/resolve.js";
+import { useCmsSave } from "../core/hooks/use-cms-save.js";
+import { useMyCollections } from "../collections/hooks/use-my-collections.js";
+import { CmsApiError } from "../shared/contracts/errors.js";
+
+import { BlockCard } from "./BlockCard.jsx";
+import { CollectionRegionPanel } from "./CollectionRegionPanel.jsx";
+import { CollectionsPane } from "./CollectionsPane.jsx";
+import { ChangesPanel } from "./ChangesPanel.jsx";
+
+import { emptyStateStyle } from "../editors/fields/styles.js";
+import { panelStyle, paneContainerStyle, paneStyle, railStyle, railButtonStyle, railDirtyDotStyle, railIndicatorStyle, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
+import { PANEL_WIDTH, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, BG, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER } from "../shared/style/tokens.js";
+
+/**
+ * @import { BlockResponse } from "../shared/contracts/schemas.js"
+ */
+
+/** @type {Map<string, BlockResponse>} */
+const EMPTY_BLOCKS = new Map();
+
+export function Drawer() {
+  const pathname = usePathname() ?? "/";
+  const {
+    setActiveBlock,
+    setDrawerOpen,
+    blocksStore,
+    contentDraftsStore,
+    uiStore,
+    registryStore,
+    userInfo,
+    onSignOut,
+  } = useCmsContext();
+  // The drawer aggregates over everything, so unlike a page region it selects
+  // whole slices. As a single admin surface, re-rendering on each write is fine
+  // as long as the memoised card list below can still bail out.
+  const blocks = useStoreSelector(blocksStore, (s) => s.get(pathname) ?? EMPTY_BLOCKS);
+  const drafts = useStoreSelector(contentDraftsStore, (m) => m);
+  const activeBlock = useStoreSelector(uiStore, (s) => s.activeBlock);
+  const isDrawerOpen = useStoreSelector(uiStore, (s) => s.isDrawerOpen);
+  const draftSyncStatus = useStoreSelector(uiStore, (s) => s.draftSyncStatus);
+  const itemSchemas = useStoreSelector(registryStore, (s) => s.itemSchemas);
+  const editorVisibility = useStoreSelector(registryStore, (s) => s.editorVisibility);
+  // Collection state lives in its own provider, which CmsProvider always wraps
+  // the drawer in, so the throwing reader is safe here.
+  const { setActiveCollectionItem, collectionStore } = useCollectionContext();
+  const activeCollectionItem = useStoreSelector(collectionStore, (s) => s.activeItem);
+  const collectionBindings = useStoreSelector(collectionStore, (s) => s.bindings);
+  const collectionListCache = useStoreSelector(collectionStore, (s) => s.listCache);
+  const collectionItemCache = useStoreSelector(collectionStore, (s) => s.itemCache);
+  const collectionDrafts = useStoreSelector(collectionStore, (s) => s.drafts);
+  const myCollections = useMyCollections().collections;
+  const {
+    dirtyCount, isSaving, error,
+    save: onSaveAll, discard: onDiscardAll,
+  } = useCmsSave();
+  // Header path ancestors navigate the host app; the drawer already follows the
+  // route via `usePathname`, so it re-renders into the new page on its own.
+  const router = useRouter();
+
+  // Warm the Tiptap chunk in the background once the admin surface mounts, so
+  // the first RichText edit (drawer card or in-place) doesn't stall ~1-2s on the
+  // lazy import. Admin-only path already; idle so it never competes with paint.
+  useEffect(() => {
+    const prefetch = () => { import("../editors/rich-text/RichTextEditor.jsx").catch(() => {}); };
+    const ric = typeof window !== "undefined" ? window.requestIdleCallback : undefined;
+    if (ric) {
+      const id = ric(prefetch, { timeout: 2000 });
+      return () => window.cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(prefetch, 800);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Search filter (path + type), Page/Global tabs only; Collection lanes
+  // filter inside their own panel.
+  const [search, setSearch] = useState("");
+
+  // Split blocks into page/global lists. Deliberately independent of `drafts`:
+  // the drawer re-renders on every keystroke, and if these arrays were rebuilt
+  // each time, the memoised card list below would never get to bail out.
+  // CollectionItem bindings are synthesised in as virtual Collection blocks.
+  const { pageBlockList, globalBlockList } = useMemo(() => {
+    /** @type {BlockResponse[]} */
+    const pages = [];
+    /** @type {BlockResponse[]} */
+    const globals = [];
+
+    for (const block of blocks.values()) {
+      // `visible={false}` regions register as "hidden": drop them entirely.
+      if (editorVisibility.get(block.blockPath) === "hidden") continue;
+
+      const slug = block._slug ?? pathname;
+      (slug === pathname ? pages : globals).push(block);
+    }
+    pages.sort((a, b) => a.sortOrder - b.sortOrder);
+    globals.sort((a, b) => a.sortOrder - b.sortOrder);
+
+    let nextSort = pages.length > 0 ? pages[pages.length - 1].sortOrder + 1 : 1;
+    for (const [bindingId, binding] of collectionBindings) {
+      if (!binding.slug) continue;
+      // A region's rows already have a home: the reference row below lists the
+      // window and drills into them. Only a record placed directly on the page
+      // earns its own card.
+      if (binding.fromRegion) continue;
+      // Same rule the block loop applies above: a record inside a hidden group
+      // leaves the drawer entirely.
+      if (editorVisibility.get(bindingId) === "hidden") continue;
+      pages.push(/** @type {BlockResponse} */ ({
+        blockPath: bindingId,
+        blockType: "Collection",
+        value: binding,
+        version: 0,
+        sortOrder: nextSort++,
+        _slug: pathname,
+        // Group and label ride along on the binding: a collection row's path
+        // addresses a record, so unlike a content block it has nowhere to
+        // carry either.
+        _group: binding.group ?? null,
+        _label: binding.label,
+      }));
+    }
+
+    return { pageBlockList: pages, globalBlockList: globals };
+  }, [blocks, pathname, collectionBindings, editorVisibility]);
+
+  // Per-block dirty flag for the rail dot, tab dots and preview counts. Its own
+  // memo (rebuilt per keystroke) so it can't drag the block lists with it. Cards
+  // don't read it: each one derives its own dirty state from its own draft.
+  const dirtyByPath = useMemo(() => collectDirtyBlocks(blocks, drafts), [blocks, drafts]);
+
+  // Collections this page binds as a region and the user can reach (per /me).
+  // These are reference rows in the page list, not tabs: a collection is a
+  // top-level area reached from the rail, and the page only points at it.
+  const pageCollectionRefs = useMemo(() => {
+    /** @type {Set<string>} */
+    const pageRegions = new Set();
+    for (const [, binding] of collectionBindings) {
+      if (binding.slug) continue;
+      pageRegions.add(binding.collection);
+    }
+    /** @type {{ label: string, count: number, key: string }[]} */
+    const out = [];
+    for (const my of myCollections) {
+      if (!pageRegions.has(my.collectionKey)) continue;
+      // List cache keys are `"{key}|{params}"`, so scan by prefix and take the
+      // largest `total` (the unfiltered size once the Region tab is opened).
+      const listPrefix = `${my.collectionKey}|`;
+      let total = 0;
+      for (const [k, entry] of collectionListCache) {
+        if (k.startsWith(listPrefix)) total = Math.max(total, entry.total);
+      }
+      out.push({ label: my.collectionKey, count: total, key: my.collectionKey });
+    }
+    return out;
+  }, [collectionBindings, myCollections, collectionListCache]);
+
+  // Per-key dirty flag for the tab dot, unioning the live overlay map and
+  // cached items carrying server `draftData`. The cache pass is needed because
+  // the overlay clears once autosave lands, which would otherwise drop the dot.
+  const collectionDirtyByKey = useMemo(
+    () => dirtyCollectionKeys(collectDirtyRecords(collectionDrafts, collectionItemCache)),
+    [collectionDrafts, collectionItemCache],
+  );
+
+  const pageDirty = pageBlockList.some((b) => dirtyByPath.get(b.blockPath));
+  const globalDirty = globalBlockList.some((b) => dirtyByPath.get(b.blockPath));
+
+  // Diff-able dirty count for "Önizle": page + global, minus Collection synth
+  // blocks (their dirty state surfaces in the region tab, not the block preview).
+  const previewableCount = useMemo(() => {
+    let n = 0;
+    for (const b of pageBlockList) {
+      if (b.blockType === "Collection") continue;
+      if (dirtyByPath.get(b.blockPath)) n++;
+    }
+    for (const b of globalBlockList) {
+      if (dirtyByPath.get(b.blockPath)) n++;
+    }
+    return n;
+  }, [pageBlockList, globalBlockList, dirtyByPath]);
+
+  // Per-collection dirty slug sets (overlay map + cached items with a server
+  // draft), for the preview overlay's summary banner. Items never loaded into
+  // the cache stay invisible, which is fine since they weren't opened.
+  const collectionDirtyCounts = useMemo(() => {
+    /** @type {Map<string, Set<string>>} */
+    const out = new Map();
+    /** @param {string} key @param {string} slug */
+    const add = (key, slug) => {
+      let set = out.get(key);
+      if (!set) { set = new Set(); out.set(key, set); }
+      set.add(slug);
+    };
+    for (const draftKey of collectionDrafts.keys()) {
+      const i = draftKey.indexOf(":");
+      if (i <= 0) continue;
+      add(draftKey.slice(0, i), draftKey.slice(i + 1));
+    }
+    for (const [cacheKey, entry] of collectionItemCache) {
+      if (!entry.item || entry.item.draftData == null) continue;
+      const i = cacheKey.indexOf(":");
+      if (i <= 0) continue;
+      add(cacheKey.slice(0, i), cacheKey.slice(i + 1));
+    }
+    return out;
+  }, [collectionDrafts, collectionItemCache]);
+
+  const collectionDirtyTotal = useMemo(() => {
+    let n = 0;
+    for (const set of collectionDirtyCounts.values()) n += set.size;
+    return n;
+  }, [collectionDirtyCounts]);
+
+  // First dirty (key, slug) for the "Aç" CTA. Map iteration mirrors tab order,
+  // so this is predictable, not random.
+  const firstDirtyCollectionTarget = useMemo(() => {
+    for (const [key, slugs] of collectionDirtyCounts) {
+      const slug = slugs.values().next().value;
+      if (slug) return { key, slug };
+    }
+    return null;
+  }, [collectionDirtyCounts]);
+
+  // Drives Önizle visibility and the auto-close-on-clean effect.
+  const anyPreviewable = previewableCount + collectionDirtyTotal > 0;
+
+  const allTabs = useMemo(
+    () => [
+      { id: "page", label: "Sayfa", count: pageBlockList.length, dirty: pageDirty },
+      ...(globalBlockList.length > 0
+        ? [{ id: "global", label: "Genel", count: globalBlockList.length, dirty: globalDirty }]
+        : []),
+    ],
+    [pageBlockList.length, globalBlockList.length, pageDirty, globalDirty],
+  );
+
+  // Rail mode. Collections is a top-level area (everything the user can reach,
+  // not just what this page binds), so it carries its own selection instead of
+  // living in the page's tab bar. `scope` decides whether the opened panel
+  // shows the whole collection or only this page's bound sections.
+  const [mode, setModeState] = useState(/** @type {"page"|"collections"} */ ("page"));
+  const [selectedCollection, setSelectedCollection] = useState(
+    /** @type {{ key: string, scope: "page"|"global" } | null} */ (null),
+  );
+
+  const [activeTab, setActiveTabState] = useState(/** @type {string} */ ("page"));
+  // Preview overlay: renders `ChangesPanel` in the body slot instead of the
+  // active tab. Auto-closes when dirty drains to 0 or the user switches tabs.
+  const [isPreviewOpen, setPreviewOpen] = useState(false);
+  useEffect(() => {
+    if (isPreviewOpen && !anyPreviewable) setPreviewOpen(false);
+  }, [isPreviewOpen, anyPreviewable]);
+  /** @param {string} tab */
+  const setActiveTab = (tab) => {
+    if (isPreviewOpen) setPreviewOpen(false);
+    setActiveTabState(tab);
+  };
+
+  /** @param {"page"|"collections"} next */
+  const setMode = (next) => {
+    if (isPreviewOpen) setPreviewOpen(false);
+    setModeState(next);
+  };
+
+  // Stable identity so the memoised collections list isn't re-rendered by every
+  // drawer re-render: the drawer subscribes to the whole drafts map, so it
+  // re-renders on each keystroke in any field.
+  const selectCollectionFromList = useCallback(
+    /** @param {string} key */
+    (key) => setSelectedCollection({ key, scope: "global" }),
+    [],
+  );
+
+  // If the active tab disappears (e.g. navigating off a page with a Region
+  // binding), fall back to "page". Raw setter so a routing event doesn't also
+  // close an open preview.
+  useEffect(() => {
+    if (allTabs.some((t) => t.id === activeTab)) return;
+    setActiveTabState("page");
+  }, [allTabs, activeTab]);
+
+  // Failsafe for the "Aç" signal: the card normally consumes and clears it on
+  // mount, but if the target slug sits past a paginated window the card never
+  // mounts. Drop the signal when the user leaves the target tab so it can't
+  // fire stale on a later "Load more".
+  useEffect(() => {
+    if (!activeCollectionItem) return;
+    if (mode === "collections" && selectedCollection?.key === activeCollectionItem.key) return;
+    setActiveCollectionItem(null);
+  }, [mode, selectedCollection, activeCollectionItem, setActiveCollectionItem]);
+
+  // Every row the drawer renders, synthesised collection bindings included, so
+  // "which group holds this path" answers for both block kinds. The raw
+  // `blocks` map can't: collection rows never enter the content namespace.
+  const rowsByPath = useMemo(() => {
+    /** @type {Map<string, BlockResponse>} */
+    const map = new Map();
+    for (const block of pageBlockList) map.set(block.blockPath, block);
+    for (const block of globalBlockList) map.set(block.blockPath, block);
+    return map;
+  }, [pageBlockList, globalBlockList]);
+
+  // Per-group collapse state. Storing the *closed* set means new groups from
+  // discovery default to expanded.
+  const [closedGroups, setClosedGroups] = useState(/** @type {Set<string>} */ (new Set()));
+
+  // Read through refs so `toggleGroup` keeps a stable identity: it is a prop of
+  // the memoised block list, which a keystroke-driven shell re-render must not
+  // invalidate.
+  const closedGroupsRef = useRef(closedGroups);
+  closedGroupsRef.current = closedGroups;
+  const activeBlockRef = useRef(activeBlock);
+  activeBlockRef.current = activeBlock;
+  const rowsByPathRef = useRef(rowsByPath);
+  rowsByPathRef.current = rowsByPath;
+
+  const toggleGroup = useCallback(
+    /** @param {string} group */
+    (group) => {
+      const closing = !closedGroupsRef.current.has(group);
+      setClosedGroups((prev) => {
+        const next = new Set(prev);
+        if (next.has(group)) next.delete(group);
+        else next.add(group);
+        return next;
+      });
+      const active = activeBlockRef.current;
+      const activeRow = active ? rowsByPathRef.current.get(active) : undefined;
+      if (closing && activeRow && groupOfBlock(activeRow) === group) {
+        setActiveBlock(null);
+      }
+    },
+    [setActiveBlock],
+  );
+
+  // When an EditableRegion is clicked, open the panel and switch to its tab so
+  // the matching card scrolls into view instead of hiding behind another tab.
+  useEffect(() => {
+    if (!activeBlock) return;
+    if (!isDrawerOpen) setDrawerOpen(true);
+    // A page region was clicked, so leave whatever rail mode was open: the
+    // matching card lives in the page list.
+    setModeState("page");
+    const block = rowsByPath.get(activeBlock);
+    if (!block) return;
+    const slug = block._slug ?? pathname;
+    const tab = slug === pathname ? "page" : "global";
+    setActiveTab(tab);
+    const group = groupOfBlock(block);
+    if (group == null) return;
+    setClosedGroups((prev) => {
+      if (!prev.has(group)) return prev;
+      const next = new Set(prev);
+      next.delete(group);
+      return next;
+    });
+  }, [activeBlock, rowsByPath, pathname, isDrawerOpen, setDrawerOpen]);
+
+  // Wall-clock time of the last successful autosave, echoed as "Taslak kayıtlı
+  // HH:MM" once dirty drains.
+  const [lastSavedAt, setLastSavedAt] = useState(/** @type {string | null} */ (null));
+  useEffect(() => {
+    if (draftSyncStatus === "saved") {
+      const now = new Date();
+      setLastSavedAt(
+        `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+      );
+    } else if (draftSyncStatus === "idle" && dirtyCount === 0) {
+      setLastSavedAt(null);
+    }
+  }, [draftSyncStatus, dirtyCount]);
+
+  // Transient "Veri kaydedildi" pulse after a successful publish (`onSaveAll`),
+  // distinct from `lastSavedAt` (which tracks draft autosaves). Detected on the
+  // `isSaving` true->false edge with no error and dirty drained to 0.
+  const [publishedFlash, setPublishedFlash] = useState(false);
+  const prevIsSavingRef = useRef(false);
+  useEffect(() => {
+    const wasSaving = prevIsSavingRef.current;
+    prevIsSavingRef.current = isSaving;
+    if (!wasSaving || isSaving) return;
+    if (error) return;
+    if (dirtyCount !== 0) return;
+    // Kaydet only publishes content blocks. If collection drafts are
+    // still pending in a region tab, "Veri kaydedildi" would overstate
+    // what actually happened. Stay silent until everything is clean.
+    if (collectionDirtyTotal !== 0) return;
+    setPublishedFlash(true);
+    // The publish emptied the draft slot, so clear the timestamp; otherwise the
+    // pill would fall back to a stale "Taslak kayıtlı" once the flash closes.
+    setLastSavedAt(null);
+  }, [isSaving, error, dirtyCount, collectionDirtyTotal]);
+  useEffect(() => {
+    if (!publishedFlash) return undefined;
+    const t = setTimeout(() => setPublishedFlash(false), 2400);
+    return () => clearTimeout(t);
+  }, [publishedFlash]);
+  // A new autosave or returning to dirty invalidates the "Veri kaydedildi"
+  // flash, since the data no longer matches the just-published state.
+  useEffect(() => {
+    if (draftSyncStatus === "saving" || dirtyCount > 0) setPublishedFlash(false);
+  }, [draftSyncStatus, dirtyCount]);
+
+  const isConflict = error instanceof CmsApiError && error.isConflict;
+  const isForbidden = error instanceof CmsApiError && error.isForbidden;
+  const pathSegments = pathnameToSegments(pathname);
+
+  const matchSearch = (block) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return block.blockPath.toLowerCase().includes(q)
+        || (block._label ?? "").toLowerCase().includes(q)
+        || block.blockType.toLowerCase().includes(q);
+  };
+
+  const filteredPage = useMemo(
+    () => pageBlockList.filter(matchSearch),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pageBlockList, search],
+  );
+  const filteredGlobal = useMemo(
+    () => globalBlockList.filter(matchSearch),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [globalBlockList, search],
+  );
+
+  return (
+    <>
+      <style>{panelCss}</style>
+      <motion.aside
+        initial={false}
+        animate={{ x: isDrawerOpen ? 0 : -PANEL_WIDTH }}
+        transition={PANEL_TRANSITION}
+        style={panelStyle}
+        aria-hidden={!isDrawerOpen}
+      >
+        <ModeRail
+          mode={mode}
+          onChange={setMode}
+          pageDirty={pageDirty || globalDirty}
+          collectionsDirty={collectionDirtyTotal > 0}
+        />
+
+        <div style={paneContainerStyle}>
+          <PanelHeader
+            mode={mode}
+            segments={pathSegments}
+            collectionKey={selectedCollection?.key ?? null}
+            onNavigate={(href) => router.push(href)}
+            onBackToCollections={() => setSelectedCollection(null)}
+            dirty={dirtyCount > 0}
+            draftSyncStatus={draftSyncStatus}
+            isSaving={isSaving}
+            lastSavedAt={lastSavedAt}
+            publishedFlash={publishedFlash}
+          />
+
+          {mode === "collections" ? (
+            // No bar here: the header path's `collections /` segment is the way
+            // back, so a second one would just repeat it.
+            null
+          ) : isPreviewOpen ? (
+            <PreviewHeader
+              count={previewableCount + collectionDirtyTotal}
+              onBack={() => setPreviewOpen(false)}
+            />
+          ) : (
+            <TabBar
+              tabs={allTabs}
+              activeTab={activeTab}
+              onChange={setActiveTab}
+            />
+          )}
+
+          {mode === "collections" ? (
+            <CollectionsMode
+              selected={selectedCollection}
+              onSelect={selectCollectionFromList}
+              collections={myCollections}
+              dirtyKeys={collectionDirtyByKey}
+            />
+          ) : isPreviewOpen ? (
+            <ChangesPanel
+              blockList={[...pageBlockList, ...globalBlockList]}
+              drafts={drafts}
+              dirtyByPath={dirtyByPath}
+              itemSchemas={itemSchemas}
+              collectionDirtyCounts={collectionDirtyCounts}
+              onGoToBlock={(block) => {
+                setPreviewOpen(false);
+                const scope = (block._slug ?? pathname) === pathname ? "page" : "global";
+                setActiveTabState(scope);
+                setActiveBlock(block.blockPath);
+              }}
+              onGoToCollection={(collectionKey) => {
+                setPreviewOpen(false);
+                setModeState("collections");
+                setSelectedCollection({ key: collectionKey, scope: "global" });
+              }}
+            />
+          ) : (
+            <>
+              <Toolbar value={search} onChange={setSearch} />
+              {activeTab === "page" && pageCollectionRefs.length > 0 && !search ? (
+                <CollectionRefStrip
+                  refs={pageCollectionRefs}
+                  dirtyKeys={collectionDirtyByKey}
+                  onOpen={(key) => {
+                    // Page-scoped: the reference means "the list rendered on
+                    // this page", so keep the page's filters rather than
+                    // dropping the user into the whole collection.
+                    setModeState("collections");
+                    setSelectedCollection({ key, scope: "page" });
+                  }}
+                />
+              ) : null}
+              <GroupedBlockList
+                blockList={activeTab === "page" ? filteredPage : filteredGlobal}
+                activeBlockPath={activeBlock}
+                itemSchemas={itemSchemas}
+                editorVisibility={editorVisibility}
+                closedGroups={closedGroups}
+                onToggleGroup={toggleGroup}
+                emptyHint={
+                  search
+                    ? `"${search}" araması için sonuç yok.`
+                    : activeTab === "page"
+                      ? "Bu sayfada düzenlenebilir blok yok. Yeni bloklar eklemek için manifest sync'ini çalıştır."
+                      : "Henüz scope=\"global\" işaretli blok yok."
+                }
+              />
+            </>
+          )}
+
+          {error ? (
+            <div style={isConflict ? conflictStyle : errorStyle}>
+              {isConflict
+                ? "Bir blok başka biri tarafından güncellendi. En son sürüm yüklendi — kontrol edip tekrar dene."
+                : isForbidden
+                  ? "Yetkiniz yok. Bu içeriği düzenleme izniniz bulunmuyor."
+                  : (error.message ?? "Kaydedilemedi")}
+            </div>
+          ) : null}
+
+          <StatusBar
+            dirtyCount={dirtyCount}
+            collectionDirtyCount={collectionDirtyTotal}
+            firstDirtyCollectionTarget={firstDirtyCollectionTarget}
+            onGoToCollection={(target) => {
+              setModeState("collections");
+              setSelectedCollection({ key: target.key, scope: "global" });
+              // Signal the panel to open the item's detail pane once it mounts
+              // (it reads `activeCollectionItem` on first paint).
+              setActiveCollectionItem({ key: target.key, slug: target.slug });
+            }}
+            isSaving={isSaving}
+            draftSyncStatus={draftSyncStatus}
+            onDiscardAll={() => {
+              onDiscardAll();
+              // Clear the "Taslak kayıtlı HH:MM" indicator: the server draft is
+              // gone, so the timestamp would point at nothing.
+              setLastSavedAt(null);
+            }}
+            onSaveAll={onSaveAll}
+            previewableCount={previewableCount + collectionDirtyTotal}
+            isPreviewOpen={isPreviewOpen}
+            onTogglePreview={() => setPreviewOpen((v) => !v)}
+          />
+
+          {userInfo ? (
+            <PanelFooter userInfo={userInfo} onSignOut={onSignOut} />
+          ) : null}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(!isDrawerOpen)}
+          className="inscribed-handle"
+          style={handleButtonStyle}
+          aria-label={isDrawerOpen ? "Paneli kapat" : "Paneli aç"}
+          aria-expanded={isDrawerOpen}
+          title={isDrawerOpen ? "Paneli kapat" : "Paneli aç"}
+        >
+          <span
+            className="inscribed-handle-slide"
+            style={{
+              ...handleIconStyle,
+              "--slide-x": isDrawerOpen ? "-3px" : "3px",
+            }}
+          >
+            <motion.span
+              initial={false}
+              animate={{ rotate: isDrawerOpen ? 0 : 180 }}
+              transition={{ duration: 0.25, ease: PANEL_TRANSITION.ease }}
+              style={handleIconStyle}
+            >
+              <ChevronsLeft size={14} />
+            </motion.span>
+          </span>
+        </button>
+      </motion.aside>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mode rail
+// ---------------------------------------------------------------------------
+
+/**
+ * Top-level area switch on the panel's left edge. Icon-only (labels live in the
+ * tooltip) so the rail costs the pane as little width as possible; the dot marks
+ * unsaved work waiting in an area the user isn't currently looking at.
+ *
+ * @param {{
+ *   mode: "page"|"collections",
+ *   onChange: (mode: "page"|"collections") => void,
+ *   pageDirty: boolean,
+ *   collectionsDirty: boolean,
+ * }} props
+ */
+function ModeRail({ mode, onChange, pageDirty, collectionsDirty }) {
+  return (
+    <nav style={railStyle} aria-label="Bölümler">
+      <RailButton
+        icon={FileText}
+        label="Sayfa"
+        active={mode === "page"}
+        dirty={pageDirty}
+        accent={ACCENT}
+        onClick={() => onChange("page")}
+      />
+      <RailButton
+        icon={Layers}
+        label="Koleksiyonlar"
+        active={mode === "collections"}
+        dirty={collectionsDirty}
+        accent={COLLECTION_ACCENT}
+        isCollection
+        onClick={() => onChange("collections")}
+      />
+    </nav>
+  );
+}
+
+/**
+ * @param {{
+ *   icon: (props: { size?: number }) => React.ReactNode,
+ *   label: string,
+ *   active: boolean,
+ *   dirty: boolean,
+ *   accent: string,
+ *   isCollection?: boolean,
+ *   onClick: () => void,
+ * }} props
+ */
+function RailButton({ icon: Icon, label, active, dirty, accent, isCollection, onClick }) {
+  const className = [
+    "inscribed-rail-btn",
+    isCollection ? "inscribed-rail-btn-collection" : null,
+    active ? "is-active" : null,
+  ].filter(Boolean).join(" ");
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={className}
+      style={railButtonStyle}
+      aria-label={label}
+      aria-current={active ? "true" : undefined}
+      title={label}
+    >
+      {active ? (
+        // Shared `layoutId`: mounting this in the newly active button makes
+        // framer slide the bar from the old one instead of swapping it.
+        <motion.span
+          layoutId="inscribed-rail-indicator"
+          aria-hidden="true"
+          style={{ ...railIndicatorStyle, background: accent }}
+          transition={RAIL_TRANSITION}
+        />
+      ) : null}
+      <motion.span
+        initial={false}
+        animate={{ scale: active ? 1 : 0.9 }}
+        transition={RAIL_TRANSITION}
+        style={{ display: "inline-flex" }}
+      >
+        <Icon size={17} />
+      </motion.span>
+      {dirty ? (
+        <span
+          style={{ ...railDirtyDotStyle, background: accent }}
+          aria-label="kaydedilmemiş değişiklik var"
+        />
+      ) : null}
+    </button>
+  );
+}
+
+// Rail motion: a short spring so the indicator slide and the icon settle feel
+// like one gesture rather than two eased tweens.
+const RAIL_TRANSITION = /** @type {const} */ ({
+  type: "spring",
+  stiffness: 420,
+  damping: 32,
+  mass: 0.7,
+});
+
+// ---------------------------------------------------------------------------
+// Collections mode
+// ---------------------------------------------------------------------------
+
+// Mirrors the region panel's own list/detail choreography one level up, so
+// drilling from the collections list into a collection reads as the same
+// gesture as drilling from a collection into an item.
+const COLLECTIONS_TRANSITION = { duration: 0.3, ease: [0.32, 0.72, 0.18, 1] };
+const COLLECTIONS_PARALLAX = "28%";
+
+// The pane's cast shadow reaches ~52px past its own right edge, so at x=-100%
+// the slide looks finished while the shadow still sits over the list; unmount
+// then snaps it away. Fading only the tail of the exit clears the shadow with
+// the pane instead, and keeps it fully opaque for the part you actually watch.
+const COLLECTIONS_PANE_TRANSITION = {
+  ...COLLECTIONS_TRANSITION,
+  opacity: { duration: 0.12, delay: 0.18, ease: "linear" },
+};
+
+/**
+ * Body slot for Collections mode: the list layer recedes while the chosen
+ * collection slides over it. Both layers stay mounted through the transition,
+ * which is why this owns a positioned frame instead of swapping children.
+ *
+ * Once a collection is open, a strip of the user's other collections rides
+ * above it for lateral switching, so hopping between them doesn't mean going
+ * back out to the list first.
+ *
+ * @param {{
+ *   selected: { key: string, scope: "page"|"global" } | null,
+ *   onSelect: (collectionKey: string) => void,
+ *   collections: import("../shared/contracts/schemas.js").MyCollectionResponse[],
+ *   dirtyKeys: Set<string>,
+ * }} props
+ */
+function CollectionsMode({ selected, onSelect, collections, dirtyKeys }) {
+  const isOpen = selected != null;
+
+  return (
+    <section style={{ ...paneStyle, position: "relative", overflow: "hidden" }}>
+      <motion.div
+        initial={false}
+        animate={isOpen
+          ? { x: COLLECTIONS_PARALLAX, opacity: 0.4 }
+          : { x: "0%", opacity: 1 }}
+        transition={COLLECTIONS_TRANSITION}
+        style={{
+          ...collectionsLayerStyle,
+          // The opaque pane covers the layer at rest; this only guards clicks
+          // and tab focus during the transition frames.
+          pointerEvents: isOpen ? "none" : "auto",
+        }}
+        aria-hidden={isOpen}
+      >
+        <CollectionsPane onSelect={onSelect} />
+      </motion.div>
+
+      {/* `initial={false}`: switching to the page and back remounts this whole
+          mode, and without it the already-open collection would replay its
+          entrance every time. Opening one from the list still animates, since
+          that child is added after mount rather than present on first render. */}
+      <AnimatePresence initial={false}>
+        {selected ? (
+          // The key is deliberately constant: the slide is the "went inside"
+          // gesture, so switching collections from the strip must not replay it.
+          // Only the panel below remounts, which still drops any open item pane.
+          <motion.div
+            key="collection-pane"
+            initial={{ x: "-100%" }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: "-100%", opacity: 0 }}
+            transition={COLLECTIONS_PANE_TRANSITION}
+            style={collectionsPaneStyle}
+          >
+            <TabBar
+              tabs={collections.map((c) => ({
+                id: c.collectionKey,
+                label: c.collectionKey,
+                dirty: dirtyKeys.has(c.collectionKey),
+              }))}
+              activeTab={selected.key}
+              // Re-selecting the active tab would re-open it in global scope
+              // and silently drop a page-scoped arrival's filter.
+              onChange={(key) => { if (key !== selected.key) onSelect(key); }}
+              accent={COLLECTION_ACCENT}
+            />
+            <CollectionRegionPanel
+              key={selected.key}
+              collectionKey={selected.key}
+              scope={selected.scope}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </section>
+  );
+}
+
+const collectionsLayerStyle = /** @type {React.CSSProperties} */ ({
+  flex: 1,
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
+  // Framer drives these transitions by writing inline transform/opacity each
+  // frame, which does not promote the element on its own. Without a layer the
+  // whole list repaints per frame instead of being composited.
+  willChange: "transform, opacity",
+});
+
+const collectionsPaneStyle = /** @type {React.CSSProperties} */ ({
+  position: "absolute",
+  inset: 0,
+  display: "flex",
+  flexDirection: "column",
+  background: BG,
+  // Matches the item detail pane: right-edge hairline plus a soft cast shadow
+  // so the entering pane separates from the receding list.
+  boxShadow: `1px 0 0 ${HAIRLINE}, 16px 0 36px rgba(0, 0, 0, 0.35)`,
+  // The 36px blur above is the expensive part: promoted, it is rasterised once
+  // and only moved afterwards. This pane is mounted solely while open, so the
+  // layer's cost is scoped to the transition.
+  willChange: "transform",
+});
+
+// ---------------------------------------------------------------------------
+// Header
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {{
+ *   mode: "page"|"collections",
+ *   segments: { label: string, href: string }[],
+ *   collectionKey: string | null,
+ *   onNavigate: (href: string) => void,
+ *   onBackToCollections: () => void,
+ *   dirty: boolean,
+ *   draftSyncStatus: "idle"|"saving"|"saved"|"failed",
+ *   isSaving: boolean,
+ *   lastSavedAt: string | null,
+ *   publishedFlash: boolean,
+ * }} props
+ */
+function PanelHeader({
+  mode, segments, collectionKey, onNavigate, onBackToCollections,
+  dirty, draftSyncStatus, isSaving, lastSavedAt, publishedFlash,
+}) {
+  const isCollections = mode === "collections";
+
+  return (
+    <header style={headerStyle}>
+      <span
+        style={isCollections
+          ? { ...headerBadgeStyle, ...headerBadgeCollectionStyle }
+          : headerBadgeStyle}
+        aria-hidden="true"
+      >
+        {isCollections ? <Layers size={12} /> : <FileText size={12} />}
+      </span>
+
+      <nav style={headerPathStyle} aria-label="Konum">
+        {isCollections ? (
+          <CollectionsPath
+            collectionKey={collectionKey}
+            onBack={onBackToCollections}
+          />
+        ) : (
+          <PagePath segments={segments} onNavigate={onNavigate} />
+        )}
+      </nav>
+
+      <HeaderStatusPill
+        dirty={dirty}
+        draftSyncStatus={draftSyncStatus}
+        isSaving={isSaving}
+        lastSavedAt={lastSavedAt}
+        publishedFlash={publishedFlash}
+      />
+    </header>
+  );
+}
+
+// Deep paths collapse their middle rather than wrapping. Keeping the last two
+// segments preserves the "which section am I in" cue that a bare filename loses.
+const MAX_VISIBLE_SEGMENTS = 2;
+
+/**
+ * `~ / about / team`, where every part except the last navigates the host app.
+ *
+ * @param {{
+ *   segments: { label: string, href: string }[],
+ *   onNavigate: (href: string) => void,
+ * }} props
+ */
+function PagePath({ segments, onNavigate }) {
+  const isCollapsed = segments.length > MAX_VISIBLE_SEGMENTS;
+  const shown = isCollapsed ? segments.slice(-MAX_VISIBLE_SEGMENTS) : segments;
+  const hidden = isCollapsed ? segments.slice(0, -MAX_VISIBLE_SEGMENTS) : [];
+
+  return (
+    <>
+      <Crumb label="Anasayfa" title="Anasayfa" onClick={() => onNavigate("/")} />
+      {isCollapsed ? (
+        <>
+          <span style={headerSepStyle}>/</span>
+          {/* Jumps to the deepest hidden ancestor; the title spells out what
+              was folded away so the path stays readable. */}
+          <Crumb
+            label="…"
+            title={hidden.map((s) => s.label).join(" / ")}
+            onClick={() => onNavigate(hidden[hidden.length - 1].href)}
+          />
+        </>
+      ) : null}
+      {shown.map((segment, i) => {
+        const isLast = i === shown.length - 1;
+        return (
+          <span key={segment.href} style={crumbWrapStyle}>
+            <span style={headerSepStyle}>/</span>
+            {isLast ? (
+              <span style={headerCrumbCurrentStyle} title={segment.label}>
+                {segment.label}
+              </span>
+            ) : (
+              <Crumb
+                label={segment.label}
+                title={segment.href}
+                onClick={() => onNavigate(segment.href)}
+              />
+            )}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * `collections / news`. The parent doubles as the way back to the list, which
+ * is why the mode needs no separate back bar.
+ *
+ * @param {{ collectionKey: string | null, onBack: () => void }} props
+ */
+function CollectionsPath({ collectionKey, onBack }) {
+  if (!collectionKey) {
+    // Styled as a crumb, not as the emphasised current segment, so the area's
+    // own landing page reads the same as the site root does on `/`. Nowhere to
+    // navigate from here, so it drops the button's pointer cursor.
+    return (
+      <span style={{ ...headerCrumbStyle, cursor: "default" }}>Koleksiyonlar</span>
+    );
+  }
+  return (
+    <>
+      <Crumb label="Koleksiyonlar" title="Koleksiyon listesi" onClick={onBack} />
+      <span style={headerSepStyle}>/</span>
+      <span style={headerCrumbCurrentStyle} title={collectionKey}>
+        {collectionKey}
+      </span>
+    </>
+  );
+}
+
+/**
+ * @param {{ label: string, title: string, onClick: () => void }} props
+ */
+function Crumb({ label, title, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inscribed-crumb"
+      style={headerCrumbStyle}
+      title={title}
+    >
+      {label}
+    </button>
+  );
+}
+
+const crumbWrapStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 2,
+  minWidth: 0,
+});
+
+/**
+ * Header pill surfacing the page-level autosave state: coloured dot + label +
+ * (when present) a wall-clock timestamp. Mirrors the bottom StatusBar's dot
+ * tones and typography on purpose.
+ *
+ * @param {{
+ *   dirty: boolean,
+ *   draftSyncStatus: "idle"|"saving"|"saved"|"failed",
+ *   isSaving: boolean,
+ *   lastSavedAt: string | null,
+ *   publishedFlash: boolean,
+ * }} props
+ */
+function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publishedFlash }) {
+  const isSyncing = draftSyncStatus === "saving" || isSaving;
+  const isFailed = draftSyncStatus === "failed";
+
+  /** @type {{ state: string, bg: string, glow: string, pulse: boolean, label: React.ReactNode, title: string }} */
+  let view;
+
+  if (isFailed) {
+    view = {
+      state: "failed",
+      bg: STATUS_DANGER,
+      glow: "none",
+      pulse: false,
+      label: "Kaydedilemedi",
+      title: "Taslak kaydedilemedi",
+    };
+  } else if (publishedFlash) {
+    // Post-publish pulse: drafts are now live data, so "Veri kaydedildi" shows
+    // for a couple of seconds before falling back to the idle dot.
+    view = {
+      state: "published",
+      bg: STATUS_OK,
+      glow: `0 0 5px ${STATUS_OK}66`,
+      pulse: false,
+      label: "Veri kaydedildi",
+      title: "Tüm değişiklikler yayınlandı",
+    };
+  } else if (lastSavedAt) {
+    // Hold the label steady during re-saves; only the dot pulses and recolours.
+    // The timestamp slides when the minute changes (same value, same key, no anim).
+    view = {
+      state: "saved",
+      bg: isSyncing ? STATUS_WARN : STATUS_OK,
+      glow: isSyncing ? `0 0 5px ${STATUS_WARN}66` : `0 0 5px ${STATUS_OK}66`,
+      pulse: isSyncing,
+      label: (
+        <>
+          Taslak kayıtlı
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={lastSavedAt}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.14, ease: [0.32, 0.72, 0.18, 1] }}
+              style={{ ...headerPillTimeStyle, display: "inline-block" }}
+            >
+              {lastSavedAt}
+            </motion.span>
+          </AnimatePresence>
+        </>
+      ),
+      title: `Taslak en son ${lastSavedAt}'de kaydedildi`,
+    };
+  } else if (isSyncing) {
+    // First save ever, no prior timestamp to anchor to.
+    view = {
+      state: "saving",
+      bg: STATUS_WARN,
+      glow: `0 0 5px ${STATUS_WARN}66`,
+      pulse: true,
+      label: "Kaydediliyor…",
+      title: "Taslak şu anda kaydediliyor",
+    };
+  } else if (dirty) {
+    view = {
+      state: "dirty",
+      bg: ACCENT,
+      glow: `0 0 5px ${ACCENT}66`,
+      pulse: false,
+      label: "Düzenleniyor",
+      title: "Kaydedilmemiş değişiklikler var",
+    };
+  } else {
+    // Idle baseline: pill stays mounted as a dot-only chip so the
+    // surface has a steady anchor in the header. Label animates in on
+    // top of it when state arrives.
+    view = {
+      state: "idle",
+      bg: TEXT_FAINT,
+      glow: "none",
+      pulse: false,
+      label: null,
+      title: "",
+    };
+  }
+
+  // Re-measure the layout FLIP only when the pill's content actually changes.
+  // Without this, every drawer re-render (e.g. an image resize spamming draft
+  // updates) re-measures mid-reflow and the pill twitches vertically.
+  const pillLayoutKey = `${view.state}|${lastSavedAt ?? ""}`;
+
+  return (
+    <motion.div
+      layout
+      layoutDependency={pillLayoutKey}
+      transition={{ duration: 0.22, ease: [0.32, 0.72, 0.18, 1] }}
+      style={{ ...headerPillStyle, transformOrigin: "center", overflow: "hidden" }}
+      title={view.title}
+    >
+      <motion.span
+        layout
+        layoutDependency={pillLayoutKey}
+        className={view.pulse ? "inscribed-status-pulse" : undefined}
+        style={{ ...headerPillDotStyle, background: view.bg, boxShadow: view.glow }}
+      />
+      <AnimatePresence mode="popLayout" initial={false}>
+        {view.label != null ? (
+          <motion.span
+            key={view.state}
+            initial={{ opacity: 0, x: 4 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -4 }}
+            transition={{ duration: 0.16, ease: [0.32, 0.72, 0.18, 1] }}
+            style={headerPillLabelStyle}
+          >
+            {view.label}
+          </motion.span>
+        ) : null}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+const headerPillStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  // Lock vertical size so the dot-only state matches the label height; only the
+  // horizontal axis animates, no vertical jitter.
+  minHeight: 22,
+  padding: "0 8px",
+  borderRadius: 99,
+  background: SURFACE_1,
+  boxShadow: `inset 0 0 0 1px ${HAIRLINE}`,
+  flexShrink: 0,
+  alignSelf: "center",
+});
+
+const headerPillDotStyle = /** @type {React.CSSProperties} */ ({
+  width: 6,
+  height: 6,
+  borderRadius: "50%",
+  flexShrink: 0,
+  display: "inline-block",
+  transition: "background 220ms ease, box-shadow 220ms ease",
+});
+
+const headerPillLabelStyle = /** @type {React.CSSProperties} */ ({
+  fontSize: 12,
+  color: TEXT_MUTED,
+  whiteSpace: "nowrap",
+  display: "inline-flex",
+  alignItems: "baseline",
+  gap: 6,
+});
+
+const headerPillTimeStyle = /** @type {React.CSSProperties} */ ({
+  fontFamily: FONT_SANS,
+  fontVariantNumeric: "tabular-nums",
+  fontSize: 11,
+  color: TEXT_FAINT,
+});
+
+// ---------------------------------------------------------------------------
+// Tab bar
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {{
+ *   tabs: { id: string, label: string, count?: number, dirty?: boolean }[],
+ *   activeTab: string,
+ *   onChange: (tab: string) => void,
+ *   accent?: string,
+ * }} props
+ */
+function TabBar({ tabs, activeTab, onChange, accent = ACCENT }) {
+  const scrollRef = useRef(/** @type {HTMLDivElement|null} */ (null));
+  const [overflow, setOverflow] = useState({ left: false, right: false });
+  const [indicator, setIndicator] = useState(/** @type {{ left: number, width: number, color: string } | null} */ (null));
+
+  const measure = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setOverflow({
+      left: el.scrollLeft > 0,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
+    });
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tabs, measure]);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const btn = el.querySelector(`[data-tab-id="${CSS.escape(activeTab)}"]`);
+    if (btn instanceof HTMLElement) {
+      btn.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+      setIndicator({ left: btn.offsetLeft, width: btn.offsetWidth, color: accent });
+    }
+    requestAnimationFrame(measure);
+  }, [activeTab, tabs, measure, accent]);
+
+  const nudge = (dir) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * el.clientWidth * 0.7, behavior: "smooth" });
+  };
+
+  return (
+    <div style={tabBarStyle}>
+      {overflow.left ? (
+        <button
+          type="button"
+          onClick={() => nudge(-1)}
+          className="inscribed-tabbar-chevron"
+          style={tabBarChevronStyle}
+          aria-label="Önceki sekmeler"
+        >
+          <ChevronLeft size={14} />
+        </button>
+      ) : null}
+      <div
+        ref={scrollRef}
+        role="tablist"
+        className="inscribed-tabbar-scroll"
+        style={{ ...tabBarScrollStyle, position: "relative" }}
+        onScroll={measure}
+      >
+        {tabs.map((tab) => (
+          <TabButton
+            key={tab.id}
+            id={tab.id}
+            label={tab.label}
+            count={tab.count}
+            dirty={Boolean(tab.dirty)}
+            active={activeTab === tab.id}
+            accent={accent}
+            onClick={() => onChange(tab.id)}
+          />
+        ))}
+        {indicator ? (
+          <span
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              bottom: -1,
+              left: indicator.left,
+              width: indicator.width,
+              height: 2,
+              background: indicator.color,
+              borderRadius: 1,
+              transition: "left 200ms cubic-bezier(0.32, 0.72, 0.18, 1), width 200ms cubic-bezier(0.32, 0.72, 0.18, 1), background-color 180ms ease",
+              pointerEvents: "none",
+            }}
+          />
+        ) : null}
+      </div>
+      {overflow.right ? (
+        <button
+          type="button"
+          onClick={() => nudge(1)}
+          className="inscribed-tabbar-chevron"
+          style={tabBarChevronStyle}
+          aria-label="Sonraki sekmeler"
+        >
+          <ChevronRight size={14} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   id: string, label: string, count?: number,
+ *   active: boolean, dirty: boolean, accent?: string, onClick: () => void,
+ * }} props
+ */
+function TabButton({ id, label, count, active, dirty, accent = ACCENT, onClick }) {
+  const activeStyle = active
+    ? { ...tabButtonStyle, ...tabButtonActiveStyle }
+    : tabButtonStyle;
+  return (
+    <button
+      type="button"
+      role="tab"
+      data-tab-id={id}
+      aria-selected={active}
+      onClick={onClick}
+      className="inscribed-tab"
+      style={activeStyle}
+    >
+      <span style={tabLabelStyle}>{label}</span>
+      {count != null ? (
+        <span
+          style={active ? { ...tabCountBadgeStyle, ...tabCountBadgeActiveStyle } : tabCountBadgeStyle}
+        >
+          {count}
+        </span>
+      ) : null}
+      {dirty ? (
+        <span
+          style={accent === ACCENT
+            ? tabDirtyDotStyle
+            : { ...tabDirtyDotStyle, background: accent, boxShadow: `0 0 6px ${accent}80` }}
+          aria-label="kaydedilmemiş değişiklik var"
+        />
+      ) : null}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Toolbar (search)
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {{ value: string, onChange: (v: string) => void }} props
+ */
+function Toolbar({ value, onChange }) {
+  return (
+    <div style={toolbarStyle}>
+      <div className="inscribed-search" style={searchWrapStyle}>
+        <Search size={13} color={TEXT_FAINT} />
+        <input
+          type="search"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Blok ara (yol veya tip)"
+          aria-label="Blok ara"
+          style={searchInputStyle}
+        />
+        {value ? (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="inscribed-search-clear"
+            style={searchClearStyle}
+            aria-label="Temizle"
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Block list
+// ---------------------------------------------------------------------------
+
+/**
+ * Memoised, and every prop it takes is stable across a keystroke: cards read
+ * their own draft from the store, so the drawer shell can re-render for the
+ * dirty count without dragging the editor tree (Tiptap, image, list) with it.
+ *
+ * @param {{
+ *   blockList: BlockResponse[],
+ *   activeBlockPath: string | null,
+ *   itemSchemas: Map<string, import("../shared/contracts/schemas.js").ItemSchema>,
+ *   editorVisibility: Map<string, "hidden"|"readonly">,
+ *   closedGroups: Set<string>,
+ *   onToggleGroup: (group: string) => void,
+ *   emptyHint: string,
+ * }} props
+ */
+const GroupedBlockList = memo(function GroupedBlockList({
+  blockList, activeBlockPath,
+  itemSchemas, editorVisibility, closedGroups, onToggleGroup, emptyHint,
+}) {
+  const chunks = useMemo(() => chunkBlocksByGroup(blockList), [blockList]);
+
+  return (
+    <section style={paneStyle}>
+      {blockList.length === 0 ? (
+        <div style={emptyStateStyle}>{emptyHint}</div>
+      ) : (
+        <ul style={listStyle} data-cms-list>
+          {chunks.map((chunk, i) => {
+            const row = chunk.type === "single" ? (
+              <li key={`s:${chunk.block.blockPath}`} style={{ listStyle: "none" }}>
+                <BlockCard
+                  block={chunk.block}
+                  displayPath={displayLabelOf(chunk.block, null)}
+                  topLevel
+                  isActive={activeBlockPath === chunk.block.blockPath}
+                  itemSchema={itemSchemas.get(chunk.block.blockPath) ?? null}
+                  readOnly={editorVisibility.get(chunk.block.blockPath) === "readonly"}
+                />
+              </li>
+            ) : (
+              <li key={`g:${chunk.name}`} style={{ listStyle: "none" }}>
+                <GroupCard
+                  groupName={chunk.name}
+                  blocks={chunk.blocks}
+                  activeBlockPath={activeBlockPath}
+                  itemSchemas={itemSchemas}
+                  editorVisibility={editorVisibility}
+                  isOpen={!closedGroups.has(chunk.name)}
+                  onToggle={() => onToggleGroup(chunk.name)}
+                />
+              </li>
+            );
+            // Close a group with a rule when another block follows, so where the
+            // group ends and the next block begins reads at a glance.
+            const closer = chunk.type === "group" && i < chunks.length - 1
+              ? <li key={`d:${chunk.name}`} aria-hidden="true" style={groupDividerStyle} />
+              : null;
+            return closer ? [row, closer] : row;
+          })}
+        </ul>
+      )}
+    </section>
+  );
+});
+
+/**
+ * @param {{
+ *   groupName: string,
+ *   blocks: BlockResponse[],
+ *   activeBlockPath: string | null,
+ *   itemSchemas: Map<string, import("../shared/contracts/schemas.js").ItemSchema>,
+ *   editorVisibility: Map<string, "hidden"|"readonly">,
+ *   isOpen: boolean,
+ *   onToggle: () => void,
+ * }} props
+ */
+function GroupCard({
+  groupName, blocks, activeBlockPath,
+  itemSchemas, editorVisibility, isOpen, onToggle,
+}) {
+  // The header dot is derived here rather than handed down: a `dirtyByPath` prop
+  // would change identity on every keystroke and defeat the list's memo. The
+  // selector returns a boolean, so a write outside this group is a no-op.
+  const { contentDraftsStore } = useCmsContext();
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
+  const dirty = useStoreSelector(contentDraftsStore, (m) => {
+    for (const block of blocksRef.current) {
+      if (isBlockDirty(block, m.has(block.blockPath), m.get(block.blockPath))) return true;
+    }
+    return false;
+  });
+
+  return (
+    <div style={groupCardStyle}>
+      <button type="button" className="inscribed-group-header" style={groupHeaderStyle} onClick={onToggle} aria-expanded={isOpen}>
+        <span style={groupIconStyle} aria-hidden="true">
+          <Folder size={13} />
+        </span>
+        <span style={groupNameStyle}>{groupName}</span>
+        <span style={groupCountStyle}>
+          {blocks.length}
+          {dirty ? <span style={groupDirtyDotStyle} aria-label="kaydedilmemiş değişiklik var" /> : null}
+        </span>
+        <motion.span
+          initial={false}
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+          style={{ display: "inline-flex", color: TEXT_MUTED }}
+        >
+          <ChevronDown size={13} />
+        </motion.span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {isOpen ? (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.24, ease: [0.32, 0.72, 0.18, 1] }}
+            style={{ overflow: "hidden" }}
+          >
+            <div style={groupBodyStyle}>
+              <span aria-hidden="true" style={groupRailStyle} />
+              {blocks.map((block) => (
+                <BlockCard
+                  key={block.blockPath}
+                  block={block}
+                  displayPath={displayLabelOf(block, groupName)}
+                  topLevel={false}
+                  isActive={activeBlockPath === block.blockPath}
+                  itemSchema={itemSchemas.get(block.blockPath) ?? null}
+                  readOnly={editorVisibility.get(block.blockPath) === "readonly"}
+                />
+              ))}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * Which group card a row belongs to, `null` for a flat one. The two block kinds
+ * carry it differently: a content block's group is the slice of its path before
+ * the first dot (the prefix `<CmsGroup>` bakes in, which discovery mirrors),
+ * while a collection row's path addresses a record, so its group travels on the
+ * binding instead.
+ *
+ * @param {BlockResponse} block
+ * @returns {string | null}
+ */
+function groupOfBlock(block) {
+  if (block.blockType === "Collection") return block._group ?? null;
+  const dot = block.blockPath.indexOf(".");
+  return dot === -1 ? null : block.blockPath.slice(0, dot);
+}
+
+/**
+ * What the row's label reads. Content rows show their path, minus the group
+ * prefix inside a group card so a child of "hero" reads as `cover`, not
+ * `hero.cover` (the full path stays in the row's title). Collection rows show
+ * the binding's label, their path being an identifier rather than a place.
+ * `undefined` means "the path as-is".
+ *
+ * @param {BlockResponse} block
+ * @param {string | null} groupName
+ * @returns {string | undefined}
+ */
+function displayLabelOf(block, groupName) {
+  if (block.blockType === "Collection") return block._label;
+  if (!groupName) return undefined;
+  const p = `${groupName}.`;
+  return block.blockPath.startsWith(p) ? block.blockPath.slice(p.length) : block.blockPath;
+}
+
+/**
+ * @typedef {{ type: "single", block: BlockResponse }
+ *         | { type: "group", name: string, blocks: BlockResponse[] }} BlockChunk
+ */
+
+/**
+ * @param {BlockResponse[]} blocks
+ * @returns {BlockChunk[]}
+ */
+function chunkBlocksByGroup(blocks) {
+  /** @type {BlockChunk[]} */
+  const chunks = [];
+  /** @type {Map<string, number>} */
+  const groupChunkIndex = new Map();
+
+  for (const block of blocks) {
+    const group = groupOfBlock(block);
+    if (group == null) {
+      chunks.push({ type: "single", block });
+      continue;
+    }
+    const existing = groupChunkIndex.get(group);
+    if (existing != null) {
+      const chunk = chunks[existing];
+      if (chunk.type === "group") chunk.blocks.push(block);
+      continue;
+    }
+    groupChunkIndex.set(group, chunks.length);
+    chunks.push({ type: "group", name: group, blocks: [block] });
+  }
+  return chunks;
+}
+
+// ---------------------------------------------------------------------------
+// Status bar
+// ---------------------------------------------------------------------------
+
+/**
+ * Replaces the tab bar while the preview overlay is open. Matches its height +
+ * border so the body doesn't reflow; left chip goes back, right chip is a
+ * passive label + count.
+ *
+ * @param {{ count: number, onBack: () => void }} props
+ */
+function PreviewHeader({ count, onBack }) {
+  return (
+    <div style={previewHeaderStyle}>
+      <button
+        type="button"
+        onClick={onBack}
+        className="inscribed-preview-back"
+        style={previewBackStyle}
+        aria-label="Düzenlemeye dön"
+      >
+        <ChevronLeft size={12} />
+        <span>Düzenlemeye dön</span>
+      </button>
+      <div style={previewTitleStyle}>
+        <span>{count} Değişiklik</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Page-side pointer to the collections this page renders as regions. Now that
+ * collections are a rail area instead of page tabs, this keeps "the list on
+ * this page" one click away; opening a row stays page-scoped so the page's
+ * filters survive the jump.
+ *
+ * @param {{
+ *   refs: { key: string, label: string, count: number }[],
+ *   dirtyKeys: Set<string>,
+ *   onOpen: (key: string) => void,
+ * }} props
+ */
+function CollectionRefStrip({ refs, dirtyKeys, onOpen }) {
+  return (
+    <div style={refStripStyle}>
+      {refs.map((ref) => (
+        <button
+          key={ref.key}
+          type="button"
+          onClick={() => onOpen(ref.key)}
+          className="inscribed-collection-ref"
+          style={refRowStyle}
+        >
+          <span style={refIconStyle}>
+            <Layers size={12} />
+          </span>
+          <span style={refLabelStyle} title={ref.key}>{ref.label}</span>
+          {ref.count > 0 ? <span style={refCountStyle}>{ref.count}</span> : null}
+          {dirtyKeys.has(ref.key) ? (
+            <span style={refDirtyDotStyle} aria-label="kaydedilmemiş değişiklik var" />
+          ) : null}
+          <span style={refChevronStyle} aria-hidden="true">
+            <ChevronRight size={12} />
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const refStripStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+  padding: "0 16px 8px",
+});
+
+const refRowStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  width: "100%",
+  padding: "7px 10px",
+  borderRadius: R_MD,
+  border: 0,
+  cursor: "pointer",
+  textAlign: "left",
+  fontFamily: "inherit",
+});
+
+const refIconStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  color: COLLECTION_ACCENT,
+  flexShrink: 0,
+});
+
+const refLabelStyle = /** @type {React.CSSProperties} */ ({
+  flex: 1,
+  minWidth: 0,
+  font: `500 11px/1.2 ${FONT_MONO}`,
+  color: TEXT_MID,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
+const refCountStyle = /** @type {React.CSSProperties} */ ({
+  font: `500 10px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
+  padding: "2px 6px",
+  borderRadius: 99,
+  background: SURFACE_2,
+  color: TEXT_FAINT,
+  flexShrink: 0,
+});
+
+const refDirtyDotStyle = /** @type {React.CSSProperties} */ ({
+  width: 5,
+  height: 5,
+  borderRadius: "50%",
+  background: COLLECTION_ACCENT,
+  boxShadow: `0 0 5px color-mix(in srgb, ${COLLECTION_ACCENT} 50%, transparent)`,
+  flexShrink: 0,
+});
+
+const refChevronStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  color: TEXT_FAINT,
+  flexShrink: 0,
+});
+
+// Shared enter/exit choreography for StatusBar action buttons: a small upward
+// slide on enter, fade out on exit, with `layout` handling the horizontal
+// stagger as sibling buttons appear/disappear. Mirrors the header pill's easing.
+const statusActionMotion = /** @type {const} */ ({
+  layout: true,
+  initial: { opacity: 0, y: 4, scale: 0.96 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, y: 4, scale: 0.96 },
+  transition: { duration: 0.18, ease: [0.32, 0.72, 0.18, 1] },
+});
+
+const previewHeaderStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "stretch",
+  justifyContent: "space-between",
+  padding: "0 16px",
+  borderBottom: `1px solid ${HAIRLINE}`,
+});
+
+const previewBackStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  background: "transparent",
+  border: 0,
+  padding: "10px 8px",
+  marginLeft: -8,
+  color: TEXT,
+  font: `500 12px/1 ${FONT_SANS}`,
+  cursor: "pointer",
+  fontFamily: "inherit",
+});
+
+const previewTitleStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  color: TEXT_MUTED,
+  font: `400 11px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
+});
+
+/**
+ * Single-line rolling counter: on change the old number slides out and the new
+ * one in (up when rising, down when falling), masked by an `overflow: hidden`
+ * wrapper. `style` carries the text appearance.
+ *
+ * @param {{ value: number, style?: React.CSSProperties }} props
+ */
+function RollingCount({ value, style }) {
+  const prevRef = useRef(value);
+  const direction = value >= prevRef.current ? 1 : -1;
+  useEffect(() => {
+    prevRef.current = value;
+  }, [value]);
+  return (
+    <span
+      style={{
+        ...style,
+        display: "inline-flex",
+        position: "relative",
+        overflow: "hidden",
+        verticalAlign: "bottom",
+      }}
+    >
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={value}
+          initial={{ y: direction > 0 ? "100%" : "-100%", opacity: 0 }}
+          animate={{ y: "0%", opacity: 1 }}
+          exit={{ y: direction > 0 ? "-100%" : "100%", opacity: 0 }}
+          transition={{ duration: 0.24, ease: [0.32, 0.72, 0.18, 1] }}
+          style={{ display: "inline-block" }}
+        >
+          {value}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
+/**
+ * @param {{
+ *   dirtyCount: number,
+ *   collectionDirtyCount: number,
+ *   firstDirtyCollectionTarget: { key: string, slug: string } | null,
+ *   onGoToCollection: (target: { key: string, slug: string }) => void,
+ *   isSaving: boolean,
+ *   draftSyncStatus: "idle"|"saving"|"saved"|"failed",
+ *   onDiscardAll: () => void,
+ *   onSaveAll: () => void,
+ *   previewableCount: number,
+ *   isPreviewOpen: boolean,
+ *   onTogglePreview: () => void,
+ * }} props
+ */
+function StatusBar({
+  dirtyCount, collectionDirtyCount, firstDirtyCollectionTarget, onGoToCollection,
+  isSaving, draftSyncStatus,
+  onDiscardAll, onSaveAll,
+  previewableCount, isPreviewOpen, onTogglePreview,
+}) {
+  const isContentDirty = dirtyCount > 0;
+  const isCollectionDirty = collectionDirtyCount > 0;
+  const isBothDirty = isContentDirty && isCollectionDirty;
+  const isOnlyCollectionDirty = !isContentDirty && isCollectionDirty;
+  const isSyncing = draftSyncStatus === "saving" || isSaving;
+  const isFailed  = draftSyncStatus === "failed";
+
+  // Dirty colours never pulse (a steady tint reads as "pending" without
+  // competing with the syncing pulse).
+  /** @type {React.CSSProperties} */
+  const dotBackground = (() => {
+    if (isBothDirty) {
+      return /** @type {*} */ ({
+        background: `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT} 50%, ${COLLECTION_ACCENT} 50%, ${COLLECTION_ACCENT} 100%)`,
+        boxShadow: `0 0 4px ${ACCENT}66, 0 0 4px ${COLLECTION_ACCENT}66`,
+      });
+    }
+    if (isContentDirty) {
+      return { background: ACCENT, boxShadow: `0 0 8px ${ACCENT}80` };
+    }
+    if (isCollectionDirty) {
+      return { background: COLLECTION_ACCENT, boxShadow: `0 0 8px ${COLLECTION_ACCENT}80` };
+    }
+    if (isSyncing) {
+      return { background: STATUS_WARN, boxShadow: `0 0 6px ${STATUS_WARN}66` };
+    }
+    if (isFailed) {
+      return { background: STATUS_DANGER, boxShadow: "none" };
+    }
+    return { background: TEXT_FAINT, boxShadow: "none" };
+  })();
+  const dotPulse = isSyncing && !isContentDirty && !isCollectionDirty;
+
+  /** @type {React.ReactNode} */
+  let msg;
+  if (isSyncing) {
+    msg = <span style={statusMsgStyle}>Taslak kaydediliyor…</span>;
+  } else if (isBothDirty) {
+    msg = (
+      <span style={statusMsgStyle}>
+        <RollingCount value={dirtyCount} style={statusMsgEmphasisStyle} />
+        <span style={{ color: TEXT_FAINT, margin: "0 1px" }}>/</span>
+        <RollingCount value={collectionDirtyCount} style={{ ...statusMsgEmphasisStyle, color: COLLECTION_ACCENT }} />
+        {" "}kaydedilmemiş değişiklik
+      </span>
+    );
+  } else if (isContentDirty) {
+    msg = (
+      <span style={statusMsgStyle}>
+        <RollingCount value={dirtyCount} style={statusMsgEmphasisStyle} /> kaydedilmemiş değişiklik
+      </span>
+    );
+  } else if (isCollectionDirty) {
+    msg = (
+      <span style={statusMsgStyle}>
+        <RollingCount value={collectionDirtyCount} style={{ ...statusMsgEmphasisStyle, color: COLLECTION_ACCENT }} />
+        {" "}koleksiyon taslağı
+      </span>
+    );
+  } else if (isFailed) {
+    msg = <span style={statusMsgStyle}>Taslak kaydedilemedi</span>;
+  } else {
+    // Clean state. The header pill carries the timestamp detail, so the bar
+    // stays a quiet idle line rather than repeating it.
+    msg = <span style={{ ...statusMsgStyle, ...statusMsgCleanStyle }}>Değişiklik yok</span>;
+  }
+
+  // Same guard as the header pill: FLIP-measure the action buttons only when
+  // the visible button set (or the preview label swap) changes, not on every
+  // drawer re-render.
+  const actionsLayoutKey = [
+    previewableCount > 0,
+    isPreviewOpen,
+    isContentDirty,
+    isOnlyCollectionDirty && Boolean(firstDirtyCollectionTarget),
+  ].join("|");
+
+  return (
+    <div style={statusBarStyle}>
+      <div style={statusSignalStyle}>
+        <span
+          className={dotPulse ? "inscribed-status-pulse" : undefined}
+          style={{ ...statusDotStyle, ...dotBackground }}
+        />
+        {msg}
+      </div>
+      <div style={statusActionsStyle}>
+        <AnimatePresence mode="popLayout" initial={false}>
+          {previewableCount > 0 ? (
+            <motion.button
+              key="preview"
+              type="button"
+              onClick={onTogglePreview}
+              className="inscribed-btn-ghost"
+              style={btnGhostStyle}
+              aria-label={isPreviewOpen ? "Düzenlemeye dön" : "Değişiklikleri önizle"}
+              title={isPreviewOpen ? "Düzenlemeye dön" : "Değişiklikleri önizle"}
+              aria-pressed={isPreviewOpen}
+              {...statusActionMotion}
+              layoutDependency={actionsLayoutKey}
+            >
+              {isPreviewOpen ? <Pencil size={13} /> : <Eye size={13} />}
+            </motion.button>
+          ) : null}
+          {isContentDirty ? (
+            <motion.button
+              key="discard"
+              type="button"
+              onClick={onDiscardAll}
+              disabled={isSaving}
+              className="inscribed-btn-ghost"
+              style={btnGhostStyle}
+              aria-label="Tüm değişiklikleri iptal et"
+              title="Tüm değişiklikleri iptal et"
+              {...statusActionMotion}
+              layoutDependency={actionsLayoutKey}
+            >
+              <Undo2 size={13} />
+            </motion.button>
+          ) : null}
+          {isContentDirty ? (
+            <motion.button
+              key="save"
+              type="button"
+              onClick={onSaveAll}
+              disabled={isSaving}
+              className="inscribed-btn-primary"
+              style={btnPrimaryStyle}
+              aria-label="Tümünü kaydet"
+              title="Tümünü kaydet"
+              {...statusActionMotion}
+              layoutDependency={actionsLayoutKey}
+            >
+              <Check size={13} />
+              <span>Kaydet</span>
+            </motion.button>
+          ) : null}
+          {!isContentDirty && isOnlyCollectionDirty && firstDirtyCollectionTarget ? (
+            <motion.button
+              key="open-collection"
+              type="button"
+              onClick={() => onGoToCollection(firstDirtyCollectionTarget)}
+              className="inscribed-btn-collection-solid"
+              style={btnPrimaryStyle}
+              aria-label={`${firstDirtyCollectionTarget.key} / ${firstDirtyCollectionTarget.slug} kaydını aç`}
+              title={`${firstDirtyCollectionTarget.key} / ${firstDirtyCollectionTarget.slug} kaydını aç`}
+              {...statusActionMotion}
+              layoutDependency={actionsLayoutKey}
+            >
+              <Pencil size={13} />
+              <span>Aç</span>
+            </motion.button>
+          ) : null}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Footer (user info + sign out)
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {{
+ *   userInfo: { name: string|null, email: string|null, image: string|null },
+ *   onSignOut: (() => void) | null,
+ * }} props
+ */
+function PanelFooter({ userInfo, onSignOut }) {
+  const initials = (userInfo.name ?? userInfo.email ?? "?")
+    .split(/\s+/)
+    .map((s) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  return (
+    <footer style={footerStyle}>
+      <div style={avatarStyle} aria-hidden="true">
+        {userInfo.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={userInfo.image} alt="" style={avatarImgStyle} />
+        ) : (
+          <span style={avatarInitialsStyle}>{initials}</span>
+        )}
+      </div>
+      <div style={userMetaStyle}>
+        <div style={userNameStyle}>{userInfo.name ?? "Anonim"}</div>
+        {userInfo.email ? (
+          <div style={userEmailStyle} title={userInfo.email}>
+            {userInfo.email}
+          </div>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={onSignOut ?? undefined}
+        disabled={!onSignOut}
+        className="inscribed-logout"
+        style={signOutButtonStyle}
+        aria-label="Çıkış yap"
+        title="Çıkış yap"
+      >
+        <LogOut size={14} />
+      </button>
+    </footer>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * `/about/team` → `[{label:"about", href:"/about"}, {label:"team",
+ * href:"/about/team"}]`; `/` → `[]`. The `~` root is rendered by the header
+ * itself, so it isn't a segment here. Each href is cumulative, which is what
+ * makes an ancestor clickable.
+ *
+ * @param {string} pathname
+ * @returns {{ label: string, href: string }[]}
+ */
+function pathnameToSegments(pathname) {
+  const clean = pathname.replace(/^\//, "").replace(/\/$/, "");
+  if (!clean) return [];
+  /** @type {{ label: string, href: string }[]} */
+  const out = [];
+  let href = "";
+  for (const label of clean.split("/")) {
+    href += `/${label}`;
+    out.push({ label, href });
+  }
+  return out;
+}

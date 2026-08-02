@@ -39,35 +39,35 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 
 import { getCmsCollection, getCmsCollectionItem, getCmsPageBlocks } from "./get-content.js";
-import { ensureCmsConfig } from "../lib/config.js";
-import { buildListParams } from "../lib/collection-params.js";
+import { ensureCmsConfig } from "../shared/config.js";
+import { buildListParams } from "../collections/params.js";
 import { publicAuth } from "../defaults/auth.js";
 
 // Re-exported here (not from the client entry) because pages calling it are
 // Server Components; the index bundle's "use client" would turn the export
 // into a client reference that can't be called during server render.
-export { withCms } from "../lib/with-cms.js";
+export { withCms } from "./with-cms.js";
 // Same reason: config factories run in server modules (app/lib/cms.jsx), so
 // the callable export must come from this server entry. The index export
 // remains for client-side wrappers.
-export { createCmsConfig } from "../lib/config.js";
+export { createCmsConfig } from "../shared/config.js";
 
 const PATHNAME_HEADER = "x-pathname";
 
 /**
- * @import { CmsConfig } from "../lib/config.js"
+ * @import { CmsConfig } from "../shared/config.js"
  */
 
 /**
  * @typedef {Object} CreateCmsPageOptions
  * @property {CmsConfig | { baseUrl: string }} config
- * @property {import("../lib/service-token.js").ServiceTokenProvider} [getServiceToken]
+ * @property {import("../shared/contracts/service-token.js").ServiceTokenProvider} [getServiceToken]
  *   Server-only provider for the service token on the SSR content fetch, so
  *   public visitors get rendered content without a session. Never passed to
  *   the client `Provider`. Default: no token, which reaches `/cms/content`
  *   only through the public endpoint (`clientKey` + the client's anonymous-read
  *   flag); otherwise inject e.g. a `render`-preset service key.
- * @property {import("../lib/transport.js").CmsTransport} [transport]
+ * @property {import("../shared/contracts/transport.js").CmsTransport} [transport]
  *   Custom transport for the SSR fetch. Server-only, so to use it client-side
  *   too pass it to your provider as well. Default: REST against `config.baseUrl`.
  * @property {*} Provider
@@ -75,11 +75,11 @@ const PATHNAME_HEADER = "x-pathname";
  *   around it. Receives `config`, `isAdmin`, `userSub`, `initialBlocks`,
  *   `onAfterSave`, and `session`.
  *
- * The three auth callbacks below form a `CmsAuthAdapter` (see `lib/auth.js`);
+ * The three auth callbacks below form a `CmsAuthAdapter` (see `shared/contracts/auth.js`);
  * omit them all for a public read-only site, or spread an adapter from an
  * auth plugin / your own code.
  *
- * @property {import("../lib/auth.js").GetSession} [getSession]
+ * @property {import("../shared/contracts/auth.js").GetSession} [getSession]
  *   Resolves the server session. Default: `publicAuth.getSession` (always null → public).
  *   Its result stays on the server unless `sessionForClient` says otherwise.
  * @property {(session: *) => boolean} [deriveAdmin]
@@ -211,7 +211,7 @@ export function createCmsPage(options) {
  * consumer writes no boundary of their own, and a collection reading external
  * data can never hold the document back.
  *
- * @param {import("../lib/config.js").CmsConfig} serverConfig
+ * @param {import("../shared/config.js").CmsConfig} serverConfig
  * @param {CollectionPrimitives} primitives
  */
 function createServerCollections(serverConfig, { CollectionRecord, CollectionRows }) {

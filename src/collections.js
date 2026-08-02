@@ -14,9 +14,9 @@
  * keeps only the entry file's directive, so Next.js needs it here.
  */
 
-export { CollectionProvider } from "./components/CollectionProvider.jsx";
-export { CollectionRegion } from "./components/CollectionRegion.jsx";
-export { CollectionItem } from "./components/CollectionItem.jsx";
+export { CollectionProvider } from "./collections/CollectionProvider.jsx";
+export { CollectionRegion } from "./collections/CollectionRegion.jsx";
+export { CollectionItem } from "./collections/CollectionItem.jsx";
 
 // The client half of the server-rendered binding components. Exported
 // individually, and passed to `createCmsPage({ collections })` rather than
@@ -24,21 +24,21 @@ export { CollectionItem } from "./components/CollectionItem.jsx";
 // become client references across the RSC boundary, so a component smuggled
 // inside a plain object arrives undefined on the server. Internals as far as an
 // app is concerned; they appear here only to be wired up.
-export { CollectionRecord } from "./components/CollectionItem.jsx";
-export { CollectionRows } from "./components/CollectionRegion.jsx";
+export { CollectionRecord } from "./collections/CollectionItem.jsx";
+export { CollectionRows } from "./collections/CollectionRegion.jsx";
 // Edits one text field of the enclosing <CollectionItem> in place; anything
 // else about the record stays in the drawer's schema form.
-export { CollectionField } from "./components/CollectionField.jsx";
+export { CollectionField } from "./collections/CollectionField.jsx";
 // Chrome-free "add one item" form the host mounts on its own page; renders
 // nothing for visitors without create access.
-export { CollectionComposer } from "./components/CollectionComposer.jsx";
-export { CollectionFieldsForm, seedValues, buildPayload, requiredMissing, humanizeCollectionError } from "./components/editors/CollectionFieldsForm.jsx";
+export { CollectionComposer } from "./collections/CollectionComposer.jsx";
+export { CollectionFieldsForm, seedValues, buildPayload, requiredMissing, humanizeCollectionError } from "./collections/CollectionFieldsForm.jsx";
 
-export { useCollection, useCollectionItem } from "./hooks/use-collection.js";
+export { useCollection, useCollectionItem } from "./collections/hooks/use-collection.js";
 // Escape hatch for markup that computes with a record instead of rendering one
 // of its fields. Replaces what the removed render-prop used to hand over.
-export { useCollectionRecord } from "./lib/collection-item-context.js";
-export { useMyCollections } from "./hooks/use-my-collections.js";
+export { useCollectionRecord } from "./collections/item-context.js";
+export { useMyCollections } from "./collections/hooks/use-my-collections.js";
 // Powers <CollectionComposer> and the drawer's new-item card; exposed for
 // hosts that want to build their own create UI over the same draft/submit flow.
-export { useCollectionCreate } from "./hooks/use-collection-create.js";
+export { useCollectionCreate } from "./collections/hooks/use-collection-create.js";

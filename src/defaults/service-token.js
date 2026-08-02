@@ -8,7 +8,7 @@
  */
 
 /**
- * @type {import("../lib/service-token.js").ServiceTokenProvider}
+ * @type {import("../shared/contracts/service-token.js").ServiceTokenProvider}
  */
 export async function noServiceToken() {
   return "";

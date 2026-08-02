@@ -10,26 +10,26 @@
  * Client Component.
  */
 
-export { CmsProvider } from "./components/CmsProvider.jsx";
-export { EditableRegion } from "./components/EditableRegion.jsx";
-export { EditableList } from "./components/EditableList.jsx";
-export { CmsGroup } from "./components/CmsGroup.jsx";
+export { CmsProvider } from "./core/CmsProvider.jsx";
+export { EditableRegion } from "./core/EditableRegion.jsx";
+export { EditableList } from "./core/EditableList.jsx";
+export { CmsGroup } from "./core/CmsGroup.jsx";
 
-export { useCmsContent } from "./hooks/use-cms-content.js";
-export { useCmsAdmin } from "./hooks/use-cms-admin.js";
-export { useCmsBlock } from "./hooks/use-cms-block.js";
-export { useCountdown } from "./hooks/use-countdown.js";
+export { useCmsContent } from "./core/hooks/use-cms-content.js";
+export { useCmsAdmin } from "./core/hooks/use-cms-admin.js";
+export { useCmsBlock } from "./core/hooks/use-cms-block.js";
+export { useCountdown } from "./core/hooks/use-countdown.js";
 
-export { createCmsConfig } from "./lib/config.js";
-export { CmsApiError } from "./lib/errors.js";
-export { getBlock, getBlockValue, groupBlocksByPrefix, indexBlocksByPath } from "./lib/blocks.js";
+export { createCmsConfig } from "./shared/config.js";
+export { CmsApiError } from "./shared/contracts/errors.js";
+export { getBlock, getBlockValue, groupBlocksByPrefix, indexBlocksByPath } from "./core/blocks.js";
 
 /**
  * Public type re-exports. These shapes surface through the public API (e.g.
  * `CmsProvider`'s props), so consumers and plugins reference them by name
  * (`@import { CmsConfig } from "inscribed"`). Changing them is breaking.
  *
- * @typedef {import("./lib/config.js").CmsConfig} CmsConfig
- * @typedef {import("./lib/theme.js").CmsTheme} CmsTheme
- * @typedef {import("./lib/schemas.js").BlockResponse} BlockResponse
+ * @typedef {import("./shared/config.js").CmsConfig} CmsConfig
+ * @typedef {import("./shared/style/theme.js").CmsTheme} CmsTheme
+ * @typedef {import("./shared/contracts/schemas.js").BlockResponse} BlockResponse
  */

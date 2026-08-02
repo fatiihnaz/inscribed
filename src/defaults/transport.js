@@ -8,11 +8,11 @@
  * progress events); every other method is `fetch`.
  */
 
-import { CmsApiError, toApiError } from "../lib/errors.js";
+import { CmsApiError, toApiError } from "../shared/contracts/errors.js";
 
 /**
- * @import { CmsTransport, CmsRequestOptions } from "../lib/transport.js"
- * @import { CollectionListParams, CollectionItemResponse, PagedListResponse } from "../lib/schemas.js"
+ * @import { CmsTransport, CmsRequestOptions } from "../shared/contracts/transport.js"
+ * @import { CollectionListParams, CollectionItemResponse, PagedListResponse } from "../shared/contracts/schemas.js"
  */
 
 /**

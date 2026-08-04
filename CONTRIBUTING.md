@@ -138,6 +138,8 @@ src/
     drawer-styles.js     #   drawer style objects + the inline CSS string
     dirty.js             #   what carries unpublished changes (blocks and records)
     word-diff.js         #   inline diff behind the change preview
+    save-error.js        #   a failed save -> the line the banner shows
+    BlockConflictNotice.jsx # per-block conflict resolution on a refused save
   defaults/              # default seam implementations
     transport.js         #   createRestTransport (the /cms/* REST adapter)
     service-token.js     #   noServiceToken

@@ -273,6 +273,11 @@ A **block** is a single editable value addressed by a dot-notation `blockPath`
 | `List`       | array of objects shaped by `itemSchema` | repeatable items |
 | `Collection` | `{ collection, slug? }` binding (read-only) | n/a (see [Collections](#collections)) |
 
+`LongText` **keeps its line breaks**. The region renders with
+`white-space: pre-wrap`, and Enter in the in-place editor inserts a real newline
+into the value; left to the browser it would insert a `<br>`, which the block
+never sees. Set `white-space` in your own `style` and yours wins.
+
 > `Text` was a legacy alias of `LongText` and is gone in 4.x. Blocks that still
 > arrive typed `Text` are folded to `LongText` as they enter the runtime, so
 > older rows and custom transports keep working.
@@ -680,6 +685,16 @@ preview overlays the page; **publishing** is an explicit save in the drawer.
 Discarding clears the server draft. inscribed itself depends on **no auth
 library**; these are all injected callbacks, with a public read-only default.
 
+**A refused publish is resolved per block.** The backend rejects a write whose
+version is behind, which is what happens when someone else published the same
+block while you were editing it. The drawer reloads the page, marks the cards it
+clashed on, and shows both candidates on each: the value the server now holds
+against the one you typed. **Take theirs** drops your edit for that block,
+**keep mine** leaves it pending so the next save writes it at the version just
+fetched. Your text stays in the draft either way, so nothing goes without you
+choosing it. A conflict carrying no block-level detail (two writes racing on one
+row) only asks for a retry, since there is nothing to compare.
+
 ### Theming
 
 The admin panel and the page-side editing affordances are styled through a set
@@ -895,6 +910,25 @@ const blocks = await getCmsPageBlocks({ ...cmsConfig, transport }, slug);
 ```
 
 `createCmsPage` also accepts a `transport` option for its server-side SSR fetch.
+
+**Errors are part of the contract.** Throw `CmsApiError` (exported from
+`inscribed`) for any non-2xx, so the UI branches the same way whatever the
+backend: `isConflict` drives the save-conflict flow, `isForbidden` the
+permission banner. A **409 from `updateContent`** should name the blocks the
+write lost on, and omit the key when there is nothing block-level to report:
+
+```json
+{
+  "status": 409,
+  "detail": "Version conflict",
+  "conflicts": [{ "path": "hero.title", "expected": 4, "provided": 1 }]
+}
+```
+
+Callers read the parsed array as `error.conflicts`, `null` when the body carried
+no key at all. That difference is what decides between resolving block by block
+and asking for a plain retry, so an empty array is not a substitute for omitting
+it.
 
 > **Note:** the `cms-sync` CLI and `syncAll` target the REST `POST /cms/sync`
 > shape, which takes the **complete** manifest array and reconciles against it -

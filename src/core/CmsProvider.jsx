@@ -28,6 +28,7 @@ import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
 import { indexBlocksByPath } from "./blocks.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
+import { CmsApiError } from "../shared/contracts/errors.js";
 import { createStore, useStoreSelector } from "../shared/state/store.js";
 import { createDraftQueue } from "../shared/state/draft-queue.js";
 import { contentDraftKey } from "../shared/state/draft-keys.js";
@@ -280,6 +281,7 @@ export function CmsProvider({
       activeListItem: null,
       isDrawerOpen: false,
       draftSyncStatus: "idle",
+      conflictBlocks: new Set(),
       refetchToken: 0,
     })),
   );
@@ -414,7 +416,8 @@ export function CmsProvider({
 
     // New server content lands under the route it describes.
     if (blocksChanged) commitBlocks(pathname, indexBlocksByPath(initialBlocks ?? []));
-    patchUi({ activeBlock: null });
+    // Conflicts go with the drafts they were raised against.
+    patchUi({ activeBlock: null, conflictBlocks: new Set() });
     setDraftsState(new Map());
 
     // A navigation needs at most one refetch, and only when there is nothing to
@@ -526,6 +529,29 @@ export function CmsProvider({
     [patchUi],
   );
 
+  const setBlockConflicts = useCallback(
+    /** @param {string[]} paths */
+    (paths) => {
+      // Clearing an already-empty set would still hand every card a new Set and
+      // wake them all, and a successful save clears on every run.
+      if (paths.length === 0 && uiStore.get().conflictBlocks.size === 0) return;
+      patchUi({ conflictBlocks: new Set(paths) });
+    },
+    [patchUi, uiStore],
+  );
+
+  const clearBlockConflict = useCallback(
+    /** @param {string} blockPath */
+    (blockPath) => {
+      const current = uiStore.get().conflictBlocks;
+      if (!current.has(blockPath)) return;
+      const next = new Set(current);
+      next.delete(blockPath);
+      patchUi({ conflictBlocks: next });
+    },
+    [patchUi, uiStore],
+  );
+
   // Reads `isAdmin` through a ref so the callback (and with it the whole
   // context value) keeps one identity across a sign-in.
   const isAdminGateRef = useRef(isAdmin);
@@ -616,6 +642,14 @@ export function CmsProvider({
       if (draftStatusResetRef.current) clearTimeout(draftStatusResetRef.current);
     };
   }, []);
+
+  // Slugs whose draft autosave already answered a 409 with a refetch. One
+  // conflict gets one re-base; a second means the refetch did not help, and
+  // re-arming the lane again would just hammer the backend every second.
+  const conflictRetriedRef = useRef(/** @type {Set<string>} */ (new Set()));
+  // One-shot blocks subscriptions waiting on those refetches, held so the
+  // effect can drop them if it tears down first.
+  const conflictWaitersRef = useRef(/** @type {Set<() => void>} */ (new Set()));
 
   // Drafts live in the store, so this effect subscribes (rather than depending
   // on `[drafts]`) and re-arms the debounce on each change. One queue key per
@@ -719,11 +753,34 @@ export function CmsProvider({
             );
           } catch (err) {
             if (ctx.isStale()) return;
+            // A conflict is not a dead request: the local draft is still the
+            // user's text, only the version it was written against moved. Drop
+            // it here and someone who is mid-sentence silently stops being
+            // saved, so re-base on a refetch and send it again.
+            if (
+              err instanceof CmsApiError && err.isConflict &&
+              !conflictRetriedRef.current.has(slug)
+            ) {
+              conflictRetriedRef.current.add(slug);
+              // Re-arm when the fresh blocks actually land rather than after a
+              // guessed delay: the retry is only worth sending with the
+              // versions that refetch brings.
+              const stopWaiting = blocksStore.subscribe(() => {
+                conflictWaitersRef.current.delete(stopWaiting);
+                stopWaiting();
+                arm();
+              });
+              conflictWaitersRef.current.add(stopWaiting);
+              triggerRefetch();
+              setDraftSyncStatus("idle");
+              return;
+            }
             // eslint-disable-next-line no-console
             console.warn("[inscribed] draft autosave failed:", err);
             if (!isAllReset) flashDraftStatus("failed");
             return;
           }
+          conflictRetriedRef.current.delete(slug);
 
           // A discard landed mid-flight: it already nulled `draftValue`, so
           // mirroring our sent values now would re-populate it and fight it.
@@ -757,11 +814,64 @@ export function CmsProvider({
       }
     };
 
-    return contentDraftsStore.subscribe(arm);
+    const stopArming = contentDraftsStore.subscribe(arm);
+    const waiters = conflictWaitersRef.current;
+    return () => {
+      stopArming();
+      for (const stopWaiting of waiters) stopWaiting();
+      waiters.clear();
+    };
   }, [
-    contentDraftsStore, blocksStore, patchBlocks, draftQueue,
-    stableGetAccessToken, flashDraftStatus, setDraftSyncStatus,
+    contentDraftsStore, blocksStore, patchBlocks, draftQueue, setDraftsState,
+    stableGetAccessToken, flashDraftStatus, setDraftSyncStatus, triggerRefetch,
   ]);
+
+  // Stand these blocks' slug lanes down once a publish has landed, the same
+  // `cancel` + `enqueue` shape `useCollectionEditor.undoDraft` uses.
+  //
+  // `cancel` is for the write already in flight: it bumps the key's epoch, which
+  // that write reads as `isStale()`, so it won't mirror its `draftValue` back
+  // onto a block whose value was just published and leave it looking dirty until
+  // the refetch lands.
+  //
+  // The DELETE is for the same write's other half. Cancelling cannot recall a
+  // request already on the wire, and that one reaches the backend after the
+  // publish cleared the slot, re-creating it with pre-save text. Enqueueing on
+  // the same lane is what orders them: the chain runs this only once that write's
+  // response is back, so the backend has provably already seen it.
+  const settleDraftWrites = useCallback(
+    /** @param {string[]} blockPaths */
+    (blockPaths) => {
+      if (blockPaths.length === 0) return;
+      const currentPathname = draftPathnameRef.current ?? "/";
+      const currentBlocks = blocksStore.get().get(currentPathname) ?? EMPTY_BLOCKS;
+      /** @type {Set<string>} */
+      const slugs = new Set();
+      for (const blockPath of blockPaths) {
+        // A block missing from the map still resolves to a slug rather than
+        // being skipped: this exists to stop a write, and skipping one would
+        // leave behind exactly the write it is here to stop.
+        slugs.add(currentBlocks.get(blockPath)?._slug ?? currentPathname);
+      }
+
+      const currentConfig = draftConfigRef.current;
+      for (const slug of slugs) {
+        draftQueue.cancel(contentDraftKey(slug));
+        // Deliberately without `discardServerDrafts`' `draftValue != null`
+        // filter: a publish leaves that null, so filtering would send nothing.
+        draftQueue.enqueue(contentDraftKey(slug), async () => {
+          try {
+            const accessToken = (await stableGetAccessToken()) || undefined;
+            await currentConfig.transport.deleteDraft(slug, { accessToken });
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn("[inscribed] post-publish draft cleanup DELETE failed:", err);
+          }
+        });
+      }
+    },
+    [stableGetAccessToken, blocksStore, draftQueue],
+  );
 
   // Silent server-draft cleanup for discard. DELETEs each affected slug's
   // draft set without the debounce or `draftSyncStatus`, so the pill doesn't
@@ -842,9 +952,12 @@ export function CmsProvider({
       setDraft,
       clearDraft,
       clearDrafts,
+      settleDraftWrites,
       discardServerDrafts,
 
       uiStore,
+      setBlockConflicts,
+      clearBlockConflict,
       setActiveBlock,
       setActiveListItem,
       setDrawerOpen,
@@ -875,8 +988,11 @@ export function CmsProvider({
       setDraft,
       clearDraft,
       clearDrafts,
+      settleDraftWrites,
       discardServerDrafts,
       uiStore,
+      setBlockConflicts,
+      clearBlockConflict,
       setActiveBlock,
       setActiveListItem,
       setDrawerOpen,

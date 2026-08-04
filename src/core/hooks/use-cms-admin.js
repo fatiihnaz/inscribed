@@ -22,6 +22,10 @@ import { CmsApiError } from "../../shared/contracts/errors.js";
  * @property {(blocks: UpdateBlockItem[]) => Promise<UpdatePageResponse>} savePage
  * @property {boolean} isSaving
  * @property {CmsApiError|Error|null} error
+ * @property {() => void} clearError
+ *   Drop a failure the UI has finished reporting. `savePage` clears it on its
+ *   own next run, which is too late for a banner outliving the edits it was
+ *   about.
  */
 
 /**
@@ -31,8 +35,10 @@ export function useCmsAdmin() {
   // `blocksStore` is read inside `savePage`, never subscribed to: the slug
   // lookup wants the map at call time, and subscribing would re-render every
   // caller on each autosave roundtrip.
-  const { config, isAdmin, blocksStore, triggerRefetch, onAfterSave, getAccessToken } =
-    useCmsContext();
+  const {
+    config, isAdmin, blocksStore, triggerRefetch, onAfterSave, getAccessToken,
+    setBlockConflicts,
+  } = useCmsContext();
   const pathname = usePathname() ?? "/";
 
   const [isSaving, setIsSaving] = useState(false);
@@ -109,6 +115,10 @@ export function useCmsAdmin() {
       } catch (err) {
         setError(/** @type {Error} */ (err));
         if (err instanceof CmsApiError && err.isConflict) {
+          // Flag the named blocks before the refetch, so the cards are already
+          // in conflict state when the other editor's values land in them. A
+          // plain write race carries no `conflicts`, and flags nothing.
+          setBlockConflicts((err.conflicts ?? []).map((c) => c.path));
           triggerRefetch();
         }
         throw err;
@@ -116,7 +126,7 @@ export function useCmsAdmin() {
         setIsSaving(false);
       }
     },
-    [isAdmin, config, blocksStore, pathname, triggerRefetch, onAfterSave, getAccessToken],
+    [isAdmin, config, blocksStore, pathname, triggerRefetch, onAfterSave, getAccessToken, setBlockConflicts],
   );
 
   const save = useCallback(
@@ -131,5 +141,7 @@ export function useCmsAdmin() {
     [savePage],
   );
 
-  return { save, savePage, isSaving, error };
+  const clearError = useCallback(() => setError(null), []);
+
+  return { save, savePage, isSaving, error, clearError };
 }

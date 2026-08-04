@@ -183,7 +183,12 @@ export function useCollectionCreate({
         reset();
         onCreated?.(created);
       } catch (err) {
-        if (err instanceof CmsApiError && err.isForbidden) {
+        if (err instanceof CmsApiError && err.isConflict) {
+          // A write race, not a version clash: creates carry no version. Two
+          // surfaces POSTing the collection's single new-item slot is the way
+          // in (see the `active` contract in use-collection-editor.js).
+          setError("Aynı anda başka bir yazma işlemi oldu. Tekrar dene.");
+        } else if (err instanceof CmsApiError && err.isForbidden) {
           setError("Bu collection'da kayıt oluşturma yetkin yok.");
         } else if (err instanceof CmsApiError && err.status === 400) {
           // Backend reports inner failures as `works[0].title`; map onto

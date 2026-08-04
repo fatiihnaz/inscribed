@@ -18,6 +18,7 @@
  */
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { ChevronDown, Undo2, Lock, List as ListIcon } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
@@ -29,6 +30,7 @@ import { FieldEditor } from "../editors/fields/FieldEditor.jsx";
 import { ListEditor } from "../editors/fields/ListEditor.jsx";
 import { useCollectionEditor } from "../collections/hooks/use-collection-editor.js";
 import { CollectionRecordForm } from "./CollectionRecordForm.jsx";
+import { BlockConflictNotice, CONFLICT_TRANSITION } from "./BlockConflictNotice.jsx";
 import { blockResetStyle, dirtyDotStyle, rowContainerStyle, rowHeaderStyle, rowGuideBodyStyle, rowPathStyle, typeIconStyle, groupIconStyle } from "./drawer-styles.js";
 import { TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, HAIRLINE, FONT_SANS, FONT_MONO, R_MD, TYPE_META, TYPE_META_FALLBACK } from "../shared/style/tokens.js";
 
@@ -61,13 +63,17 @@ function rowInsetStyle(base, topLevel) {
  * @param {BlockResponse} block
  */
 function useBlockDraft(block) {
-  const { contentDraftsStore, setDraft, clearDraft, setActiveBlock } = useCmsContext();
+  const { contentDraftsStore, setDraft, setActiveBlock, uiStore, clearBlockConflict } =
+    useCmsContext();
   const blockPath = block.blockPath;
 
   // Two selectors (presence + value) so an explicit empty draft stays
   // distinguishable from "no draft", same as `<EditableRegion>`.
   const hasDraft = useStoreSelector(contentDraftsStore, (m) => m.has(blockPath));
   const draft = useStoreSelector(contentDraftsStore, (m) => m.get(blockPath));
+  // Membership as a boolean, so a conflict elsewhere on the page leaves this
+  // card alone.
+  const hasConflict = useStoreSelector(uiStore, (s) => s.conflictBlocks.has(blockPath));
 
   const onChange = useCallback(
     /** @param {*} value */
@@ -158,7 +164,9 @@ export const BlockCard = memo(function BlockCard(props) {
  */
 function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
-  const { draft, hasDraft, onChange, onReset, onFocus } = useBlockDraft(block);
+  const {
+    draft, hasDraft, hasConflict, onChange, onReset, onFocus, onTakeTheirs, onKeepMine,
+  } = useBlockDraft(block);
 
   const effective = resolveBlockValue(block);
   const value = resolveBlockValue(block, hasDraft, draft);
@@ -205,15 +213,30 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
           </span>
         ) : null}
       </div>
-      <div style={fieldEditorWrapStyle}>
-        <FieldEditor
-          blockType={block.blockType}
-          value={value}
-          onChange={onChange}
-          disabled={readOnly}
-          hideLabel
+      {/* `layout` here, not on the panel: the conflict panel appearing is a
+          size change of this box, and letting the projection animate it is what
+          slides the editor down instead of measuring an auto height. */}
+      <motion.div layout style={fieldEditorWrapStyle} transition={CONFLICT_TRANSITION}>
+        <BlockConflictNotice
+          show={hasConflict}
+          block={block}
+          draft={value}
+          onTakeTheirs={onTakeTheirs}
+          onKeepMine={onKeepMine}
         />
-      </div>
+        {/* Its own `layout` too: the wrapper's animates the box, but a plain
+            child inside it just reflows, which is the editor snapping up the
+            frame the panel unmounts instead of travelling with it. */}
+        <motion.div layout style={editorSlotStyle} transition={CONFLICT_TRANSITION}>
+          <FieldEditor
+            blockType={block.blockType}
+            value={value}
+            onChange={onChange}
+            disabled={readOnly}
+            hideLabel
+          />
+        </motion.div>
+      </motion.div>
     </div>
   );
 }
@@ -244,6 +267,15 @@ const fieldEditorWrapStyle = /** @type {React.CSSProperties} */ ({
   borderLeft: `1px solid ${HAIRLINE}`,
   display: "flex",
   flexDirection: "column",
+});
+
+// Transparent slot whose only job is to give the editor a projected box, so it
+// travels when the conflict panel above it comes and goes. Inherits the column
+// flow it replaces, so nothing about the editor's own layout changes.
+const editorSlotStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexDirection: "column",
+  minWidth: 0,
 });
 
 const fieldPathStyle = rowPathStyle;
@@ -302,7 +334,9 @@ function InvalidCollectionCard({ block, topLevel, displayPath }) {
  */
 function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, displayPath }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
-  const { draft, hasDraft, onChange, onReset, onFocus } = useBlockDraft(block);
+  const {
+    draft, hasDraft, hasConflict, onChange, onReset, onFocus, onTakeTheirs, onKeepMine,
+  } = useBlockDraft(block);
 
   const effective = resolveBlockValue(block);
   const value = resolveBlockValue(block, hasDraft, draft);
@@ -315,6 +349,12 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
   useEffect(() => {
     if (isActive) setIsOpen(true);
   }, [isActive]);
+
+  // A conflict is waiting on a decision that lives in the body, so a shut card
+  // would hide the thing the banner just sent the user to.
+  useEffect(() => {
+    if (hasConflict) setIsOpen(true);
+  }, [hasConflict]);
 
   useEffect(() => {
     if (isActive && ref.current) {
@@ -349,9 +389,18 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
         aria-hidden={!isOpen}
         onMouseDown={onFocus}
       >
-        <div style={disclosureBodyStyle}>
-          {renderEditor(block, value, onChange, itemSchema, readOnly)}
-        </div>
+        <motion.div layout style={disclosureBodyStyle} transition={CONFLICT_TRANSITION}>
+          <BlockConflictNotice
+            show={hasConflict}
+            block={block}
+            draft={value}
+            onTakeTheirs={onTakeTheirs}
+            onKeepMine={onKeepMine}
+          />
+          <motion.div layout style={editorSlotStyle} transition={CONFLICT_TRANSITION}>
+            {renderEditor(block, value, onChange, itemSchema, readOnly)}
+          </motion.div>
+        </motion.div>
       </div>
     </div>
   );

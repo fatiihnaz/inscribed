@@ -39,6 +39,12 @@ import { createContext, useContext } from "react";
  * @property {"idle"|"saving"|"saved"|"failed"} draftSyncStatus
  *   Background `PUT /cms/draft` autosave state. `saved`/`failed` are transient
  *   pulses that clear back to `idle` after the status dot finishes flashing.
+ * @property {Set<string>} conflictBlocks
+ *   Blocks a save was refused over, from the 409's `conflicts` extension. Cards
+ *   select membership as a boolean, so a conflict re-renders only the blocks it
+ *   names. The refetch that follows the 409 puts the other editor's value back
+ *   in `block.value` while the local draft still holds the user's, which is
+ *   what the card's resolve panel diffs.
  * @property {number} refetchToken   Bumped to force `useCmsContent` to refetch.
  */
 

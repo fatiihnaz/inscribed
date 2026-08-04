@@ -174,16 +174,33 @@ describe("updateContent", () => {
     expect(out).toEqual({ updated: 1, unchanged: 0 });
   });
 
-  it("throws CmsApiError on a 409 conflict and exposes blockPath", async () => {
+  it("throws CmsApiError on a 409 conflict and exposes every clashing block", async () => {
     const t = createRestTransport({ baseUrl: BASE });
-    fetchResolves(
-      { title: "Conflict", detail: "version mismatch", status: 409, blockPath: "hero.title" },
-      409,
-    );
+    const conflicts = [
+      { path: "hero.title", expected: 4, provided: 1 },
+      { path: "cover", expected: 2, provided: 1 },
+    ];
+    fetchResolves({ title: "Conflict", detail: "version mismatch", status: 409, conflicts }, 409);
     const err = await t.updateContent({ slug: "home", blocks: [] }).catch((e) => e);
     expect(err).toBeInstanceOf(CmsApiError);
     expect(err.isConflict).toBe(true);
-    expect(err.blockPath).toBe("hero.title");
+    expect(err.conflicts).toEqual(conflicts);
+  });
+
+  it("leaves conflicts null on a 409 that carries no block-level expectation", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    // A plain write race: the backend omits the key rather than sending [].
+    fetchResolves({ title: "Conflict", detail: "write race", status: 409 }, 409);
+    const err = await t.updateContent({ slug: "home", blocks: [] }).catch((e) => e);
+    expect(err.isConflict).toBe(true);
+    expect(err.conflicts).toBe(null);
+  });
+
+  it("keeps an empty conflicts array distinct from a missing one", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves({ title: "Conflict", detail: "none", status: 409, conflicts: [] }, 409);
+    const err = await t.updateContent({ slug: "home", blocks: [] }).catch((e) => e);
+    expect(err.conflicts).toEqual([]);
   });
 });
 

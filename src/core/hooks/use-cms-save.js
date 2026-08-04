@@ -10,7 +10,7 @@
  * flow stays unit-testable.
  */
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
@@ -50,7 +50,7 @@ export function useCmsSave() {
   const drafts = useStoreSelector(contentDraftsStore, (m) => m);
   const pathname = usePathname() ?? "/";
   const blocks = useStoreSelector(blocksStore, (s) => s.get(pathname) ?? EMPTY_BLOCKS);
-  const { savePage, isSaving, error } = useCmsAdmin();
+  const { savePage, isSaving, error, clearError } = useCmsAdmin();
 
   // A block is dirty when its effective value (local draft, else server-side
   // `draftValue`) differs from published `block.value`. Local edits win over

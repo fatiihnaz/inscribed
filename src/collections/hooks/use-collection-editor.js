@@ -141,6 +141,8 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   const failedResetRef = useRef(
     /** @type {ReturnType<typeof setTimeout>|null} */ (null),
   );
+  // Whether this record's autosave already answered a 409 with a refetch.
+  const conflictRetriedRef = useRef(false);
   // Read inside the edit handler so it keeps one identity: the item moves on
   // every cache write (roughly once per autosave), and re-binding the handler
   // that often would churn the record scope the fields hang off.
@@ -275,6 +277,7 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         // draft, so writing our sent value back would re-create it.
         if (ctx.isStale()) return;
         lastSyncedRef.current = serialized;
+        conflictRetriedRef.current = false;
         // Patch the cache so `hasDraft` flips immediately. In-place so list
         // windows don't refetch and overwrite it with the pre-cleanup state.
         if (!isVirtualNow && item) {
@@ -284,6 +287,17 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         setCollectionDraftSavedAt(collection, slug, formatClock(new Date()));
       } catch (err) {
         if (ctx.isStale()) return;
+        // Same reasoning as the block lane: a conflict means the row moved
+        // under this draft, not that the draft is worthless. Refetch and let
+        // the effect re-schedule itself, since it depends on `item` and
+        // `lastSyncedRef` still holds the pre-write value. Once only, or a row
+        // that keeps clashing would refetch on a loop.
+        if (err instanceof CmsApiError && err.isConflict && !conflictRetriedRef.current) {
+          conflictRetriedRef.current = true;
+          await refetch();
+          setDraftStatus("idle");
+          return;
+        }
         // eslint-disable-next-line no-console
         console.warn("[inscribed] collection draft autosave failed:", err);
         setDraftStatus("failed");

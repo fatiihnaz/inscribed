@@ -270,7 +270,20 @@ export const NEW_DRAFT_GUID = "00000000-0000-0000-0000-000000000000";
  */
 
 /**
+ * One block the backend refused because the version sent was behind. `provided`
+ * is what the client had, `expected` what the row actually holds.
+ *
+ * @typedef {Object} BlockConflict
+ * @property {string} path
+ * @property {number} expected
+ * @property {number} provided
+ */
+
+/**
  * RFC 7807 error payload returned by the backend on non-2xx responses.
+ *
+ * The two extensions are what callers should branch on rather than the `detail`
+ * prose, whose wording is not a contract.
  *
  * @typedef {Object} ProblemDetails
  * @property {string|null} type
@@ -278,6 +291,10 @@ export const NEW_DRAFT_GUID = "00000000-0000-0000-0000-000000000000";
  * @property {number} status
  * @property {string} detail
  * @property {string} instance
+ * @property {BlockConflict[]} [conflicts]
+ *   409 only, and only for a per-block version conflict. Absent (not empty) on
+ *   a plain write race, where no block-level expectation exists.
+ * @property {*[]} [errors]   Validation failures behind a 400.
  */
 
 export {};

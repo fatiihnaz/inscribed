@@ -40,7 +40,7 @@ import { collectDirtyBlocks, collectDirtyRecords, dirtyCollectionKeys } from "./
 import { isBlockDirty } from "../core/resolve.js";
 import { useCmsSave } from "../core/hooks/use-cms-save.js";
 import { useMyCollections } from "../collections/hooks/use-my-collections.js";
-import { CmsApiError } from "../shared/contracts/errors.js";
+import { describeSaveError } from "./save-error.js";
 
 import { BlockCard } from "./BlockCard.jsx";
 import { CollectionRegionPanel } from "./CollectionRegionPanel.jsx";
@@ -78,6 +78,9 @@ export function Drawer() {
   const activeBlock = useStoreSelector(uiStore, (s) => s.activeBlock);
   const isDrawerOpen = useStoreSelector(uiStore, (s) => s.isDrawerOpen);
   const draftSyncStatus = useStoreSelector(uiStore, (s) => s.draftSyncStatus);
+  // Size, not the set: the banner only counts, and selecting the set itself
+  // would re-render the whole drawer on every resolution.
+  const unresolvedConflicts = useStoreSelector(uiStore, (s) => s.conflictBlocks.size);
   const itemSchemas = useStoreSelector(registryStore, (s) => s.itemSchemas);
   const editorVisibility = useStoreSelector(registryStore, (s) => s.editorVisibility);
   // Collection state lives in its own provider, which CmsProvider always wraps
@@ -441,8 +444,7 @@ export function Drawer() {
     if (draftSyncStatus === "saving" || dirtyCount > 0) setPublishedFlash(false);
   }, [draftSyncStatus, dirtyCount]);
 
-  const isConflict = error instanceof CmsApiError && error.isConflict;
-  const isForbidden = error instanceof CmsApiError && error.isForbidden;
+  const saveError = describeSaveError(error, unresolvedConflicts);
   const pathSegments = pathnameToSegments(pathname);
 
   const matchSearch = (block) => {
@@ -572,16 +574,34 @@ export function Drawer() {
             </>
           )}
 
-          {error ? (
-            <div style={isConflict ? conflictStyle : errorStyle}>
-              {isConflict
-                ? "Bir blok başka biri tarafından güncellendi. En son sürüm yüklendi — kontrol edip tekrar dene."
-                : isForbidden
-                  ? "Yetkiniz yok. Bu içeriği düzenleme izniniz bulunmuyor."
-                  : (error.message ?? "Kaydedilemedi")}
-            </div>
-          ) : null}
+          {/* Fade only. The movement is the status bar's `layout` below, which
+              glides by exactly this banner's height as it mounts and unmounts.
+              Animating `height: auto` here instead squashed the text going in
+              and skipped coming out; `popLayout` absolutely-positioned the
+              leaving banner, which cost it its width and read as a slide. */}
+          <AnimatePresence initial={false}>
+            {saveError ? (
+              <motion.div
+                key="save-error"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={SAVE_ERROR_TRANSITION}
+                style={{
+                  ...(saveError.tone === "conflict" ? conflictStyle : errorStyle),
+                  flexShrink: 0,
+                }}
+              >
+                {saveError.text}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
 
+          {/* Carries the banner's arrival and departure: the bar glides by that
+              height instead of snapping. Wrapped rather than made a motion
+              component itself, so `StatusBar`'s own FLIP on the action buttons
+              keeps measuring against a box it still owns. */}
+          <motion.div layout transition={SAVE_ERROR_TRANSITION} style={{ flexShrink: 0 }}>
           <StatusBar
             dirtyCount={dirtyCount}
             collectionDirtyCount={collectionDirtyTotal}
@@ -606,6 +626,7 @@ export function Drawer() {
             isPreviewOpen={isPreviewOpen}
             onTogglePreview={() => setPreviewOpen((v) => !v)}
           />
+          </motion.div>
 
           {userInfo ? (
             <PanelFooter userInfo={userInfo} onSignOut={onSignOut} />
@@ -765,6 +786,15 @@ const COLLECTIONS_PARALLAX = "28%";
 const COLLECTIONS_PANE_TRANSITION = {
   ...COLLECTIONS_TRANSITION,
   opacity: { duration: 0.12, delay: 0.18, ease: "linear" },
+};
+
+// Shared by the save-error banner and the status bar it displaces, so the two
+// halves of the same movement can't drift apart. The banner fades out faster
+// than the bar travels, so the space is already closing behind it.
+const SAVE_ERROR_TRANSITION = {
+  duration: 0.2,
+  ease: PANEL_TRANSITION.ease,
+  opacity: { duration: 0.14, ease: "linear" },
 };
 
 /**

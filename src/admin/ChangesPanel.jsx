@@ -214,7 +214,7 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
  *   sharedOps?: DiffOp[] | null,
  * }} props
  */
-function DiffContent({ blockType, prev, next, itemSchema, sharedOps }) {
+export function DiffContent({ blockType, prev, next, itemSchema, sharedOps }) {
   switch (blockType) {
     case "ShortText":
     case "LongText":

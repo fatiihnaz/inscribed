@@ -5,12 +5,13 @@
  */
 
 /**
- * @import { ProblemDetails } from "./schemas.js"
+ * @import { BlockConflict, ProblemDetails } from "./schemas.js"
  */
 
 /**
  * Thrown for any non-2xx response. Carries the ProblemDetails payload when
- * present, plus a `blockPath` hint on 409s so callers can flag the field.
+ * present, plus the parsed `conflicts` extension so a 409 can be resolved per
+ * block instead of as one opaque failure.
  */
 export class CmsApiError extends Error {
   /**
@@ -19,16 +20,24 @@ export class CmsApiError extends Error {
    * @param {string} args.detail
    * @param {string} [args.title]
    * @param {ProblemDetails|null} [args.problem]
-   * @param {string|null} [args.blockPath]
+   * @param {BlockConflict[]|null} [args.conflicts]
    */
-  constructor({ status, detail, title, problem, blockPath }) {
+  constructor({ status, detail, title, problem, conflicts }) {
     super(detail || title || `CMS request failed (${status})`);
     this.name = "CmsApiError";
     this.status = status;
     this.title = title ?? null;
     this.detail = detail ?? null;
     this.problem = problem ?? null;
-    this.blockPath = blockPath ?? null;
+    /**
+     * Blocks the backend refused, or `null` when the body carried no
+     * `conflicts` key at all. The distinction is the whole point: a list means
+     * "these blocks moved under you, here is what to reconcile", `null` means a
+     * plain write race with nothing block-level to show.
+     *
+     * @type {BlockConflict[]|null}
+     */
+    this.conflicts = conflicts ?? null;
   }
 
   get isConflict() {
@@ -66,10 +75,12 @@ export async function toApiError(response) {
     // Not JSON. Keep rawBody so a plain-text error still bubbles up.
   }
 
-  const blockPath =
-    problem && typeof (/** @type {*} */ (problem).blockPath) === "string"
-      ? /** @type {*} */ (problem).blockPath
-      : null;
+  // An empty array is kept as an empty array: only a missing key means "no
+  // block-level expectation" (see `CmsApiError.conflicts`).
+  const raw = /** @type {*} */ (problem)?.conflicts;
+  const conflicts = Array.isArray(raw)
+    ? raw.filter((c) => c && typeof c.path === "string")
+    : null;
 
   // Prefer ProblemDetails.detail, fall back to the raw body, then statusText.
   const detail = problem?.detail || (rawBody && !problem ? rawBody : "") || response.statusText;
@@ -79,6 +90,6 @@ export async function toApiError(response) {
     title: problem?.title,
     detail,
     problem,
-    blockPath,
+    conflicts,
   });
 }

@@ -11,8 +11,10 @@
  * already matches and the sync effect no-ops.
  *
  * Text blocks are plain strings, so paste is forced to text/plain (no HTML
- * nodes leak into the block) and, for single-line types, Enter commits via blur
- * instead of inserting a newline.
+ * nodes leak into the block) and Enter is handled by hand: single-line types
+ * commit via blur, multi-line ones insert a literal "\n". Left to the browser,
+ * a break becomes a <br> (or a wrapper <div>), which `textContent` drops, so it
+ * would show on screen and never reach the value.
  */
 
 import { useEffect, useRef } from "react";
@@ -28,6 +30,10 @@ function ensureInlineTextStyle() {
   el.setAttribute("data-inscribed-inline", "");
   el.textContent =
     ".inscribed-inline-text{outline:none;}" +
+    // Multi-line blocks keep their newlines. The default `normal` collapses
+    // them, so a break typed here (or one arriving from the drawer's textarea)
+    // would render as a plain space.
+    '.inscribed-inline-text[aria-multiline="true"]{white-space:pre-wrap;}' +
     ".inscribed-inline-text[data-empty]::before{content:attr(data-placeholder);opacity:0.45;pointer-events:none;}";
   document.head.appendChild(el);
 }
@@ -78,12 +84,14 @@ export function InlineTextEditor({
     onInput(e.currentTarget.textContent ?? "");
   };
 
-  /** @param {React.ClipboardEvent<HTMLElement>} e */
-  const handlePaste = (e) => {
-    e.preventDefault();
-    const raw = e.clipboardData?.getData("text/plain") ?? "";
-    const text = singleLine ? raw.replace(/\r?\n/g, " ") : raw;
-    const el = ref.current;
+  /**
+   * Drop `text` in at the caret as plain characters. `execCommand` is the path
+   * that keeps the browser's own undo stack intact; the Range fallback is for
+   * where it is unavailable.
+   *
+   * @param {string} text
+   */
+  const insertPlainText = (text) => {
     try {
       if (!document.execCommand || !document.execCommand("insertText", false, text)) {
         insertTextAtCaret(text);
@@ -91,15 +99,28 @@ export function InlineTextEditor({
     } catch {
       insertTextAtCaret(text);
     }
+    // The Range fallback fires no input event, so the draft write is made here
+    // rather than left to `handleInput`.
+    const el = ref.current;
     if (el) onInput(el.textContent ?? "");
+  };
+
+  /** @param {React.ClipboardEvent<HTMLElement>} e */
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const raw = e.clipboardData?.getData("text/plain") ?? "";
+    insertPlainText(singleLine ? raw.replace(/\r?\n/g, " ") : raw);
   };
 
   /** @param {React.KeyboardEvent<HTMLElement>} e */
   const handleKeyDown = (e) => {
-    if (singleLine && e.key === "Enter") {
-      e.preventDefault();
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (singleLine) {
       e.currentTarget.blur();
+      return;
     }
+    insertPlainText("\n");
   };
 
   return (

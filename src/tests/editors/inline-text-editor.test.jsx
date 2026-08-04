@@ -65,16 +65,24 @@ describe("InlineTextEditor", () => {
     expect(onBlur).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks Enter for single-line types but allows it otherwise", () => {
+  it("handles Enter itself: blur for single-line, a literal newline otherwise", () => {
+    const onInput = vi.fn();
     const { rerender } = render(
-      <InlineTextEditor tag="span" value="" singleLine onInput={() => {}} />,
+      <InlineTextEditor tag="span" value="" singleLine onInput={onInput} />,
     );
     const el = screen.getByRole("textbox");
     // fireEvent returns false when the handler called preventDefault.
     expect(fireEvent.keyDown(el, { key: "Enter" })).toBe(false);
+    expect(onInput).not.toHaveBeenCalled();
 
-    rerender(<InlineTextEditor tag="div" value="" singleLine={false} onInput={() => {}} />);
-    expect(fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" })).toBe(true);
+    rerender(<InlineTextEditor tag="div" value="" singleLine={false} onInput={onInput} />);
+    const multi = screen.getByRole("textbox");
+    // Prevented here too: the browser's own break is a <br>, which textContent
+    // drops, so the editor inserts the character and writes the draft itself.
+    expect(fireEvent.keyDown(multi, { key: "Enter" })).toBe(false);
+    expect(onInput).toHaveBeenCalled();
+    // The CSS hook the injected `white-space: pre-wrap` rule keys off.
+    expect(multi.getAttribute("aria-multiline")).toBe("true");
   });
 
   it("prevents the default paste so HTML never enters the block", () => {

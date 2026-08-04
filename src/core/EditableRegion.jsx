@@ -158,7 +158,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
         onInput={(text) => setDraft(fullPath, text)}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
-        style={{ cursor: "text" }}
+        style={{ ...rest.style, cursor: "text" }}
       />
     );
   } else if (isImageType && empty) {
@@ -352,11 +352,16 @@ function isValueEmpty(blockType, value) {
 function renderBlock(blockType, value, props) {
   const { as, ...rest } = props;
   switch (blockType) {
-    case "Text":
-    case "ShortText":
-    case "LongText": {
+    case "ShortText": {
       const Tag = as ?? "span";
       return <Tag {...rest}>{value}</Tag>;
+    }
+    case "Text":
+    case "LongText": {
+      const Tag = as ?? "span";
+      // Multi-line is the whole point of the type, and the default `normal`
+      // collapses the newlines the editor stores. A consumer `style` still wins.
+      return <Tag {...rest} style={{ whiteSpace: "pre-wrap", ...rest.style }}>{value}</Tag>;
     }
     case "RichText": {
       const Tag = as ?? "div";

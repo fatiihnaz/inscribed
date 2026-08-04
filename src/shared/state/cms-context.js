@@ -90,12 +90,22 @@ import { createContext, useContext } from "react";
  * @property {(blockPath: string, value: *) => void} setDraft
  * @property {(blockPath: string) => void} clearDraft
  * @property {() => void} clearDrafts
+ * @property {(blockPaths: string[]) => void} settleDraftWrites
+ *   Stand these blocks' slug lanes down after a publish: mark an in-flight
+ *   autosave stale so it can't mirror a `draftValue` back over what was just
+ *   published, and queue a cleanup DELETE behind it. The DELETE is chained, so
+ *   it goes out only once a draft PUT already on the wire has come back, which
+ *   is what stops that PUT re-creating the slot the publish cleared.
  * @property {(blockPaths: string[]) => void} discardServerDrafts
  *   Silently clean up server-side draft slots: optimistically null `draftValue`
  *   locally (dirty count drops at once) and fire cleanup DELETEs in the
  *   background without touching `draftSyncStatus`, so discard doesn't flash a
  *   save pulse.
  * @property {Store<CmsUiState>} uiStore
+ * @property {(paths: string[]) => void} setBlockConflicts
+ *   Replace the conflicting-block set, from a 409's `conflicts` extension.
+ * @property {(blockPath: string) => void} clearBlockConflict
+ *   Drop one block once the user has picked a side.
  * @property {(blockPath: string|null) => void} setActiveBlock
  * @property {(target: { path: string, index: number } | null) => void} setActiveListItem
  * @property {(open: boolean) => void} setDrawerOpen

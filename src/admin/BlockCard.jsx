@@ -75,15 +75,29 @@ function useBlockDraft(block) {
     [setDraft, blockPath],
   );
   const onReset = useCallback(
-    () => resetBlock(block, setDraft, clearDraft),
-    [block, setDraft, clearDraft],
+    () => resetBlock(block, setDraft),
+    [block, setDraft],
   );
   const onFocus = useCallback(
     () => setActiveBlock(blockPath),
     [setActiveBlock, blockPath],
   );
 
-  return { draft, hasDraft, onChange, onReset, onFocus };
+  // The refetch behind the 409 already put the other editor's value in
+  // `block.value`, so taking theirs is the ordinary per-block undo.
+  const onTakeTheirs = useCallback(() => {
+    resetBlock(block, setDraft);
+    clearBlockConflict(blockPath);
+  }, [block, setDraft, clearBlockConflict, blockPath]);
+
+  // Keeping mine needs no write: the draft already holds it, and the next save
+  // sends it at the version the refetch brought in.
+  const onKeepMine = useCallback(
+    () => clearBlockConflict(blockPath),
+    [clearBlockConflict, blockPath],
+  );
+
+  return { draft, hasDraft, hasConflict, onChange, onReset, onFocus, onTakeTheirs, onKeepMine };
 }
 
 /**
@@ -595,21 +609,23 @@ function TypeIcon({ type, compact }) {
 }
 
 /**
- * Per-block undo. With a server-side draft, clearing the local entry wouldn't
- * reach the backend, so set the local draft to the published value and let
- * autosave overwrite the Redis draft (the backend auto-cleans on
- * draft===published). Without one, removing the local entry is enough.
+ * Per-block undo: pin the published value as the local draft rather than
+ * dropping the entry, whether or not a server draft is known yet.
+ * `draftValue == null` does not mean "the backend holds no draft", only "no PUT
+ * has come back yet", and a write still in flight mirrors the value it sent
+ * onto the block when it lands. With no local entry that mirror resurrects the
+ * text just undone.
+ *
+ * The pinned draft is also what the next autosave flush sends, and that PUT is
+ * what clears the backend's copy (the queue chains it behind the in-flight
+ * write, so it runs against the mirrored `draftValue`). The provider drops the
+ * entry once the round-trip has settled.
  *
  * @param {BlockResponse} block
  * @param {(blockPath: string, value: *) => void} setDraft
- * @param {(blockPath: string) => void} clearDraft
  */
-function resetBlock(block, setDraft, clearDraft) {
-  if (block.draftValue != null) {
-    setDraft(block.blockPath, block.value);
-  } else {
-    clearDraft(block.blockPath);
-  }
+function resetBlock(block, setDraft) {
+  setDraft(block.blockPath, block.value);
 }
 
 /**

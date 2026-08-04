@@ -41,7 +41,8 @@ const EMPTY_BLOCKS = new Map();
 export function useCmsSave() {
   const {
     blocksStore, contentDraftsStore, setActiveBlock,
-    clearDraft, clearDrafts, discardServerDrafts,
+    clearDraft, clearDrafts, discardServerDrafts, settleDraftWrites,
+    setBlockConflicts,
   } = useCmsContext();
   // Whole-map subscriptions: this aggregates every dirty blockPath for the
   // drawer's live dirty count, so it re-renders on any draft change. Fine for
@@ -82,16 +83,30 @@ export function useCmsSave() {
     return out;
   }, [drafts, blocks]);
 
+  // A failure only describes pending edits, so once none are left it has
+  // nothing left to be about: resolving a conflict by taking the other side
+  // drains the last of them, and the banner has to go with it. Left alone it
+  // would also still be sitting there when the next edit begins.
+  useEffect(() => {
+    if (error && dirtyUpdates.length === 0) clearError();
+  }, [error, dirtyUpdates.length, clearError]);
+
   const save = useCallback(async () => {
     if (dirtyUpdates.length === 0) return;
     try {
       await savePage(dirtyUpdates);
+      // Only on success: a failed publish leaves the drafts for a retry, and
+      // standing the lane down would mean nothing reaches the server until the
+      // user happens to type again.
+      settleDraftWrites(dirtyUpdates.map((u) => u.blockPath));
       for (const u of dirtyUpdates) clearDraft(u.blockPath);
+      // Whatever a previous attempt clashed on is settled now.
+      setBlockConflicts([]);
       setActiveBlock(null);
     } catch {
       // Error surfaced via useCmsAdmin().error; keep drafts so the user can retry.
     }
-  }, [dirtyUpdates, savePage, clearDraft, setActiveBlock]);
+  }, [dirtyUpdates, savePage, clearDraft, setActiveBlock, settleDraftWrites, setBlockConflicts]);
 
   const discard = useCallback(() => {
     // Local edits first; emptying the map also cancels any pending autosave

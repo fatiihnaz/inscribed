@@ -647,6 +647,37 @@ export function CmsProvider({
       return items;
     };
 
+    /**
+     * Drop draft entries that no longer say anything: the block's server draft
+     * is gone and the local value is what is published. Per-block undo leaves
+     * exactly such an entry behind (it pins the published value so a write
+     * still in flight can't resurrect the text), and keeping it would pin the
+     * block to a value the server may since have moved past.
+     *
+     * Only safe from inside a flush, which the queue chains behind the slug's
+     * in-flight write: anywhere else `draftValue` can still be a round-trip out
+     * of date. Scoped to this flush's slug for the same reason.
+     *
+     * @param {string} slug
+     * @param {string} pathname
+     */
+    const pruneSettledDrafts = (slug, pathname) => {
+      const blocks = blocksStore.get().get(pathname) ?? EMPTY_BLOCKS;
+      setDraftsState((prev) => {
+        /** @type {Map<string, *> | null} */
+        let next = null;
+        for (const [blockPath, value] of prev) {
+          const block = blocks.get(blockPath);
+          if (!block || (block._slug ?? pathname) !== slug) continue;
+          if (block.draftValue != null) continue;
+          if (!deepEqual(value, block.value)) continue;
+          next ??= new Map(prev);
+          next.delete(blockPath);
+        }
+        return next ?? prev;
+      });
+    };
+
     const arm = () => {
       if (!isAdminRef.current) return;
       const drafts = contentDraftsStore.get();
@@ -666,7 +697,10 @@ export function CmsProvider({
           const currentPathname = draftPathnameRef.current ?? "/";
           const currentBlocks = blocksStore.get().get(currentPathname) ?? EMPTY_BLOCKS;
           const items = collectForSlug(slug, currentPathname, currentBlocks);
-          if (items.length === 0) return;
+          if (items.length === 0) {
+            pruneSettledDrafts(slug, currentPathname);
+            return;
+          }
 
           // Everything undone back to published: a silent backend cleanup, so
           // the status pill stays quiet rather than flashing a save.
@@ -715,6 +749,7 @@ export function CmsProvider({
             }
             return mutated ? nextMap : prev;
           });
+          pruneSettledDrafts(slug, currentPathname);
 
           if (isAllReset) setDraftSyncStatus("idle");
           else flashDraftStatus("saved");

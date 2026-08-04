@@ -311,6 +311,8 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
       setError(`Zorunlu alan eksik: ${missing}`);
       return;
     }
+    const isVirtualNow = !itemRef.current || itemRef.current.version === 0;
+    const queueKey = isVirtualNow ? newDraftKey(collection) : itemDraftKey(collection, slug);
     startTransition(async () => {
       try {
         const token = await getAccessToken();
@@ -332,6 +334,26 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         // Drop the live-preview overlay so consumers fall back to the
         // freshly-published `item.data` immediately.
         clearCollectionDraft(collection, slug);
+        // Stand the record's draft lane down, same shape as `undoDraft` below.
+        // Cancel is for the write in flight: it would otherwise patch
+        // `draftData` back on when it lands. The DELETE is for that same write's
+        // other half, since cancelling can't recall a sent request and it
+        // reaches the backend after the publish cleared the slot. The chain
+        // orders them: this runs only once that write's response is back.
+        draftQueue.cancel(queueKey);
+        draftQueue.enqueue(queueKey, async () => {
+          try {
+            const token = await getAccessToken();
+            if (isVirtualNow) {
+              await config.transport.deleteCollectionNewDraft(collection, { accessToken: token });
+            } else {
+              await config.transport.deleteCollectionItemDraft(collection, slug, { accessToken: token });
+            }
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn("[inscribed] post-publish collection draft cleanup failed:", err);
+          }
+        });
         // Indicator flashes "Veri kaydedildi" for a beat before the row
         // settles into its idle dot.
         setPublishedFlash(true);
@@ -360,7 +382,7 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
       }
     });
   }, [
-    schema, collection, slug, readValues, getAccessToken, config,
+    schema, collection, slug, readValues, getAccessToken, config, draftQueue,
     updateCollectionItem, clearCollectionDraft, onAfterCollectionSave, refetch,
   ]);
 

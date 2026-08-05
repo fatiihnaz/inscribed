@@ -18,6 +18,7 @@ export { CmsGroup } from "./core/CmsGroup.jsx";
 export { useCmsContent } from "./core/hooks/use-cms-content.js";
 export { useCmsAdmin } from "./core/hooks/use-cms-admin.js";
 export { useCmsBlock } from "./core/hooks/use-cms-block.js";
+export { useCmsRoute } from "./core/hooks/use-cms-route.js";
 export { useCountdown } from "./core/hooks/use-countdown.js";
 
 export { createCmsConfig } from "./shared/config.js";

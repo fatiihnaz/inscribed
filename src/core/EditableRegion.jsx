@@ -16,9 +16,9 @@
 
 import { cloneElement, lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
-import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
+import { useCmsRoute } from "./hooks/use-cms-route.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { isBlockDirty, resolveBlockValue } from "./resolve.js";
 import { useImageOverlayFits } from "../editors/inline/use-image-overlay-fits.js";
@@ -112,8 +112,8 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   // Own block on the current route only, and selection as a boolean: another
   // block's save or selection leaves this region alone, and a navigation reads
   // the new route's cached blocks on its very first render.
-  const slug = usePathname() ?? "/";
-  const block = useStoreSelector(blocksStore, (s) => s.get(slug)?.get(fullPath));
+  const { pathname } = useCmsRoute();
+  const block = useStoreSelector(blocksStore, (s) => s.get(pathname)?.get(fullPath));
   const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === fullPath);
   const blockType = block ? block.blockType : null;
   const value = resolveBlockValue(block, hasLocalDraft, localDraft);

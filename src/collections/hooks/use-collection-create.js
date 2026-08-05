@@ -16,6 +16,7 @@ import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useCollectionContext } from "../context.js";
 import { itemDraftKey, newDraftKey } from "../../shared/state/draft-keys.js";
 import { useCollection } from "./use-collection.js";
+import { useCmsRoute } from "../../core/hooks/use-cms-route.js";
 import { NEW_DRAFT_GUID } from "../../shared/contracts/schemas.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
 import { stableStringify } from "../../shared/util/stable-stringify.js";
@@ -52,6 +53,13 @@ import {
  *   form never PUTs.
  * @param {() => void} [options.onSeedFromDraft]  Fired once when a stashed
  *   backend draft seeds the form, so the caller can e.g. auto-expand.
+ * @param {string} [options.translationOf]
+ *   `translationGroupId` of a record this new one is a translation of. Read it
+ *   off the record the editor is looking at; the backend links the two.
+ * @param {string} [options.locale]
+ *   Language to compose in. Defaults to the route's, which is right for a plain
+ *   "new record" flow. A translation is the exception: the editor is reading
+ *   the Turkish page while writing the English copy, so that flow names it.
  * @returns {CollectionCreateState}
  */
 export function useCollectionCreate({
@@ -60,10 +68,16 @@ export function useCollectionCreate({
   listParams,
   active = true,
   onSeedFromDraft,
+  translationOf,
+  locale: localeProp,
 }) {
   const { config, getAccessToken, onAfterCollectionSave } = useCmsContext();
   const { updateCollectionItem, invalidateCollectionList, draftQueue } =
     useCollectionContext();
+  // A record is composed in the language of the page composing it, unless the
+  // caller is writing a translation and says otherwise.
+  const route = useCmsRoute();
+  const locale = localeProp ?? route.locale;
 
   const [values, setValues] = useState(() => seedValues(schema.fields, {}));
   const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -114,10 +128,14 @@ export function useCollectionCreate({
 
     // Same lane as a virtual row's editor: both POST to the collection's single
     // new-item slot, so they must not be able to overlap.
-    draftQueue.schedule(newDraftKey(collectionKey), async (ctx) => {
+    draftQueue.schedule(newDraftKey(collectionKey, locale), async (ctx) => {
       try {
         const token = await getAccessToken();
-        await config.transport.saveCollectionNewDraft(collectionKey, { data: payload }, { accessToken: token });
+        await config.transport.saveCollectionNewDraft(
+          collectionKey,
+          { data: payload },
+          { accessToken: token, locale: locale ?? undefined, translationGroup: translationOf },
+        );
         if (ctx.isStale()) return;
         lastSyncedRef.current = serialized;
       } catch (err) {
@@ -128,7 +146,7 @@ export function useCollectionCreate({
     });
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values, active, isPending, collectionKey]);
+  }, [values, active, isPending, collectionKey, locale, translationOf]);
 
   const reset = () => {
     setValues(seedValues(schema.fields, {}));
@@ -140,10 +158,13 @@ export function useCollectionCreate({
   const deleteDraft = async () => {
     // A queued autosave for this slot is now obsolete; dropping it here stops
     // it re-creating the draft this call is removing.
-    draftQueue.cancel(newDraftKey(collectionKey));
+    draftQueue.cancel(newDraftKey(collectionKey, locale));
     try {
       const token = await getAccessToken();
-      await config.transport.deleteCollectionNewDraft(collectionKey, { accessToken: token });
+      await config.transport.deleteCollectionNewDraft(collectionKey, {
+        accessToken: token,
+        locale: locale ?? undefined,
+      });
       // List invalidation is enough: the sentinel row only ever reaches
       // consumers through the list window, never through the item cache.
       invalidateCollectionList(collectionKey);
@@ -166,12 +187,14 @@ export function useCollectionCreate({
         const created = await config.transport.createCollectionItem(
           collectionKey,
           { data: buildPayload(schema.fields, values) },
-          { accessToken: token },
+          { accessToken: token, locale: locale ?? undefined, translationGroup: translationOf },
         );
         // The new-item slot no longer describes anything, so a queued write
         // against it is dropped; the record's own lane inherits whatever is
         // still in flight, so its first draft write can't overtake the create.
-        draftQueue.rename(newDraftKey(collectionKey), itemDraftKey(collectionKey, created.slug));
+        draftQueue.rename(
+          newDraftKey(collectionKey, locale), itemDraftKey(collectionKey, created.slug),
+        );
         updateCollectionItem(collectionKey, created.slug, created);
         // A new row changes every server-rendered window of this collection.
         try {

@@ -1,20 +1,21 @@
 "use client";
 
 /**
- * @file `useCmsContent()`: fetch the current page's blocks. Slug comes from
- * `usePathname()`. The result also lands in the shared `CmsContext` blocks map
- * so `useCmsBlock` / `EditableRegion` read it without their own fetches.
- * Re-runs when `refetchToken` changes (bumped by saves).
+ * @file `useCmsContent()`: fetch the current page's blocks. The route comes from
+ * `useCmsRoute()`, which is also what keeps the cache keyed by pathname while
+ * the fetch addresses the slug. The result lands in the shared `CmsContext`
+ * blocks map so `useCmsBlock` / `EditableRegion` read it without their own
+ * fetches. Re-runs when `refetchToken` changes (bumped by saves).
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
 import { indexBlocksByPath } from "../blocks.js";
 import { mergePageBlocks, resolveGlobalSlug } from "../merge-blocks.js";
+import { useCmsRoute } from "./use-cms-route.js";
 
 /** Stable empty map so the selector never allocates (see shared/state/store.js). */
 const EMPTY_BLOCKS = new Map();
@@ -38,13 +39,13 @@ const EMPTY_BLOCKS = new Map();
 
 export function useCmsContent() {
   const { config, blocksStore, commitBlocks, uiStore, triggerRefetch, getAccessToken } = useCmsContext();
-  const slug = usePathname() ?? "/";
+  const { pathname, slug, locale } = useCmsRoute();
   const refetchToken = useStoreSelector(uiStore, (s) => s.refetchToken);
 
   // Blocks come straight off the store rather than a local copy: the same map
   // is written by the SSR seed, by navigation, and by the autosave mirror, and
   // a local array would silently miss all three (this hook is public API).
-  const byPath = useStoreSelector(blocksStore, (s) => s.get(slug) ?? EMPTY_BLOCKS);
+  const byPath = useStoreSelector(blocksStore, (s) => s.get(pathname) ?? EMPTY_BLOCKS);
   const blocks = useMemo(() => Array.from(byPath.values()), [byPath]);
 
   const [state, setState] = useState(
@@ -69,11 +70,13 @@ export function useCmsContent() {
         // on every page.
         const globalSlug = resolveGlobalSlug(config.globalSlug, slug);
 
+        // The global slug is fetched in the page's own locale: a Turkish page
+        // showing an English header would be worse than no header at all.
         const [pageResponse, globalResponse] = await Promise.all([
-          config.transport.getContent(slug, { accessToken: token, signal: controller.signal }),
+          config.transport.getContent(slug, { accessToken: token, locale, signal: controller.signal }),
           globalSlug
             ? config.transport
-                .getContent(globalSlug, { accessToken: token, signal: controller.signal })
+                .getContent(globalSlug, { accessToken: token, locale, signal: controller.signal })
                 .catch(() => ({ slug: globalSlug, blocks: [] }))
             : Promise.resolve({ slug: "", blocks: [] }),
         ]);
@@ -85,7 +88,9 @@ export function useCmsContent() {
           pageBlocks: pageResponse.blocks,
           globalBlocks: globalResponse.blocks,
         });
-        commitBlocks(slug, indexBlocksByPath(merged));
+        // Keyed by pathname, not slug: two locales share one slug, and the
+        // store is what each route renders from.
+        commitBlocks(pathname, indexBlocksByPath(merged));
         setState({ isLoading: false, error: null });
       } catch (err) {
         if (cancelled) return;
@@ -101,7 +106,7 @@ export function useCmsContent() {
       cancelled = true;
       controller.abort();
     };
-  }, [config, slug, refetchToken, commitBlocks, getAccessToken]);
+  }, [config, pathname, slug, locale, refetchToken, commitBlocks, getAccessToken]);
 
   return {
     blocks,

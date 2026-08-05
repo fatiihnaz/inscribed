@@ -23,6 +23,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { CmsContext, useCmsContext } from "../shared/state/cms-context.js";
 import { ensureCmsConfig } from "../shared/config.js";
+import { resolveCmsRoute } from "../shared/route.js";
 import { buildThemeCss } from "../shared/style/theme.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
@@ -70,7 +71,7 @@ function useConstant(create) {
  * @param {string|null} [props.userSub]
  * @param {boolean} [props.isAdmin]
  * @param {BlockResponse[]} [props.initialBlocks]   Server-fetched blocks, seeded into the map before first paint to avoid SSR flicker.
- * @param {(slug: string) => void | Promise<void>} [props.onAfterSave]   Server Action run after a save, typically `revalidateTag(cmsCacheTag(slug))`.
+ * @param {(slug: string, locale?: string) => void | Promise<void>} [props.onAfterSave]   Server Action run after a save, typically `revalidateCmsSlug`. `locale` is undefined on a single-language site.
  * @param {() => Promise<string>} [props.getAccessToken]   Returns the user's JWT, added as `Authorization: Bearer` on writes. When omitted and `config.clientKey` is set, the built-in browser auth (reference backend `/auth/*`) takes over; omit both for public mode.
  * @param {import("../shared/contracts/transport.js").CmsTransport} [props.transport]   Custom client transport. Defaults to REST from `config`. Passed here, not via `config`, because it holds functions that can't cross the RSC boundary.
  * @param {{ name: string|null, email: string|null, image: string|null } | null} [props.userInfo]   Identity for the admin panel footer. Null in public mode.
@@ -257,6 +258,11 @@ export function CmsProvider({
 
   const pathname = usePathname() ?? "/";
   const router = useRouter();
+  // `pathname` keys the blocks cache, `routeSlug` is what the backend stores
+  // under. Identical until a locale prefix is configured, and the pair must
+  // stay distinguishable everywhere below: mixing them up either collapses two
+  // locales into one cache entry or PUTs to a slug that was never synced.
+  const { slug: routeSlug, locale } = resolveCmsRoute(pathname, normalizedConfig);
   // Only read while the blocks store is created, so it is the mount-time route.
   const initialPathname = pathname;
 
@@ -566,11 +572,11 @@ export function CmsProvider({
   );
 
   const stableOnAfterSave = useCallback(
-    /** @param {string} slug */
-    async (slug) => {
+    /** @param {string} slug @param {string|null} [locale] */
+    async (slug, locale) => {
       const fn = onAfterSaveRef.current;
       if (!fn) return;
-      await fn(slug);
+      await fn(slug, locale ?? undefined);
     },
     [],
   );
@@ -614,6 +620,10 @@ export function CmsProvider({
 
   const draftPathnameRef = useRef(pathname);
   draftPathnameRef.current = pathname;
+  const draftSlugRef = useRef(routeSlug);
+  draftSlugRef.current = routeSlug;
+  const draftLocaleRef = useRef(locale);
+  draftLocaleRef.current = locale;
   const isAdminRef = useRef(isAdmin);
   isAdminRef.current = isAdmin;
   const draftConfigRef = useRef(normalizedConfig);
@@ -643,9 +653,10 @@ export function CmsProvider({
     };
   }, []);
 
-  // Slugs whose draft autosave already answered a 409 with a refetch. One
-  // conflict gets one re-base; a second means the refetch did not help, and
-  // re-arming the lane again would just hammer the backend every second.
+  // Draft lanes that already answered a 409 with a refetch. One conflict gets
+  // one re-base; a second means the refetch did not help, and re-arming the
+  // lane again would just hammer the backend every second. Keyed by lane, not
+  // slug, so a conflict in one locale doesn't spend the other's single retry.
   const conflictRetriedRef = useRef(/** @type {Set<string>} */ (new Set()));
   // One-shot blocks subscriptions waiting on those refetches, held so the
   // effect can drop them if it tears down first.
@@ -665,16 +676,16 @@ export function CmsProvider({
      * send a request, so the backend draft gets cleared.
      *
      * @param {string} slug
-     * @param {string} pathname
+     * @param {string} fallbackSlug   Slug for blocks that carry no `_slug` stamp.
      * @param {Map<string, import("../shared/contracts/schemas.js").BlockResponse>} blocks
      */
-    const collectForSlug = (slug, pathname, blocks) => {
+    const collectForSlug = (slug, fallbackSlug, blocks) => {
       /** @type {import("../shared/contracts/schemas.js").UpdateBlockItem[]} */
       const items = [];
       for (const [blockPath, value] of contentDraftsStore.get()) {
         const block = blocks.get(blockPath);
         if (!block) continue;
-        if ((block._slug ?? pathname) !== slug) continue;
+        if ((block._slug ?? fallbackSlug) !== slug) continue;
         if (deepEqual(value, resolveBlockValue(block))) continue;
         items.push({ blockPath, value, version: block.version });
       }
@@ -693,16 +704,17 @@ export function CmsProvider({
      * of date. Scoped to this flush's slug for the same reason.
      *
      * @param {string} slug
-     * @param {string} pathname
+     * @param {string} pathname       Cache key for this route's blocks.
+     * @param {string} fallbackSlug   Slug for blocks that carry no `_slug` stamp.
      */
-    const pruneSettledDrafts = (slug, pathname) => {
+    const pruneSettledDrafts = (slug, pathname, fallbackSlug) => {
       const blocks = blocksStore.get().get(pathname) ?? EMPTY_BLOCKS;
       setDraftsState((prev) => {
         /** @type {Map<string, *> | null} */
         let next = null;
         for (const [blockPath, value] of prev) {
           const block = blocks.get(blockPath);
-          if (!block || (block._slug ?? pathname) !== slug) continue;
+          if (!block || (block._slug ?? fallbackSlug) !== slug) continue;
           if (block.draftValue != null) continue;
           if (!deepEqual(value, block.value)) continue;
           next ??= new Map(prev);
@@ -723,16 +735,18 @@ export function CmsProvider({
       const slugs = new Set();
       for (const blockPath of drafts.keys()) {
         const block = blocks.get(blockPath);
-        if (block) slugs.add(block._slug ?? pathname);
+        if (block) slugs.add(block._slug ?? draftSlugRef.current);
       }
 
       for (const slug of slugs) {
-        draftQueue.schedule(contentDraftKey(slug), async (ctx) => {
+        draftQueue.schedule(contentDraftKey(slug, draftLocaleRef.current), async (ctx) => {
           const currentPathname = draftPathnameRef.current ?? "/";
+          const currentSlug = draftSlugRef.current;
+          const currentLocale = draftLocaleRef.current;
           const currentBlocks = blocksStore.get().get(currentPathname) ?? EMPTY_BLOCKS;
-          const items = collectForSlug(slug, currentPathname, currentBlocks);
+          const items = collectForSlug(slug, currentSlug, currentBlocks);
           if (items.length === 0) {
-            pruneSettledDrafts(slug, currentPathname);
+            pruneSettledDrafts(slug, currentPathname, currentSlug);
             return;
           }
 
@@ -749,7 +763,7 @@ export function CmsProvider({
           try {
             await draftConfigRef.current.transport.updateDraft(
               { slug, blocks: items },
-              { accessToken },
+              { accessToken, locale: currentLocale ?? undefined },
             );
           } catch (err) {
             if (ctx.isStale()) return;
@@ -759,9 +773,9 @@ export function CmsProvider({
             // saved, so re-base on a refetch and send it again.
             if (
               err instanceof CmsApiError && err.isConflict &&
-              !conflictRetriedRef.current.has(slug)
+              !conflictRetriedRef.current.has(contentDraftKey(slug, currentLocale))
             ) {
-              conflictRetriedRef.current.add(slug);
+              conflictRetriedRef.current.add(contentDraftKey(slug, currentLocale));
               // Re-arm when the fresh blocks actually land rather than after a
               // guessed delay: the retry is only worth sending with the
               // versions that refetch brings.
@@ -780,7 +794,7 @@ export function CmsProvider({
             if (!isAllReset) flashDraftStatus("failed");
             return;
           }
-          conflictRetriedRef.current.delete(slug);
+          conflictRetriedRef.current.delete(contentDraftKey(slug, currentLocale));
 
           // A discard landed mid-flight: it already nulled `draftValue`, so
           // mirroring our sent values now would re-populate it and fight it.
@@ -806,7 +820,7 @@ export function CmsProvider({
             }
             return mutated ? nextMap : prev;
           });
-          pruneSettledDrafts(slug, currentPathname);
+          pruneSettledDrafts(slug, currentPathname, currentSlug);
 
           if (isAllReset) setDraftSyncStatus("idle");
           else flashDraftStatus("saved");
@@ -851,18 +865,22 @@ export function CmsProvider({
         // A block missing from the map still resolves to a slug rather than
         // being skipped: this exists to stop a write, and skipping one would
         // leave behind exactly the write it is here to stop.
-        slugs.add(currentBlocks.get(blockPath)?._slug ?? currentPathname);
+        slugs.add(currentBlocks.get(blockPath)?._slug ?? draftSlugRef.current);
       }
 
       const currentConfig = draftConfigRef.current;
+      const currentLocale = draftLocaleRef.current;
       for (const slug of slugs) {
-        draftQueue.cancel(contentDraftKey(slug));
+        draftQueue.cancel(contentDraftKey(slug, currentLocale));
         // Deliberately without `discardServerDrafts`' `draftValue != null`
         // filter: a publish leaves that null, so filtering would send nothing.
-        draftQueue.enqueue(contentDraftKey(slug), async () => {
+        draftQueue.enqueue(contentDraftKey(slug, currentLocale), async () => {
           try {
             const accessToken = (await stableGetAccessToken()) || undefined;
-            await currentConfig.transport.deleteDraft(slug, { accessToken });
+            await currentConfig.transport.deleteDraft(slug, {
+              accessToken,
+              locale: currentLocale ?? undefined,
+            });
           } catch (err) {
             // eslint-disable-next-line no-console
             console.warn("[inscribed] post-publish draft cleanup DELETE failed:", err);
@@ -892,7 +910,7 @@ export function CmsProvider({
       for (const blockPath of blockPaths) {
         const block = currentBlocks.get(blockPath);
         if (!block || block.draftValue == null) continue;
-        const slug = block._slug ?? currentPathname;
+        const slug = block._slug ?? draftSlugRef.current;
         const list = bySlug.get(slug) ?? [];
         list.push(blockPath);
         bySlug.set(slug, list);
@@ -919,11 +937,15 @@ export function CmsProvider({
       // can't overtake a PUT still in flight and leave the draft it just
       // removed re-created behind it.
       const currentConfig = draftConfigRef.current;
+      const currentLocale = draftLocaleRef.current;
       for (const slug of bySlug.keys()) {
-        draftQueue.enqueue(contentDraftKey(slug), async () => {
+        draftQueue.enqueue(contentDraftKey(slug, currentLocale), async () => {
           try {
             const accessToken = (await stableGetAccessToken()) || undefined;
-            await currentConfig.transport.deleteDraft(slug, { accessToken });
+            await currentConfig.transport.deleteDraft(slug, {
+              accessToken,
+              locale: currentLocale ?? undefined,
+            });
           } catch (err) {
             // eslint-disable-next-line no-console
             console.warn("[inscribed] discard cleanup DELETE failed:", err);

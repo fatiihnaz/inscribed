@@ -7,6 +7,7 @@ export default defineConfig({
     server: "src/server/get-content.js",
     actions: "src/server/actions.js",
     page: "src/server/cms-page.jsx",
+    middleware: "src/middleware.js",
     "cli-sync": "src/cli/sync.js",
   },
   format: ["esm"],

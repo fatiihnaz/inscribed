@@ -32,6 +32,13 @@ import { CollectionFieldsForm } from "./CollectionFieldsForm.jsx";
  * @param {string} [props.submitLabel]  Submit button text. Default "Oluştur".
  * @param {React.ReactNode} [props.unauthorized]  Shown to visitors without
  *   create access instead of nothing.
+ * @param {string} [props.translationOf]
+ *   `translationGroupId` of the record this one translates. Read it off the
+ *   record you are showing (`useCollectionRecord()`), and the backend links the
+ *   two. Pair it with `locale` to say which language you are writing.
+ * @param {string} [props.locale]
+ *   Language to compose in. Defaults to the route's, which is what a plain
+ *   "add a record" page wants; a translation form names the target instead.
  * @param {string} [props.className]
  * @param {React.CSSProperties} [props.style]
  */
@@ -40,6 +47,8 @@ export function CollectionComposer({
   onCreated,
   submitLabel = "Oluştur",
   unauthorized = null,
+  translationOf,
+  locale,
   className,
   style,
 }) {
@@ -79,11 +88,15 @@ export function CollectionComposer({
 
   return (
     <ComposerForm
-      key={collection}
+      // Remount when the target changes: the form seeds once, so switching
+      // which record it translates has to start a fresh one.
+      key={`${collection}:${locale ?? ""}:${translationOf ?? ""}`}
       collectionKey={collection}
       schema={meta.schema}
       onCreated={onCreated}
       submitLabel={submitLabel}
+      translationOf={translationOf}
+      locale={locale}
       className={className}
       style={style}
     />
@@ -99,11 +112,15 @@ export function CollectionComposer({
  *   schema: import("../shared/contracts/schemas.js").CollectionSchema,
  *   onCreated?: (item: import("../shared/contracts/schemas.js").CollectionItemResponse) => void,
  *   submitLabel: string,
+ *   translationOf?: string,
+ *   locale?: string,
  *   className?: string,
  *   style?: React.CSSProperties,
  * }} props
  */
-function ComposerForm({ collectionKey, schema, onCreated, submitLabel, className, style }) {
+function ComposerForm({
+  collectionKey, schema, onCreated, submitLabel, translationOf, locale, className, style,
+}) {
   const [justCreated, setJustCreated] = useState(false);
   // A collection has one new-item slot. If the drawer's create lane is also
   // open on this key, only the first of the two writes it.
@@ -118,7 +135,7 @@ function ComposerForm({ collectionKey, schema, onCreated, submitLabel, className
     hasServerDraft,
     isPending,
     error,
-  } = useCollectionCreate({ collectionKey, schema, active: isDraftWriter });
+  } = useCollectionCreate({ collectionKey, schema, active: isDraftWriter, translationOf, locale });
 
   const handleSubmit = () => {
     submit((item) => {

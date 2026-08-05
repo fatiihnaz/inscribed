@@ -10,11 +10,16 @@
 /**
  * One page's block drafts (`PUT /cms/draft`), which are batched per slug.
  *
+ * The locale is part of the key because it is part of the endpoint: two
+ * languages of one page are two draft slots, and sharing a lane would make
+ * editing the English copy cancel the Turkish write still in flight.
+ *
  * @param {string} slug
+ * @param {string|null} [locale]  Omitted on a single-language site.
  * @returns {string}
  */
-export function contentDraftKey(slug) {
-  return `content:${slug}`;
+export function contentDraftKey(slug, locale) {
+  return locale ? `content:${locale}:${slug}` : `content:${slug}`;
 }
 
 /**
@@ -29,13 +34,18 @@ export function itemDraftKey(collection, slug) {
 }
 
 /**
- * The collection's single new-item draft slot
- * (`POST /cms/collections/{key}/drafts`). One per collection, no slug: that is
- * what the backend offers, and every surface composing a new record shares it.
+ * The collection's new-item draft slot
+ * (`POST /cms/collections/{key}/drafts`). No slug: that is what the backend
+ * offers, and every surface composing a new record shares it.
+ *
+ * One per collection *per locale*, because the slot itself is: composing a
+ * Turkish record and an English one are two drafts, so they must not queue
+ * behind (and cancel) each other.
  *
  * @param {string} collection
+ * @param {string|null} [locale]  Omitted on a single-language site.
  * @returns {string}
  */
-export function newDraftKey(collection) {
-  return `new:${collection}`;
+export function newDraftKey(collection, locale) {
+  return locale ? `new:${locale}:${collection}` : `new:${collection}`;
 }

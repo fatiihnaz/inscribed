@@ -27,7 +27,7 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   ChevronsLeft, ChevronDown, ChevronLeft, ChevronRight,
   Check, Undo2, LogOut, Search, Eye, Pencil, FileText, Layers, Folder,
@@ -39,6 +39,7 @@ import { useStoreSelector } from "../shared/state/store.js";
 import { collectDirtyBlocks, collectDirtyRecords, dirtyCollectionKeys } from "./dirty.js";
 import { isBlockDirty } from "../core/resolve.js";
 import { useCmsSave } from "../core/hooks/use-cms-save.js";
+import { useCmsRoute } from "../core/hooks/use-cms-route.js";
 import { useMyCollections } from "../collections/hooks/use-my-collections.js";
 import { describeSaveError } from "./save-error.js";
 
@@ -59,7 +60,9 @@ import { PANEL_WIDTH, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MI
 const EMPTY_BLOCKS = new Map();
 
 export function Drawer() {
-  const pathname = usePathname() ?? "/";
+  // `pathname` reads the blocks cache and labels the breadcrumb; `routeSlug` is
+  // what `_slug` stamps carry, so it (not the pathname) decides page vs global.
+  const { pathname, slug: routeSlug } = useCmsRoute();
   const {
     setActiveBlock,
     setDrawerOpen,
@@ -132,8 +135,8 @@ export function Drawer() {
       // `visible={false}` regions register as "hidden": drop them entirely.
       if (editorVisibility.get(block.blockPath) === "hidden") continue;
 
-      const slug = block._slug ?? pathname;
-      (slug === pathname ? pages : globals).push(block);
+      const slug = block._slug ?? routeSlug;
+      (slug === routeSlug ? pages : globals).push(block);
     }
     pages.sort((a, b) => a.sortOrder - b.sortOrder);
     globals.sort((a, b) => a.sortOrder - b.sortOrder);
@@ -154,7 +157,7 @@ export function Drawer() {
         value: binding,
         version: 0,
         sortOrder: nextSort++,
-        _slug: pathname,
+        _slug: routeSlug,
         // Group and label ride along on the binding: a collection row's path
         // addresses a record, so unlike a content block it has nowhere to
         // carry either.
@@ -164,7 +167,7 @@ export function Drawer() {
     }
 
     return { pageBlockList: pages, globalBlockList: globals };
-  }, [blocks, pathname, collectionBindings, editorVisibility]);
+  }, [blocks, routeSlug, collectionBindings, editorVisibility]);
 
   // Per-block dirty flag for the rail dot, tab dots and preview counts. Its own
   // memo (rebuilt per keystroke) so it can't drag the block lists with it. Cards
@@ -386,8 +389,8 @@ export function Drawer() {
     setModeState("page");
     const block = rowsByPath.get(activeBlock);
     if (!block) return;
-    const slug = block._slug ?? pathname;
-    const tab = slug === pathname ? "page" : "global";
+    const slug = block._slug ?? routeSlug;
+    const tab = slug === routeSlug ? "page" : "global";
     setActiveTab(tab);
     const group = groupOfBlock(block);
     if (group == null) return;
@@ -397,7 +400,7 @@ export function Drawer() {
       next.delete(group);
       return next;
     });
-  }, [activeBlock, rowsByPath, pathname, isDrawerOpen, setDrawerOpen]);
+  }, [activeBlock, rowsByPath, routeSlug, isDrawerOpen, setDrawerOpen]);
 
   // Wall-clock time of the last successful autosave, echoed as "Taslak kayıtlı
   // HH:MM" once dirty drains.
@@ -530,7 +533,7 @@ export function Drawer() {
               collectionDirtyCounts={collectionDirtyCounts}
               onGoToBlock={(block) => {
                 setPreviewOpen(false);
-                const scope = (block._slug ?? pathname) === pathname ? "page" : "global";
+                const scope = (block._slug ?? routeSlug) === routeSlug ? "page" : "global";
                 setActiveTabState(scope);
                 setActiveBlock(block.blockPath);
               }}

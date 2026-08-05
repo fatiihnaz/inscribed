@@ -25,6 +25,18 @@ import { normalizeTheme } from "./style/theme.js";
  * @property {string} globalSlug
  *   Slug holding `scope="global"` blocks (header/footer/site-wide). Fetched
  *   alongside every page and merged into the same blocks map. Default "__global".
+ * @property {string[]} locales
+ *   Locale codes this site serves, matched against the leading path segment to
+ *   split a route into `{ locale, slug }` (see `route.js`). Empty on a
+ *   single-language site, which is what keeps it off the wire entirely.
+ *
+ *   **Order is meaningful: the first entry is the default locale.** List the
+ *   language your existing content is already written in first.
+ * @property {string|null} defaultLocale
+ *   Derived, not configured: `locales[0]`, or null when `locales` is empty.
+ *   The locale an unprefixed path resolves to, and the one whose links carry no
+ *   prefix. It is not a separate input because the backend derives its own the
+ *   same way, and two inputs are two things that can disagree.
  * @property {CmsTransport} [transport]
  *   Data-access seam (see `transport.js`). Added at the use site, not by
  *   `createCmsConfig`: client provider augments it, server helpers default
@@ -45,22 +57,62 @@ import { normalizeTheme } from "./style/theme.js";
  * @param {string} [opts.cdnUrl]   Image upload root. Omit to upload through the API at `${baseUrl}/cms/media`.
  * @param {string} [opts.clientKey]   This site's Client key on the reference backend. Omit to disable public content reads and the built-in auth.
  * @param {string} [opts.globalSlug]   Override the default "__global" slug for cross-page blocks.
+ * @param {string[]} [opts.locales]   Locale codes this site serves, e.g. `["tr", "en"]`. The first is the default. Omit for a single-language site.
  * @param {CmsTheme} [opts.theme]   Overrides for the admin/editing visual tokens (accent, fonts, radius, …). Unknown keys are dropped; unset keys keep their defaults.
  * @returns {CmsConfig}
  */
 
-export function createCmsConfig({ baseUrl, cdnUrl, clientKey, globalSlug, theme }) {
+export function createCmsConfig({
+  baseUrl,
+  cdnUrl,
+  clientKey,
+  globalSlug,
+  locales,
+  theme,
+  ...rest
+}) {
   if (!baseUrl || typeof baseUrl !== "string") {
     throw new Error("createCmsConfig: baseUrl is required");
   }
   const normalizedBase = baseUrl.replace(/\/+$/, "");
+  const normalizedLocales = normalizeLocales(locales);
+  // This has to tolerate seeing its own output again: `ensureCmsConfig`
+  // re-normalizes any config that isn't frozen, and crossing the RSC boundary
+  // drops the freeze, so the client re-runs this over a config that already
+  // carries the derived `defaultLocale`. A value agreeing with the derivation
+  // is therefore a round-trip, not an input; only a disagreeing one is the
+  // mistake worth naming, and ignoring that would move the site's root
+  // language without saying so.
+  if (rest.defaultLocale != null && rest.defaultLocale !== normalizedLocales[0]) {
+    throw new Error(
+      `createCmsConfig: defaultLocale is not an option, and "${rest.defaultLocale}" is not the first entry of locales [${normalizedLocales.join(", ")}]. The first entry is the default; order that list instead.`,
+    );
+  }
   return Object.freeze({
     baseUrl: normalizedBase,
     cdnUrl: cdnUrl ? cdnUrl.replace(/\/+$/, "") : null,
     clientKey: clientKey ?? null,
     globalSlug: globalSlug ?? "__global",
+    locales: normalizedLocales,
+    defaultLocale: normalizedLocales[0] ?? null,
     theme: normalizeTheme(theme),
   });
+}
+
+/**
+ * Validate eagerly rather than at the first fetch: a typo'd locale otherwise
+ * surfaces as a page of placeholders, several layers away from the config that
+ * caused it.
+ *
+ * @param {string[] | undefined} locales
+ * @returns {string[]}
+ */
+function normalizeLocales(locales) {
+  if (locales == null) return Object.freeze([]);
+  if (!Array.isArray(locales) || locales.some((l) => typeof l !== "string" || l === "")) {
+    throw new Error("createCmsConfig: locales must be an array of non-empty strings");
+  }
+  return Object.freeze([...locales]);
 }
 
 /**

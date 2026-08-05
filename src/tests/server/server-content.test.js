@@ -119,6 +119,30 @@ describe("cache tags", () => {
       "detay",
     ]);
   });
+
+  it("keeps each language of a page under its own tag", async () => {
+    // A page is one render per language, so publishing the English copy must
+    // not drop the Turkish one. Unlike a collection window, there is nothing
+    // shared between them to justify a common tag.
+    expect(cmsCacheTag("/haberler", "en")).toBe("cms-en-/haberler");
+    expect(cmsCacheTag("/haberler", "tr")).not.toBe(cmsCacheTag("/haberler", "en"));
+  });
+
+  it("keeps the pre-i18n tag on a single-language site", async () => {
+    const transport = fakeTransport();
+    await getCmsContent(configWith(transport), "/haberler");
+
+    expect(cmsCacheTag("/haberler")).toBe("cms-/haberler");
+    expect(cacheOf(transport.getContent).tags).toEqual(["cms-/haberler"]);
+  });
+
+  it("passes the locale to the fetch and into the tag together", async () => {
+    const transport = fakeTransport();
+    await getCmsContent(configWith(transport), "/haberler", { locale: "en" });
+
+    expect(transport.getContent.mock.calls[0][1].locale).toBe("en");
+    expect(cacheOf(transport.getContent).tags).toEqual(["cms-en-/haberler"]);
+  });
 });
 
 describe("page + global merge", () => {
@@ -231,6 +255,24 @@ describe("caller tags on the shared global fetch", () => {
     expect(globalCall[1].cache.tags).toEqual(["cms-__global"]);
     const pageCall = transport.getContent.mock.calls.find(([slug]) => slug === "/haberler");
     expect(pageCall[1].cache.tags).toContain("kampanya");
+  });
+
+  it("fetches __global in the page's own language", async () => {
+    const transport = fakeTransport({
+      pages: {
+        "/haberler": { slug: "/haberler", blocks: [block("hero.title")] },
+        __global: { slug: "__global", blocks: [block("footer.copyright")] },
+      },
+    });
+    await getCmsPageBlocks(configWith(transport), "/haberler", {
+      contentOptions: { locale: "en" },
+    });
+
+    // An English page with a Turkish header would be worse than no header, so
+    // the locale rides along even though the caller's tags deliberately don't.
+    const globalCall = transport.getContent.mock.calls.find(([slug]) => slug === "__global");
+    expect(globalCall[1].locale).toBe("en");
+    expect(globalCall[1].cache.tags).toEqual(["cms-en-__global"]);
   });
 });
 

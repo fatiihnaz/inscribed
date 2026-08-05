@@ -249,6 +249,148 @@ describe("draft discard", () => {
   });
 });
 
+describe("locale", () => {
+  /** `?locale=` off the most recent fetch, or null when absent. */
+  const localeOf = () => new URL(lastCall()[0]).searchParams.get("locale");
+
+  it("rides as a query param on both content read paths", async () => {
+    const t = createRestTransport({ baseUrl: BASE, clientKey: "my-site" });
+
+    fetchResolves({ slug: "home", blocks: [] });
+    await t.getContent("home", { locale: "en" });
+    expect(lastCall()[0]).toContain(`${BASE}/cms/public/my-site/content`);
+    expect(localeOf()).toBe("en");
+
+    fetchResolves({ slug: "home", blocks: [] });
+    await t.getContent("home", { accessToken: "tok", locale: "en" });
+    expect(lastCall()[0]).toContain(`${BASE}/cms/content`);
+    expect(localeOf()).toBe("en");
+  });
+
+  it("rides as a query param on the writes too, leaving bodies untouched", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    const body = { slug: "home", blocks: [{ blockPath: "a", value: "x", version: 1 }] };
+
+    fetchResolves({ updated: 1, unchanged: 0 });
+    await t.updateContent(body, { accessToken: "tok", locale: "en" });
+    expect(localeOf()).toBe("en");
+    // The locale qualifies the request, it is not part of what is written:
+    // the payload shape is the same one a single-language site sends.
+    expect(JSON.parse(lastCall()[1].body)).toEqual(body);
+
+    fetchResolves(undefined, 204);
+    await t.updateDraft(body, { accessToken: "tok", locale: "en" });
+    expect(localeOf()).toBe("en");
+
+    fetchResolves(undefined, 204);
+    await t.deleteDraft("home", { accessToken: "tok", locale: "en" });
+    expect(localeOf()).toBe("en");
+    expect(new URL(lastCall()[0]).searchParams.get("slug")).toBe("home");
+  });
+
+  it("is omitted entirely when the caller has none", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+
+    fetchResolves({ slug: "home", blocks: [] });
+    await t.getContent("home");
+    expect(lastCall()[0]).not.toContain("locale");
+
+    fetchResolves(undefined, 204);
+    await t.deleteDraft("home");
+    expect(lastCall()[0]).not.toContain("locale");
+  });
+
+  it("declares the whole list on /cms/sync instead of addressing one language", async () => {
+    // Sync is where the app tells the backend which languages exist, so the
+    // config stays the single home for that list. The manifest body stays
+    // locale-free: a slug is what a page is, not what language it is in.
+    const t = createRestTransport({ baseUrl: BASE });
+    const manifests = [{ slug: "/", blocks: [] }];
+
+    fetchResolves({ results: [], prunedSlugs: [] });
+    await t.syncManifests(manifests, { accessToken: "tok", locales: ["tr", "en"] });
+    expect(new URL(lastCall()[0]).searchParams.get("locales")).toBe("tr,en");
+    expect(localeOf()).toBeNull();
+    expect(JSON.parse(lastCall()[1].body)).toEqual(manifests);
+
+    // A single-language site declares nothing, which is how the backend keeps
+    // its existing (empty) list rather than being told to clear it.
+    fetchResolves({ results: [], prunedSlugs: [] });
+    await t.syncManifests(manifests, { accessToken: "tok", locales: [] });
+    expect(lastCall()[0]).toBe(`${BASE}/cms/sync`);
+
+    fetchResolves({ results: [], prunedSlugs: [] });
+    await t.syncManifests(manifests, { accessToken: "tok" });
+    expect(lastCall()[0]).toBe(`${BASE}/cms/sync`);
+  });
+
+  it("comes off params for a collection list, since it narrows the window", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves({ items: [], total: 0, offset: 0, limit: 50 });
+    await t.getCollection("News", { locale: "en", limit: 5 }, { accessToken: "tok" });
+    expect(localeOf()).toBe("en");
+    expect(new URL(lastCall()[0]).searchParams.get("limit")).toBe("5");
+  });
+
+  it("carries the translation group on the two create-side endpoints", async () => {
+    // Which group a new record joins qualifies the call rather than describing
+    // the record, so it rides beside the locale and leaves the body alone.
+    const t = createRestTransport({ baseUrl: BASE });
+    const groupOf = () => new URL(lastCall()[0]).searchParams.get("translationGroup");
+
+    fetchResolves({ id: "1", slug: "new-product", data: {} });
+    await t.createCollectionItem(
+      "News", { data: {} }, { accessToken: "tok", locale: "en", translationGroup: "8f3f" },
+    );
+    expect(localeOf()).toBe("en");
+    expect(groupOf()).toBe("8f3f");
+    expect(JSON.parse(lastCall()[1].body)).toEqual({ data: {} });
+
+    fetchResolves(undefined, 204);
+    await t.saveCollectionNewDraft(
+      "News", { data: {} }, { accessToken: "tok", locale: "en", translationGroup: "8f3f" },
+    );
+    expect(groupOf()).toBe("8f3f");
+
+    // A standalone record names no group; the backend starts a fresh one.
+    fetchResolves({ id: "1", slug: "s", data: {} });
+    await t.createCollectionItem("News", { data: {} }, { accessToken: "tok", locale: "en" });
+    expect(groupOf()).toBeNull();
+  });
+
+  it("qualifies creates and the new-item draft slot, but no per-slug endpoint", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+
+    fetchResolves({ id: "1", slug: "s", data: {} });
+    await t.createCollectionItem("News", { data: {} }, { accessToken: "tok", locale: "en" });
+    expect(localeOf()).toBe("en");
+
+    fetchResolves(undefined, 204);
+    await t.saveCollectionNewDraft("News", { data: {} }, { accessToken: "tok", locale: "en" });
+    expect(localeOf()).toBe("en");
+
+    fetchResolves(undefined, 204);
+    await t.deleteCollectionNewDraft("News", { accessToken: "tok", locale: "en" });
+    expect(localeOf()).toBe("en");
+
+    // PUT is the exception among per-slug endpoints: `version: null` is how a
+    // virtual row becomes real, and that row has no language yet.
+    fetchResolves({ id: "1", slug: "s", data: {} });
+    await t.upsertCollectionItem("News", "s", { data: {}, version: null }, { accessToken: "tok", locale: "en" });
+    expect(localeOf()).toBe("en");
+
+    // A slug is unique across the whole collection, translations included, so
+    // the read-only and draft endpoints already name one row in one language.
+    fetchResolves({ id: "1", slug: "s", data: {} });
+    await t.getCollectionItem("News", "s", { accessToken: "tok", locale: "en" });
+    expect(lastCall()[0]).toBe(`${BASE}/cms/collections/News/s`);
+
+    fetchResolves(undefined, 204);
+    await t.deleteCollectionItemDraft("News", "s", { accessToken: "tok", locale: "en" });
+    expect(lastCall()[0]).toBe(`${BASE}/cms/collections/News/s/draft`);
+  });
+});
+
 describe("baseUrl normalisation", () => {
   it("strips trailing slashes before building paths", async () => {
     const t = createRestTransport({ baseUrl: "https://api.test///" });

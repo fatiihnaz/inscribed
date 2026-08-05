@@ -143,6 +143,9 @@
  *   non-filterable fields trigger a 400.
  * @property {number} [offset]   Default 0.
  * @property {number} [limit]    Default 50, max 100, min 1.
+ * @property {string} [locale]
+ *   Narrow the list to one language. Omit on a single-language site; the
+ *   backend then answers with the Client's default locale.
  */
 
 /**
@@ -163,6 +166,11 @@
  *   slug from a designated field, e.g. `data.title` for News). `RoleDerived`
  *   collections reject POST entirely; create happens via PUT to the virtual
  *   slug that already comes back in the list response.
+ * @property {string[]} [locales]
+ *   Languages this collection holds, in the collection's own definition rather
+ *   than the site's: a collection is shared, so its coverage can be narrower
+ *   than the sites reading it. Empty or absent means it is not localized.
+ *   First entry is the default.
  */
 
 /**
@@ -183,7 +191,20 @@ export const NEW_DRAFT_GUID = "00000000-0000-0000-0000-000000000000";
  * @property {string} collectionKey
  * @property {string} slug
  *   Stable, unique-within-collection identity, even when `id` is `Guid.Empty`.
- *   Use this as the React key.
+ *   Use this as the React key. Unique across the whole collection, languages
+ *   included: a record and its translation are two rows with two slugs
+ *   (`yeni-urun` / `new-product`), which is why every per-slug endpoint
+ *   addresses one row without being told a locale.
+ * @property {string} [locale]   Language this row is written in.
+ * @property {string|null} [translationGroupId]
+ *   The group this row belongs to. Every record gets one at creation, so a
+ *   record with no translations is simply the only member of its own group.
+ *   Pass it back as `translationOf` to create a sibling in another language.
+ * @property {{ locale: string, slug: string }[]} [translations]
+ *   The group's *other* members, one per language. Only the single-record read
+ *   carries it: a list would need one lookup per row, and nothing on a list
+ *   needs to know. This row's own locale and slug are not repeated here.
+ *   Absent on a backend without translation support.
  * @property {*} data
  * @property {number} version
  * @property {boolean} canEdit
@@ -201,6 +222,9 @@ export const NEW_DRAFT_GUID = "00000000-0000-0000-0000-000000000000";
  *
  * @typedef {Object} ContentResponse
  * @property {string} slug
+ * @property {string} [locale]
+ *   Language these blocks are in, echoed back. Absent from a single-language
+ *   backend, and from responses to a request that sent no `locale`.
  * @property {BlockResponse[]} blocks  Empty array if page not yet synced.
  */
 

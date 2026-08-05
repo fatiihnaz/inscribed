@@ -50,6 +50,10 @@
     "./page": {
       "types": "./dist/page.d.ts",
       "import": "./dist/page.js"
+    },
+    "./middleware": {
+      "types": "./dist/middleware.d.ts",
+      "import": "./dist/middleware.js"
     }
   },
   "files": [

@@ -17,6 +17,7 @@
  *   // cms.config.js
  *   export const getServiceToken = async () => "...";   // default: no token
  *   export const onSyncError = (err) => { ... };         // optional
+ *   export const locales = ["tr", "en"];                 // optional, first is default
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -42,6 +43,10 @@ const getServiceToken =
   typeof projectConfig.getServiceToken === "function" ? projectConfig.getServiceToken : undefined;
 const onSyncError =
   typeof projectConfig.onSyncError === "function" ? projectConfig.onSyncError : null;
+// The same list the middleware routes on. Sent with the manifest so the backend
+// learns which languages exist from the code, rather than from a second copy
+// someone has to remember to update.
+const locales = Array.isArray(projectConfig.locales) ? projectConfig.locales : undefined;
 
 const appRoot = args.appRoot
   ? path.resolve(process.cwd(), args.appRoot)
@@ -89,7 +94,7 @@ if (args.dryRun) {
 }
 
 try {
-  await syncAll(manifests, { baseUrl: projectConfig.baseUrl, getServiceToken });
+  await syncAll(manifests, { baseUrl: projectConfig.baseUrl, getServiceToken, locales });
 } catch (err) {
   console.error(err instanceof Error ? err.message : String(err));
   if (onSyncError) await Promise.resolve(onSyncError(err)).catch(() => {});
@@ -139,6 +144,7 @@ Environment:
 Project config (optional, ./cms.config.js):
   getServiceToken      () => Promise<string> for POST /cms/sync (default: none)
   onSyncError          (err) => void, called on failure (e.g. token diagnostics)
+  locales              string[] of the site's languages; first is the default
 `);
 }
 
@@ -168,7 +174,7 @@ function loadEnvFile(filePath) {
  * silently ignored.
  *
  * @param {string} cwd
- * @returns {Promise<{ getServiceToken?: () => Promise<string>, onSyncError?: (err: unknown) => void, baseUrl?: string }>}
+ * @returns {Promise<{ getServiceToken?: () => Promise<string>, onSyncError?: (err: unknown) => void, baseUrl?: string, locales?: string[] }>}
  */
 async function loadProjectConfig(cwd) {
   for (const name of ["cms.config.js", "cms.config.mjs"]) {

@@ -40,4 +40,18 @@ describe("buildListParams", () => {
   it("ignores an undefined filter rather than emitting the key", () => {
     expect(buildListParams({ filter: undefined, limit: 3 })).toEqual({ limit: 3 });
   });
+
+  it("carries the locale, so two languages get two cache keys", () => {
+    // The locale has to be inside the params object rather than beside it:
+    // this object is what the client hashes into the list cache key, so a
+    // locale kept outside would let English rows land in the Turkish entry.
+    expect(buildListParams({ limit: 5, locale: "en" })).toEqual({ limit: 5, locale: "en" });
+    expect(stableStringify(buildListParams({ limit: 5, locale: "en" })))
+      .not.toBe(stableStringify(buildListParams({ limit: 5, locale: "tr" })));
+  });
+
+  it("leaves a single-language window's key unchanged", () => {
+    expect(buildListParams({ limit: 5, locale: null })).toEqual({ limit: 5 });
+    expect(buildListParams({ locale: null })).toBeUndefined();
+  });
 });

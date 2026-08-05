@@ -59,7 +59,14 @@ const PANE_EXIT_TRANSITION = {
 const PARALLAX_SHIFT = "28%";
 
 /**
- * @typedef {{ mode: "edit", slug: string } | { mode: "create" } | null} PaneState
+ * @typedef {{ mode: "edit", slug: string }
+ *   | { mode: "create", translationOf?: string, locale?: string }
+ *   | null} PaneState
+ *
+ * Create mode carries the translation target when it was opened from a
+ * record's chip strip: the group says what it links to, and the locale says
+ * which language to write, which is not the route's (the editor is reading the
+ * Turkish page while composing the English copy).
  */
 
 
@@ -256,13 +263,20 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
             collectionKey={collectionKey}
             slug={pane.slug}
             onBack={() => setPane(null)}
+            onOpenItem={(next) => setPane({ mode: "edit", slug: next })}
+            onAddTranslation={(locale, translationOf) =>
+              setPane({ mode: "create", translationOf, locale })}
           />
         ) : pane?.mode === "create" && meta?.schema ? (
           <CreatePane
-            key="create"
+            // Keyed by target so switching which record is being translated
+            // remounts the form instead of carrying the previous one's values.
+            key={`create:${pane.translationOf ?? ""}:${pane.locale ?? ""}`}
             collectionKey={collectionKey}
             schema={meta.schema}
             listParams={createListParams}
+            translationOf={pane.translationOf}
+            locale={pane.locale}
             onClose={() => setPane(null)}
           />
         ) : null}
@@ -511,7 +525,7 @@ function RegionItemRow({ slug, title, canEdit, dirty, onOpen }) {
  *   children: React.ReactNode,
  * }} props
  */
-function DetailPane({ onBack, title, meta, footer, children }) {
+function DetailPane({ onBack, title, meta, subhead, footer, children }) {
   useEffect(() => {
     /** @param {KeyboardEvent} e */
     const onKeyDown = (e) => {
@@ -545,6 +559,7 @@ function DetailPane({ onBack, title, meta, footer, children }) {
         <span style={detailTitleStyle} title={title}>{title}</span>
         {meta}
       </header>
+      {subhead}
       <div style={detailBodyStyle}>{children}</div>
       {footer ? <footer style={detailFooterStyle}>{footer}</footer> : null}
     </motion.div>
@@ -552,23 +567,152 @@ function DetailPane({ onBack, title, meta, footer, children }) {
 }
 
 /**
+ * One chip per language the collection declares, showing which of them this
+ * record's translation group actually has.
+ *
+ * This is what keeps the "add a translation" action honest: a language that
+ * already exists offers to open it instead of creating a second one. The
+ * backend rejects the duplicate either way, but by then the editor has already
+ * written the record, and the rejection can't tell them where the existing one
+ * is.
+ *
+ * Renders nothing for a collection with no declared languages, which is every
+ * collection on a backend without translation support.
+ *
+ * @param {{
+ *   item: import("../shared/contracts/schemas.js").CollectionItemResponse | null,
+ *   locales: string[] | undefined,
+ *   canEdit: boolean,
+ *   onOpenItem: (slug: string) => void,
+ *   onAddTranslation: (locale: string, translationGroupId: string) => void,
+ * }} props
+ */
+function TranslationChips({ item, locales, canEdit, onOpenItem, onAddTranslation }) {
+  const bySlug = useMemo(() => {
+    /** @type {Map<string, string>} */
+    const out = new Map();
+    for (const t of item?.translations ?? []) out.set(t.locale, t.slug);
+    return out;
+  }, [item]);
+
+  if (!locales?.length || !item) return null;
+  const groupId = item.translationGroupId;
+
+  return (
+    <div style={translationBarStyle}>
+      {locales.map((locale) => {
+        const label = locale.toUpperCase();
+        if (locale === item.locale) {
+          return <span key={locale} style={localeChipCurrentStyle}>{label}</span>;
+        }
+
+        const sibling = bySlug.get(locale);
+        if (sibling) {
+          return (
+            <button
+              key={locale}
+              type="button"
+              onClick={() => onOpenItem(sibling)}
+              style={localeChipStyle}
+              title={`${label}: ${sibling}`}
+            >
+              {label}
+            </button>
+          );
+        }
+
+        // No sibling yet. Without a group there is nothing to attach one to,
+        // so the affordance stays hidden rather than offering an orphan.
+        if (!canEdit || !groupId) return null;
+        return (
+          <button
+            key={locale}
+            type="button"
+            onClick={() => onAddTranslation(locale, groupId)}
+            style={localeChipAddStyle}
+            title={`${label} çevirisini ekle`}
+          >
+            + {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const translationBarStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  gap: 4,
+  alignItems: "center",
+  padding: "6px 12px",
+  borderBottom: `1px solid ${HAIRLINE}`,
+  flexShrink: 0,
+});
+
+const localeChipBase = /** @type {React.CSSProperties} */ ({
+  font: `600 9px/1 ${FONT_SANS}`,
+  letterSpacing: "0.05em",
+  padding: "4px 7px",
+  borderRadius: R_BADGE,
+  border: 0,
+  background: "transparent",
+});
+
+const localeChipCurrentStyle = /** @type {React.CSSProperties} */ ({
+  ...localeChipBase,
+  background: COLLECTION_SOFT,
+  color: COLLECTION_ACCENT,
+  boxShadow: `inset 0 0 0 1px ${COLLECTION_LINE}`,
+});
+
+const localeChipStyle = /** @type {React.CSSProperties} */ ({
+  ...localeChipBase,
+  background: SURFACE_1,
+  color: TEXT_MID,
+  cursor: "pointer",
+});
+
+const localeChipAddStyle = /** @type {React.CSSProperties} */ ({
+  ...localeChipBase,
+  color: TEXT_FAINT,
+  boxShadow: `inset 0 0 0 1px ${BORDER}`,
+  cursor: "pointer",
+});
+
+/**
  * Detail pane for one existing (or RoleDerived virtual) collection row.
  * `useCollectionEditor` is lifted here so the footer actions and the form body
  * share one state.
  *
- * @param {{ collectionKey: string, slug: string, onBack: () => void }} props
+ * @param {{
+ *   collectionKey: string,
+ *   slug: string,
+ *   onBack: () => void,
+ *   onOpenItem: (slug: string) => void,
+ *   onAddTranslation: (locale: string, translationGroupId: string) => void,
+ * }} props
  */
-function ItemDetailPane({ collectionKey, slug, onBack }) {
+function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslation }) {
   // The pane is always on screen when mounted, so it mirrors; whether it also
   // writes depends on the page not already owning the record's draft.
   const role = useDrawerDraftRole(collectionKey, slug, true);
   const editor = useCollectionEditor(collectionKey, slug, role);
+  const meta = useCollectionMeta(collectionKey);
   const isDirty = editor.hasDraft && editor.canEdit;
 
   return (
     <DetailPane
       onBack={onBack}
       title={slug}
+      subhead={
+        <TranslationChips
+          item={editor.item}
+          locales={meta?.locales}
+          canEdit={editor.canEdit}
+          onOpenItem={onOpenItem}
+          onAddTranslation={onAddTranslation}
+        />
+      }
       meta={
         <>
           {editor.item && !editor.canEdit ? (
@@ -667,10 +811,12 @@ function CreateButton({ collectionKey, listParams, onOpen }) {
  *   collectionKey: string,
  *   schema: import("../shared/contracts/schemas.js").CollectionSchema,
  *   listParams: import("../shared/contracts/schemas.js").CollectionListParams,
+ *   translationOf?: string,
+ *   locale?: string,
  *   onClose: () => void,
  * }} props
  */
-function CreatePane({ collectionKey, schema, listParams, onClose }) {
+function CreatePane({ collectionKey, schema, listParams, translationOf, locale, onClose }) {
   // A page-level <CollectionComposer> may be open on the same collection, and
   // both would write its single new-item slot; the first to claim it wins.
   const scopeId = useId();
@@ -690,12 +836,14 @@ function CreatePane({ collectionKey, schema, listParams, onClose }) {
     // instead of a separate GET.
     listParams,
     active: isDraftWriter,
+    translationOf,
+    locale,
   });
 
   return (
     <DetailPane
       onBack={onClose}
-      title={`Yeni ${collectionKey}`}
+      title={translationOf && locale ? `Yeni ${collectionKey} · ${locale.toUpperCase()}` : `Yeni ${collectionKey}`}
       meta={hasServerDraft ? <span style={draftBadgeStyle}>taslak</span> : null}
       footer={
         <>

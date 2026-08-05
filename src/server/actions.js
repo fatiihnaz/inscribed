@@ -13,10 +13,14 @@ import { cmsCacheTag, cmsCollectionItemTag, cmsCollectionTag } from "./get-conte
  * Drop the ISR cache for a page slug after an admin save.
  * Pass this directly as `onAfterSave` to `NextAuthCmsProvider` or `CmsProvider`.
  *
+ * Only the locale that was published: the other translations of this page are
+ * cached under their own tags and nothing about them changed.
+ *
  * @param {string} slug
+ * @param {string} [locale]  Omitted on a single-language site.
  */
-export async function revalidateCmsSlug(slug) {
-  revalidateTag(cmsCacheTag(slug));
+export async function revalidateCmsSlug(slug, locale) {
+  revalidateTag(cmsCacheTag(slug, locale));
 }
 
 /**

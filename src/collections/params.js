@@ -19,17 +19,23 @@
  * zero significant instead, the drawer's `offset=0` window would never collapse
  * onto the page's entry and every region would be fetched twice.
  *
+ * `locale` belongs here rather than beside the access token: it narrows which
+ * rows come back exactly as a filter does, and this object is what the client
+ * hashes into a cache key, so a locale kept outside it would let two languages
+ * of one collection share an entry.
+ *
  * Returns `undefined` when nothing narrows the window, which is the shape
  * `useCollection` and `getCmsCollection` treat as "the default page".
  *
- * @param {{ filter?: Record<string, *>, limit?: number, offset?: number }} [input]
+ * @param {{ filter?: Record<string, *>, limit?: number, offset?: number, locale?: string|null }} [input]
  * @returns {CollectionListParams | undefined}
  */
-export function buildListParams({ filter, limit, offset } = {}) {
+export function buildListParams({ filter, limit, offset, locale } = {}) {
   /** @type {CollectionListParams} */
   const params = {};
   if (filter) params.filter = filter;
   if (typeof limit === "number") params.limit = limit;
   if (typeof offset === "number" && offset !== 0) params.offset = offset;
+  if (locale) params.locale = locale;
   return Object.keys(params).length > 0 ? params : undefined;
 }

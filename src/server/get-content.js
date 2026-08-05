@@ -20,11 +20,18 @@ import { noServiceToken } from "../defaults/service-token.js";
  */
 
 /**
+ * Cache tag for one page's blocks in one language.
+ *
+ * The locale is part of the tag because each language is a separate render:
+ * sharing one tag would rebuild every translation whenever any of them is
+ * published. A single-language site keeps the shorter, pre-i18n tag.
+ *
  * @param {string} slug
+ * @param {string|null} [locale]
  * @returns {string}
  */
-export function cmsCacheTag(slug) {
-  return `cms-${slug}`;
+export function cmsCacheTag(slug, locale) {
+  return locale ? `cms-${locale}-${slug}` : `cms-${slug}`;
 }
 
 /**
@@ -32,6 +39,11 @@ export function cmsCacheTag(slug) {
  * collection shares it, because a single write can move rows between windows:
  * membership, ordering and totals all shift, so there is nothing finer to
  * invalidate safely.
+ *
+ * Locale is no exception, for the same reason: it is one more dimension of the
+ * window, and a record moving between languages shifts membership exactly as a
+ * filter change does. So publishing an English record does rebuild the Turkish
+ * listing, which is the same trade every filter window already makes.
  *
  * @param {string} key
  * @returns {string}
@@ -43,6 +55,9 @@ export function cmsCollectionTag(key) {
 /**
  * Cache tag for one record. Held alongside `cmsCollectionTag` so a detail page
  * can be dropped on its own, without rebuilding every list that mentions it.
+ *
+ * No locale: a slug is unique across the whole collection, translations
+ * included, so it already names one record in one language.
  *
  * @param {string} key
  * @param {string} slug
@@ -66,6 +81,9 @@ export function cmsCollectionItemTag(key, slug) {
  *   load-bearing: these responses are ISR-cached under one tag for every
  *   visitor, so a draft that survives here is served to the public. Opt in only
  *   for a preview route you cache separately (or not at all).
+ * @property {string|null} [locale]
+ *   Language to read. Omit on a single-language site; the backend then answers
+ *   with the Client's default locale.
  */
 
 /**
@@ -112,9 +130,10 @@ export async function getCmsContent(config, slug, options) {
   const transport = config.transport ?? createRestTransport(config);
   const content = await transport.getContent(slug, {
     accessToken,
+    locale: options?.locale ?? undefined,
     cache: {
       revalidate: options?.revalidate ?? false,
-      tags: [cmsCacheTag(slug), ...(options?.tags ?? [])],
+      tags: [cmsCacheTag(slug, options?.locale), ...(options?.tags ?? [])],
     },
   });
   const blocks = withoutDrafts(content.blocks, "draftValue", options?.includeDrafts);
@@ -128,6 +147,9 @@ export async function getCmsContent(config, slug, options) {
  *
  * Collection-typed blocks are declarations only here; `<CollectionRegion>` /
  * `<CollectionItem>` fetch their items at render time under their own tag.
+ *
+ * A `contentOptions.locale` reaches both fetches, so the header and footer
+ * arrive in the page's own language rather than the Client's default.
  *
  * @param {CmsConfig} config
  * @param {string} slug
@@ -227,6 +249,10 @@ export async function getCmsCollectionItem(config, key, slug, options) {
  * absent slugs/blocks and restoring reappearing ones. Idempotent; for
  * build/deploy pipelines.
  *
+ * Also carries `config.locales`, which is what makes the app's config the one
+ * home for the language list: sync is the step that makes the backend match the
+ * code, and the set of languages is part of what the code declares.
+ *
  * @param {CmsConfig} config
  * @param {SyncManifestRequest[]} manifests
  * @param {string} [accessToken]
@@ -234,7 +260,7 @@ export async function getCmsCollectionItem(config, key, slug, options) {
  */
 export function syncCmsManifest(config, manifests, accessToken) {
   const transport = config.transport ?? createRestTransport(config);
-  return transport.syncManifests(manifests, { accessToken });
+  return transport.syncManifests(manifests, { accessToken, locales: config.locales });
 }
 
 /**
@@ -243,12 +269,16 @@ export function syncCmsManifest(config, manifests, accessToken) {
  * pruned slugs, and throws with a readable message on failure.
  *
  * @param {SyncManifestRequest[]} manifests
- * @param {{ baseUrl?: string, getServiceToken?: ServiceTokenProvider }} [options]
+ * @param {{ baseUrl?: string, getServiceToken?: ServiceTokenProvider, locales?: string[] }} [options]
+ *   `locales` comes from the project's `cms.config.js`, the same list the
+ *   middleware routes on, and reaches the backend from here so nobody has to
+ *   keep a second copy of it in step by hand.
  * @returns {Promise<void>}
  */
 export async function syncAll(manifests, options) {
   const config = ensureCmsConfig({
     baseUrl: options?.baseUrl ?? process.env.CMS_URL ?? "http://localhost:5000",
+    locales: options?.locales,
   });
   const transport = createRestTransport(config);
   const getServiceToken = options?.getServiceToken ?? noServiceToken;
@@ -264,7 +294,10 @@ export async function syncAll(manifests, options) {
 
   let result;
   try {
-    result = await transport.syncManifests(manifests, { accessToken: accessToken || undefined });
+    result = await transport.syncManifests(manifests, {
+      accessToken: accessToken || undefined,
+      locales: config.locales,
+    });
   } catch (err) {
     const detail =
       err && typeof err === "object" && "detail" in err

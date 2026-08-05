@@ -11,12 +11,12 @@
  */
 
 import { useCallback, useEffect, useMemo } from "react";
-import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { deepEqual } from "../../shared/util/deep-equal.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
+import { useCmsRoute } from "./use-cms-route.js";
 
 /**
  * @import { UpdateBlockItem } from "../../shared/contracts/schemas.js"
@@ -48,7 +48,7 @@ export function useCmsSave() {
   // drawer's live dirty count, so it re-renders on any draft change. Fine for
   // a single admin surface.
   const drafts = useStoreSelector(contentDraftsStore, (m) => m);
-  const pathname = usePathname() ?? "/";
+  const { pathname } = useCmsRoute();
   const blocks = useStoreSelector(blocksStore, (s) => s.get(pathname) ?? EMPTY_BLOCKS);
   const { savePage, isSaving, error, clearError } = useCmsAdmin();
 

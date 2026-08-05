@@ -7,10 +7,10 @@
  */
 
 import { useCallback, useState } from "react";
-import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
+import { useCmsRoute } from "./use-cms-route.js";
 
 /**
  * @import { UpdateBlockItem, UpdatePageResponse, BlockResponse } from "../../shared/contracts/schemas.js"
@@ -39,7 +39,9 @@ export function useCmsAdmin() {
     config, isAdmin, blocksStore, triggerRefetch, onAfterSave, getAccessToken,
     setBlockConflicts,
   } = useCmsContext();
-  const pathname = usePathname() ?? "/";
+  // `pathname` keys the block cache, `routeSlug` addresses the backend. They
+  // part ways as soon as the route carries a locale prefix.
+  const { pathname, slug: routeSlug, locale } = useCmsRoute();
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(/** @type {Error|null} */ (null));
@@ -68,7 +70,7 @@ export function useCmsAdmin() {
         const blocks = blocksStore.get().get(pathname) ?? new Map();
         for (const update of updates) {
           const block = /** @type {BlockResponse | undefined} */ (blocks.get(update.blockPath));
-          const slug = block?._slug ?? pathname;
+          const slug = block?._slug ?? routeSlug;
           const list = bySlug.get(slug) ?? [];
           list.push(update);
           bySlug.set(slug, list);
@@ -79,7 +81,7 @@ export function useCmsAdmin() {
           groups.map(([slug, slugUpdates]) =>
             config.transport.updateContent(
               { slug, blocks: slugUpdates },
-              { accessToken: accessToken || undefined },
+              { accessToken: accessToken || undefined, locale },
             ),
           ),
         );
@@ -99,12 +101,14 @@ export function useCmsAdmin() {
 
         // Drop ISR cache for every slug we wrote. Page and global slugs are
         // independent tags, so a header save must not leave page renders stale.
+        // The locale rides along: each language is cached under its own tag, so
+        // publishing the English copy must not rebuild the Turkish page.
         // In parallel: each one is its own Server Action round-trip, and the
         // save button waits on all of them.
         await Promise.all(
           groups.map(async ([slug]) => {
             try {
-              await onAfterSave(slug);
+              await onAfterSave(slug, locale);
             } catch (revalidateErr) {
               // eslint-disable-next-line no-console
               console.warn("[inscribed] onAfterSave failed:", revalidateErr);
@@ -126,7 +130,7 @@ export function useCmsAdmin() {
         setIsSaving(false);
       }
     },
-    [isAdmin, config, blocksStore, pathname, triggerRefetch, onAfterSave, getAccessToken, setBlockConflicts],
+    [isAdmin, config, blocksStore, pathname, routeSlug, locale, triggerRefetch, onAfterSave, getAccessToken, setBlockConflicts],
   );
 
   const save = useCallback(

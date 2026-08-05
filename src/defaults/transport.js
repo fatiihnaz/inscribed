@@ -46,13 +46,46 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
     cache ? { next: { revalidate: cache.revalidate ?? false, tags: cache.tags ?? [] } } : {};
 
   /**
+   * `locale` is a query parameter on every localized endpoint, writes included:
+   * it says which language the call addresses rather than describing the
+   * payload, so keeping it in one channel means the backend reads it the same
+   * way on a GET and a PUT, and no request body shape had to change.
+   *
+   * Omitted when the caller has no locale, which is how a single-language site
+   * keeps the pre-i18n wire and lets the backend apply its default.
+   *
+   * @param {URL} u
+   * @param {CmsRequestOptions} [opts]
+   * @returns {string}
+   */
+  const withLocale = (u, opts) => {
+    if (opts?.locale) u.searchParams.set("locale", opts.locale);
+    return u.toString();
+  };
+
+  /**
+   * Same channel as the locale, for the same reason: which group a new record
+   * joins qualifies the call rather than describing the record, so the payload
+   * shape stays identical whether or not translations are in play.
+   *
+   * @param {URL} u
+   * @param {{ locale?: string, translationGroup?: string }} [opts]
+   * @returns {string}
+   */
+  const withLocaleAndGroup = (u, opts) => {
+    if (opts?.translationGroup) u.searchParams.set("translationGroup", opts.translationGroup);
+    return withLocale(u, opts);
+  };
+
+  /**
    * @param {string} path  e.g. "/content"
    * @param {Record<string, string>} [params]
+   * @param {CmsRequestOptions} [opts]  Pass to carry the locale; omit on locale-agnostic endpoints (`/sync`).
    */
-  const url = (path, params) => {
+  const url = (path, params, opts) => {
     const u = new URL(`${base}/cms${path}`);
     if (params) for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
-    return u.toString();
+    return withLocale(u, opts);
   };
 
   return {
@@ -63,8 +96,8 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
       // flag is on (404 otherwise).
       const target =
         !opts.accessToken && clientKey
-          ? url(`/public/${encodeURIComponent(clientKey)}/content`, { slug })
-          : url("/content", { slug });
+          ? url(`/public/${encodeURIComponent(clientKey)}/content`, { slug }, opts)
+          : url("/content", { slug }, opts);
       const res = await fetch(target, {
         method: "GET",
         headers: headers(opts.accessToken),
@@ -86,6 +119,11 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
         }
         if (typeof params.offset === "number") u.searchParams.set("offset", String(params.offset));
         if (typeof params.limit === "number") u.searchParams.set("limit", String(params.limit));
+        // Locale rides in `params` here, not `opts`, because for a list it
+        // narrows the window like any filter does: `params` is what forms the
+        // client's cache key, so a locale outside it would let two languages
+        // collide in one entry.
+        if (params.locale) u.searchParams.set("locale", params.locale);
       }
       const res = await fetch(u.toString(), {
         method: "GET",
@@ -133,7 +171,7 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
     },
 
     async updateContent(request, opts = {}) {
-      const res = await fetch(url("/content"), {
+      const res = await fetch(url("/content", undefined, opts), {
         method: "PUT",
         headers: headers(opts.accessToken),
         body: JSON.stringify(request),
@@ -143,7 +181,7 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
     },
 
     async updateDraft(request, opts = {}) {
-      const res = await fetch(url("/draft"), {
+      const res = await fetch(url("/draft", undefined, opts), {
         method: "PUT",
         headers: headers(opts.accessToken),
         body: JSON.stringify(request),
@@ -155,24 +193,40 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
     // published value, this can't race a concurrent publish into creating a
     // stale draft, so discard flows should always prefer this over echoing.
     async deleteDraft(slug, opts = {}) {
-      const res = await fetch(url("/draft", { slug }), {
+      const res = await fetch(url("/draft", { slug }, opts), {
         method: "DELETE",
         headers: headers(opts.accessToken),
       });
       if (!res.ok) throw await toApiError(res);
     },
 
+    // Carries the locale even though a slug already names one row, because this
+    // endpoint has a create branch: `version: null` is how a RoleDerived or
+    // UserDefined collection makes its first row at a virtual slug, and that row
+    // has no language yet. The backend reads it only on that branch; on an
+    // update the slug has already decided.
     async upsertCollectionItem(key, slug, payload, opts = {}) {
+      const target = withLocale(
+        new URL(`${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}`),
+        opts,
+      );
       const res = await fetch(
-        `${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}`,
+        target,
         { method: "PUT", headers: headers(opts.accessToken), body: JSON.stringify(payload) },
       );
       if (!res.ok) throw await toApiError(res);
       return /** @type {*} */ (await res.json());
     },
 
+    // Locale says which language the new row is written in. The per-slug
+    // endpoints that only ever address an existing row need none: a slug is
+    // unique across the whole collection, so it already names exactly one row
+    // in exactly one language.
     async createCollectionItem(key, payload, opts = {}) {
-      const res = await fetch(`${base}/cms/collections/${encodeURIComponent(key)}`, {
+      const target = withLocaleAndGroup(
+        new URL(`${base}/cms/collections/${encodeURIComponent(key)}`), opts,
+      );
+      const res = await fetch(target, {
         method: "POST",
         headers: headers(opts.accessToken),
         body: JSON.stringify(payload),
@@ -197,8 +251,13 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
       if (!res.ok) throw await toApiError(res);
     },
 
+    // The new-item slot is per locale: composing a Turkish record and an
+    // English one are two drafts, not one being overwritten twice.
     async saveCollectionNewDraft(key, payload, opts = {}) {
-      const res = await fetch(`${base}/cms/collections/${encodeURIComponent(key)}/drafts`, {
+      const target = withLocaleAndGroup(
+        new URL(`${base}/cms/collections/${encodeURIComponent(key)}/drafts`), opts,
+      );
+      const res = await fetch(target, {
         method: "POST",
         headers: headers(opts.accessToken),
         body: JSON.stringify(payload),
@@ -207,15 +266,24 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
     },
 
     async deleteCollectionNewDraft(key, opts = {}) {
-      const res = await fetch(`${base}/cms/collections/${encodeURIComponent(key)}/drafts`, {
+      const target = withLocale(
+        new URL(`${base}/cms/collections/${encodeURIComponent(key)}/drafts`), opts,
+      );
+      const res = await fetch(target, {
         method: "DELETE",
         headers: headers(opts.accessToken),
       });
       if (!res.ok) throw await toApiError(res);
     },
 
+    // `?locales=` (plural) rather than the `?locale=` every other endpoint
+    // carries: this call doesn't address one language, it declares which ones
+    // exist. The manifest itself stays locale-free, because a slug is what a
+    // page is and the language is not part of that.
     async syncManifests(manifests, opts = {}) {
-      const res = await fetch(url("/sync"), {
+      const target = new URL(`${base}/cms/sync`);
+      if (opts.locales?.length) target.searchParams.set("locales", opts.locales.join(","));
+      const res = await fetch(target.toString(), {
         method: "POST",
         headers: headers(opts.accessToken),
         body: JSON.stringify(manifests),

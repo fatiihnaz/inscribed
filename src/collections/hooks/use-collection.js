@@ -19,6 +19,7 @@ import { useCollectionContext } from "../context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { stableStringify } from "../../shared/util/stable-stringify.js";
 import { resolveItemData } from "../../core/resolve.js";
+import { useCmsRoute } from "../../core/hooks/use-cms-route.js";
 
 /**
  * @import { CollectionItemResponse } from "../../shared/contracts/schemas.js"
@@ -39,17 +40,23 @@ import { resolveItemData } from "../../core/resolve.js";
 /**
  * @param {string} key  Backend collection key, e.g. "Teams" or "News".
  * @param {import("../../shared/contracts/schemas.js").CollectionListParams} [params]
- *   Optional filter/offset/limit. Each (key, params) tuple is its own cache
- *   entry; identical params are deduped via the in-flight table.
+ *   Optional filter/offset/limit/locale. Each (key, params) tuple is its own
+ *   cache entry; identical params are deduped via the in-flight table. `locale`
+ *   defaults to the route's, so a list under `/en` needs no extra prop.
  * @returns {UseCollectionResult}
  */
 export function useCollection(key, params) {
   const { collectionStore, requestCollectionList } = useCollectionContext();
+  const { locale } = useCmsRoute();
+
+  // The page's own language unless the caller pinned one, which a sidebar
+  // deliberately showing another locale's rows still can.
+  const requested = locale && params?.locale == null ? { ...params, locale } : params;
 
   // Stabilise params identity so inline literals don't re-trigger the effect
   // every render. The serialised form doubles as the cache key.
-  const paramsKey = stableStringify(params ?? {});
-  const stableParams = useMemo(() => params, [paramsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const paramsKey = stableStringify(requested ?? {});
+  const stableParams = useMemo(() => requested, [paramsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const cacheKey = `${key}|${paramsKey}`;
 
   // Subscribe to just this window's list entry, so a write to an unrelated

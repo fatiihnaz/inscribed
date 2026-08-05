@@ -31,6 +31,15 @@
  * Dynamic routes (`/news/[id]`) still need an explicit `slug` because the
  * header carries the concrete path, not the manifest template.
  *
+ * On a multilingual site the same applies to `locale`: it too is read from the
+ * header by default, so an `app/[locale]/…` route that wants to prerender
+ * should pass its own segment through and skip the header entirely:
+ *
+ *   export default async function Page({ params }) {
+ *     const { locale } = await params;
+ *     return <CmsPage slug="/about" locale={locale}>…</CmsPage>;
+ *   }
+ *
  * `Provider` is passed in rather than imported so its `"use client"` boundary
  * survives bundling (tsup doesn't preserve the directive across entries).
  */
@@ -40,6 +49,7 @@ import { headers } from "next/headers";
 
 import { getCmsCollection, getCmsCollectionItem, getCmsPageBlocks } from "./get-content.js";
 import { ensureCmsConfig } from "../shared/config.js";
+import { localizePath, resolveCmsRoute } from "../shared/route.js";
 import { buildListParams } from "../collections/params.js";
 import { publicAuth } from "../defaults/auth.js";
 
@@ -128,7 +138,9 @@ const PATHNAME_HEADER = "x-pathname";
 /**
  * @param {CreateCmsPageOptions} options
  * @returns {{
- *   CmsPage: (props: { slug?: string, children: React.ReactNode }) => Promise<React.ReactElement>,
+ *   CmsPage: (props: { slug?: string, locale?: string, children: React.ReactNode }) => Promise<React.ReactElement>,
+ *   localePath: (slug: string, locale?: string) => string,
+ *   getCmsRoute: () => Promise<import("../shared/route.js").CmsRoute>,
  *   CollectionRegion?: *,
  *   CollectionItem?: *,
  * }}
@@ -170,15 +182,26 @@ export function createCmsPage(options) {
         }
       : normalizedConfig;
 
-  async function CmsPage({ slug, children }) {
-    const resolvedSlug = slug ?? (await resolveSlugFromHeaders());
+  async function CmsPage({ slug, locale, children }) {
+    // `headers()` opts a route out of static rendering, so it is read only when
+    // something is still unresolved. Pin both `slug` and `locale` and the page
+    // never touches them, which is what lets a localized route prerender.
+    const needsHeaders = slug == null || (locale == null && normalizedConfig.locales.length > 0);
+    const route = needsHeaders
+      ? await resolveRouteFromHeaders(normalizedConfig, slug == null)
+      : { locale: locale ?? null, slug };
+
+    const resolvedSlug = slug ?? route.slug;
+    const resolvedLocale = locale ?? route.locale;
 
     // The session and the content are independent, so they overlap rather than
     // queue: a session that hits a database or decrypts a JWT would otherwise
     // sit in front of every content request.
     const [session, blocksResult] = await Promise.all([
       getSession(),
-      getCmsPageBlocks(serverConfig, resolvedSlug).catch((err) => {
+      getCmsPageBlocks(serverConfig, resolvedSlug, {
+        contentOptions: { locale: resolvedLocale },
+      }).catch((err) => {
         // Backend offline or page not yet synced: render with empty blocks.
         if (process.env.NODE_ENV !== "production") {
           // eslint-disable-next-line no-console
@@ -200,8 +223,41 @@ export function createCmsPage(options) {
     );
   }
 
-  if (!collections) return { CmsPage };
-  return { CmsPage, ...createServerCollections(serverConfig, collections) };
+  /**
+   * Href for `slug` in `locale`, bound to this factory's config.
+   *
+   * Server Components can't call `useCmsRoute()`, and they are where most links
+   * are written, so the same helper is handed back here already knowing the
+   * default locale. Client components use the hook's `localePath` instead.
+   *
+   * @param {string} slug
+   * @param {string} [locale]
+   * @returns {string}
+   */
+  function localePath(slug, locale) {
+    return localizePath(slug, locale, normalizedConfig);
+  }
+
+  /**
+   * The active route, split into `{ pathname, slug, locale }`, for Server
+   * Components that need the language before rendering: a root layout setting
+   * `<html lang>` is the case this exists for.
+   *
+   * Reads the `x-pathname` header, so the middleware contract stays inside the
+   * SDK rather than every app knowing the header's name. Client Components use
+   * `useCmsRoute()` instead.
+   *
+   * @returns {Promise<import("../shared/route.js").CmsRoute>}
+   */
+  async function getCmsRoute() {
+    return resolveCmsRoute(await resolvePathnameFromHeaders(false), normalizedConfig);
+  }
+
+  if (!collections) return { CmsPage, localePath, getCmsRoute };
+  return {
+    CmsPage, localePath, getCmsRoute,
+    ...createServerCollections(serverConfig, collections),
+  };
 }
 
 /**
@@ -216,7 +272,10 @@ export function createCmsPage(options) {
  */
 function createServerCollections(serverConfig, { CollectionRecord, CollectionRows }) {
   async function RegionRows({ collection, filter, limit, offset, as, empty, children, rest }) {
-    const params = buildListParams({ filter, limit, offset });
+    // Resolved here rather than passed down from `CmsPage`: a region can be
+    // mounted anywhere in the tree, and this component is already async.
+    const { locale } = await resolveRouteFromHeaders(serverConfig, false);
+    const params = buildListParams({ filter, limit, offset, locale });
 
     let items = [];
     try {
@@ -299,14 +358,18 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
  * `await` covers both Next 14 (sync `headers()`) and Next 15 (async). Warns
  * in dev when the header is missing, falls back to `/` silently in prod.
  *
+ * @param {boolean} warnWhenMissing
+ *   False when the caller pinned its own slug and only wants the locale: the
+ *   header is then a nice-to-have, and warning about it would nag pages that
+ *   are already doing the right thing.
  * @returns {Promise<string>}
  */
-async function resolveSlugFromHeaders() {
+async function resolvePathnameFromHeaders(warnWhenMissing) {
   const h = await headers();
   const pathname = h.get(PATHNAME_HEADER);
   if (pathname) return pathname;
 
-  if (process.env.NODE_ENV !== "production") {
+  if (warnWhenMissing && process.env.NODE_ENV !== "production") {
     // eslint-disable-next-line no-console
     console.warn(
       `[inscribed] <CmsPage> rendered without a slug prop and no "${PATHNAME_HEADER}" ` +
@@ -315,4 +378,22 @@ async function resolveSlugFromHeaders() {
     );
   }
   return "/";
+}
+
+/**
+ * Split the request's pathname into `{ locale, slug }`.
+ *
+ * The locale always comes from the route, even when the caller pins `slug`
+ * explicitly: a dynamic route (`/news/[id]`) needs the manifest template rather
+ * than the concrete path, but its language is still whatever prefix the visitor
+ * arrived under, so the two are resolved independently.
+ *
+ * @param {CmsConfig} config
+ * @param {boolean} warnWhenMissing
+ * @returns {Promise<{ locale: string|null, slug: string }>}
+ */
+async function resolveRouteFromHeaders(config, warnWhenMissing) {
+  const pathname = await resolvePathnameFromHeaders(warnWhenMissing);
+  const { locale, slug } = resolveCmsRoute(pathname, config);
+  return { locale, slug };
 }

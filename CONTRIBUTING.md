@@ -94,6 +94,7 @@ src/
   collections.js         # `inscribed/collections` (opt-in collection entry, "use client")
   shared/                # everything above depends on this; it depends on nothing
     config.js            #   createCmsConfig / ensureCmsConfig (serializable config)
+    route.js             #   pathname -> { locale, slug }: cache key vs wire identity
     contracts/           #   injection seams + backend shapes, typedefs only
       transport.js       #     CmsTransport contract
       service-token.js   #     ServiceTokenProvider contract
@@ -279,7 +280,31 @@ headers, and `CmsApiError` mapping.
 4. Add a contract test in `src/tests/shared/transport.test.js`.
 
 Keep the method's options shape consistent: `(…, opts?)` where `opts` is
-`{ accessToken?, cache?, signal? }`.
+`{ accessToken?, cache?, signal?, locale? }`. New per-call concerns belong in
+`opts` rather than the positional signature: a custom transport that ignores one
+still satisfies the contract.
+
+### Touch anything that identifies a page
+
+`src/shared/route.js` splits a pathname into `{ pathname, slug, locale }`, and the
+distinction is load-bearing:
+
+- **`pathname`** keys the client block cache. Two languages of one page are two
+  routes and must stay two entries.
+- **`slug`** is what the backend stores under, what `_slug` stamps carry, and what
+  the manifest contains. It never carries a locale prefix.
+- **`locale`** rides on the wire as `?locale=`, on the ISR tag, and in the draft
+  lane key. It is `null` when `locales` is unconfigured, which is what keeps a
+  single-language site on the pre-i18n wire.
+
+Client code reaches all three through `useCmsRoute()` (`src/core/hooks/`); never
+read `usePathname()` for an identity again. `CmsProvider` is the exception, since
+it is what publishes the context, and calls `resolveCmsRoute` directly.
+
+The manifest stays locale-agnostic on purpose: `withCms("/about", Page)` is one
+literal for every language, so `app/[locale]/about/page.jsx` works without the
+scanner having to evaluate a variable. The backend fans a slug out across the
+Client's locales at sync time.
 
 ### Add a block type
 

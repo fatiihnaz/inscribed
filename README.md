@@ -32,6 +32,7 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
   - [Lists](#lists)
   - [Collections](#collections)
   - [Editing & drafts](#editing--drafts)
+  - [Localization](#localization)
   - [Theming](#theming)
   - [Access control](#access-control)
   - [Caching & revalidation](#caching--revalidation)
@@ -89,6 +90,11 @@ whole manifest at `POST /cms/sync`, and exposes the draft-discard `DELETE`
 endpoints. An older backend answers some of those with 404 and the drawer will
 not mount for editors. See [Bring your own backend](#bring-your-own-backend)
 for the full surface.
+
+[Localization](#localization) additionally needs a backend that stores content
+per locale and accepts `?locale=` on the content and collection endpoints. It is
+opt-in: leave `locales` unset and no `locale` is ever sent, so a backend that
+knows nothing about languages keeps working unchanged.
 
 ## Installation
 
@@ -695,6 +701,175 @@ fetched. Your text stays in the draft either way, so nothing goes without you
 choosing it. A conflict carrying no block-level detail (two writes racing on one
 row) only asks for a retry, since there is nothing to compare.
 
+### Localization
+
+Three steps, no new files. Declare the languages once somewhere the middleware
+can also read — `cms.config.js`, which the `cms-sync` CLI already looks for:
+
+```js
+// cms.config.js
+export const locales = ["tr", "en"];
+```
+
+**Order is meaningful: the first entry is the default locale** — the one that sits
+at the root with no prefix. There is no separate `defaultLocale` option, because
+the backend derives its own default the same way and two inputs are two things
+that can disagree. List the language your existing content is written in first.
+
+Hand that to both the config and the middleware:
+
+```js
+// app/lib/cms.jsx
+import { locales } from "../../cms.config.js";
+
+export const cmsConfig = createCmsConfig({ baseUrl: process.env.CMS_URL, locales });
+```
+
+```js
+// middleware.js
+import { createCmsMiddleware } from "inscribed/middleware";
+import * as cms from "./cms.config.js";
+
+export const middleware = createCmsMiddleware(cms);
+export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"] };
+```
+
+Then move your routes under `app/[locale]/` — but keep `<CmsPage>` in the root
+layout, **above** that segment:
+
+```jsx
+// app/layout.jsx        ← above [locale], not inside it
+import { CmsPage, getCmsRoute } from "./lib/cms.jsx";
+
+export default async function RootLayout({ children }) {
+  const { locale } = await getCmsRoute();
+  return (
+    <html lang={locale}>
+      <body><CmsPage>{children}</CmsPage></body>
+    </html>
+  );
+}
+```
+
+That placement is load-bearing. A layout instance belongs to its segment's
+value, so a `<CmsPage>` inside `app/[locale]/` is torn down and rebuilt every
+time the language changes. The editor's session is client state inside
+`CmsProvider` — admin-ness resolves after hydration, since the refresh cookie
+lives on the API origin — so the remount signs them out mid-session and the
+drawer disappears. The block cache goes with it, and every switch re-fetches.
+
+Above the segment the provider survives the switch: the session holds, and the
+page you came from renders from cache when you go back.
+
+`getCmsRoute()` comes back from `createCmsPage` and resolves the language from
+the same header `<CmsPage>` reads, which the root layout needs because it sits
+above `[locale]` and has no `params.locale` of its own.
+
+The default language stays at the root and the others sit behind their prefix:
+`/about` is Turkish, `/en/about` is English. The middleware rewrites the
+unprefixed path onto `app/[locale]/` so `tr` never reaches the address bar, and
+sets the `x-pathname` header `<CmsPage>` reads.
+
+A leading segment counts as a locale only when `locales` lists it, so a page at
+`/en-masse` is not mistaken for English. (Reading also handles a prefix on
+*every* language, if you would rather write your own middleware for that; the
+bundled one and `localePath` commit to default-at-root.)
+
+Reach the active language from a component — no locale prop threading, no second
+copy of the list:
+
+```jsx
+"use client";
+import { useCmsRoute } from "inscribed";
+
+const { locale, slug, localePath } = useCmsRoute();
+<a href={localePath("/about")}>…</a>          // stays in the current language
+<a href={localePath(slug, "en")}>English</a>  // a language switcher
+```
+
+Server Components can't call hooks, so `createCmsPage` hands back the same
+helper already bound to your config:
+
+```jsx
+export const { CmsPage, localePath } = createCmsPage({ /* … */ });
+
+<Link href={localePath("/about", locale)}>…</Link>
+```
+
+**Your manifest does not change.** The slug is what a page is; the locale is which
+language of it you are looking at. So a localized app still writes one literal:
+
+```jsx
+// app/[locale]/about/page.jsx
+export default withCms("/about", AboutPage);
+```
+
+`cms-sync` sends that one entry, plus the language list itself as
+`?locales=tr,en`. That is what keeps `cms.config.js` the single home for it: the
+backend learns which languages exist from the code rather than from a second
+copy someone has to remember to update. It then materializes a row per locale,
+each seeded with the block's `defaultValue`.
+
+**Adding a language is one step: put it in `locales`, re-run `cms-sync`.**
+Removing one is the same step — its rows fall out of the desired state and are
+soft-deleted like any other removed block, and restored if you add it back.
+
+Nothing falls back — an
+untranslated block renders its default value, so a missing translation is visible
+rather than quietly wearing another language's text.
+
+Everything downstream follows the route on its own:
+
+| Surface | Behaviour |
+| ------- | --------- |
+| Blocks | Read and written in the route's locale; `__global` too, so the header matches the page |
+| Drafts | One slot per language, on their own autosave lanes |
+| Cache tags | `cms-{locale}-{slug}`, so publishing one language leaves the others cached |
+| `useCollection` | Lists the route's locale unless you pass `locale` yourself |
+| New records | Composed in the route's locale, with a per-language draft slot |
+
+#### Translating a collection record
+
+Collection records are one row per language, and their slugs stay unique across
+the whole collection. So a record and its translation carry different slugs
+(`yeni-urun`, `new-product`) — which is what you want for search engines anyway,
+and why every per-slug endpoint identifies a record without being told a locale.
+
+What links them is a **translation group**. Every record gets one when it is
+created, so a record with no translations is simply the only member of its own
+group; nothing has to be created later to link them. Reading a single record
+tells you the rest of its group:
+
+```jsonc
+GET /cms/collections/news/new-product
+{
+  "slug": "new-product", "locale": "en",
+  "translationGroupId": "8f3f…",
+  "translations": [{ "locale": "tr", "slug": "yeni-urun" }]
+}
+```
+
+To write a translation, pass that group id back:
+
+```jsx
+const { translationGroupId } = useCollectionRecord();
+
+<CollectionComposer collection="news" translationOf={translationGroupId} locale="en" />
+```
+
+`locale` is explicit here on purpose. Everywhere else the language comes from the
+route, but a translation is the one flow where it can't: the editor is reading
+the Turkish page while writing the English copy.
+
+The admin drawer does this for you. A record's detail pane shows one chip per
+language the collection declares — the current one, the ones that exist (click to
+open), and the ones missing (click to compose). Which is also why the chips
+matter: without them an editor can write a whole record before the backend
+rejects it as a duplicate, and the rejection can't say where the existing one is.
+
+Omit `locales` and none of this engages: no `locale` reaches the wire, tags keep
+their pre-i18n shape, and the backend answers with the Client's default language.
+
 ### Theming
 
 The admin panel and the page-side editing affordances are styled through a set
@@ -789,7 +964,7 @@ invalidates:
 
 | Read | Tag | Dropped by |
 | ---- | --- | ---------- |
-| `getCmsPageBlocks` | `cms-{slug}` | `revalidateCmsSlug` as `onAfterSave` |
+| `getCmsPageBlocks` | `cms-{slug}`, or `cms-{locale}-{slug}` | `revalidateCmsSlug` as `onAfterSave` |
 | `getCmsCollection` | `cms-collection-{key}` | `revalidateCmsCollection` as `onAfterCollectionSave` |
 | `getCmsCollectionItem` | `cms-collection-{key}-{slug}` (plus the collection's) | the same, which drops both |
 
@@ -803,6 +978,12 @@ The global slug (header/footer/site-wide blocks) is fetched in parallel and merg
 into the same blocks map, so a shared block edited on any page reflects everywhere.
 Tags you pass yourself stay off that shared entry: `__global` backs every page, so
 one page's revalidation must not rebuild everyone's header and footer.
+
+On a [multilingual site](#localization), each language of a page is its own tag, so
+publishing the English copy leaves the Turkish render alone. Collections are the
+exception, and deliberately: a locale is one more dimension of a list window, and a
+write can move rows between windows exactly as a filter change does, so every
+window shares the one collection tag.
 
 **Drafts never survive a server read.** `getCmsContent`, `getCmsPageBlocks`,
 `getCmsCollection` and `getCmsCollectionItem` drop `draftValue` and `draftData`
@@ -859,19 +1040,29 @@ To target a backend other than the reference REST API, implement the
  * @property {(opts?) => Promise<MyCollectionResponse[]>}                             getMyCollections
  * @property {(request, opts?) => Promise<UpdatePageResponse>}                        updateContent
  * @property {(request, opts?) => Promise<void>}                                      updateDraft
+ * @property {(slug, opts?) => Promise<void>}                                         deleteDraft
  * @property {(key, slug, payload, opts?) => Promise<CollectionItemResponse>}         upsertCollectionItem
  * @property {(key, payload, opts?) => Promise<CollectionItemResponse>}               createCollectionItem
  * @property {(key, slug, payload, opts?) => Promise<void>}                           saveCollectionItemDraft
+ * @property {(key, slug, opts?) => Promise<void>}                                    deleteCollectionItemDraft
  * @property {(key, payload, opts?) => Promise<void>}                                 saveCollectionNewDraft
+ * @property {(key, opts?) => Promise<void>}                                          deleteCollectionNewDraft
  * @property {(file, opts?) => Promise<{ data: { url: string } }>}                    uploadImage
  * @property {(manifests, opts?) => Promise<SyncResultResponse>}                      syncManifests
  */
 ```
 
-Every method receives an options object: `{ accessToken?, cache?, signal? }`.
-Attach `accessToken` to your request as a Bearer (or however your backend
-expects); **don't** generate it. `cache` is an opaque hint (`{ revalidate, tags }`);
-the REST default maps it onto Next.js' `fetch(..., { next })` extension.
+Every method receives an options object:
+`{ accessToken?, cache?, signal?, locale? }`. Attach `accessToken` to your request
+as a Bearer (or however your backend expects); **don't** generate it. `cache` is an
+opaque hint (`{ revalidate, tags }`); the REST default maps it onto Next.js'
+`fetch(..., { next })` extension. `locale` says which language the call addresses
+and is absent unless the app configured `locales` — a transport that ignores it
+still satisfies the contract, and serves a single-language site correctly.
+
+The one exception is `getCollection`, which reads its locale from `params`
+alongside `filter` / `offset` / `limit`: for a list the language narrows the
+window, and `params` is what the client hashes into its cache key.
 
 ```js
 // my-transport.js
@@ -944,11 +1135,12 @@ bundle:
 
 | Import | Side | Highlights |
 | ------ | ---- | ---------- |
-| `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
+| `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCmsRoute`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
 | `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `CollectionComposer`, `useCollection`, `useCollectionItem`, `useCollectionRecord`, `useMyCollections`, `useCollectionCreate`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
 | `inscribed/server` | server only | `getCmsContent`, `getCmsPageBlocks`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
-| `inscribed/page` | server only | `createCmsPage`, `withCms` |
+| `inscribed/page` | server only | `createCmsPage` (returns `CmsPage`, `localePath`, `getCmsRoute`, and the server collection bindings), `withCms` |
 | `inscribed/actions` | Server Action | `revalidateCmsSlug`, `revalidateCmsCollection` |
+| `inscribed/middleware` | edge | `createCmsMiddleware` |
 
 Import `inscribed/server` and `inscribed/page` only from Server Components, route
 handlers, or build scripts, never from a Client Component.

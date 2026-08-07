@@ -45,7 +45,10 @@ export function TextEditor({ value, onChange, disabled, multiline, hideLabel }) 
         // the next keystroke.
         resize: "none",
         overflow: "hidden",
-        minHeight: 64,
+        // Enough to read as a textarea rather than an input, and no more: the
+        // field grows into its content anyway, so anything past that is empty
+        // space on every short field in the drawer.
+        minHeight: 46,
         ...(disabled ? fieldDisabledStyle : null),
       }}
     />

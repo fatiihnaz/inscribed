@@ -222,8 +222,11 @@ export function Drawer() {
     for (const b of globalBlockList) {
       if (dirtyByPath.get(b.blockPath)) n++;
     }
-    return n;
-  }, [pageBlockList, globalBlockList, dirtyByPath]);
+    // Staged translations publish with the same button, so a preview that left
+    // them out would review less than Kaydet sends, and the count beside it
+    // would disagree with the status bar's.
+    return n + translationPreviews.length;
+  }, [pageBlockList, globalBlockList, dirtyByPath, translationPreviews]);
 
   // Per-collection dirty slug sets (overlay map + cached items with a server
   // draft), for the preview overlay's summary banner. Items never loaded into
@@ -577,34 +580,21 @@ export function Drawer() {
             </>
           )}
 
-          {/* Fade only. The movement is the status bar's `layout` below, which
-              glides by exactly this banner's height as it mounts and unmounts.
-              Animating `height: auto` here instead squashed the text going in
-              and skipped coming out; `popLayout` absolutely-positioned the
-              leaving banner, which cost it its width and read as a slide. */}
-          <AnimatePresence initial={false}>
-            {saveError ? (
-              <motion.div
-                key="save-error"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={SAVE_ERROR_TRANSITION}
-                style={{
-                  ...(saveError.tone === "conflict" ? conflictStyle : errorStyle),
-                  flexShrink: 0,
-                }}
-              >
-                {saveError.text}
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
+          {/* The banner carries its own height, so the status bar below is
+              pushed down and pulled back by plain reflow. It used to fade while
+              holding full height and leave the travel to a `layout` on the bar:
+              the bar re-measured on every drawer render (which is every
+              keystroke, and every navigation), so it drifted for reasons that
+              had nothing to do with this banner. */}
+          <Collapse show={saveError != null}>
+            <div style={saveError?.tone === "conflict" ? conflictStyle : errorStyle}>
+              {saveError?.text}
+            </div>
+          </Collapse>
 
-          {/* Carries the banner's arrival and departure: the bar glides by that
-              height instead of snapping. Wrapped rather than made a motion
-              component itself, so `StatusBar`'s own FLIP on the action buttons
-              keeps measuring against a box it still owns. */}
-          <motion.div layout transition={SAVE_ERROR_TRANSITION} style={{ flexShrink: 0 }}>
+          {/* Its own box, so `StatusBar`'s FLIP on the action buttons keeps
+              measuring against something it owns rather than the panel column. */}
+          <div style={{ flexShrink: 0 }}>
           <StatusBar
             dirtyCount={dirtyCount}
             collectionDirtyCount={collectionDirtyTotal}
@@ -629,7 +619,7 @@ export function Drawer() {
             isPreviewOpen={isPreviewOpen}
             onTogglePreview={() => setPreviewOpen((v) => !v)}
           />
-          </motion.div>
+          </div>
 
           {userInfo ? (
             <PanelFooter userInfo={userInfo} onSignOut={onSignOut} />
@@ -1134,14 +1124,14 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       ),
       title: `Taslak en son ${lastSavedAt}'de kaydedildi`,
     };
-  } else if (isSyncing) {
-    // First save ever, no prior timestamp to anchor to.
+  } else if (isDraftSaving) {
+    // First autosave ever, no prior timestamp to anchor to.
     view = {
       state: "saving",
       bg: STATUS_WARN,
       glow: `0 0 5px ${STATUS_WARN}66`,
       pulse: true,
-      label: "Kaydediliyor…",
+      label: "Taslak kaydediliyor…",
       title: "Taslak şu anda kaydediliyor",
     };
   } else if (dirty) {

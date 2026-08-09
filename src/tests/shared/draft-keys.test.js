@@ -6,7 +6,10 @@
  */
 import { describe, it, expect } from "vitest";
 
-import { contentDraftKey, itemDraftKey, newDraftKey } from "../../shared/state/draft-keys.js";
+import {
+  contentDraftKey, itemDraftKey, newDraftKey,
+  translationDraftKey, parseTranslationDraftKey,
+} from "../../shared/state/draft-keys.js";
 
 describe("contentDraftKey", () => {
   it("gives each language of a page its own lane", () => {
@@ -50,6 +53,34 @@ describe("itemDraftKey", () => {
     // Slugs are unique across the whole collection, translations included, so
     // a record and its translation are two slugs and already two lanes.
     expect(itemDraftKey("news", "yeni-urun")).not.toBe(itemDraftKey("news", "new-product"));
+  });
+});
+
+describe("translationDraftKey", () => {
+  it("round-trips a pathname holding the delimiter's plausible rivals", () => {
+    // Both halves are user-shaped: a pathname can carry a colon, a blockPath
+    // carries dots and brackets. Whatever separates them has to be a character
+    // neither side can produce.
+    const key = translationDraftKey("/en/a:b", "hero.items[0].title");
+    expect(parseTranslationDraftKey(key)).toEqual({
+      pathname: "/en/a:b",
+      blockPath: "hero.items[0].title",
+    });
+  });
+
+  it("keeps one blockPath's languages apart", () => {
+    expect(translationDraftKey("/en/about", "hero.title"))
+      .not.toBe(translationDraftKey("/de/about", "hero.title"));
+  });
+
+  it("keeps the same blockPath on two pages apart", () => {
+    // Navigating from /a to /b must not hand /a's half-typed translation to /b.
+    expect(translationDraftKey("/en/a", "hero.title"))
+      .not.toBe(translationDraftKey("/en/b", "hero.title"));
+  });
+
+  it("reports a key it did not write", () => {
+    expect(parseTranslationDraftKey("hero.title")).toBeNull();
   });
 });
 

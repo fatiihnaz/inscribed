@@ -73,3 +73,23 @@ export function localizePath(slug, locale, config) {
   if (!locale || locale === config?.defaultLocale) return slug;
   return slug === "/" ? `/${locale}` : `/${locale}${slug}`;
 }
+
+/** Stable empty list, so callers can put the result straight in a dep array. */
+const NO_LOCALES = /** @type {string[]} */ ([]);
+
+/**
+ * The configured languages other than the one being read, in config order.
+ *
+ * Empty on a single-language site and whenever no locale resolved, which is
+ * what keeps every translation surface inert until `locales` is configured.
+ *
+ * @param {CmsConfig | { locales?: string[] }} [config]
+ * @param {string|null|undefined} locale
+ * @returns {string[]}
+ */
+export function otherLocales(config, locale) {
+  const locales = config?.locales;
+  if (!locales || locales.length < 2 || !locale) return NO_LOCALES;
+  const rest = locales.filter((l) => l !== locale);
+  return rest.length === 0 ? NO_LOCALES : rest;
+}

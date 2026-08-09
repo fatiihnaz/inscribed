@@ -281,6 +281,14 @@ export function CmsProvider({
   const contentDraftsStore = useConstant(() =>
     createStore(/** @type {Map<string, *>} */ (new Map())),
   );
+  // Edits staged for a block in a language the editor is not currently reading,
+  // keyed by `translationDraftKey`. A separate map from `contentDraftsStore`
+  // because everything subscribed to that one assumes a bare blockPath on the
+  // current route: the autosave collector would try to PUT these into the
+  // wrong locale's draft slot.
+  const translationDraftsStore = useConstant(() =>
+    createStore(/** @type {Map<string, *>} */ (new Map())),
+  );
   const uiStore = useConstant(() =>
     createStore(/** @type {import("../shared/state/cms-context.js").CmsUiState} */ ({
       activeBlock: null,
@@ -304,6 +312,7 @@ export function CmsProvider({
   );
 
   const setDraftsState = contentDraftsStore.set;
+  const setTranslationDraftsState = translationDraftsStore.set;
 
   // Replace one slug's blocks wholesale; what `useCmsContent` calls once a
   // fetch lands. Other slugs' entries stay, which is the cache.
@@ -405,6 +414,42 @@ export function CmsProvider({
     [registryStore],
   );
 
+  /**
+   * Switching language lands on a route the store has never held, and a
+   * root-layout `<CmsPage>` does not re-render with fresh server blocks for it,
+   * so the client refetch is the only thing coming. In the meantime every
+   * surface reading this route saw an empty map: the page fell back to default
+   * values and the drawer's whole block list, collection reference rows
+   * included, unmounted and came back a moment later.
+   *
+   * The two routes are one page in two languages. The manifest is
+   * locale-agnostic, so they carry the same paths, types and order, and the
+   * only thing that differs is the text. Carrying the previous route's blocks
+   * over keeps every one of those surfaces mounted, and the refetch replaces
+   * the words behind it.
+   *
+   * `draftValue` is dropped on the way: those belong to the language they were
+   * typed in, and left on they would count as this language's unpublished
+   * changes and offer themselves to the next publish.
+   *
+   * @param {string} from
+   * @param {string} to
+   */
+  const carryLocaleSwitch = useCallback((from, to) => {
+    if (blocksStore.get().has(to)) return;
+    const before = resolveCmsRoute(from, normalizedConfig);
+    const after = resolveCmsRoute(to, normalizedConfig);
+    if (before.slug !== after.slug || before.locale === after.locale) return;
+    const carried = blocksStore.get().get(from);
+    if (!carried) return;
+    /** @type {Map<string, BlockResponse>} */
+    const next = new Map();
+    for (const [path, block] of carried) {
+      next.set(path, block.draftValue == null ? block : { ...block, draftValue: null });
+    }
+    commitBlocks(to, next);
+  }, [blocksStore, commitBlocks, normalizedConfig]);
+
   // Re-seed the blocks map when `initialBlocks` arrives with new content (e.g.
   // navigation re-renders `<CmsPage>` for a new slug). Lazy init only runs once
   // on mount, so without this the panel would show stale blocks.
@@ -417,14 +462,20 @@ export function CmsProvider({
     const blocksChanged = initialBlocks !== initialBlocksRef.current;
     const pathChanged = pathname !== lastPathnameRef.current;
     if (!blocksChanged && !pathChanged) return;
+    const previousPathname = lastPathnameRef.current;
     initialBlocksRef.current = initialBlocks;
     lastPathnameRef.current = pathname;
 
     // New server content lands under the route it describes.
     if (blocksChanged) commitBlocks(pathname, indexBlocksByPath(initialBlocks ?? []));
+    else if (pathChanged) carryLocaleSwitch(previousPathname, pathname);
     // Conflicts go with the drafts they were raised against.
     patchUi({ activeBlock: null, conflictBlocks: new Set() });
     setDraftsState(new Map());
+    // Staged translations go with the page they were typed against, same as
+    // the drafts above: they are only publishable from the route that offered
+    // them, so surviving a navigation would leave an edit nothing can reach.
+    setTranslationDraftsState(new Map());
 
     // A navigation needs at most one refetch, and only when there is nothing to
     // show. A slug already in the store renders from it immediately and
@@ -440,7 +491,7 @@ export function CmsProvider({
     // is what actually needs the nudge.
     if (isAdmin) return;
     router.refresh();
-  }, [initialBlocks, pathname, isAdmin, router, blocksStore, commitBlocks, setDraftsState, patchUi]);
+  }, [initialBlocks, pathname, isAdmin, router, blocksStore, commitBlocks, carryLocaleSwitch, setDraftsState, setTranslationDraftsState, patchUi]);
 
   // Drop drafts for blocks that no longer exist (e.g. after a manifest sync
   // removed one). Subscribed rather than keyed on a render value, since blocks
@@ -517,7 +568,35 @@ export function CmsProvider({
     // is mid-await can't mirror its (now discarded) value back into the blocks.
     draftQueue.cancelAll();
     setDraftsState((prev) => (prev.size === 0 ? prev : new Map()));
-  }, [setDraftsState, draftQueue]);
+    setTranslationDraftsState((prev) => (prev.size === 0 ? prev : new Map()));
+  }, [setDraftsState, setTranslationDraftsState, draftQueue]);
+
+  const setTranslationDraft = useCallback(
+    /** @param {string} key @param {*} value */
+    (key, value) => {
+      setTranslationDraftsState((prev) => {
+        const next = new Map(prev);
+        next.set(key, value);
+        return next;
+      });
+    },
+    [setTranslationDraftsState],
+  );
+
+  const clearTranslationDrafts = useCallback(
+    /** @param {string[]} keys  Every key when omitted. */
+    (keys) => {
+      setTranslationDraftsState((prev) => {
+        if (prev.size === 0) return prev;
+        if (!keys) return new Map();
+        const next = new Map(prev);
+        let changed = false;
+        for (const key of keys) changed = next.delete(key) || changed;
+        return changed ? next : prev;
+      });
+    },
+    [setTranslationDraftsState],
+  );
 
   const setDrawerOpen = useCallback(
     /** @param {boolean} open */
@@ -976,6 +1055,9 @@ export function CmsProvider({
       clearDrafts,
       settleDraftWrites,
       discardServerDrafts,
+      translationDraftsStore,
+      setTranslationDraft,
+      clearTranslationDrafts,
 
       uiStore,
       setBlockConflicts,
@@ -1012,6 +1094,9 @@ export function CmsProvider({
       clearDrafts,
       settleDraftWrites,
       discardServerDrafts,
+      translationDraftsStore,
+      setTranslationDraft,
+      clearTranslationDrafts,
       uiStore,
       setBlockConflicts,
       clearBlockConflict,

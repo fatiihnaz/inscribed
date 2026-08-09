@@ -47,6 +47,7 @@ import { BlockCard } from "./BlockCard.jsx";
 import { CollectionRegionPanel } from "./CollectionRegionPanel.jsx";
 import { CollectionsPane } from "./CollectionsPane.jsx";
 import { ChangesPanel } from "./ChangesPanel.jsx";
+import { Collapse } from "./Collapse.jsx";
 
 import { emptyStateStyle } from "../editors/fields/styles.js";
 import { panelStyle, paneContainerStyle, paneStyle, railStyle, railButtonStyle, railDirtyDotStyle, railIndicatorStyle, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
@@ -96,7 +97,7 @@ export function Drawer() {
   const collectionDrafts = useStoreSelector(collectionStore, (s) => s.drafts);
   const myCollections = useMyCollections().collections;
   const {
-    dirtyCount, isSaving, error,
+    dirtyCount, isSaving, error, translationPreviews,
     save: onSaveAll, discard: onDiscardAll,
   } = useCmsSave();
   // Header path ancestors navigate the host app; the drawer already follows the
@@ -534,6 +535,7 @@ export function Drawer() {
               dirtyByPath={dirtyByPath}
               itemSchemas={itemSchemas}
               collectionDirtyCounts={collectionDirtyCounts}
+              translationPreviews={translationPreviews}
               onGoToBlock={(block) => {
                 setPreviewOpen(false);
                 const scope = (block._slug ?? routeSlug) === routeSlug ? "page" : "global";
@@ -779,15 +781,6 @@ const COLLECTIONS_PARALLAX = "28%";
 const COLLECTIONS_PANE_TRANSITION = {
   ...COLLECTIONS_TRANSITION,
   opacity: { duration: 0.12, delay: 0.18, ease: "linear" },
-};
-
-// Shared by the save-error banner and the status bar it displaces, so the two
-// halves of the same movement can't drift apart. The banner fades out faster
-// than the bar travels, so the space is already closing behind it.
-const SAVE_ERROR_TRANSITION = {
-  duration: 0.2,
-  ease: PANEL_TRANSITION.ease,
-  opacity: { duration: 0.14, ease: "linear" },
 };
 
 /**
@@ -1071,7 +1064,10 @@ const crumbWrapStyle = /** @type {React.CSSProperties} */ ({
  * }} props
  */
 function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publishedFlash }) {
-  const isSyncing = draftSyncStatus === "saving" || isSaving;
+  // Two different things go over the wire, and only one of them is a draft.
+  // Folding them into a single "syncing" flag is what had a publish announce
+  // itself as an autosave.
+  const isDraftSaving = draftSyncStatus === "saving";
   const isFailed = draftSyncStatus === "failed";
 
   /** @type {{ state: string, bg: string, glow: string, pulse: boolean, label: React.ReactNode, title: string }} */
@@ -1097,14 +1093,26 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       label: "Veri kaydedildi",
       title: "Tüm değişiklikler yayınlandı",
     };
+  } else if (isSaving) {
+    // Above `lastSavedAt` on purpose: a publish held under it kept showing
+    // "Taslak kayıtlı HH:MM" with a working dot, which names the wrong write
+    // and points at a timestamp the publish is in the middle of invalidating.
+    view = {
+      state: "publishing",
+      bg: STATUS_WARN,
+      glow: `0 0 5px ${STATUS_WARN}66`,
+      pulse: true,
+      label: "Yayınlanıyor…",
+      title: "Değişiklikler yayınlanıyor",
+    };
   } else if (lastSavedAt) {
     // Hold the label steady during re-saves; only the dot pulses and recolours.
     // The timestamp slides when the minute changes (same value, same key, no anim).
     view = {
       state: "saved",
-      bg: isSyncing ? STATUS_WARN : STATUS_OK,
-      glow: isSyncing ? `0 0 5px ${STATUS_WARN}66` : `0 0 5px ${STATUS_OK}66`,
-      pulse: isSyncing,
+      bg: isDraftSaving ? STATUS_WARN : STATUS_OK,
+      glow: isDraftSaving ? `0 0 5px ${STATUS_WARN}66` : `0 0 5px ${STATUS_OK}66`,
+      pulse: isDraftSaving,
       label: (
         <>
           Taslak kayıtlı
@@ -1880,7 +1888,11 @@ function StatusBar({
   const isCollectionDirty = collectionDirtyCount > 0;
   const isBothDirty = isContentDirty && isCollectionDirty;
   const isOnlyCollectionDirty = !isContentDirty && isCollectionDirty;
-  const isSyncing = draftSyncStatus === "saving" || isSaving;
+  const isDraftSaving = draftSyncStatus === "saving";
+  // The dot only says "something is on the wire", so both count toward it. The
+  // sentence has to pick one, and picking wrong is how publishing came to
+  // announce itself as an autosave.
+  const isBusy = isDraftSaving || isSaving;
   const isFailed  = draftSyncStatus === "failed";
 
   // Dirty colours never pulse (a steady tint reads as "pending" without
@@ -1899,7 +1911,7 @@ function StatusBar({
     if (isCollectionDirty) {
       return { background: COLLECTION_ACCENT, boxShadow: `0 0 8px ${COLLECTION_ACCENT}80` };
     }
-    if (isSyncing) {
+    if (isBusy) {
       return { background: STATUS_WARN, boxShadow: `0 0 6px ${STATUS_WARN}66` };
     }
     if (isFailed) {
@@ -1907,11 +1919,15 @@ function StatusBar({
     }
     return { background: TEXT_FAINT, boxShadow: "none" };
   })();
-  const dotPulse = isSyncing && !isContentDirty && !isCollectionDirty;
+  const dotPulse = isBusy && !isContentDirty && !isCollectionDirty;
 
   /** @type {React.ReactNode} */
   let msg;
-  if (isSyncing) {
+  if (isSaving) {
+    // Wins over the draft wording when both are true: publishing is what the
+    // user just asked for, and any draft write beside it is background.
+    msg = <span style={statusMsgStyle}>Yayınlanıyor…</span>;
+  } else if (isDraftSaving) {
     msg = <span style={statusMsgStyle}>Taslak kaydediliyor…</span>;
   } else if (isBothDirty) {
     msg = (

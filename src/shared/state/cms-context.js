@@ -107,6 +107,13 @@ import { createContext, useContext } from "react";
  *   locally (dirty count drops at once) and fire cleanup DELETEs in the
  *   background without touching `draftSyncStatus`, so discard doesn't flash a
  *   save pulse.
+ * @property {Store<Map<string, *>>} translationDraftsStore
+ *   Edits staged for another language's copy of a block, keyed by
+ *   `translationDraftKey(pathname, blockPath)`. Never autosaved: they exist
+ *   from the moment the drawer offers the translation until the next publish
+ *   carries them, and a navigation drops them.
+ * @property {(key: string, value: *) => void} setTranslationDraft
+ * @property {(keys?: string[]) => void} clearTranslationDrafts
  * @property {Store<CmsUiState>} uiStore
  * @property {(paths: string[]) => void} setBlockConflicts
  *   Replace the conflicting-block set, from a 409's `conflicts` extension.

@@ -6,6 +6,11 @@
  * `draftValue` overlays; `save()` PUTs them and clears matching local drafts,
  * `discard()` wipes local and backend drafts in one shot.
  *
+ * Translations staged from the drawer join that same set, tagged with the
+ * language they belong to. They publish with the block they were written
+ * beside, because a translation that could be left behind by its own source
+ * edit is the state this feature exists to prevent.
+ *
  * Lives outside `admin/Drawer.jsx` so the drawer stays pure layout and the save
  * flow stays unit-testable.
  */
@@ -15,6 +20,8 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { deepEqual } from "../../shared/util/deep-equal.js";
+import { resolveCmsRoute } from "../../shared/route.js";
+import { parseTranslationDraftKey } from "../../shared/state/draft-keys.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
 import { useCmsRoute } from "./use-cms-route.js";
 
@@ -26,9 +33,26 @@ import { useCmsRoute } from "./use-cms-route.js";
 const EMPTY_BLOCKS = new Map();
 
 /**
+ * One staged translation, in the shape the changes preview diffs.
+ *
+ * @typedef {Object} TranslationPreview
+ * @property {string} key
+ * @property {string} locale
+ * @property {string} blockPath
+ * @property {string} blockType
+ * @property {*} prev  What that language currently says.
+ * @property {*} next  What the editor typed.
+ */
+
+/**
  * @typedef {Object} UseCmsSaveResult
  * @property {UpdateBlockItem[]} dirtyUpdates
  * @property {number} dirtyCount
+ * @property {TranslationPreview[]} translationPreviews
+ *   The subset of `dirtyUpdates` bound for another language, carrying both
+ *   sides so the preview can diff them. Kept beside the count rather than
+ *   derived from it: the drawer's "N unsaved changes" and the preview's own
+ *   tally have to come from one pass, or they drift apart again.
  * @property {boolean} isSaving
  * @property {Error|null} error
  * @property {() => Promise<void>} save     PUT all dirty updates, then clear matching local drafts.
@@ -40,23 +64,28 @@ const EMPTY_BLOCKS = new Map();
  */
 export function useCmsSave() {
   const {
-    blocksStore, contentDraftsStore, setActiveBlock,
+    config, blocksStore, contentDraftsStore, setActiveBlock,
     clearDraft, clearDrafts, discardServerDrafts, settleDraftWrites,
+    translationDraftsStore, clearTranslationDrafts,
     setBlockConflicts,
   } = useCmsContext();
   // Whole-map subscriptions: this aggregates every dirty blockPath for the
   // drawer's live dirty count, so it re-renders on any draft change. Fine for
   // a single admin surface.
   const drafts = useStoreSelector(contentDraftsStore, (m) => m);
-  const { pathname } = useCmsRoute();
-  const blocks = useStoreSelector(blocksStore, (s) => s.get(pathname) ?? EMPTY_BLOCKS);
+  const translationDrafts = useStoreSelector(translationDraftsStore, (m) => m);
+  const { pathname, locale } = useCmsRoute();
+  // The whole store, not this route's slice: a staged translation is versioned
+  // against the language it targets, and that language's blocks live under
+  // their own route key.
+  const allBlocks = useStoreSelector(blocksStore, (s) => s);
+  const blocks = allBlocks.get(pathname) ?? EMPTY_BLOCKS;
   const { savePage, isSaving, error, clearError } = useCmsAdmin();
 
   // A block is dirty when its effective value (local draft, else server-side
   // `draftValue`) differs from published `block.value`. Local edits win over
   // server drafts; `seen` dedupes when both layers exist for one block.
-  /** @type {UpdateBlockItem[]} */
-  const dirtyUpdates = useMemo(() => {
+  const { dirtyUpdates, translationKeys, translationPreviews } = useMemo(() => {
     /** @type {Set<string>} */
     const seen = new Set();
     /** @type {UpdateBlockItem[]} */
@@ -80,8 +109,45 @@ export function useCmsSave() {
         version: block.version,
       });
     }
-    return out;
-  }, [drafts, blocks]);
+
+    // Staged translations. Each carries the version of the row it will
+    // overwrite, read from the language it targets rather than from this route:
+    // the two copies of a block version independently.
+    /** @type {string[]} */
+    const keys = [];
+    /** @type {TranslationPreview[]} */
+    const previews = [];
+    for (const [key, value] of translationDrafts) {
+      const parsed = parseTranslationDraftKey(key);
+      if (!parsed) continue;
+      const targetLocale = resolveCmsRoute(parsed.pathname, config).locale;
+      // A staged edit for the language already on screen would be published
+      // twice, and one for no language at all cannot be addressed.
+      if (!targetLocale || targetLocale === locale) continue;
+      const target = (allBlocks.get(parsed.pathname) ?? EMPTY_BLOCKS).get(parsed.blockPath);
+      if (!target) continue;
+      if (deepEqual(value, target.value)) continue;
+      out.push({
+        blockPath: parsed.blockPath,
+        value,
+        version: target.version,
+        locale: targetLocale,
+      });
+      keys.push(key);
+      previews.push({
+        key,
+        locale: targetLocale,
+        blockPath: parsed.blockPath,
+        blockType: target.blockType,
+        prev: target.value,
+        next: value,
+      });
+    }
+    previews.sort((a, b) => a.blockPath.localeCompare(b.blockPath)
+      || a.locale.localeCompare(b.locale));
+
+    return { dirtyUpdates: out, translationKeys: keys, translationPreviews: previews };
+  }, [drafts, blocks, translationDrafts, allBlocks, config, locale]);
 
   // A failure only describes pending edits, so once none are left it has
   // nothing left to be about: resolving a conflict by taking the other side
@@ -98,15 +164,19 @@ export function useCmsSave() {
       // Only on success: a failed publish leaves the drafts for a retry, and
       // standing the lane down would mean nothing reaches the server until the
       // user happens to type again.
-      settleDraftWrites(dirtyUpdates.map((u) => u.blockPath));
-      for (const u of dirtyUpdates) clearDraft(u.blockPath);
+      const own = dirtyUpdates.filter((u) => u.locale == null);
+      // Only this route's own writes: the draft lanes being stood down belong
+      // to the language on screen, and no translation was ever drafted into one.
+      settleDraftWrites(own.map((u) => u.blockPath));
+      for (const u of own) clearDraft(u.blockPath);
+      clearTranslationDrafts(translationKeys);
       // Whatever a previous attempt clashed on is settled now.
       setBlockConflicts([]);
       setActiveBlock(null);
     } catch {
       // Error surfaced via useCmsAdmin().error; keep drafts so the user can retry.
     }
-  }, [dirtyUpdates, savePage, clearDraft, setActiveBlock, settleDraftWrites, setBlockConflicts]);
+  }, [dirtyUpdates, translationKeys, savePage, clearDraft, clearTranslationDrafts, setActiveBlock, settleDraftWrites, setBlockConflicts]);
 
   const discard = useCallback(() => {
     // Local edits first; emptying the map also cancels any pending autosave
@@ -127,6 +197,7 @@ export function useCmsSave() {
   return {
     dirtyUpdates,
     dirtyCount: dirtyUpdates.length,
+    translationPreviews,
     isSaving,
     error,
     save,

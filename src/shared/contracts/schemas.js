@@ -235,6 +235,13 @@ export const NEW_DRAFT_GUID = "00000000-0000-0000-0000-000000000000";
  * @property {string} blockPath
  * @property {*} value
  * @property {number} version  Last known version; mismatches return 409.
+ * @property {string|null} [locale]
+ *   Client-side routing only, and stripped before the item reaches the wire:
+ *   `locale` addresses the request, so it belongs in the query string, not
+ *   beside a value in the body. Set on a translation staged from the drawer,
+ *   which is what makes `savePage` send it as its own PUT to that language
+ *   instead of folding it into the current one's. Absent means "the route's
+ *   own language".
  */
 
 /**

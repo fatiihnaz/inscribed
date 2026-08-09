@@ -14,7 +14,7 @@ import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
 import { indexBlocksByPath } from "../blocks.js";
-import { mergePageBlocks, resolveGlobalSlug } from "../merge-blocks.js";
+import { fetchRouteBlocks } from "../fetch-route-blocks.js";
 import { useCmsRoute } from "./use-cms-route.js";
 
 /** Stable empty map so the selector never allocates (see shared/state/store.js). */
@@ -66,28 +66,11 @@ export function useCmsContent() {
       try {
         const token = await getAccessToken();
 
-        // Refetch page + global slug in parallel so a header/footer save shows
-        // on every page.
-        const globalSlug = resolveGlobalSlug(config.globalSlug, slug);
-
-        // The global slug is fetched in the page's own locale: a Turkish page
-        // showing an English header would be worse than no header at all.
-        const [pageResponse, globalResponse] = await Promise.all([
-          config.transport.getContent(slug, { accessToken: token, locale, signal: controller.signal }),
-          globalSlug
-            ? config.transport
-                .getContent(globalSlug, { accessToken: token, locale, signal: controller.signal })
-                .catch(() => ({ slug: globalSlug, blocks: [] }))
-            : Promise.resolve({ slug: "", blocks: [] }),
-        ]);
+        const merged = await fetchRouteBlocks({
+          config, slug, locale, accessToken: token, signal: controller.signal,
+        });
         if (cancelled) return;
 
-        const merged = mergePageBlocks({
-          slug,
-          globalSlug,
-          pageBlocks: pageResponse.blocks,
-          globalBlocks: globalResponse.blocks,
-        });
         // Keyed by pathname, not slug: two locales share one slug, and the
         // store is what each route renders from.
         commitBlocks(pathname, indexBlocksByPath(merged));

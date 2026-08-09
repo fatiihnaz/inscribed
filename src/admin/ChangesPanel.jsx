@@ -14,6 +14,10 @@
  *
  * Collection blocks are excluded: their drafts are per-item and surface in the
  * collection's own region tab.
+ *
+ * Translations staged from a block card get their own rows, because they
+ * publish in the same click and a review that omitted them would be reviewing
+ * less than the button sends.
  */
 
 import { useMemo } from "react";
@@ -45,13 +49,14 @@ const TEXTY_BLOCK_TYPES = new Set(["ShortText", "LongText"]);
  *   dirtyByPath: Map<string, boolean>,
  *   itemSchemas: Map<string, ItemSchema>,
  *   collectionDirtyCounts: Map<string, Set<string>>,
+ *   translationPreviews?: import("../core/hooks/use-cms-save.js").TranslationPreview[],
  *   onGoToBlock: (block: BlockResponse) => void,
  *   onGoToCollection: (collectionKey: string) => void,
  * }} props
  */
 export function ChangesPanel({
   blockList, drafts, dirtyByPath, itemSchemas,
-  collectionDirtyCounts, onGoToBlock, onGoToCollection,
+  collectionDirtyCounts, translationPreviews, onGoToBlock, onGoToCollection,
 }) {
   const dirty = useMemo(
     () => blockList.filter(
@@ -67,7 +72,10 @@ export function ChangesPanel({
     [collectionDirtyCounts],
   );
 
-  const isEmpty = dirty.length === 0 && collectionEntries.length === 0;
+  const translations = translationPreviews ?? EMPTY_TRANSLATIONS;
+  const isEmpty = dirty.length === 0
+    && collectionEntries.length === 0
+    && translations.length === 0;
 
   return (
     <section style={paneStyle}>
@@ -97,12 +105,61 @@ export function ChangesPanel({
                 />
               </li>
             ))}
+            {translations.map((preview) => (
+              <li key={preview.key} style={{ listStyle: "none" }}>
+                <TranslationDiffCard preview={preview} />
+              </li>
+            ))}
           </ul>
         )}
       </div>
     </section>
   );
 }
+
+/** Stable, so the default doesn't allocate a new array each render. */
+const EMPTY_TRANSLATIONS = /** @type {import("../core/hooks/use-cms-save.js").TranslationPreview[]} */ ([]);
+
+/**
+ * One staged translation. Same card shell as a block diff, with the language
+ * named in the header and no "edit this" button: the editor for it lives under
+ * the block it was written beside, not on a page this drawer can navigate to.
+ *
+ * @param {{ preview: import("../core/hooks/use-cms-save.js").TranslationPreview }} props
+ */
+function TranslationDiffCard({ preview }) {
+  const meta = TYPE_META[preview.blockType] ?? TYPE_META_FALLBACK;
+  return (
+    <div style={rowContainerStyle}>
+      <div style={rowHeaderStyle}>
+        <span aria-hidden="true" style={{ ...typeIconStyle, color: TEXT_MUTED }}>
+          {meta.glyph}
+        </span>
+        <span style={rowPathStyle} title={preview.blockPath}>
+          {preview.blockPath}
+        </span>
+        <span style={localeBadgeStyle}>{preview.locale.toUpperCase()}</span>
+      </div>
+      <div style={rowGuideBodyStyle}>
+        <DiffContent
+          blockType={preview.blockType}
+          prev={preview.prev}
+          next={preview.next}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Same grey the prompt labels its rows with: one language marker across the
+// drawer, not a coloured one here and a plain one there.
+const localeBadgeStyle = /** @type {React.CSSProperties} */ ({
+  marginLeft: "auto",
+  color: TEXT_MUTED,
+  font: `600 10px/1.4 ${FONT_MONO}`,
+  letterSpacing: "0.06em",
+  flexShrink: 0,
+});
 
 /**
  * Header-only card for a collection with pending item drafts. Same scaffolding

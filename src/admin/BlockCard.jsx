@@ -18,7 +18,6 @@
  */
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
 import { ChevronDown, Undo2, Lock, List as ListIcon } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
@@ -30,7 +29,8 @@ import { FieldEditor } from "../editors/fields/FieldEditor.jsx";
 import { ListEditor } from "../editors/fields/ListEditor.jsx";
 import { useCollectionEditor } from "../collections/hooks/use-collection-editor.js";
 import { CollectionRecordForm } from "./CollectionRecordForm.jsx";
-import { BlockConflictNotice, CONFLICT_TRANSITION } from "./BlockConflictNotice.jsx";
+import { BlockConflictNotice } from "./BlockConflictNotice.jsx";
+import { TranslationPrompt } from "./TranslationPrompt.jsx";
 import { blockResetStyle, dirtyDotStyle, rowContainerStyle, rowHeaderStyle, rowGuideBodyStyle, rowPathStyle, typeIconStyle, groupIconStyle } from "./drawer-styles.js";
 import { TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, HAIRLINE, FONT_SANS, FONT_MONO, R_MD, TYPE_META, TYPE_META_FALLBACK } from "../shared/style/tokens.js";
 
@@ -213,10 +213,13 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
           </span>
         ) : null}
       </div>
-      {/* `layout` here, not on the panel: the conflict panel appearing is a
-          size change of this box, and letting the projection animate it is what
-          slides the editor down instead of measuring an auto height. */}
-      <motion.div layout style={fieldEditorWrapStyle} transition={CONFLICT_TRANSITION}>
+      {/* Plain boxes. The notices animate their own height, so the editor
+          between them travels by ordinary reflow. A `layout` projection here
+          animated every positional delta instead of only that one, which is
+          what made these cards drift up and down on a route change: global
+          blocks keep their identity across pages, so the projection measured
+          the previous page's position and slid them to the new one. */}
+      <div style={fieldEditorWrapStyle}>
         <BlockConflictNotice
           show={hasConflict}
           block={block}
@@ -224,10 +227,7 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
           onTakeTheirs={onTakeTheirs}
           onKeepMine={onKeepMine}
         />
-        {/* Its own `layout` too: the wrapper's animates the box, but a plain
-            child inside it just reflows, which is the editor snapping up the
-            frame the panel unmounts instead of travelling with it. */}
-        <motion.div layout style={editorSlotStyle} transition={CONFLICT_TRANSITION}>
+        <div style={editorSlotStyle}>
           <FieldEditor
             blockType={block.blockType}
             value={value}
@@ -235,8 +235,9 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
             disabled={readOnly}
             hideLabel
           />
-        </motion.div>
-      </motion.div>
+          <TranslationPrompt block={block} value={value} readOnly={readOnly} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -389,7 +390,11 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
         aria-hidden={!isOpen}
         onMouseDown={onFocus}
       >
-        <motion.div layout style={disclosureBodyStyle} transition={CONFLICT_TRANSITION}>
+        {/* Plain, as in `FieldRow`: the notices carry their own height, and the
+            `.inscribed-collapse` above already animates this body opening. A
+            projection inside a collapsing box measured against a clipped height
+            and fought it. */}
+        <div style={disclosureBodyStyle}>
           <BlockConflictNotice
             show={hasConflict}
             block={block}
@@ -397,10 +402,11 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
             onTakeTheirs={onTakeTheirs}
             onKeepMine={onKeepMine}
           />
-          <motion.div layout style={editorSlotStyle} transition={CONFLICT_TRANSITION}>
+          <div style={editorSlotStyle}>
             {renderEditor(block, value, onChange, itemSchema, readOnly)}
-          </motion.div>
-        </motion.div>
+            <TranslationPrompt block={block} value={value} readOnly={readOnly} />
+          </div>
+        </div>
       </div>
     </div>
   );

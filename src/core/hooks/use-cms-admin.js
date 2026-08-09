@@ -62,26 +62,37 @@ export function useCmsAdmin() {
       try {
         const accessToken = await getAccessToken();
 
-        // Group updates by source slug. A block lives on either the page or
-        // the global slug, and must PUT to its own slug. The multi-PUT path
-        // only kicks in when one batch edits both a page block and a global one.
-        /** @type {Map<string, UpdateBlockItem[]>} */
-        const bySlug = new Map();
+        // Group by the endpoint each update lands on, which is a slug *and* a
+        // locale. A block lives on either the page or the global slug and must
+        // PUT to its own; a staged translation carries a locale of its own and
+        // must PUT to that language's copy. Both are one PUT per target, so
+        // they group by the same rule rather than through two code paths.
+        /** @type {Map<string, { slug: string, locale: string|null, updates: UpdateBlockItem[] }>} */
+        const byTarget = new Map();
         const blocks = blocksStore.get().get(pathname) ?? new Map();
         for (const update of updates) {
           const block = /** @type {BlockResponse | undefined} */ (blocks.get(update.blockPath));
           const slug = block?._slug ?? routeSlug;
-          const list = bySlug.get(slug) ?? [];
-          list.push(update);
-          bySlug.set(slug, list);
+          const targetLocale = update.locale ?? locale;
+          // JSON rather than a joined string: both halves are free-form, and
+          // this key is only ever compared, never parsed back.
+          const key = JSON.stringify([targetLocale ?? null, slug]);
+          const group = byTarget.get(key) ?? { slug, locale: targetLocale, updates: [] };
+          // `locale` addresses the request, so it stays off the body items.
+          group.updates.push({
+            blockPath: update.blockPath,
+            value: update.value,
+            version: update.version,
+          });
+          byTarget.set(key, group);
         }
 
-        const groups = [...bySlug.entries()];
+        const groups = [...byTarget.values()];
         const responses = await Promise.all(
-          groups.map(([slug, slugUpdates]) =>
+          groups.map((group) =>
             config.transport.updateContent(
-              { slug, blocks: slugUpdates },
-              { accessToken: accessToken || undefined, locale },
+              { slug: group.slug, blocks: group.updates },
+              { accessToken: accessToken || undefined, locale: group.locale },
             ),
           ),
         );
@@ -106,9 +117,9 @@ export function useCmsAdmin() {
         // In parallel: each one is its own Server Action round-trip, and the
         // save button waits on all of them.
         await Promise.all(
-          groups.map(async ([slug]) => {
+          groups.map(async (group) => {
             try {
-              await onAfterSave(slug, locale);
+              await onAfterSave(group.slug, group.locale);
             } catch (revalidateErr) {
               // eslint-disable-next-line no-console
               console.warn("[inscribed] onAfterSave failed:", revalidateErr);
@@ -122,7 +133,13 @@ export function useCmsAdmin() {
           // Flag the named blocks before the refetch, so the cards are already
           // in conflict state when the other editor's values land in them. A
           // plain write race carries no `conflicts`, and flags nothing.
-          setBlockConflicts((err.conflicts ?? []).map((c) => c.path));
+          //
+          // Only when the batch went to a single language: `Promise.all` hands
+          // back the first rejection without saying which PUT raised it, and a
+          // conflict on the English copy would light up the Turkish card, whose
+          // path matches and whose value is fine. The banner still reports it.
+          const singleLocale = updates.every((u) => (u.locale ?? locale) === locale);
+          if (singleLocale) setBlockConflicts((err.conflicts ?? []).map((c) => c.path));
           triggerRefetch();
         }
         throw err;

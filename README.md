@@ -827,6 +827,39 @@ Everything downstream follows the route on its own:
 | Cache tags | `cms-{locale}-{slug}`, so publishing one language leaves the others cached |
 | `useCollection` | Lists the route's locale unless you pass `locale` yourself |
 | New records | Composed in the route's locale, with a per-language draft slot |
+| The drawer | Offers the other languages when a text block is rewritten, and publishes them together |
+
+#### Keeping the languages in step
+
+Nothing falls back, which is honest but leaves a gap: rewrite a paragraph in
+Turkish and the English copy still says the old thing, correctly and invisibly.
+
+So the drawer asks. Rewrite more than a few words of a text block and the other
+languages appear under it, each prefilled with what it currently says:
+
+```
+hero.body   [ Şirketimiz 1998'den beri… ]
+            ┌───────────────────────────────────────┐
+            │ 🌐 Bu metin diğer dillerde değişmedi  │
+            │ EN  /en   [ Our company has served… ] │
+            └───────────────────────────────────────┘
+```
+
+Type into it and it publishes with the block it sits under — one `PUT` per
+language, each versioned against its own row, each revalidating its own tag. So
+"publish" means the same thing it always did: everything you have pending.
+
+The prompt is deliberately quiet. It only appears for `ShortText`, `LongText`
+and `RichText` (translating a date or an image URL is not a thing), only once
+the diff crosses a few words, and only after typing settles — a typo fix or a
+bolded word never triggers it. `RichText` is compared on its text, so
+reformatting is not a rewrite. Past three other languages the editors would
+dwarf the block they hang off, so it degrades to a dismissible line naming them.
+
+This is not machine translation: the field is prefilled with the current copy
+and you write the rest. Staged translations are never autosaved as drafts —
+they live from the moment the prompt opens until you publish, and navigating
+away drops them.
 
 #### Translating a collection record
 

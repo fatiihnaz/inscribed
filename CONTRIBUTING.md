@@ -360,6 +360,46 @@ those surfaces render on light host pages and the drawer alike, and the
 collections entry must stay framer-free. `ImageEditor` is the reference: one
 component shared by the CMS Image block and the collection `Image` field.
 
+### Write a user-facing string
+
+Nothing the editor reads is a literal any more. A new one is two catalog entries
+and a lookup.
+
+1. Add the key to `src/shared/i18n/en/<area>.js` first: English is canonical, and
+   it is also the per-key fallback every other catalog falls through to.
+2. Add the Turkish to `src/shared/i18n/tr/<area>.js`. `src/tests/shared/i18n.test.js`
+   fails if a stem is missing from either side, or if a `{placeholder}` differs.
+3. Read it with `useCmsStrings()` in a component, or take `t` as the **last**
+   parameter in a pure helper (`describeSaveError`, `humanizeCollectionError`).
+   Never pass `t` down as a prop: cards are memoised and a prop would wake them.
+
+Counted strings pass `count` and carry `_one` / `_other` in English.
+**Turkish gets `_other` only** — it takes one form after a number, and a catalog
+owns every form of a key it mentions, so supplying `_other` alone is what stops
+English's `_one` showing through at 1.
+
+Areas exist so the catalogs are not one file every change queues behind; keys
+stay flat and globally unique, so which file a key lives in is a filing decision
+and not a namespace.
+
+Not UI copy, and not translated: `console.warn` / `console.error`, thrown
+developer errors, JSDoc, and comments.
+
+Two placement traps, both already paid for once:
+
+- **A component invoked as a plain function cannot hold the hook.** `FieldEditor`
+  is called as `FieldEditor({...})` from `BlockCard` and from inside a gated
+  `.map()` in `ListEditor`, so a hook there lands in the caller's slot and the
+  count varies between renders. Extract the piece that needs wording into a real
+  component, as `RichTextLoading` does.
+- **`CmsProvider`'s own body is above the context the hook reads.** Only
+  components rendered inside `<CmsContext.Provider>` may call it.
+
+Tests assert through the catalog (`en["conflict.label"]`), never a literal, so
+they break on a bug rather than on a reword. `src/tests/admin/block-conflict.test.jsx`
+is the pattern; `src/tests/admin/save-error.test.js` shows feeding a real
+translator to a pure helper.
+
 ## Commit conventions
 
 We use **[Conventional Commits](https://www.conventionalcommits.org/)** with small,

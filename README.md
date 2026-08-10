@@ -34,6 +34,7 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
   - [Editing & drafts](#editing--drafts)
   - [Localization](#localization)
   - [Theming](#theming)
+  - [Panel language](#panel-language)
   - [Access control](#access-control)
   - [Caching & revalidation](#caching--revalidation)
 - [Architecture: the seams](#architecture-the-seams)
@@ -900,6 +901,11 @@ open), and the ones missing (click to compose). Which is also why the chips
 matter: without them an editor can write a whole record before the backend
 rejects it as a duplicate, and the rejection can't say where the existing one is.
 
+None of this decides what language the *panel itself* speaks. That is
+[`adminLocale`](#panel-language), and it is a separate setting on purpose:
+these locales are your content's, and are arbitrary, while the panel speaks
+whatever someone has written a catalog for.
+
 Omit `locales` and none of this engages: no `locale` reaches the wire, tags keep
 their pre-i18n shape, and the backend answers with the Client's default language.
 
@@ -936,6 +942,71 @@ For example, to recolor just the brand accent, pass `theme: { accent: "#3b82f6" 
 and leave the rest untouched. Unknown keys are dropped; overriding nothing is
 identical to shipping the stock theme. (Theming relies on CSS `color-mix`,
 supported by all current evergreen browsers.)
+
+### Panel language
+
+The panel's own wording ("Save", "Collections", "Undo") is English by default
+and set in one place:
+
+```js
+createCmsConfig({
+  baseUrl: process.env.CMS_URL,
+  adminLocale: "tr",   // built-in: "en" (default) and "tr"
+});
+```
+
+**This is not [`locales`](#localization), and the two are deliberately
+unrelated.** `locales` is what the *site's content* comes in: arbitrary, as many
+as you sell in. `adminLocale` is what the *editing surface* speaks, and only what
+someone has written a catalog for. An editor working through the English copy of
+a page has no reason to have their toolbar change under them, so the panel does
+not follow the route.
+
+#### Rewording, and adding a language
+
+Strings are keyed flat, so overriding some of them is just supplying those keys:
+
+```js
+createCmsConfig({
+  adminLocale: "tr",
+  adminStrings: { "status.save": "Yayınla" },
+});
+```
+
+A language with no built-in catalog is a first-class case, not an error. Give
+`adminLocale` the tag and `adminStrings` the wording:
+
+```js
+import de from "./cms-strings.de.js";
+
+createCmsConfig({ adminLocale: "de", adminStrings: de });
+```
+
+Plural selection then follows German, and anything you left out still reads in
+English rather than showing a raw key. That per-key fallback is why a partial
+catalog is safe to ship and fill in later.
+
+Counted strings carry `_one` / `_other` variants, picked through
+`Intl.PluralRules`:
+
+```js
+{
+  "status.unsaved_one": "{count} unsaved change",
+  "status.unsaved_other": "{count} unsaved changes",
+}
+```
+
+A language that takes one form after a number writes only `_other`, and a
+catalog owns every form of a key it mentions: supplying `_other` alone means
+English's `_one` does **not** show through underneath it.
+
+The key list is `src/shared/i18n/en/`, split by area (`panel`, `collections`,
+`editors`, `core`). Unknown keys render as the key itself and warn once in
+development, so a typo is visible rather than blank.
+
+Only the tag and your overrides reach the browser as data; the built-in
+catalogs are code. A site that sets nothing ships no configuration for this at
+all.
 
 ### Access control
 

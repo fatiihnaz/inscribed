@@ -1,8 +1,7 @@
-import { withCms } from "inscribed";
 import Hero from "@/components/Hero";
 import Ghost from "@/components/DoesNotExist";
 
-function Page() {
+export default function Page() {
   return (
     <main>
       <Hero />
@@ -10,5 +9,3 @@ function Page() {
     </main>
   );
 }
-
-export default withCms("/aliased", Page);

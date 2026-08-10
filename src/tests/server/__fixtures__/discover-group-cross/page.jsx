@@ -1,8 +1,7 @@
-import { withCms } from "inscribed";
 import Hero from "./Hero";
 import Plain from "./Plain";
 
-function Page() {
+export default function Page() {
   return (
     <main>
       <CmsGroup name="hero">
@@ -16,5 +15,3 @@ function Page() {
     </main>
   );
 }
-
-export default withCms("/cross", Page);

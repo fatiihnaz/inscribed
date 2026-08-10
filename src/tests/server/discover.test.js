@@ -70,7 +70,7 @@ describe("discoverManifests", () => {
     const appRoot = path.join(fixturesRoot, "discover-alias", "app");
     const { manifests, warnings } = await discoverManifests({ appRoot });
 
-    const page = manifests.find((m) => m.slug === "/aliased");
+    const page = manifests.find((m) => m.slug === "/");
     expect(page).toBeDefined();
     expect(page.blocks.map((b) => b.blockPath)).toEqual(["alias.hero"]);
 
@@ -85,7 +85,7 @@ describe("discoverManifests", () => {
 
     // <Hero> is rendered under two groups and once bare, so its single region
     // yields all three paths - matching what the runtime reads at each site.
-    const page = manifests.find((m) => m.slug === "/cross");
+    const page = manifests.find((m) => m.slug === "/");
     expect(page.blocks.map((b) => b.blockPath)).toEqual([
       "hero.title", "footer.title", "title",
     ]);
@@ -98,7 +98,7 @@ describe("discoverManifests", () => {
 
     // No static edge to follow: the region syncs unprefixed while the runtime
     // reads it as "sec.note".
-    const page = manifests.find((m) => m.slug === "/children");
+    const page = manifests.find((m) => m.slug === "/");
     expect(page.blocks.map((b) => b.blockPath)).toEqual(["note"]);
 
     expect(warnings).toHaveLength(1);
@@ -106,11 +106,67 @@ describe("discoverManifests", () => {
     expect(warnings[0].message).toContain('name="sec"');
   });
 
+  it("derives slugs from page file paths, dropping route groups", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-routes");
+    const { manifests, warnings, roots } = await discoverManifests({
+      appRoot,
+      locales: ["tr", "en"],
+    });
+
+    expect(manifests.map((m) => m.slug)).toEqual([
+      "/", "/about", "/news/[id]", "/pricing",
+    ]);
+    expect(warnings).toEqual([]);
+    expect(path.relative(appRoot, roots.get("/pricing")).split(path.sep).join("/")).toBe(
+      "(marketing)/pricing/page.jsx",
+    );
+  });
+
+  it("keeps the leading dynamic segment when no locales are configured", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-routes");
+    const { manifests } = await discoverManifests({ appRoot });
+
+    expect(manifests.map((m) => m.slug)).toContain("/[locale]/news/[id]");
+    expect(manifests.map((m) => m.slug)).not.toContain("/news/[id]");
+  });
+
+  it("skips pages that are not routable on their own", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-routes");
+    const { manifests } = await discoverManifests({ appRoot });
+
+    // _private (never routed), @modal (a layout slot) and (.)photo (an
+    // interception of a path another page owns) declare regions that must
+    // reach no manifest at all.
+    const paths = manifests.flatMap((m) => m.blocks.map((b) => b.blockPath));
+    expect(paths).not.toContain("private.title");
+    expect(paths).not.toContain("modal.title");
+    expect(paths).not.toContain("photo.title");
+  });
+
+  it("leaves a page that declares no regions out of the manifest", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-routes");
+    const { manifests } = await discoverManifests({ appRoot });
+
+    expect(manifests.map((m) => m.slug)).not.toContain("/contact");
+  });
+
+  it("warns when two page files derive the same slug", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-dup-slug");
+    const { manifests, warnings } = await discoverManifests({ appRoot });
+
+    expect(manifests).toHaveLength(1);
+    expect(manifests[0].slug).toBe("/dup");
+    expect(manifests[0].blocks.map((b) => b.blockPath)).toEqual(["dup.a", "dup.b"]);
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toContain('the slug "/dup"');
+  });
+
   it("skips unparseable files with a warning instead of throwing", async () => {
     const appRoot = path.join(fixturesRoot, "discover-parse-error");
     const { manifests, warnings } = await discoverManifests({ appRoot });
 
-    const page = manifests.find((m) => m.slug === "/ok");
+    const page = manifests.find((m) => m.slug === "/");
     expect(page).toBeDefined();
     expect(page.blocks.map((b) => b.blockPath)).toEqual(["ok.title"]);
 

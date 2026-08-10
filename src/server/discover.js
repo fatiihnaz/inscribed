@@ -8,12 +8,16 @@
  *
  * Discovery rules:
  *
- *   - Every `withCms("/slug", X)` call is the root of one slug. The file
- *     containing the call is the entry point; reachable files are followed
- *     via relative imports and jsconfig/tsconfig `paths` aliases (DFS
- *     pre-order), including files outside the scanned app root. Bare
- *     specifiers (`inscribed`, `next/...`) are not followed; an alias that
- *     matches no `paths` entry warns instead of silently dropping the file.
+ *   - Every `page.{js,jsx,ts,tsx}` under the app root is the root of one slug,
+ *     derived from its directory path (see `slugFromPageFile`). The page file
+ *     is the entry point; reachable files are followed via relative imports
+ *     and jsconfig/tsconfig `paths` aliases (DFS pre-order), including files
+ *     outside the scanned app root. Bare specifiers (`inscribed`, `next/...`)
+ *     are not followed; an alias that matches no `paths` entry warns instead
+ *     of silently dropping the file.
+ *
+ *   - A page that declares no regions owns no rows, so its slug is left out of
+ *     the manifest entirely rather than pushed as an empty entry.
  *
  *   - Files that fail to parse are skipped with a warning rather than
  *     aborting the run, so one broken (or oxc-unsupported) file can't kill
@@ -30,7 +34,7 @@
  *     groups contributes its regions once per prefix. The one case static
  *     analysis can't follow is `<CmsGroup>{children}</CmsGroup>`, which warns.
  *
- *   - `sortOrder` is the DFS order (root file first, then imports in source
+ *   - `sortOrder` is the DFS order (page file first, then imports in source
  *     order). Duplicate blockPaths within a slug: first occurrence wins.
  *
  *   - Shared component reachable from two slugs contributes its regions
@@ -53,6 +57,7 @@ import { parseSync } from "oxc-parser";
 
 const SOURCE_EXTENSIONS = [".jsx", ".js", ".tsx", ".ts"];
 const INDEX_FILES = SOURCE_EXTENSIONS.map((ext) => `index${ext}`);
+const PAGE_FILES = SOURCE_EXTENSIONS.map((ext) => `page${ext}`);
 
 // oxc infers the dialect from `lang`. `.ts` stays TypeScript-only so
 // angle-bracket type assertions parse correctly; every other extension allows
@@ -77,7 +82,7 @@ const UNRESOLVED = Symbol("unresolved");
  *   Discovery scope marker. When `"global"`, the region is written to the
  *   `globalSlug` manifest entry instead of any page slug, so a header/footer
  *   declared once is shared across every page. Undefined = page-scoped (the
- *   region follows the withCms slug it's reachable from).
+ *   region follows the slug of every page file it's reachable from).
  */
 
 /**
@@ -86,7 +91,6 @@ const UNRESOLVED = Symbol("unresolved");
  * @property {string[]} imports
  * @property {Map<string, string>} importBindings
  *   Imported local name -> resolved file, for the cross-file group check.
- * @property {string[]} withCmsSlugs
  * @property {DiscoveredRegion[]} regions
  * @property {{ componentName: string, file: string, prefix: string, loc: { line: number, column: number } | null }[]} componentRefs
  *   Every JSX render site of an imported component, with the `<CmsGroup>`
@@ -108,12 +112,19 @@ const UNRESOLVED = Symbol("unresolved");
  * @typedef {Object} DiscoveryResult
  * @property {SyncManifestRequest[]} manifests
  * @property {DiscoveryWarning[]} warnings
+ * @property {Map<string, string>} roots
+ *   Slug -> the page file it was derived from. Diagnostics only, kept off
+ *   `manifests` because those are the request bodies sent to the backend.
  */
 
 /**
  * @typedef {Object} DiscoverManifestsOptions
  * @property {string} [appRoot]      Directory to scan. Default: `process.cwd()/app`.
  * @property {string} [globalSlug]   Slug to receive `scope="global"` regions. Default: `"__global"`.
+ * @property {string[]} [locales]
+ *   The site's locales. Only their presence matters here: a localized app puts
+ *   the language in a leading dynamic segment, which is part of the URL but not
+ *   part of which page it is, so that segment is dropped from derived slugs.
  */
 
 /**
@@ -123,6 +134,7 @@ const UNRESOLVED = Symbol("unresolved");
 export async function discoverManifests(options = {}) {
   const appRoot = options.appRoot ?? path.resolve(process.cwd(), "app");
   const globalSlug = options.globalSlug ?? "__global";
+  const locales = options.locales;
 
   const files = await collectSourceFiles(appRoot);
   const aliases = loadPathAliases(appRoot);
@@ -160,26 +172,43 @@ export async function discoverManifests(options = {}) {
 
   /** @type {Map<string, Map<string, ManifestBlockItem>>} */
   const bySlug = new Map();
+  /** @type {Map<string, string>} */
+  const roots = new Map();
 
-  // Page-scoped regions: walk every withCms root, follow imports DFS, file
-  // each non-global region under the page's slug. Global regions are handled
-  // separately below so a Header/Footer shared across pages isn't duplicated.
-  for (const [rootFile, analysis] of analyses) {
-    if (analysis.withCmsSlugs.length === 0) continue;
-    for (const slug of analysis.withCmsSlugs) {
-      const blockMap = bySlug.get(slug) ?? new Map();
-      bySlug.set(slug, blockMap);
+  // Page-scoped regions: walk every page file, follow imports DFS, file each
+  // non-global region under the slug derived from that file's path. Global
+  // regions are handled separately below so a Header/Footer shared across
+  // pages isn't duplicated.
+  for (const rootFile of analyses.keys()) {
+    const slug = slugFromPageFile(rootFile, appRoot, locales);
+    if (slug == null) continue;
 
-      /** @type {DiscoveredRegion[]} */
-      const ordered = [];
-      collectRegionsDfs(rootFile, ctx, new Set(), ordered, "");
+    const previous = roots.get(slug);
+    if (previous) {
+      // Next itself rejects two pages resolving to one path, so this is
+      // mid-edit source rather than a shipping app; say so instead of
+      // silently merging two files' regions into one entry.
+      warnings.push({
+        file: rootFile,
+        loc: null,
+        message: `Derives the slug "${slug}", already claimed by ${path.relative(appRoot, previous)}. Both files' regions are merged into that one entry, first occurrence winning per blockPath.`,
+      });
+    } else {
+      roots.set(slug, rootFile);
+    }
 
-      let nextSortOrder = blockMap.size + 1;
-      for (const region of ordered) {
-        if (region.scope === "global") continue;
-        if (blockMap.has(region.blockPath)) continue;
-        blockMap.set(region.blockPath, regionToEntry(region, nextSortOrder++));
-      }
+    const blockMap = bySlug.get(slug) ?? new Map();
+    bySlug.set(slug, blockMap);
+
+    /** @type {DiscoveredRegion[]} */
+    const ordered = [];
+    collectRegionsDfs(rootFile, ctx, new Set(), ordered, "");
+
+    let nextSortOrder = blockMap.size + 1;
+    for (const region of ordered) {
+      if (region.scope === "global") continue;
+      if (blockMap.has(region.blockPath)) continue;
+      blockMap.set(region.blockPath, regionToEntry(region, nextSortOrder++));
     }
   }
 
@@ -202,6 +231,10 @@ export async function discoverManifests(options = {}) {
   /** @type {SyncManifestRequest[]} */
   const manifests = [];
   for (const [slug, blockMap] of bySlug) {
+    // Every routable page is a root, so most apps have pages that declare
+    // nothing (a collection detail view, a form). They own no rows; pushing an
+    // empty entry would register the slug on the backend for no reason.
+    if (blockMap.size === 0) continue;
     manifests.push({ slug, blocks: [...blockMap.values()] });
   }
   if (globalMap.size > 0) {
@@ -209,7 +242,48 @@ export async function discoverManifests(options = {}) {
   }
   manifests.sort((a, b) => a.slug.localeCompare(b.slug));
 
-  return { manifests, warnings };
+  return { manifests, warnings, roots };
+}
+
+/**
+ * Derive a manifest slug from an App Router page file, or null when the file
+ * isn't one / isn't routable on its own.
+ *
+ * Derived rather than declared because a hand-written second copy could only
+ * drift: a typo would sync its own empty slug and leave the page blank forever,
+ * with nothing to fail loudly against.
+ *
+ * @param {string} file
+ * @param {string} appRoot
+ * @param {string[]} [locales]
+ * @returns {string | null}
+ */
+function slugFromPageFile(file, appRoot, locales) {
+  if (!PAGE_FILES.includes(path.basename(file))) return null;
+
+  const rel = path.relative(appRoot, file);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+
+  /** @type {string[]} */
+  const segments = [];
+  for (const segment of rel.split(path.sep).slice(0, -1)) {
+    // `(.)foo` / `(..)foo` intercept a path some other page already owns, and
+    // `_foo` / `@slot` aren't routable at all: none of them is a page of its own.
+    if (/^\(\.+\)/.test(segment)) return null;
+    if (segment.startsWith("_") || segment.startsWith("@")) return null;
+    // Route groups organize files without appearing in the URL.
+    if (/^\(.*\)$/.test(segment)) continue;
+    segments.push(segment);
+  }
+
+  // The locale is either the first segment or nowhere: `resolveCmsRoute` only
+  // ever strips a leading segment, so a localized app has to nest everything
+  // under one. Which language a page is in is not part of which page it is.
+  if (locales?.length && segments.length > 0 && /^\[.+\]$/.test(segments[0])) {
+    segments.shift();
+  }
+
+  return "/" + segments.join("/");
 }
 
 /**
@@ -535,7 +609,6 @@ async function analyzeFile(filePath, aliases) {
     file: filePath,
     imports: [],
     importBindings: new Map(),
-    withCmsSlugs: [],
     regions: [],
     componentRefs: [],
   };
@@ -611,21 +684,6 @@ async function analyzeFile(filePath, aliases) {
         case "CallExpression": {
           const callee = node.callee;
           if (callee.type !== "Identifier") return;
-
-          if (callee.name === "withCms") {
-            const slug = literalString(node.arguments[0]);
-            if (slug == null) {
-              warnings.push({
-                file: filePath,
-                loc: locOf(node, locator),
-                message:
-                  "withCms() called with a non-literal slug - skipping. Pass a string literal so the manifest discovery can statically resolve it.",
-              });
-              return;
-            }
-            analysis.withCmsSlugs.push(slug);
-            return;
-          }
 
           // useCmsBlock("path", { blockType, defaultValue }): read-only block
           // declaration. No metadata arg means nothing to register, so ignore it.

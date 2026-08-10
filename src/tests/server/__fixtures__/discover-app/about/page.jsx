@@ -1,7 +1,6 @@
-import { withCms } from "inscribed";
-import Shared from "./components/Shared";
+import Shared from "../components/Shared";
 
-function About() {
+export default function About() {
   return (
     <main>
       <EditableRegion blockPath="about.body" blockType="RichText" defaultValue="" />
@@ -9,5 +8,3 @@ function About() {
     </main>
   );
 }
-
-export default withCms("/about", About);

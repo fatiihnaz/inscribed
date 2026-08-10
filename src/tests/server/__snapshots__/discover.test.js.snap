@@ -18,29 +18,6 @@ exports[`discoverManifests > discovers blocks, scopes, groups and DFS order acro
   {
     "blocks": [
       {
-        "blockPath": "about.body",
-        "blockType": "RichText",
-        "defaultValue": "",
-        "sortOrder": 1,
-      },
-      {
-        "blockPath": "shared.meta",
-        "blockType": "LongText",
-        "defaultValue": "m",
-        "sortOrder": 2,
-      },
-      {
-        "blockPath": "shared.cta",
-        "blockType": "LongText",
-        "defaultValue": "x",
-        "sortOrder": 3,
-      },
-    ],
-    "slug": "/about",
-  },
-  {
-    "blocks": [
-      {
         "blockPath": "hero.title",
         "blockType": "LongText",
         "defaultValue": "Welcome",
@@ -93,7 +70,30 @@ exports[`discoverManifests > discovers blocks, scopes, groups and DFS order acro
         "sortOrder": 7,
       },
     ],
-    "slug": "/home",
+    "slug": "/",
+  },
+  {
+    "blocks": [
+      {
+        "blockPath": "about.body",
+        "blockType": "RichText",
+        "defaultValue": "",
+        "sortOrder": 1,
+      },
+      {
+        "blockPath": "shared.meta",
+        "blockType": "LongText",
+        "defaultValue": "m",
+        "sortOrder": 2,
+      },
+      {
+        "blockPath": "shared.cta",
+        "blockType": "LongText",
+        "defaultValue": "x",
+        "sortOrder": 3,
+      },
+    ],
+    "slug": "/about",
   },
 ]
 `;
@@ -129,7 +129,7 @@ exports[`discoverManifests > emits warnings for non-static / malformed declarati
         "sortOrder": 4,
       },
     ],
-    "slug": "/bad",
+    "slug": "/",
   },
 ]
 `;
@@ -137,84 +137,76 @@ exports[`discoverManifests > emits warnings for non-static / malformed declarati
 exports[`discoverManifests > emits warnings for non-static / malformed declarations > warnings 1`] = `
 [
   {
-    "file": "bad.jsx",
+    "file": "page.jsx",
     "loc": {
       "column": 6,
-      "line": 13,
+      "line": 10,
     },
     "message": "<EditableRegion> needs a static blockPath string. Skipping discovery for this region.",
   },
   {
-    "file": "bad.jsx",
+    "file": "page.jsx",
     "loc": {
       "column": 6,
-      "line": 15,
+      "line": 12,
     },
     "message": "<EditableRegion blockPath="a.b"> is missing a static blockType prop. Skipping.",
   },
   {
-    "file": "bad.jsx",
+    "file": "page.jsx",
     "loc": {
       "column": 6,
-      "line": 17,
+      "line": 14,
     },
     "message": "<EditableRegion blockPath="a.c"> has no static defaultValue prop. Syncing with an empty string (""); set a static defaultValue to seed initial content.",
   },
   {
-    "file": "bad.jsx",
+    "file": "page.jsx",
     "loc": {
       "column": 6,
-      "line": 19,
+      "line": 16,
     },
     "message": "<EditableRegion> needs a static blockPath string. Skipping discovery for this region.",
   },
   {
-    "file": "bad.jsx",
+    "file": "page.jsx",
     "loc": {
       "column": 6,
-      "line": 22,
+      "line": 19,
     },
     "message": "<EditableList blockPath="a.d"> is missing or has a non-static itemSchema. Each field must be a plain object with literal blockType + defaultValue.",
   },
   {
-    "file": "bad.jsx",
+    "file": "page.jsx",
     "loc": {
       "column": 6,
-      "line": 25,
+      "line": 22,
     },
     "message": "<EditableRegion blockPath="a.e"> has unsupported scope="weird". Treating as page-scoped. Only "global" is recognized today.",
   },
   {
-    "file": "bad.jsx",
+    "file": "page.jsx",
     "loc": {
       "column": 6,
-      "line": 28,
+      "line": 25,
     },
     "message": "<CmsGroup> needs a static string \`name\` prop. Treating as a transparent wrapper - blockPaths inside won't be prefixed.",
   },
   {
-    "file": "bad.jsx",
+    "file": "page.jsx",
     "loc": {
       "column": 7,
-      "line": 33,
+      "line": 30,
     },
     "message": "useCmsBlock("a.h", ...) metadata must be a static object literal. Skipping.",
   },
   {
-    "file": "bad.jsx",
+    "file": "page.jsx",
     "loc": {
       "column": 7,
-      "line": 35,
+      "line": 32,
     },
     "message": "useCmsBlock("a.i", ...) metadata is missing blockType or defaultValue. Skipping.",
-  },
-  {
-    "file": "bad.jsx",
-    "loc": {
-      "column": 0,
-      "line": 41,
-    },
-    "message": "withCms() called with a non-literal slug - skipping. Pass a string literal so the manifest discovery can statically resolve it.",
   },
 ]
 `;

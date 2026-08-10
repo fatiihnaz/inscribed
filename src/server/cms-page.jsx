@@ -53,13 +53,10 @@ import { localizePath, resolveCmsRoute } from "../shared/route.js";
 import { buildListParams } from "../collections/params.js";
 import { publicAuth } from "../defaults/auth.js";
 
-// Re-exported here (not from the client entry) because pages calling it are
-// Server Components; the index bundle's "use client" would turn the export
-// into a client reference that can't be called during server render.
-export { withCms } from "./with-cms.js";
-// Same reason: config factories run in server modules (app/lib/cms.jsx), so
-// the callable export must come from this server entry. The index export
-// remains for client-side wrappers.
+// Re-exported here (not from the client entry) because config factories run in
+// server modules (app/lib/cms.jsx), and the index bundle's "use client" would
+// turn the export into a client reference that can't be called during server
+// render. The index export remains for client-side wrappers.
 export { createCmsConfig } from "../shared/config.js";
 
 const PATHNAME_HEADER = "x-pathname";

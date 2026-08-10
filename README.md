@@ -27,6 +27,7 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
 - [Quick start](#quick-start)
 - [Core concepts](#core-concepts)
   - [Authoring & discovery](#authoring--discovery)
+  - [Slugs](#slugs)
   - [Blocks & block types](#blocks--block-types)
   - [Groups](#groups)
   - [Lists](#lists)
@@ -179,10 +180,9 @@ export const { CmsPage } = createCmsPage({
 ```jsx
 // app/page.jsx  (a Server Component)
 import { CmsPage } from "./lib/cms.jsx";
-import { withCms } from "inscribed/page";
 import { EditableRegion } from "inscribed";
 
-function Home() {
+export default function Home() {
   return (
     <CmsPage slug="/">
       <main>
@@ -202,18 +202,16 @@ function Home() {
     </CmsPage>
   );
 }
-
-export default withCms("/", Home);
 ```
 
 `blockType` and `defaultValue` are **discovery-time metadata** read by the sync
 CLI, ignored at runtime. They tell inscribed what kind of editor to show and what to
 seed the database row with.
 
-`withCms("/", Home)` is a runtime no-op with one job: it marks this file as the
-**discovery root** for the `/` slug, so `cms-sync` knows which page owns the
-regions reachable from it (this file plus everything it imports). A page
-without a `withCms` root never enters the manifest.
+There is **no marker to add**: every `page.{js,jsx,ts,tsx}` under `app/` is a
+**discovery root**, and its slug comes from its own path, so `cms-sync` already
+knows this file owns the regions reachable from it (this file plus everything it
+imports). See [Slugs](#slugs) for the derivation rules.
 
 ### 5. Register the manifest
 
@@ -246,11 +244,10 @@ static discovery step turns those declarations into a backend manifest.
   `blockType` + `defaultValue` literals. (`<CollectionRegion>` /
   `<CollectionItem>` bindings are runtime-only and never enter the manifest;
   see [Collections](#collections).)
-- **Root** each page with `withCms("/slug", Page)` from `inscribed/page` (a
-  runtime no-op). The scanner starts at every `withCms` call, follows relative
-  imports from that file, and files each reachable region under the call's
-  slug. Pages without a root contribute nothing to the manifest; only
-  `scope="global"` regions are collected without one.
+- **Root** nothing by hand: every `page.{js,jsx,ts,tsx}` under `app/` is a
+  discovery root, and its slug is derived from its path (see
+  [Slugs](#slugs)). The scanner starts at each page file, follows relative
+  imports from there, and files each reachable region under that page's slug.
 - **Discover** by running `cms-sync`. It AST-scans `app/`, follows relative
   imports and jsconfig/tsconfig `paths` aliases, with or without `baseUrl` (also
   into files outside `app/`, e.g. a root-level `components/` dir), applies
@@ -269,6 +266,48 @@ be **plain literals**, the scanner can't evaluate variables or imports.
 
 You can also register a read-only block that has no `<EditableRegion>` on the
 page by passing discovery metadata to `useCmsBlock(path, { blockType, defaultValue })`.
+
+### Slugs
+
+A **slug** is the page identity blocks are addressed by. It is derived from the
+page file's own path, so it is never written down twice:
+
+| Page file | Slug |
+| --------- | ---- |
+| `app/page.jsx` | `/` |
+| `app/about/page.jsx` | `/about` |
+| `app/(marketing)/pricing/page.jsx` | `/pricing` |
+| `app/news/[id]/page.jsx` | `/news/[id]` |
+| `app/[locale]/about/page.jsx` | `/about` (with `locales` configured) |
+
+The rules behind that table:
+
+- **Route groups** (`(marketing)`) organise files without appearing in the URL,
+  so they drop out of the slug too.
+- **Dynamic segments** (`[id]`) stay as written: the manifest addresses the
+  route template, not one concrete URL, so `/news/1` and `/news/2` share a page.
+- **The leading segment is the locale** when `cms.config.js` exports `locales`,
+  and it drops out: which language a page is in is not part of which page it is.
+  Without `locales` it is kept like any other segment. inscribed only ever reads a
+  language from the **first** path segment (see [Localization](#localization)),
+  which is what makes this unambiguous.
+- **Private folders** (`_lib`), **parallel-route slots** (`@modal`) and
+  **intercepting routes** (`(.)photo`) are not pages of their own, so they are
+  skipped entirely and the regions inside them reach no manifest.
+- **A page that declares no regions owns no rows**, so its slug never reaches
+  the backend. A collection detail view or a form page costs nothing.
+
+Dynamic routes are the one place the slug is also written by hand: the
+`x-pathname` header carries the concrete path (`/news/1`), not the template, so
+`<CmsPage>` needs it explicitly and it has to match the folder names.
+
+```jsx
+// app/news/[id]/page.jsx
+<CmsPage slug="/news/[id]">
+```
+
+> **Check the derivation** with `cms-sync --dry-run`. It prints each slug beside
+> the page file it came from, which is where a surprise shows up.
 
 ### Blocks & block types
 
@@ -804,12 +843,9 @@ export const { CmsPage, localePath } = createCmsPage({ /* … */ });
 ```
 
 **Your manifest does not change.** The slug is what a page is; the locale is which
-language of it you are looking at. So a localized app still writes one literal:
-
-```jsx
-// app/[locale]/about/page.jsx
-export default withCms("/about", AboutPage);
-```
+language of it you are looking at. So a localized app still syncs one entry per
+page: `app/[locale]/about/page.jsx` becomes `/about`, because a leading segment
+is a language once `locales` is set (see [Slugs](#slugs)).
 
 `cms-sync` sends that one entry, plus the language list itself as
 `?locales=tr,en`. That is what keeps `cms.config.js` the single home for it: the
@@ -1248,7 +1284,7 @@ bundle:
 | `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCmsRoute`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
 | `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `CollectionComposer`, `useCollection`, `useCollectionItem`, `useCollectionRecord`, `useMyCollections`, `useCollectionCreate`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
 | `inscribed/server` | server only | `getCmsContent`, `getCmsPageBlocks`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
-| `inscribed/page` | server only | `createCmsPage` (returns `CmsPage`, `localePath`, `getCmsRoute`, and the server collection bindings), `withCms` |
+| `inscribed/page` | server only | `createCmsPage` (returns `CmsPage`, `localePath`, `getCmsRoute`, and the server collection bindings), `createCmsConfig` |
 | `inscribed/actions` | Server Action | `revalidateCmsSlug`, `revalidateCmsCollection` |
 | `inscribed/middleware` | edge | `createCmsMiddleware` |
 
@@ -1258,10 +1294,10 @@ handlers, or build scripts, never from a Client Component.
 ## CLI: `cms-sync`
 
 Discovers `<EditableRegion>` (and `useCmsBlock` metadata) declarations under
-`app/`, rooted at `withCms("/slug", ...)` call sites, and pushes the manifest
-to the backend. When discovery finds no roots and no global regions it exits
-with an error instead of pushing, since reconciling against an empty manifest
-soft-deletes every remote slug.
+`app/`, rooted at each `page.{js,jsx,ts,tsx}` file, and pushes the manifest to
+the backend. When discovery finds no regions at all it exits with an error
+instead of pushing, since reconciling against an empty manifest soft-deletes
+every remote slug.
 
 ```
 cms-sync [options]
@@ -1278,14 +1314,25 @@ Environment:
   CMS_URL               Backend base URL (default: http://localhost:5000)
 ```
 
+Each discovered slug is printed beside the page file it was derived from, so
+`--dry-run` is where you check a slug that came out wrong:
+
+```
+[inscribed-discover] /            6 block(s)  (app/[locale]/page.jsx)
+[inscribed-discover] /haber-lab   1 block(s)  (app/[locale]/haber-lab/page.jsx)
+```
+
 The service token for `POST /cms/sync` (and optional failure diagnostics) comes
 from an optional `cms.config.js` in the project root; the CLI is a plain Node
-binary, so it loads that module rather than receiving props:
+binary, so it loads that module rather than receiving props. `locales` lives
+here too because discovery needs it: it is what tells the scanner a leading
+`[locale]` segment is a language rather than part of the slug.
 
 ```js
 // cms.config.js
 export const getServiceToken = async () => "...";  // default: no token
 export const onSyncError = (err) => { /* ... */ };  // optional
+export const locales = ["tr", "en"];                // optional, first is default
 ```
 
 ## TypeScript

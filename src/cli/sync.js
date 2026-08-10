@@ -9,7 +9,8 @@
  *   }
  *
  * Reads `.env.local`, walks `app/` for `<EditableRegion>` and
- * `useCmsBlock(..., metadata)` declarations, then calls `syncAll`.
+ * `useCmsBlock(..., metadata)` declarations rooted at each `page.*` file, then
+ * calls `syncAll`.
  *
  * Being a plain Node binary, it can't receive function props, so the service
  * token and failure hook come from an optional `cms.config.js`:
@@ -52,9 +53,10 @@ const appRoot = args.appRoot
   ? path.resolve(process.cwd(), args.appRoot)
   : path.resolve(process.cwd(), "app");
 
-const { manifests, warnings } = await discoverManifests({
+const { manifests, warnings, roots } = await discoverManifests({
   appRoot,
   globalSlug: args.globalSlug,
+  locales,
 });
 
 for (const w of warnings) {
@@ -64,28 +66,32 @@ for (const w of warnings) {
   console.warn(`[inscribed-discover] ${where}\n  ${w.message}`);
 }
 
-// An empty manifest is almost always a discovery mistake (no withCms roots,
-// wrong --app-root), and reconciling with it soft-deletes every remote slug.
-// Refuse unless the caller opts in; --dry-run only prints, so it may proceed.
+// An empty manifest is almost always a discovery mistake (wrong --app-root, a
+// tree with no page files), and reconciling with it soft-deletes every remote
+// slug. Refuse unless the caller opts in; --dry-run only prints, so it may proceed.
 if (manifests.length === 0) {
   const where = path.relative(process.cwd(), appRoot);
   if (args.allowEmpty || args.dryRun) {
     console.warn(
-      `[inscribed-discover] No withCms("/slug", ...) roots or scope="global" regions found under ${where}.${args.dryRun ? "" : " Reconciling with an empty manifest - every remote slug will be marked deleted (soft delete; restored on the next sync that finds them)."}`,
+      `[inscribed-discover] No page declaring <EditableRegion>/<EditableList> and no scope="global" region found under ${where}.${args.dryRun ? "" : " Reconciling with an empty manifest - every remote slug will be marked deleted (soft delete; restored on the next sync that finds them)."}`,
     );
   } else {
     console.error(
-      `[inscribed-discover] No withCms("/slug", ...) roots or scope="global" regions found under ${where}.\n` +
+      `[inscribed-discover] No page declaring <EditableRegion>/<EditableList> and no scope="global" region found under ${where}.\n` +
         `  Syncing an empty manifest would soft-delete every remote slug, so nothing was pushed.\n` +
-        `  Wrap each page with withCms("/slug", Page) from "inscribed/page", or check --app-root.\n` +
+        `  Slugs come from the page files themselves (app/about/page.jsx -> "/about"), so check --app-root points at your app directory.\n` +
         `  Pass --allow-empty if you really mean to reconcile against an empty manifest.`,
     );
     process.exit(1);
   }
 }
 
+// The source file is printed beside each slug because slugs are derived rather
+// than written down: this listing is where you check the derivation.
 for (const m of manifests) {
-  console.log(`[inscribed-discover] ${m.slug}  ${m.blocks.length} block(s)`);
+  const root = roots.get(m.slug);
+  const from = root ? `  (${path.relative(process.cwd(), root)})` : "";
+  console.log(`[inscribed-discover] ${m.slug}  ${m.blocks.length} block(s)${from}`);
 }
 
 if (args.dryRun) {
@@ -144,7 +150,15 @@ Environment:
 Project config (optional, ./cms.config.js):
   getServiceToken      () => Promise<string> for POST /cms/sync (default: none)
   onSyncError          (err) => void, called on failure (e.g. token diagnostics)
-  locales              string[] of the site's languages; first is the default
+  locales              string[] of the site's languages; first is the default.
+                       Also tells discovery the leading [locale] segment is a
+                       language, not part of the slug.
+
+Slugs are derived from the page files themselves:
+  app/page.jsx                  -> /
+  app/about/page.jsx            -> /about
+  app/(marketing)/pricing/page.jsx -> /pricing
+  app/[locale]/news/[id]/page.jsx  -> /news/[id]   (with locales configured)
 `);
 }
 

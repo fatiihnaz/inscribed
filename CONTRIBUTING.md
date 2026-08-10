@@ -301,9 +301,9 @@ Client code reaches all three through `useCmsRoute()` (`src/core/hooks/`); never
 read `usePathname()` for an identity again. `CmsProvider` is the exception, since
 it is what publishes the context, and calls `resolveCmsRoute` directly.
 
-The manifest stays locale-agnostic on purpose: `withCms("/about", Page)` is one
-literal for every language, so `app/[locale]/about/page.jsx` works without the
-scanner having to evaluate a variable. The backend fans a slug out across the
+The manifest stays locale-agnostic on purpose: `app/[locale]/about/page.jsx`
+derives the single slug `/about`, because discovery drops the leading segment
+once `cms.config.js` exports `locales`. The backend fans a slug out across the
 Client's locales at sync time.
 
 ### Add a block type

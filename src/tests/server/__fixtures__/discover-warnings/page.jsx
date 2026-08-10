@@ -1,12 +1,9 @@
-import { withCms } from "inscribed";
-
 const slugVar = "/computed";
 
-function Bad() {
+export default function Bad() {
   return (
     <main>
-      {/* non-literal withCms slug below is the warning case; this valid one
-          gives the snapshot a real manifest to anchor against. */}
+      {/* Valid, so the snapshot has a real manifest to anchor the warnings against. */}
       <EditableRegion blockPath="ok.region" blockType="LongText" defaultValue="ok" />
 
       {/* missing blockPath */}
@@ -36,9 +33,3 @@ function Bad() {
     </main>
   );
 }
-
-// non-literal slug -> warning, no slug root registered for this branch
-withCms(slugVar, Bad);
-
-// a valid root so the page-scoped regions above still produce a manifest
-export default withCms("/bad", Bad);

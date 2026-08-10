@@ -1,7 +1,6 @@
-import { withCms } from "inscribed";
 import Broken from "./broken";
 
-function Page() {
+export default function Page() {
   return (
     <main>
       <EditableRegion blockPath="ok.title" blockType="LongText" defaultValue="ok" />
@@ -9,5 +8,3 @@ function Page() {
     </main>
   );
 }
-
-export default withCms("/ok", Page);

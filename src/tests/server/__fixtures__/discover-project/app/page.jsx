@@ -1,7 +1,6 @@
-import { withCms } from "inscribed";
 import Hero from "../components/Hero";
 
-function Page() {
+export default function Page() {
   return (
     <main>
       <EditableRegion blockPath="home.title" blockType="LongText" defaultValue="hi" />
@@ -9,5 +8,3 @@ function Page() {
     </main>
   );
 }
-
-export default withCms("/", Page);

@@ -369,16 +369,29 @@ async function resolvePathnameFromHeaders(warnWhenMissing) {
   const pathname = h.get(PATHNAME_HEADER);
   if (pathname) return pathname;
 
-  if (warnWhenMissing && process.env.NODE_ENV !== "production") {
+  if (warnWhenMissing && !warnedMissingPathname && process.env.NODE_ENV !== "production") {
+    warnedMissingPathname = true;
     // eslint-disable-next-line no-console
     console.warn(
       `[inscribed] <CmsPage> rendered without a slug prop and no "${PATHNAME_HEADER}" ` +
-        "request header was found. Add middleware that copies the pathname into the " +
-        "request headers, or pass slug={...} explicitly. Falling back to \"/\".",
+        'request header was found. Falling back to "/".\n' +
+        "  If every page reads the same content, your middleware is missing or its " +
+        "matcher does not cover them: add it, or pass slug={...} explicitly.\n" +
+        "  If pages are fine, this is a path your matcher deliberately excludes " +
+        "(favicon.ico, robots.txt) that 404'd, and Next rendered not-found through " +
+        "your root layout. Harmless.",
     );
   }
   return "/";
 }
+
+/**
+ * Once per process, because the two causes are told apart by how often this
+ * fires rather than by anything readable here: a missing middleware trips it on
+ * every page, while an excluded path trips it occasionally and harmlessly.
+ * Repeating the second case teaches people to scroll past the first.
+ */
+let warnedMissingPathname = false;
 
 /**
  * Split the request's pathname into `{ locale, slug }`.

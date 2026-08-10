@@ -146,6 +146,12 @@ export function middleware(req) {
 }
 ```
 
+Whatever your `matcher` excludes gets no header. If one of those paths 404s
+(`/favicon.ico` on a site that ships no icon), Next renders not-found through
+your **root layout**, so a `<CmsPage>` there runs without a pathname and warns
+once. That case is harmless. The same warning on every page means the matcher
+is not covering your pages, and then content really is wrong.
+
 ### 3. Build a page factory
 
 `createCmsPage` centralises the per-page boilerplate: it fetches the page's

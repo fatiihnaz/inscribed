@@ -24,6 +24,9 @@ vi.mock("next/navigation", () => ({
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
 import { CollectionComposer } from "../../collections/CollectionComposer.jsx";
+// Through the catalog: the panel's wording is configurable, so a literal here
+// would break on a reword rather than on a bug.
+import { en } from "../../shared/i18n/en/index.js";
 
 const BASE = "https://api.test";
 
@@ -131,14 +134,14 @@ describe("create flow", () => {
     renderComposer();
     await waitFor(() => expect(screen.getByText("Başlık")).toBeTruthy());
     expect(screen.getByText("İçerik")).toBeTruthy();
-    expect(screen.getByText("Oluştur")).toBeTruthy();
+    expect(screen.getByText(en["collections.create"])).toBeTruthy();
   });
 
   it("blocks submit while a required field is empty", async () => {
     renderComposer();
-    await waitFor(() => expect(screen.getByText("Oluştur")).toBeTruthy());
-    fireEvent.click(screen.getByText("Oluştur"));
-    expect(await screen.findByText(/Zorunlu alan eksik: Başlık/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(en["collections.create"])).toBeTruthy());
+    fireEvent.click(screen.getByText(en["collections.create"]));
+    expect(await screen.findByText(new RegExp(en["collections.requiredMissing"].replace("{field}", "Başlık")))).toBeTruthy();
     expect(requests.some(([m]) => m === "POST")).toBe(false);
   });
 
@@ -150,7 +153,7 @@ describe("create flow", () => {
     fireEvent.change(titleInput, { target: { value: "Merhaba" } });
     fireEvent.click(screen.getByText("Haberi yayınla"));
 
-    expect(await screen.findByText("Kaydedildi.")).toBeTruthy();
+    expect(await screen.findByText(en["collections.createdNotice"])).toBeTruthy();
     const post = global.fetch.mock.calls.find(([, init]) => init?.method === "POST");
     expect(post).toBeTruthy();
     expect(JSON.parse(String(post[1].body)).data.title).toBe("Merhaba");
@@ -160,14 +163,14 @@ describe("create flow", () => {
   it("hands the created item to onCreated instead of confirming inline", async () => {
     const onCreated = vi.fn();
     renderComposer({ props: { onCreated } });
-    await waitFor(() => expect(screen.getByText("Oluştur")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(en["collections.create"])).toBeTruthy());
 
     const [titleInput] = Array.from(document.querySelectorAll("input.inscribed-field"));
     fireEvent.change(titleInput, { target: { value: "Merhaba" } });
-    fireEvent.click(screen.getByText("Oluştur"));
+    fireEvent.click(screen.getByText(en["collections.create"]));
 
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
     expect(onCreated.mock.calls[0][0].slug).toBe("yeni-haber");
-    expect(screen.queryByText("Kaydedildi.")).toBeNull();
+    expect(screen.queryByText(en["collections.createdNotice"])).toBeNull();
   });
 });

@@ -6,6 +6,7 @@
 
 import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./styles.js";
 import { ACCENT, TEXT_MUTED } from "../../shared/style/tokens.js";
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 
 /**
  * @param {Object} props
@@ -16,6 +17,7 @@ import { ACCENT, TEXT_MUTED } from "../../shared/style/tokens.js";
  *   caption when a parent (e.g. `ListEditor`) already labels the field.
  */
 export function DateEditor({ value, onChange, disabled, hideLabel }) {
+  const t = useCmsStrings();
   const localValue = isoToLocal(value);
   const remaining = value ? calcRemaining(value) : null;
 
@@ -34,7 +36,7 @@ export function DateEditor({ value, onChange, disabled, hideLabel }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {hideLabel ? input : (
         <label style={labelStyle}>
-          <span style={labelTextStyle}>Tarih ve Saat</span>
+          <span style={labelTextStyle}>{t("editors.date.label")}</span>
           {input}
         </label>
       )}
@@ -50,13 +52,13 @@ export function DateEditor({ value, onChange, disabled, hideLabel }) {
           borderRadius: 8,
         }}>
           {remaining.past ? (
-            <span style={{ fontSize: 11, color: TEXT_MUTED }}>Bu tarih geçmiş.</span>
+            <span style={{ fontSize: 11, color: TEXT_MUTED }}>{t("editors.date.past")}</span>
           ) : (
             <>
               {[
-                { v: remaining.days,    l: "gün" },
-                { v: remaining.hours,   l: "saat" },
-                { v: remaining.minutes, l: "dk" },
+                { v: remaining.days,    l: t("editors.date.days") },
+                { v: remaining.hours,   l: t("editors.date.hours") },
+                { v: remaining.minutes, l: t("editors.date.minutes") },
               ].map(({ v, l }) => (
                 <div key={l} style={{ textAlign: "center", minWidth: 32 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: ACCENT, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{v}</div>

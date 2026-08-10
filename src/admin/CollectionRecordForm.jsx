@@ -13,6 +13,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 
 import { CmsApiError } from "../shared/contracts/errors.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useEditorValues } from "../collections/hooks/use-collection-editor.js";
 import { CollectionFieldsForm } from "../collections/CollectionFieldsForm.jsx";
 import { buttonBaseStyle } from "./drawer-styles.js";
@@ -39,6 +40,7 @@ import { TEXT_MUTED, TEXT_FAINT, FONT_MONO, FONT_SANS, STATUS_OK, STATUS_WARN, S
  *   enclosing `<CmsGroup editable={false}>` covers its collection rows too.
  */
 export function CollectionRecordForm({ editor, showMetaRow = true, showActions = true, readOnly = false }) {
+  const t = useCmsStrings();
   const {
     collection, slug, editorId,
     schema, item, setValues,
@@ -49,18 +51,22 @@ export function CollectionRecordForm({ editor, showMetaRow = true, showActions =
   const values = useEditorValues(editorId);
 
   if (meLoading || itemLoading) {
-    return <div style={hintStyle}>Yükleniyor…</div>;
+    return <div style={hintStyle}>{t("collections.loading")}</div>;
   }
   if (meError) {
-    return <div style={errorStyle}>Erişim listesi alınamadı: {meError.message}</div>;
+    return <div style={errorStyle}>{t("collections.accessFailed", { message: meError.message })}</div>;
   }
   if (itemError && !(itemError instanceof CmsApiError && itemError.isNotFound)) {
-    return <div style={errorStyle}>{collection}/{slug} alınamadı: {itemError.message}</div>;
+    return (
+      <div style={errorStyle}>
+        {t("collections.recordFailed", { collection, slug, message: itemError.message })}
+      </div>
+    );
   }
   if (!schema) {
     return (
       <div style={hintStyle}>
-        <code>{collection}</code> collection'ına bu oturumda erişimin yok — düzenleyemezsin.
+        {t("collections.noAccess", { key: collection })}
       </div>
     );
   }
@@ -80,16 +86,18 @@ export function CollectionRecordForm({ editor, showMetaRow = true, showActions =
             {/* With a draft pending, the number reads ahead by one: that is the
                 version this edit becomes on publish, and the badge beside it
                 says it isn't there yet. */}
-            {isVirtual ? "Yeni kayıt" : `Sürüm ${hasDraft ? item.version + 1 : item.version}`}
+            {isVirtual
+              ? t("collections.newRecord")
+              : t("collections.version", { version: hasDraft ? item.version + 1 : item.version })}
           </span>
-          {hasDraft ? <span style={draftBadgeStyle}>taslak</span> : null}
-          {!editable ? <span style={metaReadonlyStyle}>salt okunur</span> : null}
+          {hasDraft ? <span style={draftBadgeStyle}>{t("collections.draftBadge")}</span> : null}
+          {!editable ? <span style={metaReadonlyStyle}>{t("block.readOnly")}</span> : null}
         </div>
       ) : null}
 
       {isVirtual && editable ? (
         <div style={virtualHintStyle}>
-          Bu kayıt henüz yok — ilk Kaydet'te oluşturulur.
+          {t("collections.virtualHint")}
         </div>
       ) : null}
 
@@ -117,7 +125,7 @@ export function CollectionRecordForm({ editor, showMetaRow = true, showActions =
             className="inscribed-btn-collection"
             style={saveButtonStyle}
           >
-            {isPending ? "Kaydediliyor…" : "Kaydet"}
+            {isPending ? t("collections.saving") : t("status.save")}
           </button>
         </div>
       ) : null}
@@ -138,6 +146,7 @@ export function CollectionRecordForm({ editor, showMetaRow = true, showActions =
  * }} props
  */
 export function DraftIndicator({ status, lastSavedAt, hasServerDraft, publishedFlash }) {
+  const t = useCmsStrings();
   /** @type {{ state: string, bg: string, glow: string, pulse: boolean, label: React.ReactNode }} */
   let view;
 
@@ -147,7 +156,7 @@ export function DraftIndicator({ status, lastSavedAt, hasServerDraft, publishedF
       bg: STATUS_WARN,
       glow: `0 0 5px ${STATUS_WARN}66`,
       pulse: true,
-      label: "Kaydediliyor…",
+      label: t("collections.saving"),
     };
   } else if (status === "failed") {
     view = {
@@ -155,7 +164,7 @@ export function DraftIndicator({ status, lastSavedAt, hasServerDraft, publishedF
       bg: STATUS_DANGER,
       glow: "none",
       pulse: false,
-      label: "Kaydedilemedi",
+      label: t("pill.failed"),
     };
   } else if (publishedFlash) {
     view = {
@@ -163,7 +172,7 @@ export function DraftIndicator({ status, lastSavedAt, hasServerDraft, publishedF
       bg: STATUS_OK,
       glow: `0 0 5px ${STATUS_OK}66`,
       pulse: false,
-      label: "Veri kaydedildi",
+      label: t("pill.published"),
     };
   } else if (lastSavedAt) {
     view = {
@@ -173,7 +182,7 @@ export function DraftIndicator({ status, lastSavedAt, hasServerDraft, publishedF
       pulse: false,
       label: (
         <>
-          Taslak kayıtlı
+          {t("pill.draftSaved")}
           <span style={indicatorTimeStyle}>{lastSavedAt}</span>
         </>
       ),
@@ -186,7 +195,7 @@ export function DraftIndicator({ status, lastSavedAt, hasServerDraft, publishedF
       bg: STATUS_OK,
       glow: `0 0 5px ${STATUS_OK}66`,
       pulse: false,
-      label: "Taslak kayıtlı",
+      label: t("pill.draftSaved"),
     };
   } else {
     view = {

@@ -27,6 +27,7 @@ vi.mock("next/navigation", () => ({
 import { CmsProvider } from "../../core/CmsProvider.jsx";
 import { CmsContext } from "../../shared/state/cms-context.js";
 import { getBrowserAuth } from "../../defaults/browser-auth.js";
+import { en } from "../../shared/i18n/en/index.js";
 
 const BASE = "https://api.test";
 
@@ -213,7 +214,7 @@ describe("session lifecycle", () => {
     });
 
     await waitFor(() => expect(adminText()).toBe("false"));
-    expect(screen.getByText(/Oturumun sona erdi/)).toBeTruthy();
+    expect(screen.getByText(en["core.session.expired"])).toBeTruthy();
   });
 
   it("drops to public silently (no notice) when another tab signs out", async () => {
@@ -225,7 +226,7 @@ describe("session lifecycle", () => {
     });
 
     await waitFor(() => expect(adminText()).toBe("false"));
-    expect(screen.queryByText(/Oturumun sona erdi/)).toBeNull();
+    expect(screen.queryByText(en["core.session.expired"])).toBeNull();
   });
 
   it("adopts the session when another tab signs in", async () => {

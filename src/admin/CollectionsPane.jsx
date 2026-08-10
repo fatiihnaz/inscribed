@@ -14,6 +14,7 @@ import { memo, useMemo, useState } from "react";
 import { ChevronRight, Search } from "../shared/style/icons.jsx";
 
 import { useCollectionContext } from "../collections/context.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { collectDirtyRecords, dirtyCollectionKeys } from "./dirty.js";
 import { useMyCollections } from "../collections/hooks/use-my-collections.js";
@@ -30,6 +31,7 @@ import { TEXT, TEXT_MID, TEXT_FAINT, TEXT_MUTED, COLLECTION_ACCENT, COLLECTION_S
  * @param {{ onSelect: (collectionKey: string) => void }} props
  */
 export const CollectionsPane = memo(function CollectionsPane({ onSelect }) {
+  const t = useCmsStrings();
   const { collectionStore } = useCollectionContext();
   const { collections, isLoading } = useMyCollections();
   const [search, setSearch] = useState("");
@@ -78,8 +80,8 @@ export const CollectionsPane = memo(function CollectionsPane({ onSelect }) {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Koleksiyon ara"
-              aria-label="Koleksiyon ara"
+              placeholder={t("collections.searchCollections")}
+              aria-label={t("collections.searchCollections")}
               style={searchInputStyle}
             />
             {search ? (
@@ -88,7 +90,7 @@ export const CollectionsPane = memo(function CollectionsPane({ onSelect }) {
                 onClick={() => setSearch("")}
                 className="inscribed-search-clear"
                 style={searchClearStyle}
-                aria-label="Temizle"
+                aria-label={t("collections.clear")}
               >
                 ×
               </button>
@@ -100,10 +102,10 @@ export const CollectionsPane = memo(function CollectionsPane({ onSelect }) {
       {visible.length === 0 ? (
         <div style={emptyStateStyle}>
           {isLoading
-            ? "Koleksiyonlar yükleniyor…"
+            ? t("collections.loadingList")
             : search
-              ? `"${search}" araması için sonuç yok.`
-              : "Erişebildiğin bir koleksiyon yok."}
+              ? t("collections.noSearchResults", { query: search })
+              : t("collections.noneAccessible")}
         </div>
       ) : (
         <div style={scrollStyle}>
@@ -142,9 +144,10 @@ export const CollectionsPane = memo(function CollectionsPane({ onSelect }) {
  * }} props
  */
 function CollectionRow({ collectionKey, fieldCount, canCreate, onPage, dirty, onOpen }) {
+  const t = useCmsStrings();
   const meta = [
-    fieldCount > 0 ? `${fieldCount} alan` : null,
-    canCreate ? "yeni kayıt eklenebilir" : null,
+    fieldCount > 0 ? t("collections.fieldCount", { count: fieldCount }) : null,
+    canCreate ? t("collections.canCreate") : null,
   ].filter(Boolean).join(" · ");
 
   return (
@@ -161,9 +164,9 @@ function CollectionRow({ collectionKey, fieldCount, canCreate, onPage, dirty, on
       <span style={textColStyle}>
         <span style={titleRowStyle}>
           <span style={keyStyle} title={collectionKey}>{collectionKey}</span>
-          {onPage ? <span style={pageChipStyle}>bu sayfada</span> : null}
+          {onPage ? <span style={pageChipStyle}>{t("collections.onThisPage")}</span> : null}
           {dirty ? (
-            <span style={dirtyDotStyle} aria-label="Kaydedilmemiş değişiklik" />
+            <span style={dirtyDotStyle} aria-label={t("block.unsavedDot")} />
           ) : null}
         </span>
         {meta ? <span style={metaStyle}>{meta}</span> : null}

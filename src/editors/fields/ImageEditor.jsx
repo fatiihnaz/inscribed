@@ -15,6 +15,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { useImageUpload } from "../use-image-upload.js";
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 
 /**
  * @typedef {Object} ImageValue
@@ -29,6 +30,7 @@ import { useImageUpload } from "../use-image-upload.js";
  * @param {boolean} [props.disabled]
  */
 export function ImageEditor({ value, onChange, disabled }) {
+  const t = useCmsStrings();
   const obj = value && typeof value === "object" ? value : {};
   const src = typeof obj.src === "string" ? obj.src : "";
   const alt = typeof obj.alt === "string" ? obj.alt : "";
@@ -70,16 +72,16 @@ export function ImageEditor({ value, onChange, disabled }) {
             {!disabled ? (
               <div style={previewActionsStyle}>
                 <button type="button" onClick={() => inputRef.current?.click()} style={overlayBtnStyle}>
-                  Değiştir
+                  {t("editors.image.replace")}
                 </button>
                 <button type="button" onClick={() => patch({ src: "" })} style={overlayBtnStyle}>
-                  Kaldır
+                  {t("editors.image.remove")}
                 </button>
               </div>
             ) : null}
           </div>
         ) : disabled ? (
-          <div style={placeholderStyle}>Görsel yok</div>
+          <div style={placeholderStyle}>{t("editors.image.empty")}</div>
         ) : (
           <button
             type="button"
@@ -95,13 +97,19 @@ export function ImageEditor({ value, onChange, disabled }) {
                 <div style={progressTrackStyle}>
                   <div style={{ ...progressFillStyle, width: `${progress}%` }} />
                 </div>
-                <span style={hintStyle}>{progress < 100 ? `Yükleniyor ${progress}%` : "İşleniyor…"}</span>
+                <span style={hintStyle}>
+                  {progress < 100
+                    ? t("editors.image.uploading", { percent: progress })
+                    : t("editors.image.processing")}
+                </span>
               </div>
             ) : (
               <>
                 <UploadIcon />
-                <span style={hintStrongStyle}>{isDragging ? "Bırak" : "Görsel yükle"}</span>
-                <span style={hintStyle}>tıkla veya sürükle-bırak</span>
+                <span style={hintStrongStyle}>
+                  {isDragging ? t("editors.image.drop") : t("editors.image.upload")}
+                </span>
+                <span style={hintStyle}>{t("editors.image.uploadHint")}</span>
               </>
             )}
           </button>
@@ -115,7 +123,7 @@ export function ImageEditor({ value, onChange, disabled }) {
             type="button"
             onClick={reset}
             style={errorCloseStyle}
-            aria-label="Hatayı kapat"
+            aria-label={t("editors.image.dismissError")}
           >
             ✕
           </button>
@@ -125,7 +133,7 @@ export function ImageEditor({ value, onChange, disabled }) {
       {/* src override + alt. The backend requires alt whenever src is set, so
           alt always shows alongside the URL box. */}
       <label style={subLabelStyle}>
-        <span style={subLabelTextStyle}>Görsel URL</span>
+        <span style={subLabelTextStyle}>{t("editors.image.url")}</span>
         <input
           type="url"
           value={src}
@@ -137,12 +145,12 @@ export function ImageEditor({ value, onChange, disabled }) {
         />
       </label>
       <label style={subLabelStyle}>
-        <span style={subLabelTextStyle}>Alt metin</span>
+        <span style={subLabelTextStyle}>{t("editors.image.alt")}</span>
         <input
           type="text"
           value={alt}
           onChange={(e) => patch({ alt: e.target.value })}
-          placeholder="Görseli tarif et"
+          placeholder={t("editors.image.altPlaceholder")}
           disabled={disabled}
           className="inscribed-field"
           style={fieldStyle}

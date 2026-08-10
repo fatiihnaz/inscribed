@@ -35,6 +35,7 @@ import { createDraftQueue } from "../shared/state/draft-queue.js";
 import { contentDraftKey } from "../shared/state/draft-keys.js";
 import { resolveBlockValue } from "./resolve.js";
 import { useCmsContent } from "./hooks/use-cms-content.js";
+import { useCmsStrings } from "./hooks/use-cms-strings.js";
 import { CollectionProvider } from "../collections/CollectionProvider.jsx";
 
 /**
@@ -1182,6 +1183,7 @@ function stripAuthParams() {
 // Inline (not in the lazy admin chunk): it must render after the drawer has
 // already unmounted, and its only trigger is an expired admin session.
 function SessionExpiredNotice({ onSignIn, onDismiss }) {
+  const t = useCmsStrings();
   return (
     <div
       style={{
@@ -1202,7 +1204,7 @@ function SessionExpiredNotice({ onSignIn, onDismiss }) {
         boxShadow: "0 8px 24px rgba(0, 0, 0, 0.35)",
       }}
     >
-      <span>Oturumun sona erdi. Düzenlemeye devam etmek için tekrar giriş yap.</span>
+      <span>{t("core.session.expired")}</span>
       <button
         type="button"
         onClick={onSignIn}
@@ -1217,12 +1219,12 @@ function SessionExpiredNotice({ onSignIn, onDismiss }) {
           cursor: "pointer",
         }}
       >
-        Giriş yap
+        {t("core.session.signIn")}
       </button>
       <button
         type="button"
         onClick={onDismiss}
-        aria-label="Kapat"
+        aria-label={t("translations.dismiss")}
         style={{
           background: "none",
           border: "none",

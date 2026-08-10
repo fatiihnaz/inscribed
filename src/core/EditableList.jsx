@@ -37,6 +37,7 @@ import { Plus, Trash2, ChevronUp, ChevronDown } from "../shared/style/icons.jsx"
 
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsRoute } from "./hooks/use-cms-route.js";
+import { useCmsStrings } from "./hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
 import { stableStringify } from "../shared/util/stable-stringify.js";
@@ -99,6 +100,7 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
     registerEditorVisibility, unregisterEditorVisibility,
     setActiveBlock, setActiveListItem,
   } = useCmsContext();
+  const t = useCmsStrings();
   const groupPrefix = useContext(CmsGroupContext);
   const groupVisibility = useContext(CmsGroupVisibilityContext);
   const [isHovered, setIsHovered] = useState(false);
@@ -244,15 +246,15 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
             // was told to scroll to.
             setActiveListItem(null);
           }}
-          title="Panelde aç"
-          aria-label={`${fullPath} listesini panelde aç`}
+          title={t("core.chip.open")}
+          aria-label={t("core.chip.openList", { path: fullPath })}
           style={regionChipStyle({ roomy, highlight: isActive, accent: ACCENT, font: FONT_MONO })}
         >
           <span aria-hidden="true" style={{ fontWeight: 700, opacity: 0.85 }}>
             {TYPE_META.List.glyph}
           </span>
           {fullPath}
-          {dirty && <span aria-label="Kaydedilmemiş değişiklik" style={chipDirtyDotStyle} />}
+          {dirty && <span aria-label={t("block.unsavedDot")} style={chipDirtyDotStyle} />}
         </button>
       )}
     </Wrapper>
@@ -269,6 +271,7 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
  * }} props
  */
 function AdminItemWrapper({ children, onActivate, onRemove, onMoveUp, onMoveDown }) {
+  const t = useCmsStrings();
   const [isHovered, setIsHovered] = useState(false);
   return (
     <div
@@ -291,16 +294,16 @@ function AdminItemWrapper({ children, onActivate, onRemove, onMoveUp, onMoveDown
           onClick={(e) => e.stopPropagation()}
         >
           {onMoveUp ? (
-            <button type="button" onClick={onMoveUp} style={iconButtonStyle} title="Yukarı taşı">
+            <button type="button" onClick={onMoveUp} style={iconButtonStyle} title={t("core.item.moveUp")}>
               <ChevronUp size={12} />
             </button>
           ) : null}
           {onMoveDown ? (
-            <button type="button" onClick={onMoveDown} style={iconButtonStyle} title="Aşağı taşı">
+            <button type="button" onClick={onMoveDown} style={iconButtonStyle} title={t("core.item.moveDown")}>
               <ChevronDown size={12} />
             </button>
           ) : null}
-          <button type="button" onClick={onRemove} style={dangerButtonStyle} title="Sil">
+          <button type="button" onClick={onRemove} style={dangerButtonStyle} title={t("core.item.remove")}>
             <Trash2 size={12} />
           </button>
         </div>
@@ -317,6 +320,7 @@ function AdminItemWrapper({ children, onActivate, onRemove, onMoveUp, onMoveDown
  * @param {{ children: React.ReactNode, onAdd: () => void }} props
  */
 function GhostAddSlot({ children, onAdd }) {
+  const t = useCmsStrings();
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const lit = hovered || focused;
@@ -325,7 +329,7 @@ function GhostAddSlot({ children, onAdd }) {
     <div
       role="button"
       tabIndex={0}
-      aria-label="Yeni öğe ekle"
+      aria-label={t("core.item.addLabel")}
       onClick={onAdd}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -362,7 +366,7 @@ function GhostAddSlot({ children, onAdd }) {
         }}
       >
         <Plus size={15} />
-        <span>Öğe ekle</span>
+        <span>{t("core.item.add")}</span>
       </div>
     </div>
   );

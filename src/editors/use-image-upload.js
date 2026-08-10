@@ -11,6 +11,7 @@
 import { useCallback, useState } from "react";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 
 /**
  * @typedef {{ progress: number } | { error: string } | null} UploadState
@@ -30,6 +31,7 @@ import { useCmsContext } from "../shared/state/cms-context.js";
  */
 export function useImageUpload() {
   const { config, getAccessToken } = useCmsContext();
+  const t = useCmsStrings();
   const [state, setState] = useState(/** @type {UploadState} */ (null));
 
   const upload = useCallback(
@@ -39,7 +41,7 @@ export function useImageUpload() {
      */
     async (file) => {
       if (!file.type.startsWith("image/")) {
-        setState({ error: "Lütfen bir görsel dosyası seçin." });
+        setState({ error: t("editors.upload.notImage") });
         return null;
       }
       setState({ progress: 0 });
@@ -50,15 +52,15 @@ export function useImageUpload() {
           accessToken: token,
         });
         const url = result?.data?.url;
-        if (!url) throw new Error("CDN cevabında url bulunamadı");
+        if (!url) throw new Error(t("editors.upload.noUrl"));
         setState(null);
         return url;
       } catch (/** @type {any} */ err) {
-        setState({ error: err?.message ?? "Yükleme başarısız." });
+        setState({ error: err?.message ?? t("editors.upload.failed") });
         return null;
       }
     },
-    [config, getAccessToken],
+    [config, getAccessToken, t],
   );
 
   const reset = useCallback(() => setState(null), []);

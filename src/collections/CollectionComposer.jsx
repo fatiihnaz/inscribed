@@ -16,6 +16,7 @@
 import { useId, useState } from "react";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useCollectionMeta, useMyCollections } from "./hooks/use-my-collections.js";
 import { useCollectionCreate } from "./hooks/use-collection-create.js";
 import { useCreateDraftRole } from "./hooks/use-draft-driver.js";
@@ -29,7 +30,8 @@ import { CollectionFieldsForm } from "./CollectionFieldsForm.jsx";
  * @param {(item: import("../shared/contracts/schemas.js").CollectionItemResponse) => void} [props.onCreated]
  *   Called after a successful create (e.g. redirect to the new item). Without
  *   it the form resets and shows a brief inline confirmation.
- * @param {string} [props.submitLabel]  Submit button text. Default "Oluştur".
+ * @param {string} [props.submitLabel]  Submit button text. Defaults to the
+ *   panel's own "create" wording, in the panel's language.
  * @param {React.ReactNode} [props.unauthorized]  Shown to visitors without
  *   create access instead of nothing.
  * @param {string} [props.translationOf]
@@ -45,7 +47,7 @@ import { CollectionFieldsForm } from "./CollectionFieldsForm.jsx";
 export function CollectionComposer({
   collection,
   onCreated,
-  submitLabel = "Oluştur",
+  submitLabel,
   unauthorized = null,
   translationOf,
   locale,
@@ -111,7 +113,7 @@ export function CollectionComposer({
  *   collectionKey: string,
  *   schema: import("../shared/contracts/schemas.js").CollectionSchema,
  *   onCreated?: (item: import("../shared/contracts/schemas.js").CollectionItemResponse) => void,
- *   submitLabel: string,
+ *   submitLabel?: string,
  *   translationOf?: string,
  *   locale?: string,
  *   className?: string,
@@ -121,6 +123,7 @@ export function CollectionComposer({
 function ComposerForm({
   collectionKey, schema, onCreated, submitLabel, translationOf, locale, className, style,
 }) {
+  const t = useCmsStrings();
   const [justCreated, setJustCreated] = useState(false);
   // A collection has one new-item slot. If the drawer's create lane is also
   // open on this key, only the first of the two writes it.
@@ -162,7 +165,7 @@ function ComposerForm({
       />
 
       {error ? <div style={errorStyle} role="alert">{error}</div> : null}
-      {justCreated ? <div style={successStyle} role="status">Kaydedildi.</div> : null}
+      {justCreated ? <div style={successStyle} role="status">{t("collections.createdNotice")}</div> : null}
 
       <div style={actionsRowStyle}>
         {hasServerDraft ? (
@@ -173,7 +176,7 @@ function ComposerForm({
             className="inscribed-composer-ghost"
             style={ghostButtonStyle}
           >
-            Temizle
+            {t("collections.clear")}
           </button>
         ) : null}
         <button
@@ -183,7 +186,7 @@ function ComposerForm({
           className="inscribed-composer-submit"
           style={submitButtonStyle}
         >
-          {isPending ? "Kaydediliyor…" : submitLabel}
+          {isPending ? t("collections.saving") : (submitLabel ?? t("collections.create"))}
         </button>
       </div>
     </div>

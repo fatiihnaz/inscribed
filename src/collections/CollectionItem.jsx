@@ -27,6 +27,7 @@
 import { isValidElement, useContext, useEffect, useId, useMemo, useState } from "react";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { collectionItemBindingId, useCollectionContext } from "./context.js";
 import { CollectionItemContext } from "./item-context.js";
 import { CmsGroupContext, CmsGroupVisibilityContext } from "../shared/state/group-context.js";
@@ -278,6 +279,7 @@ function CollectionEditScope({
  * @param {{ editor: import("./hooks/use-collection-editor.js").CollectionEditorState, dirty: boolean }} props
  */
 function RecordActions({ editor, dirty }) {
+  const t = useCmsStrings();
   const busy = editor.isPending;
   // The button carries the outcome: there is no room beside it for a banner,
   // and a publish that failed silently is worse than one that says so.
@@ -285,7 +287,7 @@ function RecordActions({ editor, dirty }) {
     : editor.error ? "failed"
     : editor.publishedFlash ? "saved"
     : "idle";
-  const { label, accent } = SAVE_STATES[state];
+  const { labelKey, accent } = SAVE_STATES[state];
   // Only a plain idle button goes quiet when there is nothing to publish; a
   // result the user still needs to read stays at full strength.
   const inert = state === "idle" && !dirty;
@@ -300,10 +302,10 @@ function RecordActions({ editor, dirty }) {
           editor.undoDraft();
         }}
         disabled={!dirty || busy}
-        title="Bu kaydın taslağını geri al"
+        title={t("collections.undoRecordDraft")}
         style={regionActionButtonStyle({ font: FONT_MONO, accent: TEXT_MID, disabled: !dirty || busy })}
       >
-        Geri al
+        {t("block.undo")}
       </button>
       <button
         type="button"
@@ -313,20 +315,20 @@ function RecordActions({ editor, dirty }) {
           editor.save();
         }}
         disabled={inert || busy}
-        title={editor.error ?? "Bu kaydı yayınla"}
+        title={editor.error ?? t("collections.publishRecord")}
         style={regionActionButtonStyle({ font: FONT_MONO, accent, disabled: inert })}
       >
-        {label}
+        {t(labelKey)}
       </button>
     </>
   );
 }
 
 const SAVE_STATES = {
-  idle:   { label: "Kaydet", accent: COLLECTION_ACCENT },
-  saving: { label: "Kaydediliyor…", accent: TEXT_MID },
-  saved:  { label: "Kaydedildi", accent: STATUS_OK },
-  failed: { label: "Hata", accent: STATUS_DANGER },
+  idle:   { labelKey: "status.save", accent: COLLECTION_ACCENT },
+  saving: { labelKey: "collections.saving", accent: TEXT_MID },
+  saved:  { labelKey: "collections.saved", accent: STATUS_OK },
+  failed: { labelKey: "collections.error", accent: STATUS_DANGER },
 };
 
 /**
@@ -345,6 +347,7 @@ const SAVE_STATES = {
  * }} props
  */
 function CollectionEditWrapper({ onClick, isActive, label, dirty, tag, actions, children }) {
+  const t = useCmsStrings();
   const [isHovered, setIsHovered] = useState(false);
   const showChip = isHovered || isActive;
 
@@ -371,8 +374,8 @@ function CollectionEditWrapper({ onClick, isActive, label, dirty, tag, actions, 
             e.stopPropagation();
             onClick(e);
           }}
-          title="Panelde aç"
-          aria-label={`${label} kaydını panelde aç`}
+          title={t("collections.openInPanel")}
+          aria-label={t("collections.openRecordInPanel", { label })}
           style={regionChipStyle({
             roomy,
             highlight: isActive,
@@ -385,7 +388,7 @@ function CollectionEditWrapper({ onClick, isActive, label, dirty, tag, actions, 
           </span>
           {label}
           {dirty ? (
-            <span aria-label="Kaydedilmemiş değişiklik" style={chipDirtyDotStyle} />
+            <span aria-label={t("block.unsavedDot")} style={chipDirtyDotStyle} />
           ) : null}
         </button>
       ) : null}

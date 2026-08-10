@@ -17,6 +17,7 @@ import {
   Undo2, Redo2,
 } from "../../shared/style/icons.jsx";
 import { ACCENT, ACCENT_SOFT, R_SM } from "../../shared/style/tokens.js";
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 
 // Portable tones (mid-gray alphas + currentColor) so the buttons read on the
 // dark drawer and on a light page alike, matching the editor content.
@@ -33,6 +34,7 @@ const SURFACE_HOVER = "rgba(127,127,127,0.12)";
  * }} props
  */
 export function RichTextToolbar({ editor, disabled, className, style, dense }) {
+  const t = useCmsStrings();
   useEffect(() => {
     ensureToolbarStyle();
   }, []);
@@ -58,7 +60,7 @@ export function RichTextToolbar({ editor, disabled, className, style, dense }) {
   const handleLink = () => {
     const prev = editor.getAttributes("link").href ?? "";
     // eslint-disable-next-line no-alert
-    const url = window.prompt("Link URL", prev);
+    const url = window.prompt(t("editors.richText.linkPrompt"), prev);
     if (url === null) return; // cancelled
     if (url === "") {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
@@ -72,52 +74,52 @@ export function RichTextToolbar({ editor, disabled, className, style, dense }) {
   // collapses, and the toggle runs against an empty range.
   return (
     <div className={cls} style={rowStyle} onMouseDown={(e) => e.preventDefault()}>
-      <Btn active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} title="Kalın (Ctrl+B)" ariaLabel="Kalın">
+      <Btn active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} title={t("editors.richText.boldTitle")} ariaLabel={t("editors.richText.bold")}>
         <Bold size={13} />
       </Btn>
-      <Btn active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()} title="İtalik (Ctrl+I)" ariaLabel="İtalik">
+      <Btn active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()} title={t("editors.richText.italicTitle")} ariaLabel={t("editors.richText.italic")}>
         <Italic size={13} />
       </Btn>
-      <Btn active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()} title="Üstü çizili" ariaLabel="Üstü çizili">
+      <Btn active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()} title={t("editors.richText.strike")} ariaLabel={t("editors.richText.strike")}>
         <Strikethrough size={13} />
       </Btn>
-      <Btn active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()} title="Inline kod" ariaLabel="Inline kod">
+      <Btn active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()} title={t("editors.richText.code")} ariaLabel={t("editors.richText.code")}>
         <Code size={13} />
       </Btn>
 
       <Sep />
 
-      <Btn active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} title="Başlık 2" ariaLabel="Başlık 2">
+      <Btn active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} title={t("editors.richText.heading2")} ariaLabel={t("editors.richText.heading2")}>
         <Heading2 size={13} />
       </Btn>
-      <Btn active={editor.isActive("heading", { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} title="Başlık 3" ariaLabel="Başlık 3">
+      <Btn active={editor.isActive("heading", { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} title={t("editors.richText.heading3")} ariaLabel={t("editors.richText.heading3")}>
         <Heading3 size={13} />
       </Btn>
 
       <Sep />
 
-      <Btn active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Madde listesi" ariaLabel="Madde listesi">
+      <Btn active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()} title={t("editors.richText.bulletList")} ariaLabel={t("editors.richText.bulletList")}>
         <ListIcon size={13} />
       </Btn>
-      <Btn active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Numaralı liste" ariaLabel="Numaralı liste">
+      <Btn active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} title={t("editors.richText.orderedList")} ariaLabel={t("editors.richText.orderedList")}>
         <ListOrdered size={13} />
       </Btn>
-      <Btn active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()} title="Alıntı" ariaLabel="Alıntı">
+      <Btn active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()} title={t("editors.richText.quote")} ariaLabel={t("editors.richText.quote")}>
         <Quote size={13} />
       </Btn>
 
       <Sep />
 
-      <Btn active={editor.isActive("link")} onClick={handleLink} title="Link" ariaLabel="Link">
+      <Btn active={editor.isActive("link")} onClick={handleLink} title={t("editors.richText.link")} ariaLabel={t("editors.richText.link")}>
         <LinkIcon size={13} />
       </Btn>
 
       <Sep />
 
-      <Btn onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} title="Geri al (Ctrl+Z)" ariaLabel="Geri al">
+      <Btn onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} title={t("editors.richText.undoTitle")} ariaLabel={t("editors.richText.undo")}>
         <Undo2 size={13} />
       </Btn>
-      <Btn onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} title="İleri al (Ctrl+Shift+Z)" ariaLabel="İleri al">
+      <Btn onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} title={t("editors.richText.redoTitle")} ariaLabel={t("editors.richText.redo")}>
         <Redo2 size={13} />
       </Btn>
     </div>

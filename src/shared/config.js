@@ -12,6 +12,7 @@
  */
 
 import { normalizeTheme } from "./style/theme.js";
+import { DEFAULT_ADMIN_LOCALE } from "./i18n/default-locale.js";
 
 /**
  * @typedef {Object} CmsConfig
@@ -37,6 +38,16 @@ import { normalizeTheme } from "./style/theme.js";
  *   The locale an unprefixed path resolves to, and the one whose links carry no
  *   prefix. It is not a separate input because the backend derives its own the
  *   same way, and two inputs are two things that can disagree.
+ * @property {string} adminLocale
+ *   The panel's own language, defaulting to `"en"`. Deliberately independent of
+ *   `locales`: those are the languages the site's *content* comes in, and are
+ *   arbitrary, while the panel speaks whatever someone has written a catalog
+ *   for. An editor working through the English copy of a page has no reason to
+ *   have their toolbar change under them.
+ * @property {Record<string, string>|null} adminStrings
+ *   Flat overrides for that wording. Only the tag and these travel to the
+ *   client; the built-in catalogs are code, so they cost nothing on a page
+ *   whose visitor will never see the panel.
  * @property {CmsTransport} [transport]
  *   Data-access seam (see `transport.js`). Added at the use site, not by
  *   `createCmsConfig`: client provider augments it, server helpers default
@@ -58,6 +69,8 @@ import { normalizeTheme } from "./style/theme.js";
  * @param {string} [opts.clientKey]   This site's Client key on the reference backend. Omit to disable public content reads and the built-in auth.
  * @param {string} [opts.globalSlug]   Override the default "__global" slug for cross-page blocks.
  * @param {string[]} [opts.locales]   Locale codes this site serves, e.g. `["tr", "en"]`. The first is the default. Omit for a single-language site.
+ * @param {string} [opts.adminLocale]   Language of the admin panel's own chrome ("Kaydet", "Koleksiyonlar", …). Built-in: `"en"` (default) and `"tr"`. Any other tag works alongside `adminStrings`, and drives plural selection. Unrelated to `locales`, which is what the site's *content* comes in.
+ * @param {Record<string, string>} [opts.adminStrings]   Overrides for panel wording, keyed flat (`"drawer.save"`). Supply a few to reword, or a whole catalog to add a language. Anything omitted falls back to English.
  * @param {CmsTheme} [opts.theme]   Overrides for the admin/editing visual tokens (accent, fonts, radius, …). Unknown keys are dropped; unset keys keep their defaults.
  * @returns {CmsConfig}
  */
@@ -68,6 +81,8 @@ export function createCmsConfig({
   clientKey,
   globalSlug,
   locales,
+  adminLocale,
+  adminStrings,
   theme,
   ...rest
 }) {
@@ -95,8 +110,31 @@ export function createCmsConfig({
     globalSlug: globalSlug ?? "__global",
     locales: normalizedLocales,
     defaultLocale: normalizedLocales[0] ?? null,
+    // Only the tag and any overrides travel. The built-in catalogs are code and
+    // resolve on the client: this object crosses the RSC boundary as JSON on
+    // every page, and a few hundred panel strings would ride along for every
+    // visitor, none of whom can see the panel.
+    adminLocale: adminLocale ?? DEFAULT_ADMIN_LOCALE,
+    adminStrings: normalizeAdminStrings(adminStrings),
     theme: normalizeTheme(theme),
   });
+}
+
+/**
+ * @param {Record<string, string> | undefined | null} strings
+ * @returns {Record<string, string> | null}
+ */
+function normalizeAdminStrings(strings) {
+  if (strings == null) return null;
+  if (typeof strings !== "object" || Array.isArray(strings)) {
+    throw new Error("createCmsConfig: adminStrings must be an object of key -> text");
+  }
+  for (const [key, value] of Object.entries(strings)) {
+    if (typeof value !== "string") {
+      throw new Error(`createCmsConfig: adminStrings["${key}"] must be a string`);
+    }
+  }
+  return Object.freeze({ ...strings });
 }
 
 /**

@@ -19,6 +19,7 @@ import DOMPurify from "isomorphic-dompurify";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsRoute } from "./hooks/use-cms-route.js";
+import { useCmsStrings } from "./hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { isBlockDirty, resolveBlockValue } from "./resolve.js";
 import { useImageOverlayFits } from "../editors/inline/use-image-overlay-fits.js";
@@ -84,6 +85,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
     isAdmin, blocksStore, contentDraftsStore, uiStore, setActiveBlock, setDraft,
     registerEditorVisibility, unregisterEditorVisibility,
   } = useCmsContext();
+  const t = useCmsStrings();
   const groupPrefix = useContext(CmsGroupContext);
   const groupVisibility = useContext(CmsGroupVisibilityContext);
   const [isHovered, setIsHovered] = useState(false);
@@ -152,7 +154,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
         tag={innerTag}
         value={typeof value === "string" ? value : ""}
         singleLine={blockType !== "LongText"}
-        placeholder="Metin ekle…"
+        placeholder={t("core.text.placeholder")}
         data-block={fullPath}
         data-cms-active={highlight || undefined}
         onInput={(text) => setDraft(fullPath, text)}
@@ -267,8 +269,8 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
             e.stopPropagation();
             setActiveBlock(fullPath);
           }}
-          title="Panelde aç"
-          aria-label={`${fullPath} bloğunu panelde aç`}
+          title={t("core.chip.open")}
+          aria-label={t("core.chip.openBlock", { path: fullPath })}
           style={regionChipStyle({
             roomy,
             highlight,
@@ -280,7 +282,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
           {fullPath}
           {dirty && (
             <span
-              aria-label="Kaydedilmemiş değişiklik"
+              aria-label={t("block.unsavedDot")}
               style={chipDirtyDotStyle}
             />
           )}

@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { useCollectionContext } from "../context.js";
 import { itemDraftKey, newDraftKey } from "../../shared/state/draft-keys.js";
 import { useCollection } from "./use-collection.js";
@@ -72,6 +73,7 @@ export function useCollectionCreate({
   locale: localeProp,
 }) {
   const { config, getAccessToken, onAfterCollectionSave } = useCmsContext();
+  const t = useCmsStrings();
   const { updateCollectionItem, invalidateCollectionList, draftQueue } =
     useCollectionContext();
   // A record is composed in the language of the page composing it, unless the
@@ -178,7 +180,7 @@ export function useCollectionCreate({
     setError(null);
     const missing = requiredMissing(schema.fields, values);
     if (missing) {
-      setError(`Zorunlu alan eksik: ${missing}`);
+      setError(t("collections.requiredMissing", { field: missing }));
       return;
     }
     startTransition(async () => {
@@ -210,13 +212,16 @@ export function useCollectionCreate({
           // A write race, not a version clash: creates carry no version. Two
           // surfaces POSTing the collection's single new-item slot is the way
           // in (see the `active` contract in use-collection-editor.js).
-          setError("Aynı anda başka bir yazma işlemi oldu. Tekrar dene.");
+          setError(t("collections.createRace"));
         } else if (err instanceof CmsApiError && err.isForbidden) {
-          setError("Bu collection'da kayıt oluşturma yetkin yok.");
+          setError(t("collections.createForbidden"));
         } else if (err instanceof CmsApiError && err.status === 400) {
           // Backend reports inner failures as `works[0].title`; map onto
           // schema labels for a readable banner.
-          setError(humanizeCollectionError(err.detail, schema.fields) ?? `Geçersiz veri: ${err.message}`);
+          setError(
+            humanizeCollectionError(err.detail, schema.fields, t)
+            ?? t("collections.invalidData", { detail: err.message }),
+          );
         } else {
           setError(/** @type {Error} */ (err).message);
         }

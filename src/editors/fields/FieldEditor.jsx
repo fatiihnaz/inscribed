@@ -14,6 +14,7 @@ import { ImageEditor } from "./ImageEditor.jsx";
 import { LinkEditor } from "./LinkEditor.jsx";
 import { DateEditor } from "./DateEditor.jsx";
 import { TEXT_MUTED } from "../../shared/style/tokens.js";
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 
 // Lazy so the heavy TipTap dep stays out of the eager drawer chunk; fetched the
 // first time a RichText field renders. Same pattern as `CollectionFieldsForm`.
@@ -45,7 +46,7 @@ export function FieldEditor({ blockType, value, onChange, disabled, hideLabel })
     case "Text":
     case "LongText":  return <TextEditor value={value ?? ""} onChange={onChange} disabled={disabled} multiline hideLabel={hideLabel} />;
     case "RichText":  return (
-      <Suspense fallback={<div style={{ fontSize: 12, color: TEXT_MUTED, padding: "4px 0" }}>Editör yükleniyor…</div>}>
+      <Suspense fallback={<RichTextLoading />}>
         <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />
       </Suspense>
     );
@@ -54,4 +55,18 @@ export function FieldEditor({ blockType, value, onChange, disabled, hideLabel })
     case "Date":      return <DateEditor value={value} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />;
     default:          return null;
   }
+}
+
+/**
+ * Its own component so `FieldEditor` stays hook-free: `BlockCard` and
+ * `ListEditor` invoke it as a plain function from inside conditionals, where a
+ * hook of its own would break the rules of hooks.
+ */
+function RichTextLoading() {
+  const t = useCmsStrings();
+  return (
+    <div style={{ fontSize: 12, color: TEXT_MUTED, padding: "4px 0" }}>
+      {t("editors.richText.loading")}
+    </div>
+  );
 }

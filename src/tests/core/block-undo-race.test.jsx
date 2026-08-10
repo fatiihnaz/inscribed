@@ -26,6 +26,9 @@ import { CmsProvider } from "../../core/CmsProvider.jsx";
 import { BlockCard } from "../../admin/BlockCard.jsx";
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
+// Through the catalog: the panel's wording is configurable, so a literal here
+// would break on a reword rather than on a bug.
+import { en } from "../../shared/i18n/en/index.js";
 
 const PATH = "hero.body";
 const PUBLISHED = "yayınlanmış metin";
@@ -107,7 +110,7 @@ async function mount() {
 }
 
 const clickUndo = () =>
-  fireEvent.click(screen.getByLabelText("Bu bloğun değişikliklerini geri al"));
+  fireEvent.click(screen.getByLabelText(en["block.undoThis"]));
 
 describe("per-block undo vs. an in-flight draft autosave", () => {
   it("survives the mirror of a PUT that was already on the wire", async () => {

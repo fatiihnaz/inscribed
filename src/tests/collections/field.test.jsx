@@ -25,6 +25,9 @@ import { CollectionField } from "../../collections/CollectionField.jsx";
 import { useCollectionContext } from "../../collections/context.js";
 import { useCollectionItemScope } from "../../collections/item-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
+// Through the catalog: the panel's wording is configurable, so a literal here
+// would break on a reword rather than on a bug.
+import { en } from "../../shared/i18n/en/index.js";
 
 const BASE = "https://api.test";
 
@@ -292,7 +295,7 @@ describe("two presentations of one record", () => {
 
     // The ring's actions only appear on hover, same as the label chip.
     fireEvent.mouseEnter(first.parentElement);
-    fireEvent.click(screen.getByTitle("Bu kaydın taslağını geri al"));
+    fireEvent.click(screen.getByTitle(en["collections.undoRecordDraft"]));
 
     // Both, not just the one the button belonged to: a surface that never PUT
     // the draft holds the published value in `lastSyncedRef`, which used to

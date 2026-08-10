@@ -15,6 +15,7 @@
 import { useRef } from "react";
 
 import { useImageUpload } from "../use-image-upload.js";
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 
 /**
  * @param {Object} props
@@ -22,6 +23,7 @@ import { useImageUpload } from "../use-image-upload.js";
  * @param {(value: { src: string, alt: string }) => void} props.onChange
  */
 export function InlineImageOverlay({ value, onChange }) {
+  const t = useCmsStrings();
   const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
   const { upload, isUploading, progress, error } = useImageUpload();
   const alt = value?.alt ?? "";
@@ -43,7 +45,7 @@ export function InlineImageOverlay({ value, onChange }) {
             inputRef.current?.click();
           }}
         >
-          Değiştir
+          {t("editors.image.replace")}
         </button>
         {value?.src ? (
           <button
@@ -54,14 +56,16 @@ export function InlineImageOverlay({ value, onChange }) {
               onChange({ src: "", alt });
             }}
           >
-            Kaldır
+            {t("editors.image.remove")}
           </button>
         ) : null}
       </span>
 
       {isUploading ? (
         <span style={progressStyle}>
-          {progress < 100 ? `Yükleniyor ${progress}%` : "İşleniyor…"}
+          {progress < 100
+            ? t("editors.image.uploading", { percent: progress })
+            : t("editors.image.processing")}
         </span>
       ) : null}
       {error ? <span style={errorStyle}>{error}</span> : null}

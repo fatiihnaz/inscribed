@@ -15,6 +15,7 @@ import { Plus, Trash2, ChevronUp, ChevronDown } from "../../shared/style/icons.j
 
 import { addItem, moveItem, removeItem } from "../../shared/util/list-ops.js";
 import { useCmsContext } from "../../shared/state/cms-context.js";
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { emptyStateStyle } from "./styles.js";
 import { ACCENT, TEXT_MUTED, STATUS_DANGER, R_BADGE, R_SM } from "../../shared/style/tokens.js";
@@ -35,14 +36,14 @@ import { FieldEditor } from "./FieldEditor.jsx";
  * }} props
  */
 export function ListEditor({ blockPath, value, onChange, itemSchema, disabled }) {
+  const t = useCmsStrings();
   /** @type {Record<string, *>[]} */
   const items = Array.isArray(value) ? value : [];
 
   if (!itemSchema) {
     return (
       <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
-        Bu liste için <code>itemSchema</code> bulunamadı. Sayfada{" "}
-        <code>&lt;EditableList&gt;</code> render ediliyor mu?
+        {t("editors.list.noSchema", { schema: "itemSchema", component: "<EditableList>" })}
       </div>
     );
   }
@@ -73,7 +74,7 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {items.length === 0 ? (
         <div style={emptyStateStyle}>
-          Liste boş. "+ Öğe ekle" butonuyla başlayabilirsin.
+          {t("editors.list.empty")}
         </div>
       ) : null}
 
@@ -102,7 +103,7 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
           className="inscribed-icon-action"
         >
           <Plus size={13} />
-          <span>Öğe ekle</span>
+          <span>{t("editors.list.addItem")}</span>
         </button>
       )}
     </div>
@@ -127,6 +128,7 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
   // Selects a boolean, not the signal itself: a row click elsewhere in the list
   // leaves the other cards alone.
   const { uiStore, setActiveListItem } = useCmsContext();
+  const t = useCmsStrings();
   const isTarget = useStoreSelector(
     uiStore,
     (s) => s.activeListItem?.path === blockPath && s.activeListItem?.index === index,
@@ -163,7 +165,7 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
       >
         <span style={listItemIndexStyle} title={`#${index + 1} / ${total}`}>{index + 1}</span>
         <span style={summary ? listItemSummaryStyle : listItemSummaryEmptyStyle}>
-          {summary || "Boş öğe"}
+          {summary || t("editors.list.emptyItem")}
         </span>
 
         {/* Reorder/delete are edit affordances, omitted in read-only mode. */}
@@ -174,8 +176,8 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
               type="button"
               onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
               style={listItemIconStyle}
-              title="Yukarı taşı"
-              aria-label="Yukarı taşı"
+              title={t("editors.list.moveUp")}
+              aria-label={t("editors.list.moveUp")}
             >
               <ChevronUp size={12} />
             </button>
@@ -185,8 +187,8 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
               type="button"
               onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
               style={listItemIconStyle}
-              title="Aşağı taşı"
-              aria-label="Aşağı taşı"
+              title={t("editors.list.moveDown")}
+              aria-label={t("editors.list.moveDown")}
             >
               <ChevronDown size={12} />
             </button>
@@ -195,8 +197,8 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
             type="button"
             onClick={(e) => { e.stopPropagation(); onRemove(); }}
             style={listItemDangerStyle}
-            title="Sil"
-            aria-label="Sil"
+            title={t("editors.list.delete")}
+            aria-label={t("editors.list.delete")}
           >
             <Trash2 size={12} />
           </button>
@@ -239,7 +241,7 @@ function ListItemCard({ blockPath, index, total, item, itemSchema, disabled, onF
                     <div style={listFieldLabelStyle}>{key}</div>
                     {editor ?? (
                       <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
-                        <code>{field.blockType}</code> tipi list itemschema'sında desteklenmiyor.
+                        {t("editors.list.unsupportedField", { type: field.blockType })}
                       </div>
                     )}
                   </div>

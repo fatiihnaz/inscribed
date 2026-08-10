@@ -24,6 +24,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Plus, Undo2, Search } from "../shared/style/icons.jsx";
 
 import { useCollectionContext } from "../collections/context.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { collectDirtyRecords, dirtySlugsFor } from "./dirty.js";
 import { buildListParams } from "../collections/params.js";
@@ -114,6 +115,7 @@ function itemTitle(item, field) {
  * @param {{ collectionKey: string, scope?: "page" | "global" }} props
  */
 export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
+  const t = useCmsStrings();
   const { collectionStore, setActiveCollectionItem } = useCollectionContext();
   const collectionBindings = useStoreSelector(collectionStore, (s) => s.bindings);
   const activeCollectionItem = useStoreSelector(collectionStore, (s) => s.activeItem);
@@ -206,8 +208,8 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Kayıt ara"
-              aria-label="Kayıt ara"
+              placeholder={t("collections.searchRecords")}
+              aria-label={t("collections.searchRecords")}
               style={searchInputStyle}
             />
             {query ? (
@@ -216,7 +218,7 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
                 onClick={() => setQuery("")}
                 className="inscribed-search-clear"
                 style={searchClearStyle}
-                aria-label="Temizle"
+                aria-label={t("collections.clear")}
               >
                 ×
               </button>
@@ -235,7 +237,7 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
         <div style={regionScrollStyle}>
           {sections.length === 0 ? (
             <div style={emptyStateStyle}>
-              Bu sayfa <code>{collectionKey}</code> için bir region binding'i göstermiyor.
+              {t("collections.noRegionBinding", { key: collectionKey })}
             </div>
           ) : (
             sections.map((section) => (
@@ -322,6 +324,7 @@ function RegionSection({
   collectionKey, filter, pageLimit, pageOffset, showHeader, dirtySlugs,
   titleField, query, onOpenItem,
 }) {
+  const t = useCmsStrings();
   const initialLimit = pageLimit ?? DEFAULT_DRAWER_PAGE_SIZE;
   const initialOffset = pageOffset ?? 0;
   const [offset, setOffset] = useState(initialOffset);
@@ -386,23 +389,23 @@ function RegionSection({
 
       {error ? (
         <div style={errorBoxStyle}>
-          <span style={{ flex: 1 }}>Liste alınamadı: {error.message}</span>
+          <span style={{ flex: 1 }}>{t("collections.listFailed", { message: error.message })}</span>
           <button
             type="button"
             onClick={refetch}
             className="inscribed-text-button"
             style={retryTextStyle}
           >
-            Yeniden dene
+            {t("collections.retry")}
           </button>
         </div>
       ) : isLoading && accumulated.length === 0 ? (
-        <div style={emptyStateStyle}>Yükleniyor…</div>
+        <div style={emptyStateStyle}>{t("collections.loading")}</div>
       ) : accumulated.length === 0 ? (
-        <div style={emptyStateStyle}>Bu filtre için kayıt yok.</div>
+        <div style={emptyStateStyle}>{t("collections.noRecordsForFilter")}</div>
       ) : visible.length === 0 ? (
         <div style={emptyStateStyle}>
-          {`"${query}" araması yüklenmiş kayıtlarda sonuç vermedi.`}
+          {t("collections.searchEmpty", { query })}
         </div>
       ) : (
         <ul style={rowGroupStyle} data-cms-list>
@@ -424,7 +427,7 @@ function RegionSection({
           short result list read as "that's everything". */}
       {isSearching && canLoadMore ? (
         <div style={searchScopeNoteStyle}>
-          Yalnızca yüklenmiş {accumulated.length} kayıt arandı, {remaining} kayıt daha var.
+          {t("collections.searchScope", { loaded: accumulated.length, remaining })}
         </div>
       ) : null}
 
@@ -436,7 +439,7 @@ function RegionSection({
           className="inscribed-load-more"
           style={loadMoreStyle}
         >
-          {isLoading ? "Yükleniyor…" : `Daha fazla yükle (${remaining} kalan)`}
+          {isLoading ? t("collections.loading") : t("collections.loadMore", { remaining })}
         </button>
       ) : null}
     </div>
@@ -450,11 +453,12 @@ function RegionSection({
  * @param {{ filter: Record<string, *> | undefined, loaded: number, total: number }} props
  */
 function RegionHeader({ filter, loaded, total }) {
+  const t = useCmsStrings();
   const entries = filter ? Object.entries(filter) : [];
   return (
     <div style={regionHeaderStyle}>
       {entries.length === 0 ? (
-        <span style={regionAllLabelStyle}>Tümü</span>
+        <span style={regionAllLabelStyle}>{t("collections.allRecords")}</span>
       ) : (
         entries.map(([key, value]) => (
           <span key={key} style={filterChipStyle}>
@@ -475,6 +479,7 @@ function RegionHeader({ filter, loaded, total }) {
  * @param {{ slug: string, canEdit: boolean, dirty: boolean, onOpen: () => void }} props
  */
 function RegionItemRow({ slug, title, canEdit, dirty, onOpen }) {
+  const t = useCmsStrings();
   // No title resolves when the schema has no textual field: the slug then takes
   // the headline and keeps its identifier styling instead of being dressed up
   // as prose.
@@ -492,9 +497,9 @@ function RegionItemRow({ slug, title, canEdit, dirty, onOpen }) {
           <span style={title ? rowTitleStyle : rowSlugHeadlineStyle} title={headline}>
             {headline}
           </span>
-          {!canEdit ? <span style={readonlyChipStyle}>salt okunur</span> : null}
+          {!canEdit ? <span style={readonlyChipStyle}>{t("block.readOnly")}</span> : null}
           {dirty ? (
-            <span style={rowDirtyDotStyle} aria-label="Kaydedilmemiş değişiklik" />
+            <span style={rowDirtyDotStyle} aria-label={t("block.unsavedDot")} />
           ) : null}
         </span>
         {title ? (
@@ -526,6 +531,7 @@ function RegionItemRow({ slug, title, canEdit, dirty, onOpen }) {
  * }} props
  */
 function DetailPane({ onBack, title, meta, subhead, footer, children }) {
+  const t = useCmsStrings();
   useEffect(() => {
     /** @param {KeyboardEvent} e */
     const onKeyDown = (e) => {
@@ -551,8 +557,8 @@ function DetailPane({ onBack, title, meta, subhead, footer, children }) {
           onClick={onBack}
           className="inscribed-pane-back"
           style={paneBackStyle}
-          aria-label="Listeye dön"
-          title="Listeye dön (Esc)"
+          aria-label={t("collections.backToList")}
+          title={t("collections.backToListTitle")}
         >
           <ChevronLeft size={15} />
         </button>
@@ -588,10 +594,11 @@ function DetailPane({ onBack, title, meta, subhead, footer, children }) {
  * }} props
  */
 function TranslationChips({ item, locales, canEdit, onOpenItem, onAddTranslation }) {
+  const t = useCmsStrings();
   const bySlug = useMemo(() => {
     /** @type {Map<string, string>} */
     const out = new Map();
-    for (const t of item?.translations ?? []) out.set(t.locale, t.slug);
+    for (const entry of item?.translations ?? []) out.set(entry.locale, entry.slug);
     return out;
   }, [item]);
 
@@ -630,7 +637,7 @@ function TranslationChips({ item, locales, canEdit, onOpenItem, onAddTranslation
             type="button"
             onClick={() => onAddTranslation(locale, groupId)}
             style={localeChipAddStyle}
-            title={`${label} çevirisini ekle`}
+            title={t("collections.addTranslation", { locale: label })}
           >
             + {label}
           </button>
@@ -693,6 +700,7 @@ const localeChipAddStyle = /** @type {React.CSSProperties} */ ({
  * }} props
  */
 function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslation }) {
+  const t = useCmsStrings();
   // The pane is always on screen when mounted, so it mirrors; whether it also
   // writes depends on the page not already owning the record's draft.
   const role = useDrawerDraftRole(collectionKey, slug, true);
@@ -716,11 +724,11 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
       meta={
         <>
           {editor.item && !editor.canEdit ? (
-            <span style={readonlyChipStyle}>readonly</span>
+            <span style={readonlyChipStyle}>{t("block.readOnly")}</span>
           ) : null}
           {editor.item ? (
             <span style={detailVersionStyle}>
-              {editor.isVirtual ? "yeni" : `v${editor.item.version}`}
+              {editor.isVirtual ? t("collections.newBadge") : `v${editor.item.version}`}
             </span>
           ) : null}
         </>
@@ -741,8 +749,8 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
               disabled={editor.isPending}
               className="inscribed-btn-ghost"
               style={btnGhostStyle}
-              aria-label="Bu kaydın değişikliklerini geri al"
-              title="Geri al"
+              aria-label={t("collections.undoRecord")}
+              title={t("block.undo")}
             >
               <Undo2 size={13} />
             </button>
@@ -754,7 +762,7 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
             className="inscribed-btn-collection"
             style={saveButtonStyle}
           >
-            {editor.isPending ? "Kaydediliyor…" : "Kaydet"}
+            {editor.isPending ? t("collections.saving") : t("status.save")}
           </button>
         </>
       ) : null}
@@ -781,6 +789,7 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
  * }} props
  */
 function CreateButton({ collectionKey, listParams, onOpen }) {
+  const t = useCmsStrings();
   const { items } = useCollection(collectionKey, listParams);
   const hasServerDraft = items.some(
     (row) => row.id === NEW_DRAFT_GUID && !row.slug && row.draftData != null,
@@ -795,8 +804,8 @@ function CreateButton({ collectionKey, listParams, onOpen }) {
         style={createButtonStyle}
       >
         <Plus size={13} />
-        <span style={{ flex: 1 }}>Yeni {collectionKey}</span>
-        {hasServerDraft ? <span style={draftBadgeStyle}>taslak</span> : null}
+        <span style={{ flex: 1 }}>{t("collections.newRecordIn", { key: collectionKey })}</span>
+        {hasServerDraft ? <span style={draftBadgeStyle}>{t("collections.draftBadge")}</span> : null}
       </button>
     </div>
   );
@@ -817,6 +826,7 @@ function CreateButton({ collectionKey, listParams, onOpen }) {
  * }} props
  */
 function CreatePane({ collectionKey, schema, listParams, translationOf, locale, onClose }) {
+  const t = useCmsStrings();
   // A page-level <CollectionComposer> may be open on the same collection, and
   // both would write its single new-item slot; the first to claim it wins.
   const scopeId = useId();
@@ -843,8 +853,10 @@ function CreatePane({ collectionKey, schema, listParams, translationOf, locale, 
   return (
     <DetailPane
       onBack={onClose}
-      title={translationOf && locale ? `Yeni ${collectionKey} · ${locale.toUpperCase()}` : `Yeni ${collectionKey}`}
-      meta={hasServerDraft ? <span style={draftBadgeStyle}>taslak</span> : null}
+      title={translationOf && locale
+        ? t("collections.newRecordInLocale", { key: collectionKey, locale: locale.toUpperCase() })
+        : t("collections.newRecordIn", { key: collectionKey })}
+      meta={hasServerDraft ? <span style={draftBadgeStyle}>{t("collections.draftBadge")}</span> : null}
       footer={
         <>
           <button
@@ -854,7 +866,7 @@ function CreatePane({ collectionKey, schema, listParams, translationOf, locale, 
             className="inscribed-btn-ghost"
             style={btnGhostStyle}
           >
-            Vazgeç
+            {t("status.discard")}
           </button>
           <span style={{ flex: 1 }} />
           <button
@@ -864,7 +876,7 @@ function CreatePane({ collectionKey, schema, listParams, translationOf, locale, 
             className="inscribed-btn-collection"
             style={saveButtonStyle}
           >
-            {isPending ? "Oluşturuluyor…" : "Oluştur"}
+            {isPending ? t("collections.creating") : t("collections.create")}
           </button>
         </>
       }

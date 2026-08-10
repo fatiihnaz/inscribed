@@ -40,6 +40,7 @@ import { collectDirtyBlocks, collectDirtyRecords, dirtyCollectionKeys } from "./
 import { isBlockDirty } from "../core/resolve.js";
 import { useCmsSave } from "../core/hooks/use-cms-save.js";
 import { useCmsRoute } from "../core/hooks/use-cms-route.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useMyCollections } from "../collections/hooks/use-my-collections.js";
 import { describeSaveError } from "./save-error.js";
 
@@ -61,6 +62,7 @@ import { PANEL_WIDTH, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MI
 const EMPTY_BLOCKS = new Map();
 
 export function Drawer() {
+  const t = useCmsStrings();
   // `pathname` reads the blocks cache and labels the breadcrumb; `routeSlug` is
   // what `_slug` stamps carry, so it (not the pathname) decides page vs global.
   const { pathname, slug: routeSlug } = useCmsRoute();
@@ -114,8 +116,8 @@ export function Drawer() {
       const id = ric(prefetch, { timeout: 2000 });
       return () => window.cancelIdleCallback?.(id);
     }
-    const t = setTimeout(prefetch, 800);
-    return () => clearTimeout(t);
+    const timer = setTimeout(prefetch, 800);
+    return () => clearTimeout(timer);
   }, []);
 
   // Search filter (path + type), Page/Global tabs only; Collection lanes
@@ -276,12 +278,12 @@ export function Drawer() {
 
   const allTabs = useMemo(
     () => [
-      { id: "page", label: "Sayfa", count: pageBlockList.length, dirty: pageDirty },
+      { id: "page", label: t("drawer.page"), count: pageBlockList.length, dirty: pageDirty },
       ...(globalBlockList.length > 0
-        ? [{ id: "global", label: "Genel", count: globalBlockList.length, dirty: globalDirty }]
+        ? [{ id: "global", label: t("drawer.global"), count: globalBlockList.length, dirty: globalDirty }]
         : []),
     ],
-    [pageBlockList.length, globalBlockList.length, pageDirty, globalDirty],
+    [pageBlockList.length, globalBlockList.length, pageDirty, globalDirty, t],
   );
 
   // Rail mode. Collections is a top-level area (everything the user can reach,
@@ -325,7 +327,7 @@ export function Drawer() {
   // binding), fall back to "page". Raw setter so a routing event doesn't also
   // close an open preview.
   useEffect(() => {
-    if (allTabs.some((t) => t.id === activeTab)) return;
+    if (allTabs.some((tab) => tab.id === activeTab)) return;
     setActiveTabState("page");
   }, [allTabs, activeTab]);
 
@@ -442,8 +444,8 @@ export function Drawer() {
   }, [isSaving, error, dirtyCount, collectionDirtyTotal]);
   useEffect(() => {
     if (!publishedFlash) return undefined;
-    const t = setTimeout(() => setPublishedFlash(false), 2400);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setPublishedFlash(false), 2400);
+    return () => clearTimeout(timer);
   }, [publishedFlash]);
   // A new autosave or returning to dirty invalidates the "Veri kaydedildi"
   // flash, since the data no longer matches the just-published state.
@@ -451,7 +453,7 @@ export function Drawer() {
     if (draftSyncStatus === "saving" || dirtyCount > 0) setPublishedFlash(false);
   }, [draftSyncStatus, dirtyCount]);
 
-  const saveError = describeSaveError(error, unresolvedConflicts);
+  const saveError = describeSaveError(error, t, unresolvedConflicts);
   const pathSegments = pathnameToSegments(pathname);
 
   const matchSearch = (block) => {
@@ -573,10 +575,10 @@ export function Drawer() {
                 onToggleGroup={toggleGroup}
                 emptyHint={
                   search
-                    ? `"${search}" araması için sonuç yok.`
+                    ? t("drawer.emptySearch", { query: search })
                     : activeTab === "page"
-                      ? "Bu sayfada düzenlenebilir blok yok. Yeni bloklar eklemek için manifest sync'ini çalıştır."
-                      : "Henüz scope=\"global\" işaretli blok yok."
+                      ? t("drawer.emptyPage")
+                      : t("drawer.emptyGlobal")
                 }
               />
             </>
@@ -633,9 +635,9 @@ export function Drawer() {
           onClick={() => setDrawerOpen(!isDrawerOpen)}
           className="inscribed-handle"
           style={handleButtonStyle}
-          aria-label={isDrawerOpen ? "Paneli kapat" : "Paneli aç"}
+          aria-label={isDrawerOpen ? t("drawer.closePanel") : t("drawer.openPanel")}
           aria-expanded={isDrawerOpen}
-          title={isDrawerOpen ? "Paneli kapat" : "Paneli aç"}
+          title={isDrawerOpen ? t("drawer.closePanel") : t("drawer.openPanel")}
         >
           <span
             className="inscribed-handle-slide"
@@ -676,11 +678,12 @@ export function Drawer() {
  * }} props
  */
 function ModeRail({ mode, onChange, pageDirty, collectionsDirty }) {
+  const t = useCmsStrings();
   return (
-    <nav style={railStyle} aria-label="Bölümler">
+    <nav style={railStyle} aria-label={t("drawer.sections")}>
       <RailButton
         icon={FileText}
-        label="Sayfa"
+        label={t("drawer.page")}
         active={mode === "page"}
         dirty={pageDirty}
         accent={ACCENT}
@@ -688,7 +691,7 @@ function ModeRail({ mode, onChange, pageDirty, collectionsDirty }) {
       />
       <RailButton
         icon={Layers}
-        label="Koleksiyonlar"
+        label={t("drawer.collections")}
         active={mode === "collections"}
         dirty={collectionsDirty}
         accent={COLLECTION_ACCENT}
@@ -711,6 +714,7 @@ function ModeRail({ mode, onChange, pageDirty, collectionsDirty }) {
  * }} props
  */
 function RailButton({ icon: Icon, label, active, dirty, accent, isCollection, onClick }) {
+  const t = useCmsStrings();
   const className = [
     "inscribed-rail-btn",
     isCollection ? "inscribed-rail-btn-collection" : null,
@@ -748,7 +752,7 @@ function RailButton({ icon: Icon, label, active, dirty, accent, isCollection, on
       {dirty ? (
         <span
           style={{ ...railDirtyDotStyle, background: accent }}
-          aria-label="kaydedilmemiş değişiklik var"
+          aria-label={t("drawer.unsavedDot")}
         />
       ) : null}
     </button>
@@ -910,6 +914,7 @@ function PanelHeader({
   mode, segments, collectionKey, onNavigate, onBackToCollections,
   dirty, draftSyncStatus, isSaving, lastSavedAt, publishedFlash,
 }) {
+  const t = useCmsStrings();
   const isCollections = mode === "collections";
 
   return (
@@ -923,7 +928,7 @@ function PanelHeader({
         {isCollections ? <Layers size={12} /> : <FileText size={12} />}
       </span>
 
-      <nav style={headerPathStyle} aria-label="Konum">
+      <nav style={headerPathStyle} aria-label={t("drawer.location")}>
         {isCollections ? (
           <CollectionsPath
             collectionKey={collectionKey}
@@ -958,13 +963,14 @@ const MAX_VISIBLE_SEGMENTS = 2;
  * }} props
  */
 function PagePath({ segments, onNavigate }) {
+  const t = useCmsStrings();
   const isCollapsed = segments.length > MAX_VISIBLE_SEGMENTS;
   const shown = isCollapsed ? segments.slice(-MAX_VISIBLE_SEGMENTS) : segments;
   const hidden = isCollapsed ? segments.slice(0, -MAX_VISIBLE_SEGMENTS) : [];
 
   return (
     <>
-      <Crumb label="Anasayfa" title="Anasayfa" onClick={() => onNavigate("/")} />
+      <Crumb label={t("drawer.home")} title={t("drawer.home")} onClick={() => onNavigate("/")} />
       {isCollapsed ? (
         <>
           <span style={headerSepStyle}>/</span>
@@ -1007,17 +1013,18 @@ function PagePath({ segments, onNavigate }) {
  * @param {{ collectionKey: string | null, onBack: () => void }} props
  */
 function CollectionsPath({ collectionKey, onBack }) {
+  const t = useCmsStrings();
   if (!collectionKey) {
     // Styled as a crumb, not as the emphasised current segment, so the area's
     // own landing page reads the same as the site root does on `/`. Nowhere to
     // navigate from here, so it drops the button's pointer cursor.
     return (
-      <span style={{ ...headerCrumbStyle, cursor: "default" }}>Koleksiyonlar</span>
+      <span style={{ ...headerCrumbStyle, cursor: "default" }}>{t("drawer.collections")}</span>
     );
   }
   return (
     <>
-      <Crumb label="Koleksiyonlar" title="Koleksiyon listesi" onClick={onBack} />
+      <Crumb label={t("drawer.collections")} title={t("drawer.collectionList")} onClick={onBack} />
       <span style={headerSepStyle}>/</span>
       <span style={headerCrumbCurrentStyle} title={collectionKey}>
         {collectionKey}
@@ -1064,6 +1071,7 @@ const crumbWrapStyle = /** @type {React.CSSProperties} */ ({
  * }} props
  */
 function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publishedFlash }) {
+  const t = useCmsStrings();
   // Two different things go over the wire, and only one of them is a draft.
   // Folding them into a single "syncing" flag is what had a publish announce
   // itself as an autosave.
@@ -1079,8 +1087,8 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       bg: STATUS_DANGER,
       glow: "none",
       pulse: false,
-      label: "Kaydedilemedi",
-      title: "Taslak kaydedilemedi",
+      label: t("pill.failed"),
+      title: t("pill.failedTitle"),
     };
   } else if (publishedFlash) {
     // Post-publish pulse: drafts are now live data, so "Veri kaydedildi" shows
@@ -1090,8 +1098,8 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       bg: STATUS_OK,
       glow: `0 0 5px ${STATUS_OK}66`,
       pulse: false,
-      label: "Veri kaydedildi",
-      title: "Tüm değişiklikler yayınlandı",
+      label: t("pill.published"),
+      title: t("pill.publishedTitle"),
     };
   } else if (isSaving) {
     // Above `lastSavedAt` on purpose: a publish held under it kept showing
@@ -1102,8 +1110,8 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       bg: STATUS_WARN,
       glow: `0 0 5px ${STATUS_WARN}66`,
       pulse: true,
-      label: "Yayınlanıyor…",
-      title: "Değişiklikler yayınlanıyor",
+      label: t("pill.publishing"),
+      title: t("pill.publishingTitle"),
     };
   } else if (lastSavedAt) {
     // Hold the label steady during re-saves; only the dot pulses and recolours.
@@ -1115,7 +1123,7 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       pulse: isDraftSaving,
       label: (
         <>
-          Taslak kayıtlı
+          {t("pill.draftSaved")}
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.span
               key={lastSavedAt}
@@ -1130,7 +1138,7 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
           </AnimatePresence>
         </>
       ),
-      title: `Taslak en son ${lastSavedAt}'de kaydedildi`,
+      title: t("pill.draftSavedTitle", { time: lastSavedAt }),
     };
   } else if (isDraftSaving) {
     // First autosave ever, no prior timestamp to anchor to.
@@ -1139,8 +1147,8 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       bg: STATUS_WARN,
       glow: `0 0 5px ${STATUS_WARN}66`,
       pulse: true,
-      label: "Taslak kaydediliyor…",
-      title: "Taslak şu anda kaydediliyor",
+      label: t("pill.draftSaving"),
+      title: t("pill.draftSavingTitle"),
     };
   } else if (dirty) {
     view = {
@@ -1148,8 +1156,8 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       bg: ACCENT,
       glow: `0 0 5px ${ACCENT}66`,
       pulse: false,
-      label: "Düzenleniyor",
-      title: "Kaydedilmemiş değişiklikler var",
+      label: t("pill.dirty"),
+      title: t("pill.dirtyTitle"),
     };
   } else {
     // Idle baseline: pill stays mounted as a dot-only chip so the
@@ -1255,6 +1263,7 @@ const headerPillTimeStyle = /** @type {React.CSSProperties} */ ({
  * }} props
  */
 function TabBar({ tabs, activeTab, onChange, accent = ACCENT }) {
+  const t = useCmsStrings();
   const scrollRef = useRef(/** @type {HTMLDivElement|null} */ (null));
   const [overflow, setOverflow] = useState({ left: false, right: false });
   const [indicator, setIndicator] = useState(/** @type {{ left: number, width: number, color: string } | null} */ (null));
@@ -1302,7 +1311,7 @@ function TabBar({ tabs, activeTab, onChange, accent = ACCENT }) {
           onClick={() => nudge(-1)}
           className="inscribed-tabbar-chevron"
           style={tabBarChevronStyle}
-          aria-label="Önceki sekmeler"
+          aria-label={t("drawer.tabsPrev")}
         >
           <ChevronLeft size={14} />
         </button>
@@ -1349,7 +1358,7 @@ function TabBar({ tabs, activeTab, onChange, accent = ACCENT }) {
           onClick={() => nudge(1)}
           className="inscribed-tabbar-chevron"
           style={tabBarChevronStyle}
-          aria-label="Sonraki sekmeler"
+          aria-label={t("drawer.tabsNext")}
         >
           <ChevronRight size={14} />
         </button>
@@ -1365,6 +1374,7 @@ function TabBar({ tabs, activeTab, onChange, accent = ACCENT }) {
  * }} props
  */
 function TabButton({ id, label, count, active, dirty, accent = ACCENT, onClick }) {
+  const t = useCmsStrings();
   const activeStyle = active
     ? { ...tabButtonStyle, ...tabButtonActiveStyle }
     : tabButtonStyle;
@@ -1391,7 +1401,7 @@ function TabButton({ id, label, count, active, dirty, accent = ACCENT, onClick }
           style={accent === ACCENT
             ? tabDirtyDotStyle
             : { ...tabDirtyDotStyle, background: accent, boxShadow: `0 0 6px ${accent}80` }}
-          aria-label="kaydedilmemiş değişiklik var"
+          aria-label={t("drawer.unsavedDot")}
         />
       ) : null}
     </button>
@@ -1406,6 +1416,7 @@ function TabButton({ id, label, count, active, dirty, accent = ACCENT, onClick }
  * @param {{ value: string, onChange: (v: string) => void }} props
  */
 function Toolbar({ value, onChange }) {
+  const t = useCmsStrings();
   return (
     <div style={toolbarStyle}>
       <div className="inscribed-search" style={searchWrapStyle}>
@@ -1414,8 +1425,8 @@ function Toolbar({ value, onChange }) {
           type="search"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Blok ara (yol veya tip)"
-          aria-label="Blok ara"
+          placeholder={t("drawer.searchPlaceholder")}
+          aria-label={t("drawer.searchLabel")}
           style={searchInputStyle}
         />
         {value ? (
@@ -1424,7 +1435,7 @@ function Toolbar({ value, onChange }) {
             onClick={() => onChange("")}
             className="inscribed-search-clear"
             style={searchClearStyle}
-            aria-label="Temizle"
+            aria-label={t("drawer.searchClear")}
           >
             ×
           </button>
@@ -1518,6 +1529,7 @@ function GroupCard({
   groupName, blocks, activeBlockPath,
   itemSchemas, editorVisibility, isOpen, onToggle,
 }) {
+  const t = useCmsStrings();
   // The header dot is derived here rather than handed down: a `dirtyByPath` prop
   // would change identity on every keystroke and defeat the list's memo. The
   // selector returns a boolean, so a write outside this group is a no-op.
@@ -1540,7 +1552,7 @@ function GroupCard({
         <span style={groupNameStyle}>{groupName}</span>
         <span style={groupCountStyle}>
           {blocks.length}
-          {dirty ? <span style={groupDirtyDotStyle} aria-label="kaydedilmemiş değişiklik var" /> : null}
+          {dirty ? <span style={groupDirtyDotStyle} aria-label={t("drawer.unsavedDot")} /> : null}
         </span>
         <motion.span
           initial={false}
@@ -1662,6 +1674,7 @@ function chunkBlocksByGroup(blocks) {
  * @param {{ count: number, onBack: () => void }} props
  */
 function PreviewHeader({ count, onBack }) {
+  const t = useCmsStrings();
   return (
     <div style={previewHeaderStyle}>
       <button
@@ -1669,13 +1682,13 @@ function PreviewHeader({ count, onBack }) {
         onClick={onBack}
         className="inscribed-preview-back"
         style={previewBackStyle}
-        aria-label="Düzenlemeye dön"
+        aria-label={t("drawer.backToEditing")}
       >
         <ChevronLeft size={12} />
-        <span>Düzenlemeye dön</span>
+        <span>{t("drawer.backToEditing")}</span>
       </button>
       <div style={previewTitleStyle}>
-        <span>{count} Değişiklik</span>
+        <span>{t("drawer.previewTitle", { count })}</span>
       </div>
     </div>
   );
@@ -1694,6 +1707,7 @@ function PreviewHeader({ count, onBack }) {
  * }} props
  */
 function CollectionRefStrip({ refs, dirtyKeys, onOpen }) {
+  const t = useCmsStrings();
   return (
     <div style={refStripStyle}>
       {refs.map((ref) => (
@@ -1710,7 +1724,7 @@ function CollectionRefStrip({ refs, dirtyKeys, onOpen }) {
           <span style={refLabelStyle} title={ref.key}>{ref.label}</span>
           {ref.count > 0 ? <span style={refCountStyle}>{ref.count}</span> : null}
           {dirtyKeys.has(ref.key) ? (
-            <span style={refDirtyDotStyle} aria-label="kaydedilmemiş değişiklik var" />
+            <span style={refDirtyDotStyle} aria-label={t("drawer.unsavedDot")} />
           ) : null}
           <span style={refChevronStyle} aria-hidden="true">
             <ChevronRight size={12} />
@@ -1864,6 +1878,32 @@ function RollingCount({ value, style }) {
 }
 
 /**
+ * Put the animated counters back into a finished status sentence. `t` is asked
+ * for the sentence with its numbers already in place, because the catalog owns
+ * both the plural form and where the number sits; each one is then located in
+ * the result and swapped for its `RollingCount`. Assembling the sentence from
+ * fragments instead would hard-code a word order only the catalog knows.
+ *
+ * @param {string} text
+ * @param {{ value: number, node: React.ReactElement }[]} slots In sentence order.
+ * @returns {React.ReactNode[]}
+ */
+function withCounters(text, slots) {
+  /** @type {React.ReactNode[]} */
+  const out = [];
+  let rest = text;
+  for (const { value, node } of slots) {
+    const token = String(value);
+    const at = rest.indexOf(token);
+    if (at === -1) continue;
+    out.push(rest.slice(0, at), node);
+    rest = rest.slice(at + token.length);
+  }
+  out.push(rest);
+  return out;
+}
+
+/**
  * @param {{
  *   dirtyCount: number,
  *   collectionDirtyCount: number,
@@ -1884,6 +1924,7 @@ function StatusBar({
   onDiscardAll, onSaveAll,
   previewableCount, isPreviewOpen, onTogglePreview,
 }) {
+  const t = useCmsStrings();
   const isContentDirty = dirtyCount > 0;
   const isCollectionDirty = collectionDirtyCount > 0;
   const isBothDirty = isContentDirty && isCollectionDirty;
@@ -1926,37 +1967,67 @@ function StatusBar({
   if (isSaving) {
     // Wins over the draft wording when both are true: publishing is what the
     // user just asked for, and any draft write beside it is background.
-    msg = <span style={statusMsgStyle}>Yayınlanıyor…</span>;
+    msg = <span style={statusMsgStyle}>{t("status.publishing")}</span>;
   } else if (isDraftSaving) {
-    msg = <span style={statusMsgStyle}>Taslak kaydediliyor…</span>;
+    msg = <span style={statusMsgStyle}>{t("status.draftSaving")}</span>;
   } else if (isBothDirty) {
     msg = (
       <span style={statusMsgStyle}>
-        <RollingCount value={dirtyCount} style={statusMsgEmphasisStyle} />
-        <span style={{ color: TEXT_FAINT, margin: "0 1px" }}>/</span>
-        <RollingCount value={collectionDirtyCount} style={{ ...statusMsgEmphasisStyle, color: COLLECTION_ACCENT }} />
-        {" "}kaydedilmemiş değişiklik
+        {withCounters(
+          t("status.unsavedSplit", { content: dirtyCount, collection: collectionDirtyCount }),
+          [
+            {
+              value: dirtyCount,
+              node: <RollingCount key="content" value={dirtyCount} style={statusMsgEmphasisStyle} />,
+            },
+            {
+              value: collectionDirtyCount,
+              node: (
+                <RollingCount
+                  key="collection"
+                  value={collectionDirtyCount}
+                  style={{ ...statusMsgEmphasisStyle, color: COLLECTION_ACCENT }}
+                />
+              ),
+            },
+          ],
+        )}
       </span>
     );
   } else if (isContentDirty) {
     msg = (
       <span style={statusMsgStyle}>
-        <RollingCount value={dirtyCount} style={statusMsgEmphasisStyle} /> kaydedilmemiş değişiklik
+        {withCounters(t("status.unsaved", { count: dirtyCount }), [
+          {
+            value: dirtyCount,
+            node: <RollingCount key="count" value={dirtyCount} style={statusMsgEmphasisStyle} />,
+          },
+        ])}
       </span>
     );
   } else if (isCollectionDirty) {
     msg = (
       <span style={statusMsgStyle}>
-        <RollingCount value={collectionDirtyCount} style={{ ...statusMsgEmphasisStyle, color: COLLECTION_ACCENT }} />
-        {" "}koleksiyon taslağı
+        {withCounters(t("status.collectionDrafts", { count: collectionDirtyCount }), [
+          {
+            value: collectionDirtyCount,
+            node: (
+              <RollingCount
+                key="count"
+                value={collectionDirtyCount}
+                style={{ ...statusMsgEmphasisStyle, color: COLLECTION_ACCENT }}
+              />
+            ),
+          },
+        ])}
       </span>
     );
   } else if (isFailed) {
-    msg = <span style={statusMsgStyle}>Taslak kaydedilemedi</span>;
+    msg = <span style={statusMsgStyle}>{t("status.draftFailed")}</span>;
   } else {
     // Clean state. The header pill carries the timestamp detail, so the bar
     // stays a quiet idle line rather than repeating it.
-    msg = <span style={{ ...statusMsgStyle, ...statusMsgCleanStyle }}>Değişiklik yok</span>;
+    msg = <span style={{ ...statusMsgStyle, ...statusMsgCleanStyle }}>{t("status.clean")}</span>;
   }
 
   // Same guard as the header pill: FLIP-measure the action buttons only when
@@ -1987,8 +2058,8 @@ function StatusBar({
               onClick={onTogglePreview}
               className="inscribed-btn-ghost"
               style={btnGhostStyle}
-              aria-label={isPreviewOpen ? "Düzenlemeye dön" : "Değişiklikleri önizle"}
-              title={isPreviewOpen ? "Düzenlemeye dön" : "Değişiklikleri önizle"}
+              aria-label={isPreviewOpen ? t("status.closePreview") : t("status.preview")}
+              title={isPreviewOpen ? t("status.closePreview") : t("status.preview")}
               aria-pressed={isPreviewOpen}
               {...statusActionMotion}
               layoutDependency={actionsLayoutKey}
@@ -2004,8 +2075,8 @@ function StatusBar({
               disabled={isSaving}
               className="inscribed-btn-ghost"
               style={btnGhostStyle}
-              aria-label="Tüm değişiklikleri iptal et"
-              title="Tüm değişiklikleri iptal et"
+              aria-label={t("drawer.discardAll")}
+              title={t("drawer.discardAll")}
               {...statusActionMotion}
               layoutDependency={actionsLayoutKey}
             >
@@ -2020,13 +2091,13 @@ function StatusBar({
               disabled={isSaving}
               className="inscribed-btn-primary"
               style={btnPrimaryStyle}
-              aria-label="Tümünü kaydet"
-              title="Tümünü kaydet"
+              aria-label={t("drawer.saveAll")}
+              title={t("drawer.saveAll")}
               {...statusActionMotion}
               layoutDependency={actionsLayoutKey}
             >
               <Check size={13} />
-              <span>Kaydet</span>
+              <span>{t("status.save")}</span>
             </motion.button>
           ) : null}
           {!isContentDirty && isOnlyCollectionDirty && firstDirtyCollectionTarget ? (
@@ -2036,13 +2107,13 @@ function StatusBar({
               onClick={() => onGoToCollection(firstDirtyCollectionTarget)}
               className="inscribed-btn-collection-solid"
               style={btnPrimaryStyle}
-              aria-label={`${firstDirtyCollectionTarget.key} / ${firstDirtyCollectionTarget.slug} kaydını aç`}
-              title={`${firstDirtyCollectionTarget.key} / ${firstDirtyCollectionTarget.slug} kaydını aç`}
+              aria-label={t("drawer.openRecord", firstDirtyCollectionTarget)}
+              title={t("drawer.openRecord", firstDirtyCollectionTarget)}
               {...statusActionMotion}
               layoutDependency={actionsLayoutKey}
             >
               <Pencil size={13} />
-              <span>Aç</span>
+              <span>{t("drawer.open")}</span>
             </motion.button>
           ) : null}
         </AnimatePresence>
@@ -2062,6 +2133,7 @@ function StatusBar({
  * }} props
  */
 function PanelFooter({ userInfo, onSignOut }) {
+  const t = useCmsStrings();
   const initials = (userInfo.name ?? userInfo.email ?? "?")
     .split(/\s+/)
     .map((s) => s[0])
@@ -2081,7 +2153,7 @@ function PanelFooter({ userInfo, onSignOut }) {
         )}
       </div>
       <div style={userMetaStyle}>
-        <div style={userNameStyle}>{userInfo.name ?? "Anonim"}</div>
+        <div style={userNameStyle}>{userInfo.name ?? t("drawer.anonymous")}</div>
         {userInfo.email ? (
           <div style={userEmailStyle} title={userInfo.email}>
             {userInfo.email}
@@ -2094,8 +2166,8 @@ function PanelFooter({ userInfo, onSignOut }) {
         disabled={!onSignOut}
         className="inscribed-logout"
         style={signOutButtonStyle}
-        aria-label="Çıkış yap"
-        title="Çıkış yap"
+        aria-label={t("drawer.signOut")}
+        title={t("drawer.signOut")}
       >
         <LogOut size={14} />
       </button>

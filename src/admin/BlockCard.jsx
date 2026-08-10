@@ -21,6 +21,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Undo2, Lock, List as ListIcon } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { isBlockDirty, resolveBlockValue } from "../core/resolve.js";
 import { useDrawerDraftRole } from "../collections/hooks/use-draft-driver.js";
@@ -163,6 +164,7 @@ export const BlockCard = memo(function BlockCard(props) {
  * }} props
  */
 function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
+  const t = useCmsStrings();
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
   const {
     draft, hasDraft, hasConflict, onChange, onReset, onFocus, onTakeTheirs, onKeepMine,
@@ -189,7 +191,7 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
         <TypeIcon type={block.blockType} compact={topLevel} />
         <span style={fieldPathStyle} title={block.blockPath}>{displayPath ?? block.blockPath}</span>
         {isDirty ? (
-          <span style={dirtyDotStyle} aria-label="Kaydedilmemiş değişiklik" />
+          <span style={dirtyDotStyle} aria-label={t("block.unsavedDot")} />
         ) : null}
         {isDirty ? (
           <button
@@ -197,8 +199,8 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
             onClick={onReset}
             className="inscribed-icon-button"
             style={blockResetStyle}
-            aria-label="Bu bloğun değişikliklerini geri al"
-            title="Geri al"
+            aria-label={t("block.undoThis")}
+            title={t("block.undo")}
           >
             <Undo2 size={13} />
           </button>
@@ -206,8 +208,8 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
         {readOnly ? (
           <span
             style={{ display: "inline-flex", color: TEXT_MUTED }}
-            title="Salt okunur (editable={false})"
-            aria-label="Salt okunur"
+            title={t("block.readOnlyTitle")}
+            aria-label={t("block.readOnly")}
           >
             <Lock size={12} />
           </span>
@@ -302,6 +304,7 @@ const disclosureBodyStyle = rowGuideBodyStyle;
  * @param {{ block: BlockResponse, topLevel: boolean, displayPath?: string }} props
  */
 function InvalidCollectionCard({ block, topLevel, displayPath }) {
+  const t = useCmsStrings();
   return (
     <div
       className="inscribed-field-row inscribed-field-row-collection"
@@ -315,8 +318,7 @@ function InvalidCollectionCard({ block, topLevel, displayPath }) {
       </div>
       <div style={disclosureBodyStyle}>
         <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
-          Bu Collection bloğu geçersiz bir bağlamaya sahip — beklenen{" "}
-          <code>{`{ collection, slug }`}</code> şeklini taşımıyor.
+          {t("block.invalidCollection", { shape: "{ collection, slug }" })}
         </div>
       </div>
     </div>
@@ -334,6 +336,7 @@ function InvalidCollectionCard({ block, topLevel, displayPath }) {
  * }} props
  */
 function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, displayPath }) {
+  const t = useCmsStrings();
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
   const {
     draft, hasDraft, hasConflict, onChange, onReset, onFocus, onTakeTheirs, onKeepMine,
@@ -381,7 +384,7 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
         readOnly={readOnly}
         topLevel={topLevel}
         displayPath={displayPath}
-        preview={blockPreview(block.blockType, value)}
+        preview={blockPreview(block.blockType, value, t)}
         onHeaderClick={handleHeaderClick}
         onReset={onReset}
       />
@@ -403,7 +406,7 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
             onKeepMine={onKeepMine}
           />
           <div style={editorSlotStyle}>
-            {renderEditor(block, value, onChange, itemSchema, readOnly)}
+            {renderEditor(block, value, onChange, itemSchema, readOnly, t)}
             <TranslationPrompt block={block} value={value} readOnly={readOnly} />
           </div>
         </div>
@@ -525,6 +528,7 @@ function rowClassName({ isActive, isCollection }) {
  * }} props
  */
 function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, topLevel, displayPath, onHeaderClick, onReset }) {
+  const t = useCmsStrings();
   return (
     <button
       type="button"
@@ -545,7 +549,7 @@ function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, t
       {isDirty ? (
         <span
           style={isCollection ? { ...dirtyDotStyle, background: COLLECTION_ACCENT, boxShadow: `0 0 5px ${COLLECTION_ACCENT}80` } : dirtyDotStyle}
-          aria-label="Kaydedilmemiş değişiklik"
+          aria-label={t("block.unsavedDot")}
         />
       ) : null}
 
@@ -563,8 +567,8 @@ function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, t
           }}
           className={`inscribed-icon-button${isCollection ? " inscribed-icon-button-collection" : ""}`}
           style={blockResetStyle}
-          aria-label="Bu bloğun değişikliklerini geri al"
-          title="Geri al"
+          aria-label={t("block.undoThis")}
+          title={t("block.undo")}
         >
           <Undo2 size={13} />
         </span>
@@ -573,8 +577,8 @@ function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, t
       {readOnly ? (
         <span
           style={{ display: "inline-flex", color: TEXT_MUTED }}
-          title="Salt okunur (editable={false})"
-          aria-label="Salt okunur"
+          title={t("block.readOnlyTitle")}
+          aria-label={t("block.readOnly")}
         >
           <Lock size={12} />
         </span>
@@ -613,7 +617,7 @@ const cardPreviewStyle = /** @type {React.CSSProperties} */ ({
  * @param {*} value
  * @returns {string | null}
  */
-function blockPreview(blockType, value) {
+function blockPreview(blockType, value, t) {
   switch (blockType) {
     case "RichText": {
       if (typeof value !== "string") return null;
@@ -630,7 +634,7 @@ function blockPreview(blockType, value) {
       return null;
     }
     case "List":
-      return Array.isArray(value) ? `${value.length} öğe` : null;
+      return Array.isArray(value) ? t("block.items", { count: value.length }) : null;
     default:
       return null;
   }
@@ -690,7 +694,7 @@ function resetBlock(block, setDraft) {
  * @param {ItemSchema | null} itemSchema
  * @param {boolean} [readOnly]
  */
-function renderEditor(block, value, onChange, itemSchema, readOnly) {
+function renderEditor(block, value, onChange, itemSchema, readOnly, t) {
   if (block.blockType === "List") {
     return <ListEditor blockPath={block.blockPath} value={value} onChange={onChange} itemSchema={itemSchema} disabled={readOnly} />;
   }
@@ -698,7 +702,7 @@ function renderEditor(block, value, onChange, itemSchema, readOnly) {
   if (primitive) return primitive;
   return (
     <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
-      <code>{block.blockType}</code> tipi için inline editör henüz yok.
+      {t("block.noEditor", { type: block.blockType })}
     </div>
   );
 }

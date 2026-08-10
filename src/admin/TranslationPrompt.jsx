@@ -26,12 +26,13 @@ import { Languages, Undo2 } from "../shared/style/icons.jsx";
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { otherLocales as resolveOtherLocales } from "../shared/route.js";
 import { useCmsRoute } from "../core/hooks/use-cms-route.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useCmsTranslations } from "../core/hooks/use-cms-translations.js";
 import { FieldEditor } from "../editors/fields/FieldEditor.jsx";
 import { BlockNotice, NoticeButton } from "./BlockNotice.jsx";
 import { isSubstantialChange, TRANSLATION_INLINE_MAX } from "./translation-scope.js";
 import { blockResetStyle } from "./drawer-styles.js";
-import { TEXT, TEXT_MUTED, TEXT_FAINT, FONT_MONO } from "../shared/style/tokens.js";
+import { TEXT_MUTED, TEXT_FAINT, FONT_MONO } from "../shared/style/tokens.js";
 
 /**
  * @import { BlockResponse } from "../shared/contracts/schemas.js"
@@ -47,6 +48,7 @@ const SETTLE_MS = 600;
  * @param {{ block: BlockResponse, value: *, readOnly?: boolean }} props
  */
 export function TranslationPrompt({ block, value, readOnly }) {
+  const t = useCmsStrings();
   const { config, clearTranslationDrafts } = useCmsContext();
   const { locale } = useCmsRoute();
   const others = resolveOtherLocales(config, locale);
@@ -74,7 +76,7 @@ export function TranslationPrompt({ block, value, readOnly }) {
   // Once something is typed the prompt stays, whatever the diff says next:
   // trimming the edit back under the threshold must not take a written
   // translation down with it.
-  const stagedKeys = targets.filter((t) => t.hasDraft).map((t) => t.key);
+  const stagedKeys = targets.filter((x) => x.hasDraft).map((x) => x.key);
   const engaged = stagedKeys.length > 0;
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
@@ -97,8 +99,8 @@ export function TranslationPrompt({ block, value, readOnly }) {
       // to do once the text is written.
       placement="below"
       icon={<Languages size={12} />}
-      title="Bu metin diğer dillerde değişmedi"
-      label="Diğer dillerdeki karşılıkları"
+      title={t("translations.title")}
+      label={t("translations.label")}
       aside={
         // One slot, holding whichever way out applies. With nothing typed the
         // panel is a reminder and closing it costs nothing; once something is
@@ -109,26 +111,24 @@ export function TranslationPrompt({ block, value, readOnly }) {
           <NoticeButton
             onClick={() => clearTranslationDrafts(stagedKeys)}
             tone="neutral"
-            aria-label="Yazılan çevirileri geri al"
+            aria-label={t("translations.undoAllLabel")}
           >
-            Geri al
+            {t("translations.undoAll")}
           </NoticeButton>
         ) : (
           <NoticeButton
             onClick={() => setDismissed(true)}
             tone="neutral"
-            aria-label="Bu hatırlatmayı kapat"
+            aria-label={t("translations.dismissLabel")}
           >
-            Kapat
+            {t("translations.dismiss")}
           </NoticeButton>
         )
       }
     >
       {tooMany ? (
         <p style={noteStyle}>
-          {others.length} dil daha var. Her birini kendi sayfasında düzenlemek,
-          hepsini buraya sığdırmaktan kolay:{" "}
-          <span style={localeListStyle}>{others.join(", ")}</span>.
+          {t("translations.tooMany", { count: others.length, list: others.join(", ") })}
         </p>
       ) : (
         <div style={listStyle}>
@@ -157,6 +157,7 @@ export function TranslationPrompt({ block, value, readOnly }) {
  * }} props
  */
 function TranslationRow({ target, blockType, showReset }) {
+  const t = useCmsStrings();
   const badge = (
     <span style={localeBadgeStyle} title={target.pathname}>
       {target.locale.toUpperCase()}
@@ -171,7 +172,7 @@ function TranslationRow({ target, blockType, showReset }) {
     return (
       <div style={rowStyle}>
         {badge}
-        <span style={rowHintStyle}>Bu dilde bu blok yok</span>
+        <span style={rowHintStyle}>{t("translations.missing")}</span>
       </div>
     );
   }
@@ -193,8 +194,8 @@ function TranslationRow({ target, blockType, showReset }) {
           onClick={target.reset}
           className="inscribed-icon-button"
           style={{ ...blockResetStyle, marginTop: BADGE_OFFSET }}
-          aria-label={`${target.locale} çevirisini geri al`}
-          title="Geri al"
+          aria-label={t("translations.undoOne", { locale: target.locale })}
+          title={t("block.undo")}
         >
           <Undo2 size={12} />
         </button>
@@ -239,11 +240,6 @@ function useSettled(value, ms, resetKey) {
 const noteStyle = /** @type {React.CSSProperties} */ ({
   margin: 0,
   color: TEXT_MUTED,
-});
-
-const localeListStyle = /** @type {React.CSSProperties} */ ({
-  fontFamily: FONT_MONO,
-  color: TEXT,
 });
 
 const listStyle = /** @type {React.CSSProperties} */ ({

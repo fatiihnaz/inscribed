@@ -24,6 +24,7 @@ import { useMemo } from "react";
 import { Pencil } from "../shared/style/icons.jsx";
 
 import { stableStringify } from "../shared/util/stable-stringify.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { diffWords, diffLines, stripHtml, lcsIndexPairs } from "./word-diff.js";
 
 import { emptyStateStyle } from "../editors/fields/styles.js";
@@ -58,6 +59,7 @@ export function ChangesPanel({
   blockList, drafts, dirtyByPath, itemSchemas,
   collectionDirtyCounts, translationPreviews, onGoToBlock, onGoToCollection,
 }) {
+  const t = useCmsStrings();
   const dirty = useMemo(
     () => blockList.filter(
       (b) => b.blockType !== "Collection" && dirtyByPath.get(b.blockPath),
@@ -82,7 +84,7 @@ export function ChangesPanel({
       <div style={scrollStyle}>
         {isEmpty ? (
           <div style={emptyStateStyle}>
-            Henüz değişiklik yok.
+            {t("changes.empty")}
           </div>
         ) : (
           <ul style={listStyle} data-cms-list>
@@ -173,6 +175,7 @@ const localeBadgeStyle = /** @type {React.CSSProperties} */ ({
  * }} props
  */
 function CollectionDraftCard({ collectionKey, count, onGoToCollection }) {
+  const t = useCmsStrings();
   const meta = TYPE_META.Collection;
   return (
     <div style={rowContainerStyle}>
@@ -184,15 +187,15 @@ function CollectionDraftCard({ collectionKey, count, onGoToCollection }) {
           {collectionKey}
         </span>
         <span style={collectionDraftCountStyle}>
-          {count} taslak
+          {t("changes.drafts", { count })}
         </span>
         <button
           type="button"
           onClick={() => onGoToCollection(collectionKey)}
           className="inscribed-icon-button"
           style={goToButtonStyle}
-          aria-label={`${collectionKey} koleksiyonunu aç`}
-          title="Koleksiyonu aç"
+          aria-label={t("changes.openCollection", { key: collectionKey })}
+          title={t("status.openCollection")}
         >
           <Pencil size={11} />
         </button>
@@ -210,6 +213,7 @@ function CollectionDraftCard({ collectionKey, count, onGoToCollection }) {
  * }} props
  */
 function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
+  const t = useCmsStrings();
   const meta = TYPE_META[block.blockType] ?? TYPE_META_FALLBACK;
   const next = draft !== undefined ? draft : block.draftValue;
   const prev = block.value;
@@ -240,8 +244,8 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
           onClick={() => onGoToBlock(block)}
           className="inscribed-icon-button"
           style={goToButtonStyle}
-          aria-label={`${block.blockPath} bloğunu düzenle`}
-          title="Bu bloğu düzenle"
+          aria-label={t("changes.editBlock", { path: block.blockPath })}
+          title={t("changes.editBlockTitle")}
         >
           <Pencil size={11} />
         </button>
@@ -406,6 +410,7 @@ function boundaryByWords(tokens, wordsKept, dir) {
  * @param {{ op: DiffOp | { type: "collapsed", count: number } }} props
  */
 function DiffSpan({ op }) {
+  const t = useCmsStrings();
   if (op.type === "unchanged") {
     return <span style={unchangedSpanStyle}>{op.text}</span>;
   }
@@ -416,7 +421,7 @@ function DiffSpan({ op }) {
     return <span style={addedSpanStyle}>{op.text}</span>;
   }
   return (
-    <span style={collapsedSpanStyle} aria-label={`${op.count} kelime gizlendi`}>
+    <span style={collapsedSpanStyle} aria-label={t("changes.wordsHidden", { count: op.count })}>
       …
     </span>
   );
@@ -581,9 +586,10 @@ function lineSimilarity(a, b) {
  * @param {{ row: LineRow }} props
  */
 function LineRow({ row }) {
+  const t = useCmsStrings();
   if (row.kind === "hunk") {
     return (
-      <div style={lineHunkStyle} aria-label={`${row.count} satır gizlendi`}>…</div>
+      <div style={lineHunkStyle} aria-label={t("changes.linesHidden", { count: row.count })}>…</div>
     );
   }
   if (row.kind === "changed") {
@@ -597,7 +603,7 @@ function LineRow({ row }) {
   return (
     <div style={{ ...lineRowBase, ...tone }}>
       <span style={lineGutterStyle}>{glyph}</span>
-      <span style={lineTextStyle}>{renderLineText(row.text)}</span>
+      <span style={lineTextStyle}>{renderLineText(row.text, t)}</span>
     </div>
   );
 }
@@ -613,7 +619,7 @@ const LONG_TEXT_KEEP_PER_SIDE = 80;
  * @param {string} text
  * @returns {React.ReactNode}
  */
-function renderLineText(text) {
+function renderLineText(text, t) {
   if (!text) return " ";
   if (text.length <= LONG_TEXT_THRESHOLD) return text;
   const head = text.slice(0, LONG_TEXT_KEEP_PER_SIDE);
@@ -622,8 +628,8 @@ function renderLineText(text) {
   return (
     <>
       <span>{head}</span>
-      <span style={collapsedInlineStyle} aria-label={`${omitted} karakter gizlendi`}>
-        … {omitted} karakter …
+      <span style={collapsedInlineStyle} aria-label={t("changes.charsHiddenLabel", { count: omitted })}>
+        {t("changes.charsHidden", { count: omitted })}
       </span>
       <span>{tail}</span>
     </>
@@ -663,6 +669,7 @@ function ChangedLinePair({ row }) {
  * }} props
  */
 function PairedLine({ kind, oldLine, newLine, ops, side }) {
+  const t = useCmsStrings();
   // Filter to this side, then collapse long unchanged context so a small edit
   // in a long paragraph doesn't render as walls of muted text.
   const sideOps = useMemo(
@@ -683,7 +690,7 @@ function PairedLine({ kind, oldLine, newLine, ops, side }) {
           if (op.type === "removed") return <span key={i} style={pairedRemovedSpanStyle}>{op.text}</span>;
           if (op.type === "added") return <span key={i} style={pairedAddedSpanStyle}>{op.text}</span>;
           return (
-            <span key={i} style={collapsedInlineStyle} aria-label={`${op.count} kelime gizlendi`}>
+            <span key={i} style={collapsedInlineStyle} aria-label={t("changes.wordsHidden", { count: op.count })}>
               …
             </span>
           );
@@ -699,17 +706,17 @@ function PairedLine({ kind, oldLine, newLine, ops, side }) {
 // Marks worth naming when only the markup moved. Anything outside this map is
 // rolled into a generic count rather than shown as a raw tag name.
 const RICH_MARKS = [
-  { tag: "strong", label: "kalın" },
-  { tag: "b", label: "kalın" },
-  { tag: "em", label: "italik" },
-  { tag: "i", label: "italik" },
-  { tag: "s", label: "üstü çizili" },
-  { tag: "a", label: "bağlantı" },
-  { tag: "h2", label: "başlık" },
-  { tag: "h3", label: "alt başlık" },
-  { tag: "blockquote", label: "alıntı" },
-  { tag: "li", label: "liste öğesi" },
-  { tag: "code", label: "kod" },
+  { tag: "strong", key: "changes.mark.bold" },
+  { tag: "b", key: "changes.mark.bold" },
+  { tag: "em", key: "changes.mark.italic" },
+  { tag: "i", key: "changes.mark.italic" },
+  { tag: "s", key: "changes.mark.strike" },
+  { tag: "a", key: "changes.mark.link" },
+  { tag: "h2", key: "changes.mark.heading" },
+  { tag: "h3", key: "changes.mark.subheading" },
+  { tag: "blockquote", key: "changes.mark.quote" },
+  { tag: "li", key: "changes.mark.listItem" },
+  { tag: "code", key: "changes.mark.code" },
 ];
 
 /**
@@ -723,9 +730,11 @@ function countMarks(html) {
   /** @type {Map<string, number>} */
   const counts = new Map();
   if (!html) return counts;
-  for (const { tag, label } of RICH_MARKS) {
+  for (const { tag, key } of RICH_MARKS) {
     const hits = String(html).match(new RegExp(`<${tag}(\\s[^>]*)?>`, "gi"));
-    if (hits) counts.set(label, (counts.get(label) ?? 0) + hits.length);
+    // Tallied by key, not by wording: two tags share one mark (`<strong>` and
+    // `<b>`), so they have to merge before anything is translated.
+    if (hits) counts.set(key, (counts.get(key) ?? 0) + hits.length);
   }
   return counts;
 }
@@ -738,6 +747,7 @@ function countMarks(html) {
  * @param {{ prev: *, next: *, ops?: DiffOp[] }} props
  */
 function RichTextDiff({ prev, next, ops }) {
+  const t = useCmsStrings();
   const prevText = useMemo(() => stripHtml(prev), [prev]);
   const nextText = useMemo(() => stripHtml(next), [next]);
   const isTextUnchanged = prevText === nextText;
@@ -748,11 +758,11 @@ function RichTextDiff({ prev, next, ops }) {
     if (!isTextUnchanged) return [];
     const before = countMarks(prev);
     const after = countMarks(next);
-    /** @type {{ label: string, delta: number }[]} */
+    /** @type {{ key: string, delta: number }[]} */
     const out = [];
-    for (const label of new Set([...before.keys(), ...after.keys()])) {
-      const delta = (after.get(label) ?? 0) - (before.get(label) ?? 0);
-      if (delta !== 0) out.push({ label, delta });
+    for (const key of new Set([...before.keys(), ...after.keys()])) {
+      const delta = (after.get(key) ?? 0) - (before.get(key) ?? 0);
+      if (delta !== 0) out.push({ key, delta });
     }
     out.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
     return out;
@@ -764,15 +774,15 @@ function RichTextDiff({ prev, next, ops }) {
 
   return (
     <div style={formatOnlyStyle}>
-      <span>Metin aynı, yalnızca biçimlendirme değişti.</span>
+      <span>{t("changes.formatOnly")}</span>
       {moved.length > 0 ? (
         <span style={formatMarksStyle}>
-          {moved.map(({ label, delta }) => (
+          {moved.map(({ key, delta }) => (
             <span
-              key={label}
+              key={key}
               style={{ ...formatMarkChipStyle, color: delta > 0 ? DIFF_ADDED : DIFF_REMOVED }}
             >
-              {delta > 0 ? "+" : "−"}{Math.abs(delta)} {label}
+              {delta > 0 ? "+" : "−"}{Math.abs(delta)} {t(key)}
             </span>
           ))}
         </span>
@@ -840,6 +850,7 @@ function ArrowDiff({ prev, next }) {
  * @param {{ prev: *, next: * }} props
  */
 function ImageDiff({ prev, next }) {
+  const t = useCmsStrings();
   const prevSrc = prev?.src ?? null;
   const nextSrc = next?.src ?? null;
   const prevAlt = prev?.alt ?? "";
@@ -847,8 +858,8 @@ function ImageDiff({ prev, next }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={imageRowStyle}>
-        <ImageSide label="Yayında" src={prevSrc} alt={prevAlt} />
-        <ImageSide label="Taslak" src={nextSrc} alt={nextAlt} isNext />
+        <ImageSide label={t("changes.published")} src={prevSrc} alt={prevAlt} />
+        <ImageSide label={t("changes.draft")} src={nextSrc} alt={nextAlt} isNext />
       </div>
       {prevAlt !== nextAlt ? (
         <FieldLabeled label="alt">
@@ -887,6 +898,7 @@ function ImageSide({ label, src, alt, isNext }) {
  * }} props
  */
 function ListDiff({ oldItems, newItems, itemSchema }) {
+  const t = useCmsStrings();
   // Match by content, not by position. Comparing index-for-index reported a
   // reorder as a run of edits: moving one item up rewrote every row it passed.
   // The LCS pins the items that kept their relative order; anything outside it
@@ -949,7 +961,7 @@ function ListDiff({ oldItems, newItems, itemSchema }) {
   }, [oldItems, newItems]);
 
   if (rows.length === 0) {
-    return <div style={{ color: TEXT_MUTED, fontSize: 12 }}>Görünür bir değişiklik yok.</div>;
+    return <div style={{ color: TEXT_MUTED, fontSize: 12 }}>{t("changes.noVisibleChange")}</div>;
   }
 
   return (
@@ -966,7 +978,7 @@ function ListDiff({ oldItems, newItems, itemSchema }) {
                 : `#${row.index + 1}`}
             </span>
             <span style={listItemBadgeStyle()}>
-              {labelForKind(row.kind)}
+              {labelForKind(row.kind, t)}
             </span>
           </div>
           {row.kind === "moved" ? (
@@ -998,11 +1010,11 @@ function toneForKind(kind) {
 }
 
 /** @param {"added"|"removed"|"changed"} kind */
-function labelForKind(kind) {
-  if (kind === "added") return "Eklendi";
-  if (kind === "removed") return "Silindi";
-  if (kind === "moved") return "Taşındı";
-  return "Düzenlendi";
+function labelForKind(kind, t) {
+  if (kind === "added") return t("changes.added");
+  if (kind === "removed") return t("changes.removed");
+  if (kind === "moved") return t("changes.moved");
+  return t("changes.changed");
 }
 
 const GLYPH_FOR_KIND = { added: "+", removed: "−", moved: "⇅", changed: "~" };

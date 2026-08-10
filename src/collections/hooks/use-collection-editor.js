@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { useCollectionContext } from "../context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { useCollectionItem } from "./use-collection.js";
@@ -91,6 +92,7 @@ import {
  */
 export function useCollectionEditor(collection, slug, { active = true, mirror = true, scopeId } = {}) {
   const { config, getAccessToken, onAfterCollectionSave } = useCmsContext();
+  const t = useCmsStrings();
   // Only the new-item slot and the revalidation need this: a published record
   // is addressed by a slug that is already unique across every language.
   const { locale } = useCmsRoute();
@@ -331,7 +333,7 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     if (!schema || !values) return;
     const missing = requiredMissing(schema.fields, values);
     if (missing) {
-      setError(`Zorunlu alan eksik: ${missing}`);
+      setError(t("collections.requiredMissing", { field: missing }));
       return;
     }
     const isVirtualNow = !itemRef.current || itemRef.current.version === 0;
@@ -399,14 +401,17 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         }
       } catch (err) {
         if (err instanceof CmsApiError && err.isConflict) {
-          setError("Versiyon çakışması — liste yenilendi, kontrol edip tekrar dene.");
+          setError(t("collections.versionConflict"));
           await refetch();
         } else if (err instanceof CmsApiError && err.isForbidden) {
-          setError("Bu kaydı düzenleme yetkin yok.");
+          setError(t("collections.editForbidden"));
         } else if (err instanceof CmsApiError && err.status === 400) {
           // Map the backend's `works[0].title` path notation onto schema
           // labels so the banner reads "Çalışmalar #1 → Başlık".
-          setError(humanizeCollectionError(err.detail, schema.fields) ?? `Geçersiz veri: ${err.message}`);
+          setError(
+            humanizeCollectionError(err.detail, schema.fields, t)
+            ?? t("collections.invalidData", { detail: err.message }),
+          );
         } else {
           setError(/** @type {Error} */ (err).message);
         }
@@ -414,7 +419,7 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     });
   }, [
     schema, collection, slug, locale, readValues, getAccessToken, config, draftQueue,
-    updateCollectionItem, clearCollectionDraft, onAfterCollectionSave, refetch,
+    updateCollectionItem, clearCollectionDraft, onAfterCollectionSave, refetch, t,
   ]);
 
   // Revert local edits to the published baseline. Optimistically clears

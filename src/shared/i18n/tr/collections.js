@@ -1,0 +1,81 @@
+/**
+ * @file Turkish wording for the collection panes, record forms and composers.
+ *
+ * Split by area so the catalogs are not one file every change has to queue
+ * behind.  is canonical: a key added here without a counterpart in the
+ * other language falls back to English rather than showing a raw key, and the
+ * parity test names it.
+ */
+
+export const collections = Object.freeze({
+  "collections.loading": "Yükleniyor…",
+  "collections.saving": "Kaydediliyor…",
+  "collections.saved": "Kaydedildi",
+  "collections.error": "Hata",
+  "collections.clear": "Temizle",
+  "collections.retry": "Yeniden dene",
+  "collections.draftBadge": "taslak",
+  "collections.newBadge": "yeni",
+  "collections.create": "Oluştur",
+  "collections.creating": "Oluşturuluyor…",
+
+  "collections.searchCollections": "Koleksiyon ara",
+  "collections.loadingList": "Koleksiyonlar yükleniyor…",
+  "collections.noSearchResults": "\"{query}\" araması için sonuç yok.",
+  "collections.noneAccessible": "Erişebildiğin bir koleksiyon yok.",
+  "collections.fieldCount_other": "{count} alan",
+  "collections.canCreate": "yeni kayıt eklenebilir",
+  "collections.onThisPage": "bu sayfada",
+
+  "collections.searchRecords": "Kayıt ara",
+  "collections.noRegionBinding": "Bu sayfa {key} için bir region binding'i göstermiyor.",
+  "collections.listFailed": "Liste alınamadı: {message}",
+  "collections.noRecordsForFilter": "Bu filtre için kayıt yok.",
+  "collections.searchEmpty": "\"{query}\" araması yüklenmiş kayıtlarda sonuç vermedi.",
+  "collections.searchScope": "Yalnızca yüklenmiş {loaded} kayıt arandı, {remaining} kayıt daha var.",
+  "collections.loadMore": "Daha fazla yükle ({remaining} kalan)",
+  "collections.allRecords": "Tümü",
+  "collections.backToList": "Listeye dön",
+  "collections.backToListTitle": "Listeye dön (Esc)",
+  "collections.addTranslation": "{locale} çevirisini ekle",
+  "collections.undoRecord": "Bu kaydın değişikliklerini geri al",
+  "collections.newRecordIn": "Yeni {key}",
+  "collections.newRecordInLocale": "Yeni {key} · {locale}",
+
+  "collections.accessFailed": "Erişim listesi alınamadı: {message}",
+  "collections.recordFailed": "{collection}/{slug} alınamadı: {message}",
+  "collections.noAccess": "{key} collection'ına bu oturumda erişimin yok — düzenleyemezsin.",
+  "collections.newRecord": "Yeni kayıt",
+  "collections.version": "Sürüm {version}",
+  "collections.virtualHint": "Bu kayıt henüz yok — ilk Kaydet'te oluşturulur.",
+
+  "collections.emptySchema": "Schema boş.",
+  "collections.requiredField": "zorunlu",
+  "collections.selectOption": "— seç —",
+  "collections.editorLoading": "Editör yükleniyor…",
+  "collections.itemFallback": "öğe",
+  "collections.noItems": "Henüz öğe yok.",
+  "collections.removeNamed": "\"{item}\" öğesini kaldır",
+  "collections.remove": "Kaldır",
+  "collections.add": "Ekle",
+  "collections.addNamed": "{name} ekle",
+  "collections.addNamedPlaceholder": "{name} ekle…",
+  "collections.emptyItem": "Boş öğe",
+  "collections.moveUp": "Yukarı taşı",
+  "collections.moveDown": "Aşağı taşı",
+  "collections.deleteItemAt": "#{index} öğesini sil",
+
+  "collections.undoRecordDraft": "Bu kaydın taslağını geri al",
+  "collections.publishRecord": "Bu kaydı yayınla",
+  "collections.openInPanel": "Panelde aç",
+  "collections.openRecordInPanel": "{label} kaydını panelde aç",
+  "collections.createdNotice": "Kaydedildi.",
+
+  "collections.requiredMissing": "Zorunlu alan eksik: {field}",
+  "collections.invalidData": "Geçersiz veri: {detail}",
+  "collections.versionConflict": "Versiyon çakışması — liste yenilendi, kontrol edip tekrar dene.",
+  "collections.editForbidden": "Bu kaydı düzenleme yetkin yok.",
+  "collections.createRace": "Aynı anda başka bir yazma işlemi oldu. Tekrar dene.",
+  "collections.createForbidden": "Bu collection'da kayıt oluşturma yetkin yok.",
+  "collections.unknownField": "Bilinmeyen alan: {field}",
+});

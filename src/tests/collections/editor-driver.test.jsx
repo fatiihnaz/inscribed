@@ -42,6 +42,11 @@ import { CollectionField } from "../../collections/CollectionField.jsx";
 import { CollectionComposer } from "../../collections/CollectionComposer.jsx";
 import { CollectionRegionPanel } from "../../admin/CollectionRegionPanel.jsx";
 import { useCollectionContext } from "../../collections/context.js";
+// Through the catalog, not a literal: the panel's wording is configurable now,
+// and a test pinned to one language breaks on a reword rather than on a bug.
+import { createTranslator, resolveStrings } from "../../shared/i18n/translate.js";
+
+const t = createTranslator(resolveStrings("en"), "en");
 
 const BASE = "https://api.test";
 
@@ -150,7 +155,7 @@ describe("one driver per record", () => {
     // The StatusBar "Aç" jump: the rail opens its detail pane on the same
     // record the page is already showing fields for.
     act(() => { getHandle().setActiveCollectionItem({ key: "news", slug: "q1" }); });
-    await waitFor(() => expect(screen.getByLabelText("Listeye dön")).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText(t("collections.backToList"))).toBeTruthy());
     await waitFor(() => expect(fieldInputs()).toHaveLength(1));
 
     await crossDebounce(() => {
@@ -201,9 +206,10 @@ describe("one driver per create slot", () => {
         <CollectionRegionPanel collectionKey="news" scope="global" />
       </CmsProvider>,
     );
-    await waitFor(() => expect(screen.getByText("Yeni news")).toBeTruthy());
+    const createRow = t("collections.newRecordIn", { key: "news" });
+    await waitFor(() => expect(screen.getByText(createRow)).toBeTruthy());
 
-    fireEvent.click(screen.getByText("Yeni news"));
+    fireEvent.click(screen.getByText(createRow));
     await waitFor(() => expect(fieldInputs()).toHaveLength(2));
 
     // Both forms hold their own `values` and their own `lastSyncedRef`, so both

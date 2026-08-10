@@ -17,6 +17,7 @@ import { useContext, useState } from "react";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../shared/state/group-context.js";
 import { ACCENT, BG_RAISED, ROOMY_INSET } from "../shared/style/tokens.js";
 import { useCmsContext } from "../shared/state/cms-context.js";
+import { useCmsStrings } from "./hooks/use-cms-strings.js";
 
 /**
  * @typedef {Object} CmsGroupProps
@@ -45,6 +46,7 @@ const GROUP_OFFSET     = ROOMY_INSET + 4;
  */
 export function CmsGroup({ name, children, style, editable, visible }) {
   const { isAdmin } = useCmsContext();
+  const t = useCmsStrings();
   const parentPrefix = useContext(CmsGroupContext);
   const parentVisibility = useContext(CmsGroupVisibilityContext);
   const [hovered, setHovered] = useState(false);
@@ -64,7 +66,10 @@ export function CmsGroup({ name, children, style, editable, visible }) {
     );
   }
 
-  const label = visibility ? `${prefix} · ${visibility}` : prefix;
+  const modeLabel = visibility === "hidden" ? t("core.group.hidden")
+    : visibility === "readonly" ? t("block.readOnly")
+    : null;
+  const label = modeLabel ? `${prefix} · ${modeLabel}` : prefix;
 
   return (
     <CmsGroupContext.Provider value={prefix}>

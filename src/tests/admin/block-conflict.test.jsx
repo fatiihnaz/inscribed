@@ -27,6 +27,9 @@ import { CmsProvider } from "../../core/CmsProvider.jsx";
 import { BlockCard } from "../../admin/BlockCard.jsx";
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
+// Through the catalog, not a literal: the panel's wording is configurable now,
+// and a test pinned to one language breaks on a reword rather than on a bug.
+import { en } from "../../shared/i18n/en/index.js";
 
 const PATH = "hero.title";
 const THEIRS = "Onların başlığı";
@@ -88,14 +91,14 @@ describe("block conflict resolution", () => {
   it("shows nothing until the block is flagged", async () => {
     await mount();
     act(() => { ctx.setDraft(PATH, MINE); });
-    expect(screen.queryByRole("group", { name: "Kaydetme çakışması" })).toBe(null);
+    expect(screen.queryByRole("group", { name: en["conflict.label"] })).toBe(null);
   });
 
   it("surfaces both candidate values once flagged", async () => {
     await mount();
     raiseConflict();
 
-    const panel = screen.getByRole("group", { name: "Kaydetme çakışması" });
+    const panel = screen.getByRole("group", { name: en["conflict.label"] });
     // The diff renders the server's text and the user's, so the choice is
     // visible rather than implied.
     expect(panel.textContent).toContain(THEIRS);
@@ -106,13 +109,13 @@ describe("block conflict resolution", () => {
     await mount();
     raiseConflict();
 
-    fireEvent.click(screen.getByText("Onlarınkini al"));
+    fireEvent.click(screen.getByText(en["conflict.takeTheirs"]));
 
     expect(ctx.draft).toBe(THEIRS);
     expect(ctx.hasConflict).toBe(false);
     // The panel owns its exit animation, so it leaves the DOM a beat later.
     await waitFor(() =>
-      expect(screen.queryByRole("group", { name: "Kaydetme çakışması" })).toBe(null),
+      expect(screen.queryByRole("group", { name: en["conflict.label"] })).toBe(null),
     );
   });
 
@@ -120,13 +123,13 @@ describe("block conflict resolution", () => {
     await mount();
     raiseConflict();
 
-    fireEvent.click(screen.getByText("Benimkini koru"));
+    fireEvent.click(screen.getByText(en["conflict.keepMine"]));
 
     // Untouched, so the next save writes it at the refetched version.
     expect(ctx.draft).toBe(MINE);
     expect(ctx.hasConflict).toBe(false);
     await waitFor(() =>
-      expect(screen.queryByRole("group", { name: "Kaydetme çakışması" })).toBe(null),
+      expect(screen.queryByRole("group", { name: en["conflict.label"] })).toBe(null),
     );
   });
 });

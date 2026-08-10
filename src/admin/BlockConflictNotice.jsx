@@ -20,6 +20,7 @@
 
 import { GitMerge } from "../shared/style/icons.jsx";
 
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { DiffContent } from "./ChangesPanel.jsx";
 import { BlockNotice, NoticeButton, noticeFrameStyle } from "./BlockNotice.jsx";
 
@@ -37,21 +38,22 @@ import { BlockNotice, NoticeButton, noticeFrameStyle } from "./BlockNotice.jsx";
  * }} props
  */
 export function BlockConflictNotice({ show, block, draft, onTakeTheirs, onKeepMine }) {
+  const t = useCmsStrings();
   return (
     <BlockNotice
       show={show}
       tone="warn"
       placement="above"
       icon={<GitMerge size={12} />}
-      title="Bu blok sen düzenlerken başkası tarafından yayınlandı"
-      label="Kaydetme çakışması"
+      title={t("conflict.title")}
+      label={t("conflict.label")}
       actions={
         <>
           <NoticeButton onClick={onTakeTheirs} tone="warn">
-            Onlarınkini al
+            {t("conflict.takeTheirs")}
           </NoticeButton>
           <NoticeButton onClick={onKeepMine} tone="warn" variant="primary">
-            Benimkini koru
+            {t("conflict.keepMine")}
           </NoticeButton>
         </>
       }

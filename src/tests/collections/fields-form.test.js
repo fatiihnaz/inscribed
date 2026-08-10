@@ -1,4 +1,8 @@
 import { describe, it, expect } from "vitest";
+
+// A real translator, in Turkish, so these assertions keep reading against the
+// wording they were written for while the panel default is English.
+import { createTranslator, resolveStrings } from "../../shared/i18n/translate.js";
 import {
   seedValues,
   buildPayload,
@@ -119,36 +123,38 @@ describe("Image field ({ src, alt } object)", () => {
   });
 });
 
+const t = createTranslator(resolveStrings("tr"), "tr");
+
 describe("humanizeCollectionError", () => {
   it("returns null when there's no detail", () => {
-    expect(humanizeCollectionError("", [works])).toBeNull();
-    expect(humanizeCollectionError(null, [works])).toBeNull();
+    expect(humanizeCollectionError("", [works], t)).toBeNull();
+    expect(humanizeCollectionError(null, [works], t)).toBeNull();
   });
 
   it("maps a required-field path to a label chain", () => {
     const detail = "Field 'works[0].title' is required.";
-    expect(humanizeCollectionError(detail, [works])).toBe(
+    expect(humanizeCollectionError(detail, [works], t)).toBe(
       "Zorunlu alan eksik: Çalışmalar #1 → Başlık",
     );
   });
 
   it("maps an unknown-field path, falling back to the raw inner name", () => {
     const detail = "Unknown field 'works[1].foo'";
-    expect(humanizeCollectionError(detail, [works])).toBe(
+    expect(humanizeCollectionError(detail, [works], t)).toBe(
       "Bilinmeyen alan: Çalışmalar #2 → foo",
     );
   });
 
   it("rewrites quoted paths inside unrecognised messages", () => {
     const detail = "Value for 'works[0].title' was rejected";
-    expect(humanizeCollectionError(detail, [works])).toBe(
+    expect(humanizeCollectionError(detail, [works], t)).toBe(
       "Geçersiz veri: Value for 'Çalışmalar #1 → Başlık' was rejected",
     );
   });
 
   it("leaves unresolved quoted tokens untouched", () => {
     const detail = "Something about 'nope' happened";
-    expect(humanizeCollectionError(detail, [works])).toBe(
+    expect(humanizeCollectionError(detail, [works], t)).toBe(
       "Geçersiz veri: Something about 'nope' happened",
     );
   });

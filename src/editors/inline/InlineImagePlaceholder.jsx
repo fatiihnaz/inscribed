@@ -13,6 +13,7 @@
 import { useRef, useState } from "react";
 
 import { useImageUpload } from "../use-image-upload.js";
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 
 /**
  * @param {Object} props
@@ -20,6 +21,7 @@ import { useImageUpload } from "../use-image-upload.js";
  * @param {React.CSSProperties} [props.style] Consumer box style (width, radius…).
  */
 export function InlineImagePlaceholder({ onChange, style }) {
+  const t = useCmsStrings();
   const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
   const { upload, isUploading, progress, error } = useImageUpload();
   const [isDragging, setIsDragging] = useState(false);
@@ -69,13 +71,19 @@ export function InlineImagePlaceholder({ onChange, style }) {
           <div style={progressTrackStyle}>
             <div style={{ ...progressFillStyle, width: `${progress}%` }} />
           </div>
-          <span style={hintStyle}>{progress < 100 ? `Yükleniyor ${progress}%` : "İşleniyor…"}</span>
+          <span style={hintStyle}>
+            {progress < 100
+              ? t("editors.image.uploading", { percent: progress })
+              : t("editors.image.processing")}
+          </span>
         </div>
       ) : (
         <>
           <UploadIcon />
-          <span style={hintStrongStyle}>{isDragging ? "Bırak" : "Görsel yükle"}</span>
-          <span style={hintStyle}>tıkla veya sürükle-bırak</span>
+          <span style={hintStrongStyle}>
+            {isDragging ? t("editors.image.drop") : t("editors.image.upload")}
+          </span>
+          <span style={hintStyle}>{t("editors.image.uploadHint")}</span>
           {error ? <span style={errorTextStyle}>{error}</span> : null}
         </>
       )}

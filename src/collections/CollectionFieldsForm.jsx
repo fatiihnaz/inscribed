@@ -3,6 +3,7 @@
 import { lazy, Suspense, useState } from "react";
 
 import { moveItem, removeItem } from "../shared/util/list-ops.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { ImageEditor } from "../editors/fields/ImageEditor.jsx";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "../shared/style/icons.jsx";
 
@@ -43,8 +44,9 @@ const RichTextEditor = lazy(() =>
  * }} props
  */
 export function CollectionFieldsForm({ fields, values, onChange, disabled }) {
+  const t = useCmsStrings();
   if (!fields || fields.length === 0) {
-    return <div style={emptyHintStyle}>Schema boş.</div>;
+    return <div style={emptyHintStyle}>{t("collections.emptySchema")}</div>;
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -70,11 +72,12 @@ export function CollectionFieldsForm({ fields, values, onChange, disabled }) {
  * }} props
  */
 function FieldInput({ field, value, onChange, disabled }) {
+  const t = useCmsStrings();
   const labelNode = (
     <span style={labelRowStyle}>
       <span style={labelTextStyle}>{field.label || field.name}</span>
-      {field.required ? <span style={requiredMarkStyle} aria-label="zorunlu">*</span> : null}
-      {field.readOnly ? <span style={readonlyTagStyle}>readonly</span> : null}
+      {field.required ? <span style={requiredMarkStyle} aria-label={t("collections.requiredField")}>*</span> : null}
+      {field.readOnly ? <span style={readonlyTagStyle}>{t("block.readOnly")}</span> : null}
     </span>
   );
 
@@ -91,7 +94,7 @@ function FieldInput({ field, value, onChange, disabled }) {
           className="inscribed-field"
           style={inputStyle}
         >
-          <option value="">— seç —</option>
+          <option value="">{t("collections.selectOption")}</option>
           {field.options.map((opt) => (
             <option key={opt} value={opt}>{opt}</option>
           ))}
@@ -223,7 +226,7 @@ function FieldInput({ field, value, onChange, disabled }) {
         return (
           <div style={labelStyle}>
             {labelNode}
-            <Suspense fallback={<div style={helpStyle}>Editör yükleniyor…</div>}>
+            <Suspense fallback={<div style={helpStyle}>{t("collections.editorLoading")}</div>}>
               <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel />
             </Suspense>
             {field.help ? <span style={helpStyle}>{field.help}</span> : null}
@@ -260,9 +263,10 @@ function FieldInput({ field, value, onChange, disabled }) {
  * }} props
  */
 function StringArrayEditor({ field, value, onChange, disabled }) {
+  const t = useCmsStrings();
   const [draft, setDraft] = useState("");
   const items = Array.isArray(value) ? value : [];
-  const itemLabel = singularize(field?.label || field?.name || "öğe");
+  const itemLabel = singularize(field?.label || field?.name || t("collections.itemFallback"));
 
   const commit = () => {
     const trimmed = draft.trim();
@@ -274,7 +278,7 @@ function StringArrayEditor({ field, value, onChange, disabled }) {
   return (
     <div style={stringArrayShellStyle}>
       {items.length === 0 ? (
-        <div style={listEmptyStyle}>Henüz öğe yok.</div>
+        <div style={listEmptyStyle}>{t("collections.noItems")}</div>
       ) : (
         <div style={stringArrayListStyle}>
           {items.map((item, i) => (
@@ -285,8 +289,8 @@ function StringArrayEditor({ field, value, onChange, disabled }) {
                   type="button"
                   onClick={() => onChange(items.filter((_, j) => j !== i))}
                   style={stringArrayRemoveStyle}
-                  aria-label={`"${item}" öğesini kaldır`}
-                  title="Kaldır"
+                  aria-label={t("collections.removeNamed", { item })}
+                  title={t("collections.remove")}
                 >
                   ×
                 </button>
@@ -302,7 +306,7 @@ function StringArrayEditor({ field, value, onChange, disabled }) {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-            placeholder={`${itemLabel} ekle…`}
+            placeholder={t("collections.addNamedPlaceholder", { name: itemLabel })}
             className="inscribed-field"
             style={stringArrayInputStyle}
           />
@@ -313,7 +317,7 @@ function StringArrayEditor({ field, value, onChange, disabled }) {
             style={stringArrayAddBtnStyle}
           >
             <Plus size={13} />
-            Ekle
+            {t("collections.add")}
           </button>
         </div>
       )}
@@ -346,6 +350,7 @@ function StringArrayEditor({ field, value, onChange, disabled }) {
  * }} props
  */
 function ObjectArrayEditor({ field, value, onChange, disabled }) {
+  const t = useCmsStrings();
   const itemFields = field.itemFields ?? [];
   const items = Array.isArray(value) ? value : [];
   const addLabel = singularize(field.label || field.name);
@@ -381,7 +386,7 @@ function ObjectArrayEditor({ field, value, onChange, disabled }) {
   return (
     <div style={objectArrayShellStyle}>
       {items.length === 0 ? (
-        <div style={listEmptyStyle}>Henüz öğe yok.</div>
+        <div style={listEmptyStyle}>{t("collections.noItems")}</div>
       ) : (
         <div style={objectArrayListStyle}>
           {items.map((item, i) => {
@@ -405,27 +410,27 @@ function ObjectArrayEditor({ field, value, onChange, disabled }) {
                 >
                   <span style={objectArrayIndexStyle}>{i + 1}</span>
                   <span style={summary ? objectArraySummaryStyle : objectArraySummaryEmptyStyle}>
-                    {summary || "Boş öğe"}
+                    {summary || t("collections.emptyItem")}
                   </span>
                   {!disabled && (
                     <span style={objectArrayControlsStyle}>
                       <RowControl
                         onClick={() => move(i, -1)}
                         disabled={i === 0}
-                        label="Yukarı taşı"
+                        label={t("collections.moveUp")}
                       >
                         <ChevronUp size={14} />
                       </RowControl>
                       <RowControl
                         onClick={() => move(i, 1)}
                         disabled={i === items.length - 1}
-                        label="Aşağı taşı"
+                        label={t("collections.moveDown")}
                       >
                         <ChevronDown size={14} />
                       </RowControl>
                       <RowControl
                         onClick={() => remove(i)}
-                        label={`#${i + 1} öğesini sil`}
+                        label={t("collections.deleteItemAt", { index: i + 1 })}
                       >
                         <Trash2 size={13} />
                       </RowControl>
@@ -469,7 +474,7 @@ function ObjectArrayEditor({ field, value, onChange, disabled }) {
       {!disabled && (
         <button type="button" onClick={addNew} style={objectArrayAddBtnStyle}>
           <Plus size={14} />
-          {addLabel} ekle
+          {t("collections.addNamed", { name: addLabel })}
         </button>
       )}
     </div>
@@ -721,23 +726,26 @@ export function requiredMissing(fields, values) {
  *
  * @param {string | null | undefined} detail
  * @param {CollectionFieldDescriptor[]} fields
+ * @param {import("../shared/i18n/translate.js").Translate} t
+ *   Passed in rather than read from a hook, so this stays pure and each shape's
+ *   wording is testable without React.
  * @returns {string | null}
  */
-export function humanizeCollectionError(detail, fields) {
+export function humanizeCollectionError(detail, fields, t) {
   if (!detail) return null;
 
   const required = detail.match(/Field '([^']+)' is required/i);
-  if (required) return `Zorunlu alan eksik: ${resolveFieldPath(required[1], fields)}`;
+  if (required) return t("collections.requiredMissing", { field: resolveFieldPath(required[1], fields) });
 
   const unknown = detail.match(/Unknown field '([^']+)'/i);
-  if (unknown) return `Bilinmeyen alan: ${resolveFieldPath(unknown[1], fields)}`;
+  if (unknown) return t("collections.unknownField", { field: resolveFieldPath(unknown[1], fields) });
 
   // Rewrite any quoted path that resolves to a known field, leaving the rest intact.
   const rewritten = detail.replace(/'([^']+)'/g, (whole, path) => {
     const label = resolveFieldPath(path, fields);
     return label === path ? whole : `'${label}'`;
   });
-  return `Geçersiz veri: ${rewritten}`;
+  return t("collections.invalidData", { detail: rewritten });
 }
 
 /**

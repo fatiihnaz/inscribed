@@ -17,6 +17,9 @@ import { CmsApiError } from "../shared/contracts/errors.js";
 
 /**
  * @param {Error|null|undefined} error
+ * @param {import("../shared/i18n/translate.js").Translate} t
+ *   Passed in rather than read from a hook, so this stays pure and each case's
+ *   wording is testable without React.
  * @param {number} [unresolvedCount]
  *   Blocks still flagged in the UI store. The count comes from there rather
  *   than from the error, because the error is a snapshot of the refused save
@@ -24,10 +27,10 @@ import { CmsApiError } from "../shared/contracts/errors.js";
  *   the flags, and say nothing once the last one is gone.
  * @returns {SaveErrorDescription|null} `null` when there is nothing to show.
  */
-export function describeSaveError(error, unresolvedCount = 0) {
+export function describeSaveError(error, t, unresolvedCount = 0) {
   if (!error) return null;
   if (!(error instanceof CmsApiError)) {
-    return { tone: "error", text: error.message || "Kaydedilemedi" };
+    return { tone: "error", text: error.message || t("saveError.generic") };
   }
 
   if (error.isConflict) {
@@ -36,22 +39,22 @@ export function describeSaveError(error, unresolvedCount = 0) {
       if (unresolvedCount === 0) return null;
       return {
         tone: "conflict",
-        text: `${unresolvedCount} blok sen düzenlerken güncellendi. Her biri aşağıda işaretlendi: iki sürümü karşılaştırıp hangisinin kalacağını seç.`,
+        text: t("saveError.conflict", { count: unresolvedCount }),
       };
     }
     // `conflicts` absent or empty: a write race, not a per-block version clash.
     return {
       tone: "conflict",
-      text: "Aynı anda başka bir yazma işlemi oldu. Sayfa yenilendi, tekrar dene.",
+      text: t("saveError.race"),
     };
   }
 
   if (error.isForbidden) {
     return {
       tone: "forbidden",
-      text: "Yetkiniz yok. Bu içeriği düzenleme izniniz bulunmuyor.",
+      text: t("saveError.forbidden"),
     };
   }
 
-  return { tone: "error", text: error.message || "Kaydedilemedi" };
+  return { tone: "error", text: error.message || t("saveError.generic") };
 }

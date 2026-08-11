@@ -235,6 +235,11 @@ export async function discoverManifests(options = {}) {
     // nothing (a collection detail view, a form). They own no rows; pushing an
     // empty entry would register the slug on the backend for no reason.
     if (blockMap.size === 0) continue;
+    // Only pages that made it this far can surprise anyone: a dynamic-segment
+    // page declaring nothing is the common, harmless case and stays silent.
+    if (hasDynamicSegment(slug)) {
+      warnings.push(sharedRowsWarning(slug, /** @type {string} */ (roots.get(slug))));
+    }
     manifests.push({ slug, blocks: [...blockMap.values()] });
   }
   if (globalMap.size > 0) {
@@ -279,11 +284,50 @@ function slugFromPageFile(file, appRoot, locales) {
   // The locale is either the first segment or nowhere: `resolveCmsRoute` only
   // ever strips a leading segment, so a localized app has to nest everything
   // under one. Which language a page is in is not part of which page it is.
-  if (locales?.length && segments.length > 0 && /^\[.+\]$/.test(segments[0])) {
+  if (locales?.length && segments.length > 0 && isDynamicSegment(segments[0])) {
     segments.shift();
   }
 
   return "/" + segments.join("/");
+}
+
+/**
+ * `[id]`, `[...slug]` or `[[...slug]]`.
+ *
+ * @param {string} segment
+ */
+function isDynamicSegment(segment) {
+  return /^\[.+\]$/.test(segment);
+}
+
+/** @param {string} slug */
+function hasDynamicSegment(slug) {
+  return slug.split("/").some(isDynamicSegment);
+}
+
+/**
+ * A dynamic-segment slug is one manifest entry every concrete URL under it
+ * reads, which is right for a page whose copy doesn't vary (`/search/[q]`) and
+ * silently wrong for one whose copy does. Nothing at author time distinguishes
+ * the two, so the choice is surfaced rather than blocked, and the entry syncs
+ * either way.
+ *
+ * @param {string} slug
+ * @param {string} file
+ * @returns {DiscoveryWarning}
+ */
+function sharedRowsWarning(slug, file) {
+  const [first, second] = ["one", "another"].map((value) =>
+    slug.replace(/\[[^/]+\]/, value),
+  );
+  return {
+    file,
+    loc: null,
+    message:
+      `Derived slug "${slug}" contains a dynamic segment, so every concrete URL under it shares one set of rows: editing ${first} also rewrites ${second}.\n` +
+      `  If each URL should own its content, model the records as a collection and render them with <CollectionItem>, or give each URL its own folder and share the markup through a component.\n` +
+      `  If the content really is the same for every URL, this is fine.`,
+  };
 }
 
 /**

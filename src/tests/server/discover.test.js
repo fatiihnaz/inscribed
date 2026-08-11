@@ -116,10 +116,41 @@ describe("discoverManifests", () => {
     expect(manifests.map((m) => m.slug)).toEqual([
       "/", "/about", "/news/[id]", "/pricing",
     ]);
-    expect(warnings).toEqual([]);
     expect(path.relative(appRoot, roots.get("/pricing")).split(path.sep).join("/")).toBe(
       "(marketing)/pricing/page.jsx",
     );
+
+    // Only /news/[id] is dynamic and declares blocks; the rest are quiet.
+    expect(warnings.map((w) => w.message)).toEqual([
+      expect.stringContaining('Derived slug "/news/[id]" contains a dynamic segment'),
+    ]);
+  });
+
+  it("warns that a dynamic-segment page shares one set of rows, and still syncs it", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-routes");
+    const { manifests, warnings } = await discoverManifests({
+      appRoot,
+      locales: ["tr", "en"],
+    });
+
+    // Surfaced, not blocked: shared rows are correct for a page whose copy
+    // doesn't vary, and nothing at author time tells the two apart.
+    expect(manifests.map((m) => m.slug)).toContain("/news/[id]");
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toContain("editing /news/one also rewrites /news/another");
+    expect(warnings[0].message).toContain("<CollectionItem>");
+    expect(warnings[0].file.endsWith("page.jsx")).toBe(true);
+  });
+
+  it("stays silent for a dynamic-segment page that declares no regions", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-routes");
+    const { manifests, warnings } = await discoverManifests({ appRoot });
+
+    // app/etkinlik/[id]/page.jsx: dynamic, but owns no rows, so it can't
+    // surprise anyone and never reaches the manifest.
+    expect(manifests.map((m) => m.slug)).not.toContain("/etkinlik/[id]");
+    expect(warnings.every((w) => !w.message.includes("/etkinlik/[id]"))).toBe(true);
   });
 
   it("keeps the leading dynamic segment when no locales are configured", async () => {

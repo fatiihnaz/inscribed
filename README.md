@@ -286,6 +286,8 @@ The rules behind that table:
   so they drop out of the slug too.
 - **Dynamic segments** (`[id]`) stay as written: the manifest addresses the
   route template, not one concrete URL, so `/news/1` and `/news/2` share a page.
+  That means they also **share one set of rows**; see
+  [Per-URL content](#per-url-content) before declaring regions on such a page.
 - **The leading segment is the locale** when `cms.config.js` exports `locales`,
   and it drops out: which language a page is in is not part of which page it is.
   Without `locales` it is kept like any other segment. inscribed only ever reads a
@@ -308,6 +310,57 @@ Dynamic routes are the one place the slug is also written by hand: the
 
 > **Check the derivation** with `cms-sync --dry-run`. It prints each slug beside
 > the page file it came from, which is where a surprise shows up.
+
+#### Per-URL content
+
+A dynamic-segment slug is **one** manifest entry, so every concrete URL under it
+reads and writes the same rows. For `/search/[q]`, whose copy is the same
+whatever was searched for, that is exactly right. For `/kampanya/[slug]`, where
+each campaign has its own words, it is a trap: editing `/kampanya/yaz-2026` also
+rewrites `/kampanya/kara-cuma`. Nothing in the page says which one you meant, so
+`cms-sync` warns whenever a dynamic-segment page declares regions and leaves the
+choice to you.
+
+When each URL needs its own content, two patterns cover it:
+
+**Records the editor creates** belong in a [collection](#collections). The route
+renders one record and declares no regions of its own, so it never enters the
+manifest:
+
+```jsx
+// app/news/[slug]/page.jsx
+<CollectionItem collection="news" slug={slug} missing={<NotFound />}>
+  <CollectionField name="title" as="h1" />
+  <CollectionField name="body" />
+</CollectionItem>
+```
+
+**A fixed set of pages the developer owns** gets a folder each, with the markup
+shared through a component. Every folder derives its own slug and therefore its
+own rows, while the shape stays written once:
+
+```jsx
+// app/kampanya/_body.jsx  (a leading _ keeps Next from routing it)
+export function CampaignBody() {
+  return (
+    <CmsGroup name="hero">
+      <EditableRegion blockPath="title" blockType="ShortText" defaultValue="Campaign" as="h1" />
+      <EditableRegion blockPath="body" blockType="RichText" defaultValue="<p>Edit me.</p>" />
+    </CmsGroup>
+  );
+}
+
+// app/kampanya/yaz-2026/page.jsx   -> /kampanya/yaz-2026, its own rows
+// app/kampanya/kara-cuma/page.jsx  -> /kampanya/kara-cuma, its own rows
+import { CampaignBody } from "../_body.jsx";
+
+export default function Page() {
+  return <main><CampaignBody /></main>;
+}
+```
+
+This is the "shared component reachable from two slugs contributes its regions
+to both" rule doing its job: one declaration, one set of rows per page.
 
 ### Blocks & block types
 

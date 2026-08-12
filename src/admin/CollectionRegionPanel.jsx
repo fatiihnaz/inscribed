@@ -21,13 +21,13 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Plus, Undo2, Search } from "../shared/style/icons.jsx";
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Plus, Undo2, Search } from "../shared/style/icons.jsx";
 
 import { useCollectionContext } from "../collections/context.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { collectDirtyRecords, dirtySlugsFor } from "./dirty.js";
-import { buildListParams } from "../collections/params.js";
+import { buildListParams, DEFAULT_SORT } from "../collections/params.js";
 import { useCollection } from "../collections/hooks/use-collection.js";
 import { useCollectionCreate } from "../collections/hooks/use-collection-create.js";
 import { useCreateDraftRole, useDrawerDraftRole } from "../collections/hooks/use-draft-driver.js";
@@ -95,6 +95,26 @@ function titleFieldName(schema) {
 }
 
 /**
+ * Columns `?sort=` accepts for this collection: three the backend always
+ * offers, plus whatever the schema marks sortable. Built from the schema rather
+ * than hardcoded, because which fields carry an index is per collection.
+ *
+ * @param {import("../shared/contracts/schemas.js").CollectionSchema | null | undefined} schema
+ * @returns {{ value: string, labelKey?: string, label?: string }[]}
+ */
+function sortableColumns(schema) {
+  const base = [
+    { value: "slug", labelKey: "collections.sortSlug" },
+    { value: "createdAt", labelKey: "collections.sortCreatedAt" },
+    { value: "updatedAt", labelKey: "collections.sortUpdatedAt" },
+  ];
+  const own = (schema?.fields ?? [])
+    .filter((f) => f.sortable)
+    .map((f) => ({ value: f.name, label: f.label || f.name }));
+  return [...base, ...own];
+}
+
+/**
  * Row headline for one item. Reads the draft first: while an item is being
  * edited its draft title is what the user expects to see in the list.
  *
@@ -126,8 +146,14 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
 
   const [pane, setPane] = useState(/** @type {PaneState} */ (null));
   const [query, setQuery] = useState("");
+  // Sort and archive sit at panel level rather than per section: the search box
+  // above them already scopes the whole panel, and a page binding three regions
+  // wants one answer to "what am I looking at", not three.
+  const [sort, setSort] = useState(DEFAULT_SORT);
+  const [showArchived, setShowArchived] = useState(false);
 
   const titleField = useMemo(() => titleFieldName(meta?.schema), [meta]);
+  const sortOptions = useMemo(() => sortableColumns(meta?.schema), [meta]);
 
   // StatusBar "Aç" jump: consume the signal here and open the detail pane
   // directly. Pane-level fetch by slug means the jump works even when the
@@ -226,7 +252,15 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
           </div>
         </div>
 
-        {supportsCreate && meta?.schema ? (
+        <ListToolbar
+          sort={sort}
+          onSortChange={setSort}
+          options={sortOptions}
+          showArchived={showArchived}
+          onToggleArchived={() => setShowArchived((v) => !v)}
+        />
+
+        {supportsCreate && meta?.schema && !showArchived ? (
           <CreateButton
             collectionKey={collectionKey}
             listParams={virtualListParams}
@@ -235,14 +269,18 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
         ) : null}
 
         <div style={regionScrollStyle}>
-          <DerivedRows
-            collectionKey={collectionKey}
-            listParams={virtualListParams}
-            dirtySlugs={dirtySlugs}
-            titleField={titleField}
-            query={query}
-            onOpenItem={(slug) => setPane({ mode: "edit", slug })}
-          />
+          {/* The archive is its own view: a row that was never created has no
+              place in it, and the backend sends no virtualItems there either. */}
+          {showArchived ? null : (
+            <DerivedRows
+              collectionKey={collectionKey}
+              listParams={virtualListParams}
+              dirtySlugs={dirtySlugs}
+              titleField={titleField}
+              query={query}
+              onOpenItem={(slug) => setPane({ mode: "edit", slug })}
+            />
+          )}
 
           {sections.length === 0 ? (
             <div style={emptyStateStyle}>
@@ -260,6 +298,8 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
                 dirtySlugs={dirtySlugs}
                 titleField={titleField}
                 query={query}
+                sort={sort}
+                archived={showArchived}
                 onOpenItem={(slug) => setPane({ mode: "edit", slug })}
               />
             ))
@@ -315,6 +355,83 @@ const regionScrollStyle = /** @type {React.CSSProperties} */ ({
 });
 
 /**
+ * Sort picker plus the archive toggle, in one strip under the search box.
+ *
+ * The direction is a separate button rather than two entries per column: the
+ * options come from the schema, so folding direction in would double a list
+ * that already grows with the collection.
+ *
+ * @param {{
+ *   sort: string,
+ *   onSortChange: (next: string) => void,
+ *   options: { value: string, labelKey?: string, label?: string }[],
+ *   showArchived: boolean,
+ *   onToggleArchived: () => void,
+ * }} props
+ */
+function ListToolbar({ sort, onSortChange, options, showArchived, onToggleArchived }) {
+  const t = useCmsStrings();
+  const [column, direction] = splitSort(sort);
+
+  return (
+    <div style={toolbarStyle}>
+      <select
+        value={column}
+        onChange={(e) => onSortChange(`${e.target.value}:${direction}`)}
+        className="inscribed-field"
+        style={sortSelectStyle}
+        aria-label={t("collections.sortBy")}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.labelKey ? t(opt.labelKey) : opt.label}
+          </option>
+        ))}
+      </select>
+
+      <button
+        type="button"
+        onClick={() => onSortChange(`${column}:${direction === "asc" ? "desc" : "asc"}`)}
+        className="inscribed-btn-ghost"
+        style={toolbarButtonStyle}
+        aria-label={direction === "asc" ? t("collections.sortAsc") : t("collections.sortDesc")}
+        title={direction === "asc" ? t("collections.sortAsc") : t("collections.sortDesc")}
+      >
+        {direction === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
+      </button>
+
+      <span style={{ flex: 1 }} />
+
+      <button
+        type="button"
+        onClick={onToggleArchived}
+        className="inscribed-btn-ghost"
+        style={{
+          ...toolbarButtonStyle,
+          ...(showArchived ? toolbarButtonOnStyle : null),
+        }}
+        aria-pressed={showArchived}
+        title={t("collections.showArchive")}
+      >
+        <Archive size={13} />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * `"publishedAt:desc"` into its two halves, defaulting the direction the way
+ * the backend does.
+ *
+ * @param {string} sort
+ * @returns {[string, "asc" | "desc"]}
+ */
+function splitSort(sort) {
+  const [column, dir] = sort.split(":");
+  return [column, dir === "desc" ? "desc" : "asc"];
+}
+
+/**
  * The caller's claim-derived slugs that have no record yet, as ordinary rows
  * opening the ordinary editor: the first save is what materialises them.
  *
@@ -322,9 +439,10 @@ const regionScrollStyle = /** @type {React.CSSProperties} */ ({
  * returns the same `virtualItems` for every window: a page binding three
  * filtered regions would otherwise show each derived row three times.
  *
- * Archived slugs are left out for now. They arrive here too, but the only
- * useful action on one is restore, and writing to it answers 409, so a row
- * that opens an editor would be worse than no row at all.
+ * An archived slug arrives here too, flagged. It is the owner's only way to
+ * learn their slug was taken down: the live list excludes archived rows, so
+ * without this the row would sit in no default view at all. Opening it lands on
+ * the detail pane's restore action rather than an editor.
  *
  * @param {{
  *   collectionKey: string,
@@ -342,7 +460,6 @@ function DerivedRows({ collectionKey, listParams, dirtySlugs, titleField, query,
     const q = query.trim().toLowerCase();
     return virtualItems.filter((row) => {
       if (row.origin !== "derived" || row.slug == null) return false;
-      if (row.isArchived) return false;
       if (!q) return true;
       if (row.slug.toLowerCase().includes(q)) return true;
       const title = itemTitle(row, titleField);
@@ -360,6 +477,7 @@ function DerivedRows({ collectionKey, listParams, dirtySlugs, titleField, query,
             slug={/** @type {string} */ (row.slug)}
             title={itemTitle(row, titleField)}
             canEdit={row.canEdit}
+            archived={row.isArchived === true}
             dirty={dirtySlugs.has(/** @type {string} */ (row.slug))}
             onOpen={() => onOpenItem(/** @type {string} */ (row.slug))}
           />
@@ -381,12 +499,14 @@ function DerivedRows({ collectionKey, listParams, dirtySlugs, titleField, query,
  *   pageOffset: number | undefined,
  *   showHeader: boolean,
  *   dirtySlugs: Set<string>,
+ *   sort: string,
+ *   archived: boolean,
  *   onOpenItem: (slug: string) => void,
  * }} props
  */
 function RegionSection({
   collectionKey, filter, pageLimit, pageOffset, showHeader, dirtySlugs,
-  titleField, query, onOpenItem,
+  titleField, query, sort, archived, onOpenItem,
 }) {
   const t = useCmsStrings();
   const initialLimit = pageLimit ?? DEFAULT_DRAWER_PAGE_SIZE;
@@ -394,14 +514,17 @@ function RegionSection({
   const [offset, setOffset] = useState(initialOffset);
   const [limit] = useState(initialLimit);
 
-  const filterKey = stableStringify(filter ?? null);
+  // Anything that changes which rows come back, and in what order, has to
+  // restart the accumulation: pages gathered under the old ordering would
+  // otherwise interleave with pages under the new one.
+  const windowKey = `${stableStringify(filter ?? null)}|${sort}|${archived}`;
   const [accumulated, setAccumulated] = useState(
     /** @type {import("../shared/contracts/schemas.js").CollectionItemResponse[]} */ ([]),
   );
 
   const params = useMemo(
-    () => buildListParams({ filter, offset, limit }),
-    [filter, offset, limit],
+    () => buildListParams({ filter, offset, limit, sort, archived }),
+    [filter, offset, limit, sort, archived],
   );
   const { items, total, isLoading, error, refetch } = useCollection(collectionKey, params);
 
@@ -409,7 +532,7 @@ function RegionSection({
     setOffset(initialOffset);
     setAccumulated([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterKey]);
+  }, [windowKey]);
 
   useEffect(() => {
     if (isLoading || error) return;
@@ -462,7 +585,9 @@ function RegionSection({
       ) : isLoading && accumulated.length === 0 ? (
         <div style={emptyStateStyle}>{t("collections.loading")}</div>
       ) : accumulated.length === 0 ? (
-        <div style={emptyStateStyle}>{t("collections.noRecordsForFilter")}</div>
+        <div style={emptyStateStyle}>
+          {archived ? t("collections.archiveEmpty") : t("collections.noRecordsForFilter")}
+        </div>
       ) : visible.length === 0 ? (
         <div style={emptyStateStyle}>
           {t("collections.searchEmpty", { query })}
@@ -475,6 +600,7 @@ function RegionSection({
                 slug={item.slug}
                 title={itemTitle(item, titleField)}
                 canEdit={item.canEdit}
+                archived={item.isArchived === true}
                 dirty={dirtySlugs.has(item.slug)}
                 onOpen={() => onOpenItem(item.slug)}
               />
@@ -536,9 +662,9 @@ function RegionHeader({ filter, loaded, total }) {
  * One collection item as a quiet list row: slug, readonly chip, dirty dot,
  * trailing chevron. All editing happens in the detail pane.
  *
- * @param {{ slug: string, canEdit: boolean, dirty: boolean, onOpen: () => void }} props
+ * @param {{ slug: string, canEdit: boolean, archived?: boolean, dirty: boolean, onOpen: () => void }} props
  */
-function RegionItemRow({ slug, title, canEdit, dirty, onOpen }) {
+function RegionItemRow({ slug, title, canEdit, archived, dirty, onOpen }) {
   const t = useCmsStrings();
   // No title resolves when the schema has no textual field: the slug then takes
   // the headline and keeps its identifier styling instead of being dressed up
@@ -558,6 +684,9 @@ function RegionItemRow({ slug, title, canEdit, dirty, onOpen }) {
             {headline}
           </span>
           {!canEdit ? <span style={readonlyChipStyle}>{t("block.readOnly")}</span> : null}
+          {archived ? (
+            <span style={archivedChipStyle}>{t("collections.archivedBadge")}</span>
+          ) : null}
           {dirty ? (
             <span style={rowDirtyDotStyle} aria-label={t("block.unsavedDot")} />
           ) : null}
@@ -783,6 +912,9 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
       }
       meta={
         <>
+          {editor.isArchived ? (
+            <span style={archivedChipStyle}>{t("collections.archivedBadge")}</span>
+          ) : null}
           {editor.item && !editor.canEdit ? (
             <span style={readonlyChipStyle}>{t("block.readOnly")}</span>
           ) : null}
@@ -793,7 +925,24 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
           ) : null}
         </>
       }
-      footer={editor.canEdit ? (
+      // An archived row has one action, and it is not save: every write against
+      // it answers 409 until someone restores it.
+      footer={!editor.canEdit ? null : editor.isArchived ? (
+        <>
+          <span style={archiveNoticeStyle}>{t("collections.archivedNotice")}</span>
+          <span style={{ flex: 1 }} />
+          <button
+            type="button"
+            onClick={editor.restore}
+            disabled={editor.isPending}
+            className="inscribed-btn-collection"
+            style={saveButtonStyle}
+          >
+            <ArchiveRestore size={13} />
+            {t("collections.restore")}
+          </button>
+        </>
+      ) : (
         <>
           <DraftIndicator
             status={editor.draftStatus}
@@ -815,6 +964,21 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
               <Undo2 size={13} />
             </button>
           ) : null}
+          {/* Only a saved row can be archived; a virtual one has nothing to
+              take down yet. */}
+          {editor.isVirtual ? null : (
+            <button
+              type="button"
+              onClick={editor.archive}
+              disabled={editor.isPending}
+              className="inscribed-btn-ghost"
+              style={btnGhostStyle}
+              aria-label={t("collections.archiveRecord")}
+              title={t("collections.archiveRecord")}
+            >
+              <Archive size={13} />
+            </button>
+          )}
           <button
             type="button"
             onClick={editor.save}
@@ -825,7 +989,7 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
             {editor.isPending ? t("collections.saving") : t("status.save")}
           </button>
         </>
-      ) : null}
+      )}
     >
       <CollectionRecordForm editor={editor} showMetaRow={false} showActions={false} />
     </DetailPane>
@@ -1078,6 +1242,45 @@ const searchBarStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
 });
 
+const toolbarStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "0 16px 8px",
+  flexShrink: 0,
+});
+
+const sortSelectStyle = /** @type {React.CSSProperties} */ ({
+  flex: "0 1 auto",
+  minWidth: 0,
+  padding: "4px 6px",
+  background: "transparent",
+  border: `1px solid ${HAIRLINE}`,
+  borderRadius: R_SM,
+  color: TEXT_MID,
+  font: `11px/1.4 ${FONT_SANS}`,
+});
+
+const toolbarButtonStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 24,
+  height: 24,
+  padding: 0,
+  background: "transparent",
+  border: `1px solid ${HAIRLINE}`,
+  borderRadius: R_SM,
+  color: TEXT_MUTED,
+  cursor: "pointer",
+});
+
+const toolbarButtonOnStyle = /** @type {React.CSSProperties} */ ({
+  background: COLLECTION_SOFT,
+  borderColor: COLLECTION_LINE,
+  color: COLLECTION_ACCENT,
+});
+
 const searchScopeNoteStyle = /** @type {React.CSSProperties} */ ({
   padding: "2px 16px 0",
   font: `10.5px/1.4 ${FONT_SANS}`,
@@ -1201,6 +1404,22 @@ const detailVersionStyle = /** @type {React.CSSProperties} */ ({
   font: `500 11px/1 ${FONT_MONO}`,
   color: TEXT_MUTED,
   flexShrink: 0,
+});
+
+const archivedChipStyle = /** @type {React.CSSProperties} */ ({
+  color: STATUS_DANGER,
+  textTransform: "uppercase",
+  fontSize: 9,
+  padding: "1px 6px",
+  background: SURFACE_1,
+  borderRadius: 3,
+  letterSpacing: "0.05em",
+  flexShrink: 0,
+});
+
+const archiveNoticeStyle = /** @type {React.CSSProperties} */ ({
+  font: `11px/1.4 ${FONT_SANS}`,
+  color: TEXT_MUTED,
 });
 
 const detailBodyStyle = /** @type {React.CSSProperties} */ ({

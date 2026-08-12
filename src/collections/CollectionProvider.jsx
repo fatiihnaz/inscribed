@@ -65,7 +65,11 @@ export function CollectionProvider({ children }) {
       createLanes: new Map(),
       editorValues: new Map(),
       activeItem: null,
-      meta: { byKey: new Map(), order: [], isLoading: false, error: null },
+      // Loading from the first render of an admin session, not from the effect
+      // that fetches: child effects run before this provider's, so a list
+      // mounted below would otherwise see "loaded, empty" and request its
+      // window before /me could say which locale that collection takes.
+      meta: { byKey: new Map(), order: [], isLoading: isAdmin, error: null },
     });
   }
   const collectionStore = collectionStoreRef.current;

@@ -56,7 +56,7 @@ export function CollectionFieldsForm({ fields, values, onChange, disabled }) {
           field={field}
           value={values[field.name]}
           onChange={(v) => onChange({ ...values, [field.name]: v })}
-          disabled={Boolean(disabled) || field.readOnly}
+          disabled={Boolean(disabled) || field.readOnly || field.computed}
         />
       ))}
     </div>
@@ -77,7 +77,14 @@ function FieldInput({ field, value, onChange, disabled }) {
     <span style={labelRowStyle}>
       <span style={labelTextStyle}>{field.label || field.name}</span>
       {field.required ? <span style={requiredMarkStyle} aria-label={t("collections.requiredField")}>*</span> : null}
-      {field.readOnly ? <span style={readonlyTagStyle}>{t("block.readOnly")}</span> : null}
+      {/* Computed says where the value comes from, which read-only does not:
+          it is fetched from another system each read, so nobody can edit it
+          here and nothing the user types would be stored. */}
+      {field.computed ? (
+        <span style={readonlyTagStyle}>{t("collections.computedField")}</span>
+      ) : field.readOnly ? (
+        <span style={readonlyTagStyle}>{t("block.readOnly")}</span>
+      ) : null}
     </span>
   );
 
@@ -635,7 +642,7 @@ function swapOpen(set, a, b) {
 
 /**
  * Shape a form's `values` into the request body's `data` payload.
- * Strips readOnly fields - the backend would strip them anyway but
+ * Strips readOnly and computed fields - the backend ignores them anyway but
  * keeping the wire payload clean helps debugging.
  *
  * @param {CollectionFieldDescriptor[]} fields
@@ -646,7 +653,7 @@ export function buildPayload(fields, values) {
   /** @type {Record<string, *>} */
   const out = {};
   for (const field of fields) {
-    if (field.readOnly) continue;
+    if (field.readOnly || field.computed) continue;
     // ObjectArray: shape each element through its itemFields so inner
     // readOnly keys are stripped per item, mirroring the top-level pass.
     if (field.type === "ObjectArray") {
@@ -670,7 +677,7 @@ export function buildPayload(fields, values) {
  */
 export function requiredMissing(fields, values) {
   for (const field of fields) {
-    if (field.readOnly) continue;
+    if (field.readOnly || field.computed) continue;
 
     const value = values[field.name];
 

@@ -73,6 +73,32 @@ describe("buildPayload - ObjectArray", () => {
   });
 });
 
+describe("computed fields", () => {
+  // Enrichment values are resolved from another system on every read and never
+  // stored, so echoing one back is noise the backend has to discard.
+  const stars = {
+    name: "stars", type: "ShortText", label: "Yıldız", required: false,
+    readOnly: true, computed: true, filterable: false, sortable: false,
+    options: null, help: null, itemFields: null,
+  };
+
+  it("keeps them out of the save payload", () => {
+    expect(buildPayload([scalarTitle, stars], { name: "A", stars: "128" }))
+      .toEqual({ name: "A" });
+  });
+
+  it("never reports one as a missing required field", () => {
+    // A computed field cannot be filled in, so treating it as required would
+    // be an error the user has no way to clear.
+    const requiredComputed = { ...stars, required: true };
+    expect(requiredMissing([requiredComputed], { stars: "" })).toBeNull();
+  });
+
+  it("still seeds them, so the form can show the fetched value", () => {
+    expect(seedValues([stars], { stars: "128" })).toEqual({ stars: "128" });
+  });
+});
+
 describe("requiredMissing - ObjectArray", () => {
   it("passes when all inner required fields are present", () => {
     const values = { works: [{ title: "A", image: "", tags: [] }] };

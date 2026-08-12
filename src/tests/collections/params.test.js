@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from "vitest";
 
-import { buildListParams } from "../../collections/params.js";
+import { buildListParams, DEFAULT_SORT } from "../../collections/params.js";
 import { stableStringify } from "../../shared/util/stable-stringify.js";
 
 describe("buildListParams", () => {
@@ -53,5 +53,23 @@ describe("buildListParams", () => {
   it("leaves a single-language window's key unchanged", () => {
     expect(buildListParams({ limit: 5, locale: null })).toEqual({ limit: 5 });
     expect(buildListParams({ locale: null })).toBeUndefined();
+  });
+
+  it("drops the default sort so it collapses onto an unsorted window", () => {
+    // Same reasoning as offset 0: the backend already sorts by slug ascending,
+    // so spelling it out would fetch the drawer's list a second time.
+    expect(buildListParams({ sort: DEFAULT_SORT })).toBeUndefined();
+    expect(buildListParams({ limit: 5, sort: DEFAULT_SORT })).toEqual({ limit: 5 });
+  });
+
+  it("keeps any other sort, so each ordering is its own entry", () => {
+    expect(buildListParams({ sort: "publishedAt:desc" })).toEqual({ sort: "publishedAt:desc" });
+    expect(stableStringify(buildListParams({ sort: "publishedAt:desc" })))
+      .not.toBe(stableStringify(buildListParams({ sort: "publishedAt:asc" })));
+  });
+
+  it("only emits archived when asking for the archive", () => {
+    expect(buildListParams({ archived: false })).toBeUndefined();
+    expect(buildListParams({ archived: true })).toEqual({ archived: true });
   });
 });

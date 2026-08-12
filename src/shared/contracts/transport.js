@@ -62,6 +62,11 @@
  *   `translationGroup` joins the new record to an existing one's group, making
  *   the two translations of each other. Omit it and the backend starts a fresh
  *   group, which is what every standalone record gets.
+ * @property {(key: string, slug: string, version: number, opts?: CmsRequestOptions) => Promise<{ collectionKey: string, slug: string, version: number }>} archiveCollectionItem
+ *   Takes the row out of every default view without deleting it: the slug stays
+ *   reserved and the content survives. `version` must match or the call is a
+ *   409, and it is not consumed, so the number that archived also restores.
+ * @property {(key: string, slug: string, opts?: CmsRequestOptions) => Promise<CollectionItemResponse>} restoreCollectionItem
  * @property {(key: string, slug: string, payload: { data: * }, opts?: CmsRequestOptions) => Promise<void>} saveCollectionItemDraft
  * @property {(key: string, slug: string, opts?: CmsRequestOptions) => Promise<void>} deleteCollectionItemDraft
  * @property {(key: string, payload: { data: * }, opts?: CmsRequestOptions & { translationGroup?: string }) => Promise<void>} saveCollectionNewDraft

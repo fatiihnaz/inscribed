@@ -240,6 +240,33 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
       return /** @type {*} */ (await res.json());
     },
 
+    // Archiving is a state change, not a delete: the row and its slug stay, and
+    // the version rides along only to prove the caller saw the current content.
+    // It is not consumed, so the same number restores and publishes afterwards.
+    async archiveCollectionItem(key, slug, version, opts = {}) {
+      const target = new URL(
+        `${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}`,
+      );
+      target.searchParams.set("version", String(version));
+      const res = await fetch(target.toString(), {
+        method: "DELETE",
+        headers: headers(opts.accessToken),
+      });
+      if (!res.ok) throw await toApiError(res);
+      return /** @type {*} */ (await res.json());
+    },
+
+    // No version: archiving leaves the content untouched, so there is nothing
+    // for a restore to disagree with.
+    async restoreCollectionItem(key, slug, opts = {}) {
+      const res = await fetch(
+        `${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}/restore`,
+        { method: "POST", headers: headers(opts.accessToken) },
+      );
+      if (!res.ok) throw await toApiError(res);
+      return /** @type {*} */ (await res.json());
+    },
+
     async saveCollectionItemDraft(key, slug, payload, opts = {}) {
       const res = await fetch(
         `${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}/draft`,

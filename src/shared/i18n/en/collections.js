@@ -17,8 +17,16 @@ export const collections = Object.freeze({
   "collections.retry": "Try again",
   "collections.draftBadge": "draft",
   "collections.newBadge": "new",
+  "collections.archivedBadge": "archived",
   "collections.create": "Create",
   "collections.creating": "Creating…",
+
+  // Archive and restore.
+  "collections.showArchive": "Show the archive",
+  "collections.archiveEmpty": "Nothing in the archive.",
+  "collections.archiveRecord": "Archive this record",
+  "collections.restore": "Restore",
+  "collections.archivedNotice": "Archived. Restore it to edit again.",
 
   // The collections list (rail landing surface).
   "collections.searchCollections": "Search collections",
@@ -39,6 +47,12 @@ export const collections = Object.freeze({
   "collections.searchScope": "Searched the {loaded} loaded records; {remaining} more to load.",
   "collections.loadMore": "Load more ({remaining} left)",
   "collections.allRecords": "All",
+  "collections.sortBy": "Sort by",
+  "collections.sortSlug": "Slug",
+  "collections.sortCreatedAt": "Created",
+  "collections.sortUpdatedAt": "Updated",
+  "collections.sortAsc": "Ascending",
+  "collections.sortDesc": "Descending",
   "collections.backToList": "Back to the list",
   "collections.backToListTitle": "Back to the list (Esc)",
   "collections.addTranslation": "Add the {locale} translation",
@@ -57,6 +71,7 @@ export const collections = Object.freeze({
   // Schema-driven fields.
   "collections.emptySchema": "The schema is empty.",
   "collections.requiredField": "required",
+  "collections.computedField": "computed",
   "collections.selectOption": "— select —",
   "collections.editorLoading": "Loading the editor…",
   "collections.itemFallback": "item",
@@ -82,6 +97,7 @@ export const collections = Object.freeze({
   "collections.requiredMissing": "A required field is missing: {field}",
   "collections.invalidData": "Invalid data: {detail}",
   "collections.versionConflict": "Version conflict. The list has been refreshed, check it and try again.",
+  "collections.archivedConflict": "This record is archived, so it can't be written to. Restore it first.",
   "collections.editForbidden": "You don't have rights to edit this record.",
   "collections.createRace": "Another write landed at the same time. Try again.",
   "collections.createForbidden": "You don't have rights to create records in this collection.",

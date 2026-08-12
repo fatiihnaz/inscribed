@@ -11,6 +11,9 @@
  * @import { CollectionListParams } from "../shared/contracts/schemas.js"
  */
 
+/** What the backend sorts by when asked for nothing. */
+export const DEFAULT_SORT = "slug:asc";
+
 /**
  * Build a params object, omitting keys that don't narrow the window.
  *
@@ -27,15 +30,21 @@
  * Returns `undefined` when nothing narrows the window, which is the shape
  * `useCollection` and `getCmsCollection` treat as "the default page".
  *
- * @param {{ filter?: Record<string, *>, limit?: number, offset?: number, locale?: string|null }} [input]
+ * `sort` and `archived` follow the same rule as `offset: 0`: the backend's own
+ * defaults are `slug:asc` and live rows, so spelling either one out would fork
+ * the cache key away from the plain window that asks for the same thing.
+ *
+ * @param {{ filter?: Record<string, *>, limit?: number, offset?: number, locale?: string|null, sort?: string|null, archived?: boolean }} [input]
  * @returns {CollectionListParams | undefined}
  */
-export function buildListParams({ filter, limit, offset, locale } = {}) {
+export function buildListParams({ filter, limit, offset, locale, sort, archived } = {}) {
   /** @type {CollectionListParams} */
   const params = {};
   if (filter) params.filter = filter;
   if (typeof limit === "number") params.limit = limit;
   if (typeof offset === "number" && offset !== 0) params.offset = offset;
   if (locale) params.locale = locale;
+  if (sort && sort !== DEFAULT_SORT) params.sort = sort;
+  if (archived) params.archived = true;
   return Object.keys(params).length > 0 ? params : undefined;
 }

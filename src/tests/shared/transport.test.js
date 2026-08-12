@@ -249,6 +249,48 @@ describe("draft discard", () => {
   });
 });
 
+describe("archive and restore", () => {
+  it("DELETEs the item with the version in the query string", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves({ collectionKey: "News", slug: "my-slug", version: 3 });
+
+    await t.archiveCollectionItem("News", "my-slug", 3, { accessToken: "tok" });
+
+    const [url, init] = lastCall();
+    expect(init.method).toBe("DELETE");
+    expect(url).toContain(`${BASE}/cms/collections/News/my-slug`);
+    expect(new URL(url).searchParams.get("version")).toBe("3");
+  });
+
+  it("POSTs restore without a version", async () => {
+    // Archiving does not consume the version, so there is nothing for a
+    // restore to disagree with and the endpoint takes none.
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves({ id: "row-1", slug: "my-slug", version: 3 });
+
+    await t.restoreCollectionItem("News", "my-slug", { accessToken: "tok" });
+
+    const [url, init] = lastCall();
+    expect(init.method).toBe("POST");
+    expect(url).toBe(`${BASE}/cms/collections/News/my-slug/restore`);
+  });
+
+  it("surfaces the archived reason on a 409", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves(
+      { title: "Conflict", status: 409, reason: "archived", detail: "is archived" },
+      409,
+    );
+
+    const err = await t.upsertCollectionItem("News", "my-slug", { data: {}, version: 2 })
+      .catch((e) => e);
+
+    expect(err).toBeInstanceOf(CmsApiError);
+    expect(err.isConflict).toBe(true);
+    expect(err.isArchivedConflict).toBe(true);
+  });
+});
+
 describe("locale", () => {
   /** `?locale=` off the most recent fetch, or null when absent. */
   const localeOf = () => new URL(lastCall()[0]).searchParams.get("locale");

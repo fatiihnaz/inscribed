@@ -17,7 +17,7 @@ import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { useCollectionContext } from "../context.js";
 import { itemDraftKey, newDraftKey } from "../../shared/state/draft-keys.js";
 import { useCollection } from "./use-collection.js";
-import { useCmsRoute } from "../../core/hooks/use-cms-route.js";
+import { useCollectionLocale } from "./use-collection-locale.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
 import { stableStringify } from "../../shared/util/stable-stringify.js";
 import {
@@ -57,9 +57,10 @@ import {
  *   `translationGroupId` of a record this new one is a translation of. Read it
  *   off the record the editor is looking at; the backend links the two.
  * @param {string} [options.locale]
- *   Language to compose in. Defaults to the route's, which is right for a plain
- *   "new record" flow. A translation is the exception: the editor is reading
- *   the Turkish page while writing the English copy, so that flow names it.
+ *   Language to compose in. Defaults to the route's when the collection holds
+ *   that language, which is right for a plain "new record" flow. A translation
+ *   is the exception: the editor is reading the Turkish page while writing the
+ *   English copy, so that flow names it.
  * @returns {CollectionCreateState}
  */
 export function useCollectionCreate({
@@ -77,8 +78,8 @@ export function useCollectionCreate({
     useCollectionContext();
   // A record is composed in the language of the page composing it, unless the
   // caller is writing a translation and says otherwise.
-  const route = useCmsRoute();
-  const locale = localeProp ?? route.locale;
+  const collectionLocale = useCollectionLocale(collectionKey);
+  const locale = localeProp ?? collectionLocale;
 
   const [values, setValues] = useState(() => seedValues(schema.fields, {}));
   const [error, setError] = useState(/** @type {string | null} */ (null));

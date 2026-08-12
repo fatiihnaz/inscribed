@@ -19,7 +19,7 @@ import { useCollectionContext } from "../context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { stableStringify } from "../../shared/util/stable-stringify.js";
 import { resolveItemData } from "../../core/resolve.js";
-import { useCmsRoute } from "../../core/hooks/use-cms-route.js";
+import { useCollectionLocale } from "./use-collection-locale.js";
 
 /**
  * @import { CollectionItemResponse, CollectionVirtualItem } from "../../shared/contracts/schemas.js"
@@ -47,15 +47,17 @@ import { useCmsRoute } from "../../core/hooks/use-cms-route.js";
  * @param {import("../../shared/contracts/schemas.js").CollectionListParams} [params]
  *   Optional filter/offset/limit/locale. Each (key, params) tuple is its own
  *   cache entry; identical params are deduped via the in-flight table. `locale`
- *   defaults to the route's, so a list under `/en` needs no extra prop.
+ *   defaults to the route's when the collection declares it, so a list under
+ *   `/en` needs no extra prop and one that holds no languages gets none.
  * @returns {UseCollectionResult}
  */
 export function useCollection(key, params) {
   const { collectionStore, requestCollectionList } = useCollectionContext();
-  const { locale } = useCmsRoute();
+  const locale = useCollectionLocale(key);
 
   // The page's own language unless the caller pinned one, which a sidebar
-  // deliberately showing another locale's rows still can.
+  // deliberately showing another locale's rows still can. Null when the
+  // collection declares no such language, so it addresses its own default.
   const requested = locale && params?.locale == null ? { ...params, locale } : params;
 
   // Stabilise params identity so inline literals don't re-trigger the effect
@@ -70,9 +72,15 @@ export function useCollection(key, params) {
   // Separate boolean selector so the fetch effect re-fires only on a present
   // <-> absent transition (invalidate/refill), not on every loading->loaded change.
   const hasEntry = useStoreSelector(collectionStore, (s) => s.listCache.has(cacheKey));
+  // Wait for /me before the first request: it decides whether this collection
+  // takes a locale at all, and guessing early fetches the window twice, once
+  // under a locale-keyed entry and again under the one every language shares.
+  // Public visitors never fetch it, so this is false for them from the start.
+  const metaLoading = useStoreSelector(collectionStore, (s) => s.meta.isLoading);
   useEffect(() => {
+    if (metaLoading) return;
     requestCollectionList(key, stableParams);
-  }, [key, stableParams, hasEntry, requestCollectionList]);
+  }, [key, stableParams, hasEntry, metaLoading, requestCollectionList]);
 
   const refetch = useCallback(async () => {
     await requestCollectionList(key, stableParams, true);

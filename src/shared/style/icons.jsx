@@ -82,6 +82,30 @@ export const Check = createIcon("check", [
   ["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }],
 ]);
 
+export const ArrowUp = createIcon("arrow-up", [
+  ["path", { d: "m5 12 7-7 7 7", key: "hav0vg" }],
+  ["path", { d: "M12 19V5", key: "x0mq9r" }],
+]);
+
+export const ArrowDown = createIcon("arrow-down", [
+  ["path", { d: "M12 5v14", key: "s699le" }],
+  ["path", { d: "m19 12-7 7-7-7", key: "1idqje" }],
+]);
+
+export const Archive = createIcon("archive", [
+  ["rect", { width: "20", height: "5", x: "2", y: "3", rx: "1", key: "1wp1u1" }],
+  ["path", { d: "M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8", key: "1s80jp" }],
+  ["path", { d: "M10 12h4", key: "a56b0p" }],
+]);
+
+export const ArchiveRestore = createIcon("archive-restore", [
+  ["rect", { width: "20", height: "5", x: "2", y: "3", rx: "1", key: "1wp1u1" }],
+  ["path", { d: "M4 8v11a2 2 0 0 0 2 2h2", key: "tvwodi" }],
+  ["path", { d: "M20 8v11a2 2 0 0 1-2 2h-2", key: "1gkqxj" }],
+  ["path", { d: "m9 15 3-3 3 3", key: "1pd0qc" }],
+  ["path", { d: "M12 12v9", key: "192myk" }],
+]);
+
 export const Undo2 = createIcon("undo-2", [
   ["path", { d: "M9 14 4 9l5-5", key: "102s5s" }],
   ["path", { d: "M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11", key: "f3b9sd" }],

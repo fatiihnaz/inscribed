@@ -19,7 +19,7 @@ import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { useCollectionContext } from "../context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { useCollectionItem } from "./use-collection.js";
-import { useCmsRoute } from "../../core/hooks/use-cms-route.js";
+import { useCollectionLocale } from "./use-collection-locale.js";
 import { useCollectionMeta, useMyCollections } from "./use-my-collections.js";
 import { itemDraftKey } from "../../shared/state/draft-keys.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
@@ -62,8 +62,13 @@ function isVirtualItem(item) {
  * @property {(next: Record<string, *>) => void} setValues
  * @property {() => void} save
  * @property {() => void} undoDraft
+ * @property {() => void} archive
+ *   Take the record out of every default view, keeping its slug and content.
+ *   No-op while the row is virtual or already archived.
+ * @property {() => void} restore
  * @property {boolean} hasDraft
  * @property {boolean} canEdit
+ * @property {boolean} isArchived
  * @property {boolean} isVirtual
  * @property {boolean} isPending
  * @property {string | null} error
@@ -111,12 +116,13 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   const t = useCmsStrings();
   // Only the create branch of `save` needs this: a published record is
   // addressed by a slug that is already unique across every language.
-  const { locale } = useCmsRoute();
+  const locale = useCollectionLocale(collection);
   const {
     collectionStore,
     draftQueue,
     updateCollectionItem,
     patchCollectionItem,
+    invalidateCollectionList,
     setCollectionDraft,
     clearCollectionDraft,
     setCollectionDraftSavedAt,
@@ -332,6 +338,8 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   const isVirtual = !item || isVirtualItem(item);
   const canEdit = item?.canEdit ?? false;
   const hasDraft = item?.draftData != null;
+  // Absent means live: the backend sends the flag only on an archived row.
+  const isArchived = item?.isArchived === true;
 
   const save = useCallback(() => {
     setError(null);
@@ -398,7 +406,13 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
           console.warn("[inscribed] onAfterCollectionSave failed:", revalidateErr);
         }
       } catch (err) {
-        if (err instanceof CmsApiError && err.isConflict) {
+        // Checked before the plain conflict: an archived row is not a race, and
+        // "the list has been refreshed, try again" would send the user round a
+        // loop that cannot end until someone restores it.
+        if (err instanceof CmsApiError && err.isArchivedConflict) {
+          setError(t("collections.archivedConflict"));
+          await refetch();
+        } else if (err instanceof CmsApiError && err.isConflict) {
           setError(t("collections.versionConflict"));
           await refetch();
         } else if (err instanceof CmsApiError && err.isForbidden) {
@@ -458,6 +472,74 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     draftQueue, getAccessToken, config,
   ]);
 
+  // Archive and restore share a shape: both move the row between views without
+  // touching its content, both answer with the row's own version, and both make
+  // a list window's membership wrong, so each ends by invalidating the item and
+  // re-reading it. Neither is a draft operation, so the draft lane is left
+  // alone: archiving drops the record's draft server-side anyway.
+  const archive = useCallback(() => {
+    const current = itemRef.current;
+    if (!current || isVirtualItem(current) || current.isArchived) return;
+    // The version rides in the query string, so a row without one would send
+    // `?version=undefined` and get a 400 back instead of doing nothing.
+    const version = current.version;
+    if (typeof version !== "number") return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        const token = await getAccessToken();
+        await config.transport.archiveCollectionItem(
+          collection, slug, version, { accessToken: token },
+        );
+        // Every window for this collection loses a row, so entries go rather
+        // than get patched: membership, not content, is what changed.
+        invalidateCollectionList(collection);
+        await refetch();
+        await onAfterCollectionSave(collection, slug);
+      } catch (err) {
+        if (err instanceof CmsApiError && err.isArchivedConflict) {
+          // Someone archived it first; the end state is the one we wanted.
+          await refetch();
+        } else if (err instanceof CmsApiError && err.isConflict) {
+          setError(t("collections.versionConflict"));
+          await refetch();
+        } else if (err instanceof CmsApiError && err.isForbidden) {
+          setError(t("collections.editForbidden"));
+        } else {
+          setError(/** @type {Error} */ (err).message);
+        }
+      }
+    });
+  }, [
+    collection, slug, getAccessToken, config, invalidateCollectionList,
+    refetch, onAfterCollectionSave, t,
+  ]);
+
+  const restore = useCallback(() => {
+    const current = itemRef.current;
+    if (!current || isVirtualItem(current) || !current.isArchived) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        const token = await getAccessToken();
+        const restored = await config.transport.restoreCollectionItem(
+          collection, slug, { accessToken: token },
+        );
+        updateCollectionItem(collection, slug, restored);
+        await onAfterCollectionSave(collection, slug);
+      } catch (err) {
+        if (err instanceof CmsApiError && err.isForbidden) {
+          setError(t("collections.editForbidden"));
+        } else {
+          setError(/** @type {Error} */ (err).message);
+        }
+      }
+    });
+  }, [
+    collection, slug, getAccessToken, config, updateCollectionItem,
+    onAfterCollectionSave, t,
+  ]);
+
   // Memoised, and deliberately free of anything that moves per keystroke: this
   // object goes into the record's scope, so its identity is what decides
   // whether typing in one field re-renders the whole record. The values
@@ -472,8 +554,11 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
       setValues: setValuesFromUser,
       save,
       undoDraft,
+      archive,
+      restore,
       hasDraft,
       canEdit,
+      isArchived,
       isVirtual,
       isPending,
       error,
@@ -490,7 +575,8 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     }),
     [
       schema, slugSource, item, editorId, readValues, setValuesFromUser,
-      save, undoDraft, hasDraft, canEdit, isVirtual, isPending, error,
+      save, undoDraft, archive, restore, hasDraft, canEdit, isArchived,
+      isVirtual, isPending, error,
       draftStatus, lastDraftSavedAt, publishedFlash, meLoading, meError,
       itemLoading, itemError, refetch, collection, slug,
     ],

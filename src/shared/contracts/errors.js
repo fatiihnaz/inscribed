@@ -21,8 +21,9 @@ export class CmsApiError extends Error {
    * @param {string} [args.title]
    * @param {ProblemDetails|null} [args.problem]
    * @param {BlockConflict[]|null} [args.conflicts]
+   * @param {string|null} [args.reason]
    */
-  constructor({ status, detail, title, problem, conflicts }) {
+  constructor({ status, detail, title, problem, conflicts, reason }) {
     super(detail || title || `CMS request failed (${status})`);
     this.name = "CmsApiError";
     this.status = status;
@@ -38,10 +39,26 @@ export class CmsApiError extends Error {
      * @type {BlockConflict[]|null}
      */
     this.conflicts = conflicts ?? null;
+    /**
+     * Machine-readable discriminator on a 409, when the backend sends one.
+     * Currently `"archived"`.
+     *
+     * @type {string|null}
+     */
+    this.reason = reason ?? null;
   }
 
   get isConflict() {
     return this.status === 409;
+  }
+
+  /**
+   * The write was refused because the row is in the archive, not because
+   * someone else got there first. A merge screen cannot resolve this one: the
+   * only way forward is restore.
+   */
+  get isArchivedConflict() {
+    return this.status === 409 && this.reason === "archived";
   }
 
   get isForbidden() {
@@ -85,11 +102,14 @@ export async function toApiError(response) {
   // Prefer ProblemDetails.detail, fall back to the raw body, then statusText.
   const detail = problem?.detail || (rawBody && !problem ? rawBody : "") || response.statusText;
 
+  const rawReason = /** @type {*} */ (problem)?.reason;
+
   return new CmsApiError({
     status: response.status,
     title: problem?.title,
     detail,
     problem,
     conflicts,
+    reason: typeof rawReason === "string" ? rawReason : null,
   });
 }

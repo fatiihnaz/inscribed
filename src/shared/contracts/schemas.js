@@ -390,7 +390,7 @@
 /**
  * RFC 7807 error payload returned by the backend on non-2xx responses.
  *
- * The two extensions are what callers should branch on rather than the `detail`
+ * The extensions are what callers should branch on rather than the `detail`
  * prose, whose wording is not a contract.
  *
  * @typedef {Object} ProblemDetails
@@ -402,6 +402,10 @@
  * @property {BlockConflict[]} [conflicts]
  *   409 only, and only for a per-block version conflict. Absent (not empty) on
  *   a plain write race, where no block-level expectation exists.
+ * @property {string} [reason]
+ *   409 only: which kind of conflict this is. `"archived"` means the row was
+ *   taken down rather than overtaken, so restore is the way forward and a merge
+ *   screen would be the wrong answer. Absent on a plain version conflict.
  * @property {*[]} [errors]   Validation failures behind a 400.
  */
 

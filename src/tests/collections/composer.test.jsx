@@ -49,7 +49,7 @@ const newsMeta = (overrides = {}) => ({
 /** Requests captured as [method, url] for order-insensitive assertions. */
 let requests;
 
-function mockFetch({ me }) {
+function mockFetch({ me, virtualItems }) {
   requests = [];
   global.fetch = vi.fn(async (input, init) => {
     const url = String(input);
@@ -70,7 +70,7 @@ function mockFetch({ me }) {
       });
     }
     if (url.includes("/cms/collections/news")) {
-      return jsonRes({ items: [], total: 0, offset: 0, limit: 50 });
+      return jsonRes({ items: [], total: 0, offset: 0, limit: 50, virtualItems });
     }
     return jsonRes({ slug: "/", blocks: [] });
   });
@@ -128,6 +128,24 @@ describe("access gate", () => {
 describe("create flow", () => {
   beforeEach(() => {
     mockFetch({ me: [newsMeta()] });
+  });
+
+  it("seeds from the pending draft row rather than any derived row beside it", async () => {
+    // The pending slot is the composer's; a derived row is someone's own
+    // claim-derived slug and has an editor of its own.
+    mockFetch({
+      me: [newsMeta()],
+      virtualItems: [
+        { origin: "derived", slug: "web", canEdit: true, data: {}, draftData: { title: "Başkasının" } },
+        { origin: "pending", canEdit: true, data: {}, draftData: { title: "Yarım haber" } },
+      ],
+    });
+    renderComposer();
+
+    await waitFor(() => {
+      const [titleInput] = Array.from(document.querySelectorAll("input.inscribed-field"));
+      expect(/** @type {HTMLInputElement} */ (titleInput).value).toBe("Yarım haber");
+    });
   });
 
   it("renders the schema form once /me arrives", async () => {

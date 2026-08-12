@@ -64,7 +64,11 @@
  *   group, which is what every standalone record gets.
  * @property {(key: string, slug: string, payload: { data: * }, opts?: CmsRequestOptions) => Promise<void>} saveCollectionItemDraft
  * @property {(key: string, slug: string, opts?: CmsRequestOptions) => Promise<void>} deleteCollectionItemDraft
- * @property {(key: string, payload: { slug?: string, data: * }, opts?: CmsRequestOptions & { translationGroup?: string }) => Promise<void>} saveCollectionNewDraft
+ * @property {(key: string, payload: { data: * }, opts?: CmsRequestOptions & { translationGroup?: string }) => Promise<void>} saveCollectionNewDraft
+ *   The pending slot stores no slug, so a `UserDefined` collection's typed slug
+ *   stays in the composer's own state until it publishes through `PUT`. Sending
+ *   one here is ignored, and a claim-derived slug is refused outright: those
+ *   have a draft slot of their own under `saveCollectionItemDraft`.
  * @property {(key: string, opts?: CmsRequestOptions) => Promise<void>} deleteCollectionNewDraft
  * @property {(file: File, opts?: { onProgress?: (progress: number) => void, accessToken?: string | null }) => Promise<{ data: { url: string } }>} uploadImage
  * @property {(manifests: SyncManifestRequest[], opts?: CmsRequestOptions & { locales?: string[] }) => Promise<SyncResultResponse>} syncManifests

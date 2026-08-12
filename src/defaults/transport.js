@@ -206,10 +206,10 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
     },
 
     // Carries the locale even though a slug already names one row, because this
-    // endpoint has a create branch: `version: null` is how a RoleDerived or
-    // UserDefined collection makes its first row at a virtual slug, and that row
-    // has no language yet. The backend reads it only on that branch; on an
-    // update the slug has already decided.
+    // endpoint has a create branch: `version: null` is how a ClaimDerived or
+    // UserDefined collection makes its first row at a slug, and that row has no
+    // language yet. The backend reads it only on that branch; on an update the
+    // slug has already decided.
     async upsertCollectionItem(key, slug, payload, opts = {}) {
       const target = withLocale(
         new URL(`${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}`),

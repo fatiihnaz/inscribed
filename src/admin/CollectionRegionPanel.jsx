@@ -32,7 +32,6 @@ import { useCollection } from "../collections/hooks/use-collection.js";
 import { useCollectionCreate } from "../collections/hooks/use-collection-create.js";
 import { useCreateDraftRole, useDrawerDraftRole } from "../collections/hooks/use-draft-driver.js";
 import { useCollectionMeta } from "../collections/hooks/use-my-collections.js";
-import { NEW_DRAFT_GUID } from "../shared/contracts/schemas.js";
 import { stableStringify } from "../shared/util/stable-stringify.js";
 
 import { useCollectionEditor } from "../collections/hooks/use-collection-editor.js";
@@ -173,10 +172,11 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
     return [...bySignature.entries()].map(([signature, info]) => ({ signature, ...info }));
   }, [collectionBindings, collectionKey, scope]);
 
-  // CreateLane reads the new-item draft sentinel from an unfiltered list
-  // response. Reuse the unfiltered section's params if the page declares one,
-  // else fall back to a dedicated unfiltered fetch.
-  const createListParams = useMemo(() => {
+  // The window the panel reads `virtualItems` from: the pending draft behind
+  // the create button, and the derived rows below. Any window carries the same
+  // array, so reuse the unfiltered section's params when the page declares one
+  // and share its cache entry, else fall back to a dedicated unfiltered fetch.
+  const virtualListParams = useMemo(() => {
     const unfiltered = sections.find((s) => s.filter === undefined);
     return buildListParams({ offset: unfiltered?.pageOffset ?? 0, limit: unfiltered?.pageLimit });
   }, [sections]);
@@ -229,12 +229,21 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
         {supportsCreate && meta?.schema ? (
           <CreateButton
             collectionKey={collectionKey}
-            listParams={createListParams}
+            listParams={virtualListParams}
             onOpen={() => setPane({ mode: "create" })}
           />
         ) : null}
 
         <div style={regionScrollStyle}>
+          <DerivedRows
+            collectionKey={collectionKey}
+            listParams={virtualListParams}
+            dirtySlugs={dirtySlugs}
+            titleField={titleField}
+            query={query}
+            onOpenItem={(slug) => setPane({ mode: "edit", slug })}
+          />
+
           {sections.length === 0 ? (
             <div style={emptyStateStyle}>
               {t("collections.noRegionBinding", { key: collectionKey })}
@@ -276,7 +285,7 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
             key={`create:${pane.translationOf ?? ""}:${pane.locale ?? ""}`}
             collectionKey={collectionKey}
             schema={meta.schema}
-            listParams={createListParams}
+            listParams={virtualListParams}
             translationOf={pane.translationOf}
             locale={pane.locale}
             onClose={() => setPane(null)}
@@ -304,6 +313,61 @@ const regionScrollStyle = /** @type {React.CSSProperties} */ ({
   scrollbarWidth: "none",
   paddingBottom: 16,
 });
+
+/**
+ * The caller's claim-derived slugs that have no record yet, as ordinary rows
+ * opening the ordinary editor: the first save is what materialises them.
+ *
+ * Mounted once above the sections rather than inside each, because the server
+ * returns the same `virtualItems` for every window: a page binding three
+ * filtered regions would otherwise show each derived row three times.
+ *
+ * Archived slugs are left out for now. They arrive here too, but the only
+ * useful action on one is restore, and writing to it answers 409, so a row
+ * that opens an editor would be worse than no row at all.
+ *
+ * @param {{
+ *   collectionKey: string,
+ *   listParams: import("../shared/contracts/schemas.js").CollectionListParams,
+ *   dirtySlugs: Set<string>,
+ *   titleField: string | null,
+ *   query: string,
+ *   onOpenItem: (slug: string) => void,
+ * }} props
+ */
+function DerivedRows({ collectionKey, listParams, dirtySlugs, titleField, query, onOpenItem }) {
+  const { virtualItems } = useCollection(collectionKey, listParams);
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return virtualItems.filter((row) => {
+      if (row.origin !== "derived" || row.slug == null) return false;
+      if (row.isArchived) return false;
+      if (!q) return true;
+      if (row.slug.toLowerCase().includes(q)) return true;
+      const title = itemTitle(row, titleField);
+      return title != null && title.toLowerCase().includes(q);
+    });
+  }, [virtualItems, query, titleField]);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <ul style={rowGroupStyle} data-cms-list>
+      {rows.map((row) => (
+        <li key={row.slug} style={{ listStyle: "none" }}>
+          <RegionItemRow
+            slug={/** @type {string} */ (row.slug)}
+            title={itemTitle(row, titleField)}
+            canEdit={row.canEdit}
+            dirty={dirtySlugs.has(/** @type {string} */ (row.slug))}
+            onOpen={() => onOpenItem(/** @type {string} */ (row.slug))}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Region section: humanized filter header + row list + load more
@@ -349,16 +413,12 @@ function RegionSection({
 
   useEffect(() => {
     if (isLoading || error) return;
-    // Drop only the slug-less new-item sentinel (AutoGenerated's create draft).
-    // A boot-GUID row that carries a slug is a RoleDerived virtual item, the
-    // user's own editable row, so it stays and renders as a normal row.
-    const real = items.filter((row) => row.id !== NEW_DRAFT_GUID || row.slug);
     if (offset === initialOffset) {
-      setAccumulated(real);
+      setAccumulated(items);
     } else {
       setAccumulated((prev) => {
         const seen = new Set(prev.map((row) => row.slug));
-        return [...prev, ...real.filter((row) => !seen.has(row.slug))];
+        return [...prev, ...items.filter((row) => !seen.has(row.slug))];
       });
     }
   }, [items, isLoading, error, offset, initialOffset]);
@@ -687,7 +747,7 @@ const localeChipAddStyle = /** @type {React.CSSProperties} */ ({
 });
 
 /**
- * Detail pane for one existing (or RoleDerived virtual) collection row.
+ * Detail pane for one collection row, persisted or claim-derived.
  * `useCollectionEditor` is lifted here so the footer actions and the form body
  * share one state.
  *
@@ -780,7 +840,7 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
  * "+ Yeni" toolbar row for AutoGenerated collections. Lives inside the
  * parallax list layer, so the create pane itself renders separately in the
  * panel's overlay slot; the two talk through the shared list cache (the
- * slug-less sentinel row's `draftData` is the stashed new-item draft).
+ * pending virtual row's `draftData` is the stashed new-item draft).
  *
  * @param {{
  *   collectionKey: string,
@@ -790,9 +850,9 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
  */
 function CreateButton({ collectionKey, listParams, onOpen }) {
   const t = useCmsStrings();
-  const { items } = useCollection(collectionKey, listParams);
-  const hasServerDraft = items.some(
-    (row) => row.id === NEW_DRAFT_GUID && !row.slug && row.draftData != null,
+  const { virtualItems } = useCollection(collectionKey, listParams);
+  const hasServerDraft = virtualItems.some(
+    (row) => row.origin === "pending" && row.draftData != null,
   );
 
   return (
@@ -842,7 +902,7 @@ function CreatePane({ collectionKey, schema, listParams, translationOf, locale, 
   } = useCollectionCreate({
     collectionKey,
     schema,
-    // Share the page's list window so the sentinel lookup hits the cache
+    // Share the page's list window so the pending-row lookup hits the cache
     // instead of a separate GET.
     listParams,
     active: isDraftWriter,

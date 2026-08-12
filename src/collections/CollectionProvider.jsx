@@ -469,10 +469,22 @@ export function CollectionProvider({ children }) {
         for (const [k, entry] of prev.entries()) {
           if (!k.startsWith(listPrefix)) continue;
           const idx = entry.items.findIndex((r) => r.slug === slug);
-          if (idx < 0) continue;
-          const items = entry.items.slice();
-          items[idx] = item;
-          next.set(k, { ...entry, items });
+          if (idx >= 0) {
+            const items = entry.items.slice();
+            items[idx] = item;
+            next.set(k, { ...entry, items });
+            mutated = true;
+            continue;
+          }
+          // A claim-derived slug lives in `virtualItems` until its first
+          // publish, and its editor patches drafts through here like any other
+          // row, so skipping this list would leave the row's draft state stale
+          // until the next fetch.
+          const vIdx = entry.virtualItems.findIndex((r) => r.slug === slug);
+          if (vIdx < 0) continue;
+          const virtualItems = entry.virtualItems.slice();
+          virtualItems[vIdx] = item;
+          next.set(k, { ...entry, virtualItems });
           mutated = true;
         }
         return mutated ? next : prev;

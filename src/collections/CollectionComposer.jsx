@@ -107,7 +107,8 @@ export function CollectionComposer({
 
 /**
  * Inner form, mounted only when create is allowed so `useCollectionCreate`
- * (and its sentinel list fetch) never runs for plain visitors.
+ * (and the list fetch it reads the pending row from) never runs for plain
+ * visitors.
  *
  * @param {{
  *   collectionKey: string,

@@ -616,6 +616,7 @@ export function CollectionProvider({ children }) {
           total: prior?.total ?? 0,
           offset: prior?.offset ?? params?.offset ?? 0,
           limit: prior?.limit ?? params?.limit ?? 0,
+          virtualItems: prior?.virtualItems ?? [],
           isLoading: true,
           error: null,
         });
@@ -633,6 +634,7 @@ export function CollectionProvider({ children }) {
               total: response.total,
               offset: response.offset,
               limit: response.limit,
+              virtualItems: response.virtualItems ?? [],
               isLoading: false,
               error: null,
             });
@@ -665,6 +667,7 @@ export function CollectionProvider({ children }) {
               total: prior?.total ?? 0,
               offset: prior?.offset ?? params?.offset ?? 0,
               limit: prior?.limit ?? params?.limit ?? 0,
+              virtualItems: prior?.virtualItems ?? [],
               isLoading: false,
               error: /** @type {Error} */ (err),
             });

@@ -17,9 +17,9 @@
  *   SyncManifestRequest,
  *   SyncResultResponse,
  *   CollectionListParams,
+ *   CollectionListResponse,
  *   CollectionItemResponse,
  *   MyCollectionResponse,
- *   PagedListResponse,
  * } from "./schemas.js"
  */
 
@@ -51,7 +51,7 @@
  *
  * @typedef {Object} CmsTransport
  * @property {(slug: string, opts?: CmsRequestOptions) => Promise<ContentResponse>} getContent
- * @property {(key: string, params?: CollectionListParams, opts?: CmsRequestOptions) => Promise<PagedListResponse<CollectionItemResponse>>} getCollection
+ * @property {(key: string, params?: CollectionListParams, opts?: CmsRequestOptions) => Promise<CollectionListResponse>} getCollection
  * @property {(key: string, slug: string, opts?: CmsRequestOptions) => Promise<CollectionItemResponse>} getCollectionItem
  * @property {(opts?: CmsRequestOptions) => Promise<MyCollectionResponse[]>} getMyCollections
  * @property {(request: UpdatePageRequest, opts?: CmsRequestOptions) => Promise<UpdatePageResponse>} updateContent

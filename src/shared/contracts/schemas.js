@@ -107,11 +107,19 @@
  * @property {string} label
  * @property {boolean} required
  * @property {boolean} readOnly
+ * @property {boolean} computed
+ *   Enrichment field: resolved from an external API at read time and never
+ *   stored, so a save payload must skip it. Always `readOnly` as well, which
+ *   means one `readOnly || computed` check covers both.
  * @property {boolean} filterable
  *   When true, the field can be used as a query-string filter against
  *   `GET /cms/collections/{key}?{field}={value}`. Backend rejects
  *   filtering on non-filterable fields with 400. UI uses this to gate
  *   which fields surface in filter pickers.
+ * @property {boolean} sortable
+ *   When true, `?sort={name}` accepts this field. Only `ShortText`, `Number`
+ *   and `Date` can be sortable. Build sort pickers from this rather than a
+ *   hardcoded list, since it is per collection.
  * @property {string[] | null} options   When non-empty, render as a select regardless of `type`.
  * @property {CollectionFieldDescriptor[] | null} itemFields
  *   Non-null only for `ObjectArray` fields: the schema for one element of the
@@ -121,18 +129,6 @@
  *
  * @typedef {Object} CollectionSchema
  * @property {CollectionFieldDescriptor[]} fields
- */
-
-/**
- * Envelope returned by paginated list endpoints (currently
- * `GET /cms/collections/{key}` with optional filter + offset/limit).
- *
- * @template T
- * @typedef {Object} PagedListResponse
- * @property {T[]} items
- * @property {number} total    Total matching rows across the entire collection (not just this page).
- * @property {number} offset
- * @property {number} limit
  */
 
 /**
@@ -146,6 +142,73 @@
  * @property {string} [locale]
  *   Narrow the list to one language. Omit on a single-language site; the
  *   backend then answers with the Client's default locale.
+ * @property {string} [sort]
+ *   `field` or `field:asc` / `field:desc`, default `slug:asc`. Valid keys are
+ *   `slug`, `createdAt`, `updatedAt` and any field with `sortable: true`; an
+ *   unknown key or direction is a 400 that names what is available. Ties always
+ *   break on `slug` so paging stays stable, and rows missing the value sort
+ *   last in both directions.
+ * @property {boolean} [archived]
+ *   `true` returns the archive in place of the live rows, and only to editors
+ *   (403 otherwise). No `virtualItems` come back in this mode: a row that was
+ *   never created does not belong in an archive view.
+ */
+
+/**
+ * `GET /cms/collections/{key}`: one paginated window of a collection, plus the
+ * rows that have no record yet.
+ *
+ * `total` / `offset` / `limit` describe `items` alone. `virtualItems` is not
+ * paginated and comes back identical at every offset, so a paging list
+ * accumulates `items` and *replaces* `virtualItems`.
+ *
+ * @typedef {Object} CollectionListResponse
+ * @property {CollectionItemResponse[]} items
+ * @property {number} total
+ * @property {number} offset
+ * @property {number} limit
+ * @property {CollectionVirtualItem[]} [virtualItems]
+ *   Editor listings only, and absent rather than empty when there are none.
+ */
+
+/**
+ * A row the editor may write that has no database record behind it yet.
+ *
+ * Branch on `origin`, not on whether `slug` is set: the two origins publish and
+ * discard through different endpoints, and `slug` alone cannot tell them apart.
+ *
+ *   - `"pending"` — this editor's unpublished new-item draft. One slot per
+ *     (collection, locale), returned on *every* editor listing whatever the
+ *     `offset`, `sort` or filters, because the slot belongs to the editor
+ *     rather than to the current view. Never returned when `archived=true`.
+ *     Carries no slug even for `UserDefined` collections: the draft slot does
+ *     not store one, so the panel's form state is the only place it lives until
+ *     publish.
+ *   - `"derived"` — a claim-derived slug this caller owns but has never saved.
+ *     `PUT /cms/collections/{key}/{slug}` at that same slug is what turns it
+ *     into a real record.
+ *
+ * Every persisted field is absent, so this is deliberately not a
+ * `CollectionItemResponse`: there is no row yet, so no `id` to key by and no
+ * `version` to conflict on. Key virtual rows by `` `${origin}:${slug ?? ""}` ``.
+ *
+ * @typedef {Object} CollectionVirtualItem
+ * @property {"pending" | "derived"} origin
+ * @property {string} [slug]        `derived` only.
+ * @property {*} data
+ *   The published side: empty, but carrying any `computed` enrichment the
+ *   collection resolves, so a team page can show its member count before
+ *   anyone has written it.
+ * @property {*|null} [draftData]   What the editor has typed but not published.
+ * @property {boolean} canEdit
+ * @property {string} [updatedAt]
+ *   `pending` only: when the slot was last autosaved. There is no `createdAt`,
+ *   since nothing has been created.
+ * @property {boolean} [isArchived]
+ *   `derived` only, and only when true: this slug's record exists but sits in
+ *   the archive. Offer restore rather than an editor; the row would otherwise
+ *   appear in no default view at all, and its owner would never learn the slug
+ *   was taken down.
  */
 
 /**
@@ -153,19 +216,27 @@
  * the requesting user can interact with (CanCreate or at least one virtual
  * slug). The drawer uses this to decide which collection tabs to open.
  *
- * @typedef {"AutoGenerated" | "RoleDerived" | "UserDefined"} CollectionSlugSource
+ * @typedef {"AutoGenerated" | "ClaimDerived" | "UserDefined"} CollectionSlugSource
  *
  * @typedef {Object} MyCollectionResponse
  * @property {string} collectionKey
  * @property {CollectionSchema} schema
  * @property {boolean} canCreate
- *   When false, the user has no global create permission; virtual slugs
- *   (version === 0 in the list) are their only way to produce new rows.
+ *   When false, the user has no global create permission; the derived rows in
+ *   `virtualItems` are their only way to produce new records.
  * @property {CollectionSlugSource} slugSource
- *   `AutoGenerated` collections accept POST creation (backend derives the
- *   slug from a designated field, e.g. `data.title` for News). `RoleDerived`
- *   collections reject POST entirely; create happens via PUT to the virtual
- *   slug that already comes back in the list response.
+ *   Decides both the create call and whether the panel shows a slug input:
+ *
+ *   - `AutoGenerated` — no slug input; the backend derives one from a declared
+ *     field on publish. Create is `POST /cms/collections/{key}/`, and a `PUT`
+ *     at a slug that does not exist is refused ("use POST to create items").
+ *   - `UserDefined` — the editor types the slug; `PUT /cms/collections/{key}/{slug}`
+ *     upserts. The draft slot does not store the slug, so it survives a reload
+ *     only in the panel's own form state.
+ *   - `ClaimDerived` — no slug input either; the slug comes from the caller's
+ *     claims and arrives as a `derived` entry in `virtualItems`. `PUT` at that
+ *     same slug is what materialises it, and a non-administrator may do so for
+ *     their own derived slugs and nothing else.
  * @property {string[]} [locales]
  *   Languages this collection holds, in the collection's own definition rather
  *   than the site's: a collection is shared, so its coverage can be narrower
@@ -183,18 +254,18 @@ export const NEW_DRAFT_GUID = "00000000-0000-0000-0000-000000000000";
  * One row from `GET /cms/collections/{key}` (list) or `.../{slug}` (single).
  * Backend-owned shape; `data` is the per-collection payload.
  *
+ * Every row here is persisted. Rows that exist only as a claim or a draft come
+ * back in `virtualItems` as `CollectionVirtualItem` instead.
+ *
  * @typedef {Object} CollectionItemResponse
  * @property {string} id
- *   Persisted row id, or `Guid.Empty` for virtual rows not yet created.
- *   NOT unique across a list (many virtual rows share `Guid.Empty`), so never
- *   use it as a React key; key by `slug`.
  * @property {string} collectionKey
  * @property {string} slug
- *   Stable, unique-within-collection identity, even when `id` is `Guid.Empty`.
- *   Use this as the React key. Unique across the whole collection, languages
- *   included: a record and its translation are two rows with two slugs
- *   (`yeni-urun` / `new-product`), which is why every per-slug endpoint
- *   addresses one row without being told a locale.
+ *   Stable, unique-within-collection identity, and what to key rows by. Unique
+ *   across the whole collection, languages included: a record and its
+ *   translation are two rows with two slugs (`yeni-urun` / `new-product`),
+ *   which is why every per-slug endpoint addresses one row without being told
+ *   a locale.
  * @property {string} [locale]   Language this row is written in.
  * @property {string|null} [translationGroupId]
  *   The group this row belongs to. Every record gets one at creation, so a
@@ -207,14 +278,26 @@ export const NEW_DRAFT_GUID = "00000000-0000-0000-0000-000000000000";
  *   Absent on a backend without translation support.
  * @property {*} data
  * @property {number} version
+ *   Optimistic concurrency token for the *content*. Archiving and restoring
+ *   deliberately leave it alone, so a tab holding the pre-archive number still
+ *   holds a current one once the row comes back.
+ * @property {string} [createdAt]  ISO 8601 UTC.
+ * @property {string} [updatedAt]  ISO 8601 UTC.
  * @property {boolean} canEdit
  *   Whether the user can write this row through the collection's own admin
  *   surface. The CMS never writes; forwarded to render-props for
- *   "edit elsewhere" links.
+ *   "edit elsewhere" links. Per row, not per collection: on a `ClaimDerived`
+ *   collection an editor owns only their own rows while an administrator owns
+ *   all of them, so gate the edit affordance on this rather than recomputing
+ *   the rule in the panel.
  * @property {*|null} [draftData]
- *   Admin-only overlay: pending draft for this user + (key, slug), or the
- *   new-item draft for virtual rows. Drawer editors seed from `draftData ??
- *   data`. A successful publish auto-clears it server-side.
+ *   Admin-only overlay: this user's pending draft for (key, slug). Drawer
+ *   editors seed from `draftData ?? data`. A successful publish auto-clears it
+ *   server-side.
+ * @property {boolean} [isArchived]
+ *   Present only on an archived row, so absence means live. Writes to an
+ *   archived row answer 409 with `reason: "archived"`.
+ * @property {string} [archivedAt]  Present only on an archived row.
  */
 
 /**

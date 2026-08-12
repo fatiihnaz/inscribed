@@ -12,7 +12,7 @@ import { CmsApiError, toApiError } from "../shared/contracts/errors.js";
 
 /**
  * @import { CmsTransport, CmsRequestOptions } from "../shared/contracts/transport.js"
- * @import { CollectionListParams, CollectionItemResponse, PagedListResponse } from "../shared/contracts/schemas.js"
+ * @import { CollectionListParams, CollectionListResponse, CollectionItemResponse } from "../shared/contracts/schemas.js"
  */
 
 /**
@@ -124,6 +124,10 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
         // client's cache key, so a locale outside it would let two languages
         // collide in one entry.
         if (params.locale) u.searchParams.set("locale", params.locale);
+        if (params.sort) u.searchParams.set("sort", params.sort);
+        if (typeof params.archived === "boolean") {
+          u.searchParams.set("archived", String(params.archived));
+        }
       }
       const res = await fetch(u.toString(), {
         method: "GET",
@@ -134,16 +138,17 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
       if (!res.ok) throw await toApiError(res);
       const body = await res.json();
       // Older backends return a raw array; coerce it to the paged shape so
-      // downstream always sees one contract.
+      // downstream always sees one contract. No `virtualItems` either way:
+      // absent means none, which is what such a backend has.
       if (Array.isArray(body)) {
-        return /** @type {PagedListResponse<CollectionItemResponse>} */ ({
+        return /** @type {CollectionListResponse} */ ({
           items: body,
           total: body.length,
           offset: params?.offset ?? 0,
           limit: params?.limit ?? body.length,
         });
       }
-      return /** @type {PagedListResponse<CollectionItemResponse>} */ (body);
+      return /** @type {CollectionListResponse} */ (body);
     },
 
     async getCollectionItem(key, slug, opts = {}) {

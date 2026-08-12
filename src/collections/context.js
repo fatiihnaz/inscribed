@@ -17,7 +17,7 @@ import { createContext, useContext } from "react";
 import { stableStringify } from "../shared/util/stable-stringify.js";
 
 /**
- * @import { MyCollectionResponse, CollectionItemResponse, CollectionBinding } from "../shared/contracts/schemas.js"
+ * @import { MyCollectionResponse, CollectionItemResponse, CollectionVirtualItem, CollectionBinding } from "../shared/contracts/schemas.js"
  */
 
 // Collection bindings share the drawer's single `activeBlock` channel with
@@ -68,6 +68,14 @@ export function collectionRegionBindingId(collection, filter) {
  * @property {number} total
  * @property {number} offset
  * @property {number} limit
+ * @property {CollectionVirtualItem[]} virtualItems
+ *   Rows with no record behind them yet. Normalised to `[]` rather than left
+ *   absent, since every consumer would otherwise repeat the same guard.
+ *
+ *   Stored per window like the rest of the entry even though the server sends
+ *   the same array to every window: the alternative, one collection-level slot,
+ *   would need its own invalidation path and could go stale against the window
+ *   that last fetched it.
  * @property {boolean} isLoading
  * @property {Error | null} error
  */

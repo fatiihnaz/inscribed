@@ -22,7 +22,7 @@ import { resolveItemData } from "../../core/resolve.js";
 import { useCmsRoute } from "../../core/hooks/use-cms-route.js";
 
 /**
- * @import { CollectionItemResponse } from "../../shared/contracts/schemas.js"
+ * @import { CollectionItemResponse, CollectionVirtualItem } from "../../shared/contracts/schemas.js"
  * @import { CmsApiError } from "../../shared/contracts/errors.js"
  */
 
@@ -32,6 +32,11 @@ import { useCmsRoute } from "../../core/hooks/use-cms-route.js";
  * @property {number} total
  * @property {number} offset
  * @property {number} limit
+ * @property {CollectionVirtualItem[]} virtualItems
+ *   Rows the editor may write that have no record yet, empty for anonymous
+ *   readers. Outside `items` and outside `total`, and not paginated: the same
+ *   array comes back at every offset, so a list paging through windows
+ *   accumulates `items` but replaces this.
  * @property {boolean} isLoading
  * @property {CmsApiError|Error|null} error
  * @property {() => Promise<void>} refetch
@@ -75,18 +80,24 @@ export function useCollection(key, params) {
 
   // Live-edit overlay: show the admin's edits as they type. Subscribe to the
   // draft map but bail unless a draft for one of this window's rows changed,
-  // so editing row X only re-renders the lists showing X.
-  const rowsRef = useRef(/** @type {CollectionItemResponse[] | undefined} */ (undefined));
-  rowsRef.current = entry?.items;
+  // so editing row X only re-renders the lists showing X. Derived virtual rows
+  // count: they own a slug and an editor writes them like any other row, so
+  // leaving them out would freeze the list while their editor types.
+  const rowsRef = useRef(/** @type {string[]} */ ([]));
+  rowsRef.current = useMemo(
+    () => [
+      ...(entry?.items ?? []).map((row) => row.slug),
+      ...(entry?.virtualItems ?? []).map((row) => row.slug).filter((s) => s != null),
+    ],
+    [entry],
+  );
   const drafts = useStoreSelector(
     collectionStore,
     (s) => s.drafts,
     (prev, next) => {
       if (prev === next) return true;
-      const rows = rowsRef.current;
-      if (!rows) return false;
-      for (const row of rows) {
-        const k = `${key}:${row.slug}`;
+      for (const slug of rowsRef.current) {
+        const k = `${key}:${slug}`;
         if (prev.get(k) !== next.get(k)) return false;
       }
       return true;
@@ -101,11 +112,24 @@ export function useCollection(key, params) {
     return raw.map((row) => resolveItemData(row, drafts.get(`${key}:${row.slug}`)));
   }, [entry, drafts, key]);
 
+  // Same overlay, minus the local-draft lookup for the pending slot: it has no
+  // slug to key a draft by, and its composer holds the working copy in its own
+  // state rather than the shared map. `draftData` still promotes, which is what
+  // repopulates a composer after a reload.
+  const virtualItems = useMemo(() => {
+    const raw = entry?.virtualItems ?? [];
+    return raw.map((row) => resolveItemData(
+      row,
+      row.slug == null ? undefined : drafts.get(`${key}:${row.slug}`),
+    ));
+  }, [entry, drafts, key]);
+
   return {
     items,
     total: entry?.total ?? 0,
     offset: entry?.offset ?? params?.offset ?? 0,
     limit: entry?.limit ?? params?.limit ?? 0,
+    virtualItems,
     // No entry yet = fetch about to fire; treat as loading.
     isLoading: entry ? entry.isLoading : true,
     error: entry?.error ?? null,

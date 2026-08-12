@@ -61,9 +61,13 @@ export function isBlockDirty(block, hasLocalDraft, localDraft) {
  * Returns the original reference when nothing changes, so a list re-render
  * doesn't hand every consumer a new object.
  *
- * @param {CollectionItemResponse} row
+ * Generic over the row so virtual rows (no `id`, no `version`) go through the
+ * same precedence as persisted ones and keep their own shape.
+ *
+ * @template {{ data: *, draftData?: * }} TRow
+ * @param {TRow} row
  * @param {*} localDraft  The `drafts` entry for this row, or `undefined`.
- * @returns {CollectionItemResponse}
+ * @returns {TRow}
  */
 export function resolveItemData(row, localDraft) {
   if (localDraft !== undefined) {

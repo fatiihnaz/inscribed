@@ -16,7 +16,7 @@ import { noServiceToken } from "../defaults/service-token.js";
 /**
  * @import { CmsConfig } from "../shared/config.js"
  * @import { ServiceTokenProvider } from "../shared/contracts/service-token.js"
- * @import { BlockResponse, CollectionItemResponse, CollectionListParams, ContentResponse, PagedListResponse, SyncManifestRequest, SyncResultResponse } from "../shared/contracts/schemas.js"
+ * @import { BlockResponse, CollectionItemResponse, CollectionListParams, CollectionListResponse, ContentResponse, SyncManifestRequest, SyncResultResponse } from "../shared/contracts/schemas.js"
  */
 
 /**
@@ -194,7 +194,10 @@ export async function getCmsPageBlocks(config, slug, options) {
  * @param {string} key                       Backend collection key, e.g. "news".
  * @param {CollectionListParams} [params]    Filter / offset / limit.
  * @param {GetCmsContentOptions} [options]
- * @returns {Promise<PagedListResponse<CollectionItemResponse>>}
+ * @returns {Promise<CollectionListResponse>}
+ *   Server-rendered windows are fetched with a service token, so they never
+ *   carry `virtualItems`: those belong to a signed-in editor, not to the
+ *   shared ISR cache entry.
  */
 export async function getCmsCollection(config, key, params, options) {
   const getServiceToken = config.getServiceToken ?? noServiceToken;

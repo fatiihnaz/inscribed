@@ -54,6 +54,8 @@ export const collections = Object.freeze({
   "collections.undoRecord": "Bu kaydın değişikliklerini geri al",
   "collections.newRecordIn": "Yeni {key}",
   "collections.newRecordInLocale": "Yeni {key} · {locale}",
+  "collections.slugLabel": "Slug",
+  "collections.slugPlaceholder": "bahar-senligi",
 
   "collections.accessFailed": "Erişim listesi alınamadı: {message}",
   "collections.recordFailed": "{collection}/{slug} alınamadı: {message}",
@@ -91,6 +93,8 @@ export const collections = Object.freeze({
   "collections.archivedConflict": "Bu kayıt arşivde, yazılamaz. Önce geri getir.",
   "collections.editForbidden": "Bu kaydı düzenleme yetkin yok.",
   "collections.createRace": "Aynı anda başka bir yazma işlemi oldu. Tekrar dene.",
+  "collections.slugMissing": "Bu collection'da yeni kayıt için slug yazman gerekiyor.",
+  "collections.slugTaken": "Bu slug'da kayıt zaten var. Başka bir slug yaz ya da mevcut kaydı açıp düzenle.",
   "collections.createForbidden": "Bu collection'da kayıt oluşturma yetkin yok.",
   "collections.unknownField": "Bilinmeyen alan: {field}",
 });

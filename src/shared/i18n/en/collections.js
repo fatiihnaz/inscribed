@@ -59,6 +59,8 @@ export const collections = Object.freeze({
   "collections.undoRecord": "Undo this record's changes",
   "collections.newRecordIn": "New {key}",
   "collections.newRecordInLocale": "New {key} · {locale}",
+  "collections.slugLabel": "Slug",
+  "collections.slugPlaceholder": "spring-festival",
 
   // The record form.
   "collections.accessFailed": "Could not load the access list: {message}",
@@ -100,6 +102,8 @@ export const collections = Object.freeze({
   "collections.archivedConflict": "This record is archived, so it can't be written to. Restore it first.",
   "collections.editForbidden": "You don't have rights to edit this record.",
   "collections.createRace": "Another write landed at the same time. Try again.",
+  "collections.slugMissing": "This collection needs a slug for the new record.",
+  "collections.slugTaken": "A record already lives at that slug. Pick another, or open the existing one to edit it.",
   "collections.createForbidden": "You don't have rights to create records in this collection.",
   "collections.unknownField": "Unknown field: {field}",
 });

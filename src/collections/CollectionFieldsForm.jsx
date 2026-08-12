@@ -523,6 +523,42 @@ function RowControl({ onClick, disabled, label, children }) {
   );
 }
 
+/**
+ * The slug input a `UserDefined` collection needs while creating a record.
+ *
+ * Deliberately outside `CollectionFieldsForm`: the slug addresses the record
+ * rather than living in its data, so it must not reach `buildPayload`, and the
+ * backend's new-item draft slot doesn't store it either. The pane holding this
+ * is the only place it lives until publish.
+ *
+ * @param {{
+ *   value: string,
+ *   onChange: (next: string) => void,
+ *   disabled?: boolean,
+ * }} props
+ */
+export function SlugField({ value, onChange, disabled }) {
+  const t = useCmsStrings();
+  return (
+    <label style={labelStyle}>
+      <span style={labelRowStyle}>
+        <span style={labelTextStyle}>{t("collections.slugLabel")}</span>
+        <span style={requiredMarkStyle} aria-label={t("collections.requiredField")}>*</span>
+      </span>
+      <input
+        type="text"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        spellCheck={false}
+        placeholder={t("collections.slugPlaceholder")}
+        className="inscribed-field"
+        style={inputStyle}
+      />
+    </label>
+  );
+}
+
 // ---- Helpers ---------------------------------------------------------------
 
 /**

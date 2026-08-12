@@ -231,8 +231,12 @@
  *     field on publish. Create is `POST /cms/collections/{key}/`, and a `PUT`
  *     at a slug that does not exist is refused ("use POST to create items").
  *   - `UserDefined` — the editor types the slug; `PUT /cms/collections/{key}/{slug}`
- *     upserts. The draft slot does not store the slug, so it survives a reload
- *     only in the panel's own form state.
+ *     is the only write path, create and update alike. Send no version to
+ *     create: at a slug that already holds a row the backend answers 400
+ *     ("Version is required when writing to existing item"), which is what
+ *     stops a create from overwriting someone else's record, and a stale one
+ *     answers 409. The draft slot does not store the slug, so it survives a
+ *     reload only in the panel's own form state.
  *   - `ClaimDerived` — no slug input either; the slug comes from the caller's
  *     claims and arrives as a `derived` entry in `virtualItems`. `PUT` at that
  *     same slug is what materialises it, and a non-administrator may do so for

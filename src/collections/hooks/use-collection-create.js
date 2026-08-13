@@ -87,7 +87,7 @@ export function useCollectionCreate({
 }) {
   const { config, getAccessToken, onAfterCollectionSave } = useCmsContext();
   const t = useCmsStrings();
-  const { updateCollectionItem, invalidateCollectionList, draftQueue } =
+  const { updateCollectionItem, invalidateCollectionList, patchCollectionPendingDraft, draftQueue } =
     useCollectionContext();
   // A record is composed in the language of the page composing it, unless the
   // caller is writing a translation and says otherwise.
@@ -154,6 +154,11 @@ export function useCollectionCreate({
         );
         if (ctx.isStale()) return;
         lastSyncedRef.current = serialized;
+        // Marked before the patch below: the seeding effect reads the same
+        // `draftData` we are about to write, and re-seeding from it would drop
+        // whatever was typed while the request was in flight.
+        seededRef.current = true;
+        patchCollectionPendingDraft(collectionKey, locale ?? null, payload);
       } catch (err) {
         if (ctx.isStale()) return;
         // eslint-disable-next-line no-console

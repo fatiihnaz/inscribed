@@ -24,6 +24,18 @@ import { deepEqual } from "../shared/util/deep-equal.js";
  */
 
 /**
+ * The language a list cache key's params name, or null for a window that names
+ * none. The key's tail is what `stableStringify` wrote, so it parses back.
+ *
+ * @param {string} serializedParams
+ * @returns {string | null}
+ */
+function windowLocale(serializedParams) {
+  const params = JSON.parse(serializedParams);
+  return typeof params?.locale === "string" ? params.locale : null;
+}
+
+/**
  * @param {{ children: React.ReactNode }} props
  */
 export function CollectionProvider({ children }) {
@@ -497,6 +509,42 @@ export function CollectionProvider({ children }) {
     [],
   );
 
+  // The composer's new-item draft, written into the `pending` virtual row the
+  // cached windows carry. The backend has the draft the moment the autosave
+  // lands, but nothing refetches between keystrokes, so without this the slot
+  // looks empty until a reload: close the create pane and the typed text is
+  // gone, and the draft badge never lights.
+  //
+  // Scoped to the windows of one language, because the slot is: composing a
+  // Turkish record and an English one are two drafts.
+  const patchCollectionPendingDraft = useCallback(
+    /** @param {string} key @param {string|null} locale @param {*} draftData */
+    (key, locale, draftData) => {
+      const listPrefix = `${key}|`;
+      setCollectionListCache((prev) => {
+        let mutated = false;
+        const next = new Map(prev);
+        for (const [k, entry] of prev.entries()) {
+          if (!k.startsWith(listPrefix)) continue;
+          if (windowLocale(k.slice(listPrefix.length)) !== (locale ?? null)) continue;
+          const idx = entry.virtualItems.findIndex((r) => r.origin === "pending");
+          // Inserted when absent: the backend sends the row only once a draft
+          // exists, so the first autosave of a session has none to patch.
+          const row = idx < 0
+            ? { origin: "pending", data: {}, canEdit: true }
+            : entry.virtualItems[idx];
+          const patched = { ...row, draftData, updatedAt: new Date().toISOString() };
+          const virtualItems = entry.virtualItems.slice();
+          if (idx < 0) virtualItems.unshift(patched); else virtualItems[idx] = patched;
+          next.set(k, { ...entry, virtualItems });
+          mutated = true;
+        }
+        return mutated ? next : prev;
+      });
+    },
+    [setCollectionListCache],
+  );
+
   const invalidateCollectionItem = useCallback(
     /** @param {string} key @param {string} slug */
     (key, slug) => {
@@ -771,6 +819,7 @@ export function CollectionProvider({ children }) {
       requestCollectionItem,
       updateCollectionItem,
       patchCollectionItem,
+      patchCollectionPendingDraft,
       invalidateCollectionItem,
       requestCollectionList,
       invalidateCollectionList,
@@ -795,6 +844,7 @@ export function CollectionProvider({ children }) {
       requestCollectionItem,
       updateCollectionItem,
       patchCollectionItem,
+      patchCollectionPendingDraft,
       invalidateCollectionItem,
       requestCollectionList,
       invalidateCollectionList,

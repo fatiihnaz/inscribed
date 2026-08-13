@@ -168,6 +168,11 @@ export function collectionRegionBindingId(collection, filter) {
  *   apply to published `data`, not `draftData`. Avoids a per-keystroke refetch
  *   storm and the race where a list refetch re-seeds the item from a
  *   not-yet-cleaned draft.
+ * @property {(key: string, locale: string|null, draftData: *) => void} patchCollectionPendingDraft
+ *   Composer autosave: write the new-item draft into the `pending` virtual row
+ *   of every cached window for that language, inserting the row when the
+ *   backend has not sent one yet. Without it the slot reads as empty until the
+ *   next list fetch, so reopening the create pane loses the typed text.
  * @property {(key: string, slug: string) => void} invalidateCollectionItem
  *   Drop the cache entry; the next mount refetches.
  * @property {(key: string, slug: string, payload: *) => void} setCollectionDraft

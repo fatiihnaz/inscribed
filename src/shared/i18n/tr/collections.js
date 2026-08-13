@@ -51,6 +51,8 @@ export const collections = Object.freeze({
   "collections.backToList": "Listeye dön",
   "collections.backToListTitle": "Listeye dön (Esc)",
   "collections.addTranslation": "{locale} çevirisini ekle",
+  "collections.viewLocale": "Dil",
+  "collections.viewLocaleIs": "{locale} dilinde çalış",
   "collections.undoRecord": "Bu kaydın değişikliklerini geri al",
   "collections.newRecordIn": "Yeni {key}",
   "collections.newRecordInLocale": "Yeni {key} · {locale}",

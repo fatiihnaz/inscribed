@@ -32,6 +32,7 @@ import { useCollection } from "../collections/hooks/use-collection.js";
 import { useCollectionCreate } from "../collections/hooks/use-collection-create.js";
 import { useCreateDraftRole, useDrawerDraftRole } from "../collections/hooks/use-draft-driver.js";
 import { useCollectionMeta } from "../collections/hooks/use-my-collections.js";
+import { useCollectionLocale } from "../collections/hooks/use-collection-locale.js";
 import { stableStringify } from "../shared/util/stable-stringify.js";
 
 import { useCollectionEditor } from "../collections/hooks/use-collection-editor.js";
@@ -154,6 +155,17 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
   // wants one answer to "what am I looking at", not three.
   const [sort, setSort] = useState(DEFAULT_SORT);
   const [showArchived, setShowArchived] = useState(false);
+  // Which language the panel is working in. Null means the route's, which is
+  // where an editor starts; picking another one is what lets them read the
+  // English rows and compose a new English record without leaving the page.
+  const [pickedLocale, setPickedLocale] = useState(/** @type {string | null} */ (null));
+  const routeLocale = useCollectionLocale(collectionKey);
+  // Checked against this collection rather than kept as picked: the panel is
+  // reused across collections, and the one being shown now may not hold the
+  // language the last one was switched to.
+  const locale = pickedLocale && meta?.locales?.includes(pickedLocale)
+    ? pickedLocale
+    : routeLocale;
 
   const titleField = useMemo(() => titleFieldName(meta?.schema), [meta]);
   const sortOptions = useMemo(() => sortableColumns(meta?.schema), [meta]);
@@ -207,8 +219,10 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
   // and share its cache entry, else fall back to a dedicated unfiltered fetch.
   const virtualListParams = useMemo(() => {
     const unfiltered = sections.find((s) => s.filter === undefined);
-    return buildListParams({ offset: unfiltered?.pageOffset ?? 0, limit: unfiltered?.pageLimit });
-  }, [sections]);
+    return buildListParams({
+      offset: unfiltered?.pageOffset ?? 0, limit: unfiltered?.pageLimit, locale,
+    });
+  }, [sections, locale]);
 
   const isPaneOpen = pane != null;
 
@@ -261,12 +275,18 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
           options={sortOptions}
           showArchived={showArchived}
           onToggleArchived={() => setShowArchived((v) => !v)}
+          locales={meta?.locales}
+          locale={locale}
+          // The open record belongs to the language being left, and its slug
+          // addresses no row in the new one, so the pane goes with it.
+          onLocaleChange={(next) => { setPickedLocale(next); setPane(null); }}
         />
 
         {supportsCreate && meta?.schema && !showArchived ? (
           <CreateButton
             collectionKey={collectionKey}
             listParams={virtualListParams}
+            locale={locale}
             onOpen={() => setPane({ mode: "create" })}
           />
         ) : null}
@@ -303,6 +323,7 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
                 query={query}
                 sort={sort}
                 archived={showArchived}
+                locale={locale}
                 onOpenItem={(slug) => setPane({ mode: "edit", slug })}
               />
             ))
@@ -331,7 +352,10 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
             slugSource={meta.slugSource}
             listParams={virtualListParams}
             translationOf={pane.translationOf}
-            locale={pane.locale}
+            // A translation names its own target language; a plain new record
+            // takes the one the panel is working in, which is how a first
+            // English record gets written without a Turkish one to hang it on.
+            locale={pane.locale ?? locale ?? undefined}
             onClose={() => setPane(null)}
           />
         ) : null}
@@ -359,7 +383,8 @@ const regionScrollStyle = /** @type {React.CSSProperties} */ ({
 });
 
 /**
- * Sort picker plus the archive toggle, in one strip under the search box.
+ * Sort picker, language switch and archive toggle, in one strip under the
+ * search box.
  *
  * The direction is a separate button rather than two entries per column: the
  * options come from the schema, so folding direction in would double a list
@@ -371,11 +396,19 @@ const regionScrollStyle = /** @type {React.CSSProperties} */ ({
  *   options: { value: string, labelKey?: string, label?: string }[],
  *   showArchived: boolean,
  *   onToggleArchived: () => void,
+ *   locales: string[] | undefined,
+ *   locale: string | null,
+ *   onLocaleChange: (next: string) => void,
  * }} props
  */
-function ListToolbar({ sort, onSortChange, options, showArchived, onToggleArchived }) {
+function ListToolbar({
+  sort, onSortChange, options, showArchived, onToggleArchived, locales, locale, onLocaleChange,
+}) {
   const t = useCmsStrings();
   const [column, direction] = splitSort(sort);
+  // One language is not a choice, and none at all means the collection isn't
+  // localized: either way there is nothing to switch between.
+  const showLocales = (locales?.length ?? 0) > 1;
 
   return (
     <div style={toolbarStyle}>
@@ -405,6 +438,26 @@ function ListToolbar({ sort, onSortChange, options, showArchived, onToggleArchiv
       </button>
 
       <span style={{ flex: 1 }} />
+
+      {showLocales ? (
+        <div style={localeSwitchStyle} role="group" aria-label={t("collections.viewLocale")}>
+          {locales.map((code) => {
+            const active = code === locale;
+            return (
+              <button
+                key={code}
+                type="button"
+                onClick={() => onLocaleChange(code)}
+                aria-pressed={active}
+                title={t("collections.viewLocaleIs", { locale: code.toUpperCase() })}
+                style={{ ...(active ? localeChipCurrentStyle : localeChipStyle), cursor: "pointer" }}
+              >
+                {code.toUpperCase()}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       <button
         type="button"
@@ -510,7 +563,7 @@ function DerivedRows({ collectionKey, listParams, dirtySlugs, titleField, query,
  */
 function RegionSection({
   collectionKey, filter, pageLimit, pageOffset, showHeader, dirtySlugs,
-  titleField, query, sort, archived, onOpenItem,
+  titleField, query, sort, archived, locale, onOpenItem,
 }) {
   const t = useCmsStrings();
   const initialLimit = pageLimit ?? DEFAULT_DRAWER_PAGE_SIZE;
@@ -521,14 +574,14 @@ function RegionSection({
   // Anything that changes which rows come back, and in what order, has to
   // restart the accumulation: pages gathered under the old ordering would
   // otherwise interleave with pages under the new one.
-  const windowKey = `${stableStringify(filter ?? null)}|${sort}|${archived}`;
+  const windowKey = `${stableStringify(filter ?? null)}|${sort}|${archived}|${locale ?? ""}`;
   const [accumulated, setAccumulated] = useState(
     /** @type {import("../shared/contracts/schemas.js").CollectionItemResponse[]} */ ([]),
   );
 
   const params = useMemo(
-    () => buildListParams({ filter, offset, limit, sort, archived }),
-    [filter, offset, limit, sort, archived],
+    () => buildListParams({ filter, offset, limit, sort, archived, locale }),
+    [filter, offset, limit, sort, archived, locale],
   );
   const { items, total, isLoading, error, refetch } = useCollection(collectionKey, params);
 
@@ -849,6 +902,11 @@ const translationBarStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
 });
 
+const localeSwitchStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  gap: 4,
+});
+
 const localeChipBase = /** @type {React.CSSProperties} */ ({
   font: `600 9px/1 ${FONT_SANS}`,
   letterSpacing: "0.05em",
@@ -1005,23 +1063,31 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
 // ---------------------------------------------------------------------------
 
 /**
- * "+ Yeni" toolbar row for AutoGenerated collections. Lives inside the
- * parallax list layer, so the create pane itself renders separately in the
- * panel's overlay slot; the two talk through the shared list cache (the
- * pending virtual row's `draftData` is the stashed new-item draft).
+ * "+ Yeni" toolbar row. Lives inside the parallax list layer, so the create
+ * pane itself renders separately in the panel's overlay slot; the two talk
+ * through the shared list cache (the pending virtual row's `draftData` is the
+ * stashed new-item draft).
+ *
+ * Names the language on a localized collection: the draft slot behind this row
+ * is per locale, so the row says which one is about to be written before the
+ * pane opens.
  *
  * @param {{
  *   collectionKey: string,
  *   listParams: import("../shared/contracts/schemas.js").CollectionListParams,
+ *   locale: string | null,
  *   onOpen: () => void,
  * }} props
  */
-function CreateButton({ collectionKey, listParams, onOpen }) {
+function CreateButton({ collectionKey, listParams, locale, onOpen }) {
   const t = useCmsStrings();
   const { virtualItems } = useCollection(collectionKey, listParams);
   const hasServerDraft = virtualItems.some(
     (row) => row.origin === "pending" && row.draftData != null,
   );
+  const label = locale
+    ? t("collections.newRecordInLocale", { key: collectionKey, locale: locale.toUpperCase() })
+    : t("collections.newRecordIn", { key: collectionKey });
 
   return (
     <div style={createBarStyle}>
@@ -1032,7 +1098,7 @@ function CreateButton({ collectionKey, listParams, onOpen }) {
         style={createButtonStyle}
       >
         <Plus size={13} />
-        <span style={{ flex: 1 }}>{t("collections.newRecordIn", { key: collectionKey })}</span>
+        <span style={{ flex: 1 }}>{label}</span>
         {hasServerDraft ? <span style={draftBadgeStyle}>{t("collections.draftBadge")}</span> : null}
       </button>
     </div>
@@ -1091,7 +1157,10 @@ function CreatePane({ collectionKey, schema, slugSource, listParams, translation
   return (
     <DetailPane
       onBack={onClose}
-      title={translationOf && locale
+      // Named whenever there is a language at all, not only for translations:
+      // on a localized collection the whole point is knowing which one you are
+      // composing in.
+      title={locale
         ? t("collections.newRecordInLocale", { key: collectionKey, locale: locale.toUpperCase() })
         : t("collections.newRecordIn", { key: collectionKey })}
       meta={hasServerDraft ? <span style={draftBadgeStyle}>{t("collections.draftBadge")}</span> : null}

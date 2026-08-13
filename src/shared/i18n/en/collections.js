@@ -56,6 +56,8 @@ export const collections = Object.freeze({
   "collections.backToList": "Back to the list",
   "collections.backToListTitle": "Back to the list (Esc)",
   "collections.addTranslation": "Add the {locale} translation",
+  "collections.viewLocale": "Language",
+  "collections.viewLocaleIs": "Work in {locale}",
   "collections.undoRecord": "Undo this record's changes",
   "collections.newRecordIn": "New {key}",
   "collections.newRecordInLocale": "New {key} · {locale}",

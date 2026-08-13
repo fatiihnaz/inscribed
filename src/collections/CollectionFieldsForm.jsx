@@ -681,6 +681,15 @@ function swapOpen(set, a, b) {
  * Strips readOnly and computed fields - the backend ignores them anyway but
  * keeping the wire payload clean helps debugging.
  *
+ * Empty goes on the wire as `null`, not `""`: the form uses the empty string
+ * because that is what a controlled input holds when nothing is typed or
+ * picked, but stored as-is it reads like a value the editor chose. An unset
+ * date or select is the clearest case, since `""` is not a date or an option.
+ *
+ * Two things stay as they are. An empty array is a value ("no tags"), not an
+ * absent one, and an `Image` keeps its `{ src, alt }` shape whenever `src` is
+ * set, since the backend rejects a half-filled one.
+ *
  * @param {CollectionFieldDescriptor[]} fields
  * @param {Record<string, *>} values
  * @returns {Record<string, *>}
@@ -697,7 +706,13 @@ export function buildPayload(fields, values) {
       out[field.name] = items.map((item) => buildPayload(field.itemFields ?? [], item ?? {}));
       continue;
     }
-    out[field.name] = values[field.name];
+    if (field.type === "Image") {
+      const image = values[field.name];
+      out[field.name] = image?.src ? image : null;
+      continue;
+    }
+    const value = values[field.name];
+    out[field.name] = value === "" ? null : value;
   }
   return out;
 }

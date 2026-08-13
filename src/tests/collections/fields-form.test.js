@@ -64,12 +64,52 @@ describe("buildPayload - ObjectArray", () => {
       works: [{ title: "A", image: "", tags: ["x"], internal: "secret" }],
     };
     expect(buildPayload([works], values)).toEqual({
-      works: [{ title: "A", image: "", tags: ["x"] }],
+      works: [{ title: "A", image: null, tags: ["x"] }],
     });
   });
 
   it("coerces a non-array value to an empty array", () => {
     expect(buildPayload([works], { works: null })).toEqual({ works: [] });
+  });
+});
+
+describe("buildPayload - empty values", () => {
+  const field = (name, type, extra = {}) => ({
+    name, type, label: name, required: false, readOnly: false, computed: false,
+    filterable: false, sortable: false, options: null, help: null, itemFields: null, ...extra,
+  });
+
+  it("sends null for anything the editor left blank", () => {
+    // "" is what a controlled input holds, not something the editor picked. An
+    // unset date or select is the plainest case: "" is neither a date nor an
+    // option.
+    const fields = [
+      field("eventDate", "Date"),
+      field("status", "ShortText", { options: ["draft", "done"] }),
+      field("summary", "LongText"),
+      field("ticketUrl", "Url"),
+    ];
+    expect(buildPayload(fields, { eventDate: "", status: "", summary: "", ticketUrl: "" }))
+      .toEqual({ eventDate: null, status: null, summary: null, ticketUrl: null });
+  });
+
+  it("leaves filled values alone", () => {
+    const fields = [field("title", "ShortText"), field("featured", "Bool"), field("capacity", "Number")];
+    // `false` and `0` are values the editor chose, so neither turns into null.
+    expect(buildPayload(fields, { title: "Bahar", featured: false, capacity: 0 }))
+      .toEqual({ title: "Bahar", featured: false, capacity: 0 });
+  });
+
+  it("keeps an empty array, which says the list is empty rather than unset", () => {
+    expect(buildPayload([field("tags", "StringArray")], { tags: [] })).toEqual({ tags: [] });
+  });
+
+  it("nulls an image with no source, and keeps one that has it whole", () => {
+    const cover = field("cover", "Image");
+    expect(buildPayload([cover], { cover: { src: "", alt: "" } })).toEqual({ cover: null });
+    // Not stripped down to its src: the backend rejects a half-filled image.
+    const filled = { src: "https://cdn/x.jpg", alt: "Kapak" };
+    expect(buildPayload([cover], { cover: filled })).toEqual({ cover: filled });
   });
 });
 

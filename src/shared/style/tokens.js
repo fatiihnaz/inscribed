@@ -119,9 +119,14 @@ export const ACCENT        = "var(--ins-accent, #c9b896)";
 export const ACCENT_SOFT   = "color-mix(in srgb, var(--ins-accent, #c9b896) 14%, transparent)";
 export const ACCENT_LINE   = "color-mix(in srgb, var(--ins-accent, #c9b896) 30%, transparent)";
 
-// Horizontal outward reach of a block-level EditableRegion's roomy card. A
-// CmsGroup outline must clear this to actually enclose its children.
-export const ROOMY_INSET   = 10;
+// Outward reach of a block-level EditableRegion's halo, on every side. Painted
+// (outline + shadow spread), never padding, so it costs no layout. A CmsGroup
+// outline must clear it to actually enclose its children.
+//
+// Keep it under half the chip's height (~9px): the chip straddles the halo's
+// top line, so a larger inset leaves a gap between chip and content that the
+// pointer can fall through, dropping hover and taking the chip with it.
+export const ROOMY_INSET   = 8;
 
 export const COLLECTION_ACCENT = "var(--ins-collection, rgb(220, 195, 225))";
 export const COLLECTION_SOFT   = "color-mix(in srgb, var(--ins-collection, rgb(220,195,225)) 10%, transparent)";

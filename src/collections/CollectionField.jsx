@@ -35,7 +35,7 @@ import { useImageOverlayFits } from "../editors/inline/use-image-overlay-fits.js
 import { InlineTextEditor } from "../editors/inline/InlineTextEditor.jsx";
 import { InlineImageOverlay } from "../editors/inline/InlineImageOverlay.jsx";
 import { InlineImagePlaceholder } from "../editors/inline/InlineImagePlaceholder.jsx";
-import { RING_HOVER } from "../core/page-region-chrome.js";
+import { haloInset, RING_LINE } from "../core/page-region-chrome.js";
 import { RING_RADIUS } from "../shared/style/tokens.js";
 
 // Lazy so Tiptap never enters the public bundle: only an admin editing a
@@ -157,7 +157,8 @@ export function CollectionField({ name, as, html, placeholder = "Metin ekle…",
         // Same neutral hover line a region gets: without it an editable field
         // is invisible until clicked. The record's ring carries the accent, so
         // this one stays quiet.
-        boxShadow: isHovered ? RING_HOVER : undefined,
+        outline: `1px solid ${isHovered ? RING_LINE : "transparent"}`,
+        outlineOffset: haloInset(false),
         borderRadius: RING_RADIUS,
         cursor: "text",
         ...(rest.style ?? {}),

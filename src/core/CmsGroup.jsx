@@ -38,7 +38,7 @@ import { useCmsStrings } from "./hooks/use-cms-strings.js";
 const RING_COLOR_HOVER = `color-mix(in srgb, ${ACCENT} 50%, transparent)`;
 const RING_COLOR_OFF   = `color-mix(in srgb, ${ACCENT} 0%, transparent)`;
 // The dashed outline sits this far outside the group box; the label straddles it
-// and it must clear the children's roomy cards so the group wraps them.
+// and it must clear the children's halos so the group wraps them.
 const GROUP_OFFSET     = ROOMY_INSET + 4;
 
 /**

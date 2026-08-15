@@ -238,8 +238,8 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   }
 
   const wrapperDisplay = BLOCK_TAGS.has(innerTag) ? "block" : "inline-block";
-  // Padded card only for block-level text/rich; images stay tight (the overlay
-  // anchors to the image) and inline stays tight (no mid-sentence ballooning).
+  // Full halo only for block-level text/rich; images stay tight (the overlay
+  // anchors to the image) and inline keeps a hair (no mid-sentence crowding).
   const roomy = wrapperDisplay === "block" && !isImageType;
 
   return (

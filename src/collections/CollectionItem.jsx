@@ -333,7 +333,7 @@ const SAVE_STATES = {
 
 /**
  * Same shell as `EditableRegion`, in the collection accent: a neutral ring on
- * hover, the accent once selected, and the padded card (plus a chip that
+ * hover, the accent once selected, and the full halo (plus a chip that
  * straddles its ring line) when the rendered content is block-level.
  *
  * @param {{

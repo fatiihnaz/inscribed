@@ -222,8 +222,8 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
       {...rest}
       style={{
         ...userStyle,
-        // Insets last: a consumer `margin` shorthand would otherwise reset the
-        // roomy card's negative side margins back to zero.
+        // Chrome last: this wrapper is the consumer's own element, and their
+        // `outline` / `boxShadow` would otherwise swallow the region's ring.
         ...regionBoxStyle({
           display: userStyle.display ?? (roomy ? "block" : "inline-block"),
           roomy,

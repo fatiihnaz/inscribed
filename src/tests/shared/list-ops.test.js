@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { makeDefaultItem, moveItem, removeItem, addItem } from "../../shared/util/list-ops.js";
+import {
+  makeDefaultItem, moveItem, moveItemTo, moveItemToIndex, removeItem, addItem,
+} from "../../shared/util/list-ops.js";
 
 describe("makeDefaultItem", () => {
   it("builds an object from each field's defaultValue", () => {
@@ -48,6 +50,77 @@ describe("moveItem", () => {
     const items = ["a", "b"];
     expect(moveItem(items, 0, -1)).toBe(items); // can't go up from top
     expect(moveItem(items, 1, 1)).toBe(items); // can't go down from bottom
+  });
+});
+
+describe("moveItemTo", () => {
+  it("drops an item into a later gap, counting the slot it vacates", () => {
+    // Slot 3 is the gap between "c" and "d", so "a" lands third, not fourth.
+    expect(moveItemTo(["a", "b", "c", "d"], 0, 3)).toEqual(["b", "c", "a", "d"]);
+  });
+
+  it("drops an item into an earlier gap", () => {
+    expect(moveItemTo(["a", "b", "c", "d"], 3, 1)).toEqual(["a", "d", "b", "c"]);
+  });
+
+  it("drops past the last item", () => {
+    expect(moveItemTo(["a", "b", "c"], 0, 3)).toEqual(["b", "c", "a"]);
+  });
+
+  it("keeps object identity, so React's index keys stay honest", () => {
+    const a = { id: "a" };
+    const b = { id: "b" };
+    const moved = moveItemTo([a, b], 0, 2);
+    expect(moved[0]).toBe(b);
+    expect(moved[1]).toBe(a);
+  });
+
+  it("returns the SAME reference when the drop changes nothing", () => {
+    const items = ["a", "b", "c"];
+    expect(moveItemTo(items, 1, 1)).toBe(items); // into its own gap
+    expect(moveItemTo(items, 1, 2)).toBe(items); // into the gap just after it
+    expect(moveItemTo(items, 5, 0)).toBe(items); // no such item
+  });
+
+  it("clamps a slot beyond either end", () => {
+    const items = ["a", "b", "c"];
+    // Both clamp onto the item's own gap, so both are no-ops.
+    expect(moveItemTo(items, 2, 99)).toBe(items);
+    expect(moveItemTo(items, 0, -5)).toBe(items);
+    // From the far end they are real moves.
+    expect(moveItemTo(items, 0, 99)).toEqual(["b", "c", "a"]);
+    expect(moveItemTo(items, 2, -5)).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("moveItemToIndex", () => {
+  it("seats an item at the position a person would name", () => {
+    const items = ["a", "b", "c", "d", "e"];
+    // "be the fourth" from the front: a lands at index 3.
+    expect(moveItemToIndex(items, 0, 3)).toEqual(["b", "c", "d", "a", "e"]);
+    // ...and from behind: e lands at index 3 too.
+    expect(moveItemToIndex(items, 4, 3)).toEqual(["a", "b", "c", "e", "d"]);
+  });
+
+  it("carries the far end of a long list in one move", () => {
+    const items = Array.from({ length: 100 }, (_, i) => i);
+    const moved = moveItemToIndex(items, 99, 3);
+    expect(moved[3]).toBe(99);
+    expect(moved.indexOf(99)).toBe(3);
+    expect(moved).toHaveLength(100);
+  });
+
+  it("clamps a seat outside the list", () => {
+    const items = ["a", "b", "c"];
+    expect(moveItemToIndex(items, 0, 99)).toEqual(["b", "c", "a"]);
+    expect(moveItemToIndex(items, 2, -4)).toEqual(["c", "a", "b"]);
+  });
+
+  it("returns the SAME reference for its own seat, and for an empty list", () => {
+    const items = ["a", "b", "c"];
+    expect(moveItemToIndex(items, 1, 1)).toBe(items);
+    const empty = [];
+    expect(moveItemToIndex(empty, 0, 0)).toBe(empty);
   });
 });
 

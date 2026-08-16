@@ -15,11 +15,7 @@
 
 import { ROOMY_INSET, RING_RADIUS } from "../shared/style/tokens.js";
 
-/**
- * Tags that make a region block-level, which is what earns it the full halo.
- * Inline content keeps a hair of reach so a region mid-sentence doesn't crowd
- * the neighbouring words.
- */
+/** Tags that make a region block-level, which is what earns it the full halo. */
 export const BLOCK_TAGS = new Set([
   "div", "section", "article", "main", "aside", "header", "footer", "nav",
   "p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "blockquote",
@@ -34,9 +30,7 @@ export const RING_LINE = "rgba(127, 127, 127, 0.55)";
 export const bgActive = (accent) => `color-mix(in srgb, ${accent} 5%, transparent)`;
 
 /**
- * How far the ring and tint reach outside the content box. Nothing here takes
- * up layout, so this is pure breathing room: the full inset for a block-level
- * region, a hair for an inline one.
+ * How far the ring and tint reach outside the content box.
  *
  * @param {boolean} roomy
  */
@@ -52,9 +46,6 @@ export function regionBoxStyle({ display, roomy, highlight, hovered, accent }) {
   return {
     position: "relative",
     display,
-    // The ring is an outline (offset outward) and the tint is a shadow spread,
-    // because neither occupies layout. Padding would, and every block region
-    // would then push the page down the moment an admin loaded it.
     outline: `${highlight ? 1.5 : 1}px solid ${highlight ? accent : hovered ? RING_LINE : "transparent"}`,
     outlineOffset: inset,
     backgroundColor: highlight ? tint : "transparent",
@@ -85,8 +76,7 @@ const floatOnRing = (roomy) => ({
 });
 
 /**
- * The label chip: a real button, not a decorative tag, anchored to the
- * content's left edge (the halo's corner sits further out).
+ * The label chip: a real button, not a decorative tag.
  *
  * @param {{ roomy: boolean, highlight: boolean, accent: string, font: string }} args
  * @returns {React.CSSProperties}

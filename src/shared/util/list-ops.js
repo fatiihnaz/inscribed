@@ -44,6 +44,53 @@ export function moveItem(items, index, dir) {
 }
 
 /**
+ * Move the item at `from` into the gap at `to`, where `to` is an *insertion
+ * slot* (0 is before the first item, `items.length` is after the last) rather
+ * than a final index. That is what a drop position naturally is: the pointer
+ * sits in a gap, not on a seat.
+ *
+ * Returns the same array reference when the move is a no-op, so callers can
+ * skip the setState.
+ *
+ * @template T
+ * @param {T[]} items
+ * @param {number} from
+ * @param {number} to
+ * @returns {T[]}
+ */
+export function moveItemTo(items, from, to) {
+  if (from < 0 || from >= items.length) return items;
+  const slot = Math.max(0, Math.min(to, items.length));
+  // Pulling `from` out first shifts every later slot down one, so a drop past
+  // its own position lands one short without this.
+  const target = slot > from ? slot - 1 : slot;
+  if (target === from) return items;
+  const next = items.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(target, 0, moved);
+  return next;
+}
+
+/**
+ * Move the item at `from` so it ends up at `index`. The counterpart to
+ * `moveItemTo` for callers that name a seat rather than a gap: typing "4" into
+ * a position field means "be the fourth", not "go into the fourth gap".
+ *
+ * @template T
+ * @param {T[]} items
+ * @param {number} from
+ * @param {number} index
+ * @returns {T[]}
+ */
+export function moveItemToIndex(items, from, index) {
+  if (items.length === 0) return items;
+  const seat = Math.max(0, Math.min(index, items.length - 1));
+  // Landing past its own seat needs the gap one further along, because the
+  // pull-out shifts everything after it down.
+  return moveItemTo(items, from, seat >= from ? seat + 1 : seat);
+}
+
+/**
  * Return a new array with the item at `index` removed.
  *
  * @template T

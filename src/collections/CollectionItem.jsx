@@ -36,9 +36,11 @@ import { useStoreSelector } from "../shared/state/store.js";
 import { useContentRadius } from "../core/hooks/use-content-radius.js";
 import { useRecordDraftRole } from "./hooks/use-draft-driver.js";
 import { useCollectionEditor } from "./hooks/use-collection-editor.js";
-import { COLLECTION_ACCENT, STATUS_DANGER, STATUS_OK, TEXT_HI, TYPE_META } from "../shared/style/tokens.js";
+import { COLLECTION_ACCENT, STATUS_DANGER, STATUS_OK, TEXT_HI } from "../shared/style/tokens.js";
+import { TypeCollection } from "../shared/style/icons.jsx";
 import {
   BLOCK_TAGS,
+  CHROME_ICON,
   INK_BTN_CLASS,
   INK_CHIP_CLASS,
   ensureInkChromeStyle,
@@ -48,8 +50,6 @@ import {
   regionActionButtonStyle,
   chipDirtyDotStyle,
 } from "../core/page-region-chrome.js";
-
-const COLLECTION_GLYPH = TYPE_META.Collection.glyph;
 
 /**
  * @import { CollectionItemResponse } from "../shared/contracts/schemas.js"
@@ -395,9 +395,7 @@ function CollectionEditWrapper({ onClick, isActive, label, dirty, tag, actions, 
           className={INK_CHIP_CLASS}
           style={regionChipStyle({ roomy, highlight: isActive, accent: COLLECTION_ACCENT })}
         >
-          <span aria-hidden="true" style={{ fontWeight: 700, opacity: 0.85 }}>
-            {COLLECTION_GLYPH}
-          </span>
+          <TypeCollection size={CHROME_ICON} style={{ flexShrink: 0, opacity: 0.8 }} />
           {label}
           {dirty ? (
             <span aria-label={t("block.unsavedDot")} style={chipDirtyDotStyle} />

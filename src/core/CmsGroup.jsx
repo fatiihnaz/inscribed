@@ -15,7 +15,8 @@
 import { useContext, useState } from "react";
 
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../shared/state/group-context.js";
-import { regionChipStyle } from "./page-region-chrome.js";
+import { CHROME_ICON, regionChipStyle } from "./page-region-chrome.js";
+import { TypeGroup } from "../shared/style/icons.jsx";
 import { ACCENT, ROOMY_INSET } from "../shared/style/tokens.js";
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsStrings } from "./hooks/use-cms-strings.js";
@@ -105,7 +106,7 @@ export function CmsGroup({ name, children, style, editable, visible }) {
                 pointerEvents: "none",
               }}
             >
-              <span style={{ fontWeight: 700, opacity: 0.85 }}>§</span>
+              <TypeGroup size={CHROME_ICON} style={{ flexShrink: 0, opacity: 0.8 }} />
               {label}
             </span>
           ) : null}

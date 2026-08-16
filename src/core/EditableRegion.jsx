@@ -25,9 +25,11 @@ import { isBlockDirty, resolveBlockValue } from "./resolve.js";
 import { useImageOverlayFits } from "../editors/inline/use-image-overlay-fits.js";
 import { useContentRadius } from "./hooks/use-content-radius.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../shared/state/group-context.js";
-import { ACCENT, TYPE_META, TYPE_META_FALLBACK } from "../shared/style/tokens.js";
+import { ACCENT } from "../shared/style/tokens.js";
+import { typeIconFor } from "../shared/style/icons.jsx";
 import {
   BLOCK_TAGS,
+  CHROME_ICON,
   INK_CHIP_CLASS,
   ensureInkChromeStyle,
   haloInset,
@@ -153,7 +155,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   const isImageType = blockType === "Image";
 
   const dirty = isBlockDirty(block, hasLocalDraft, localDraft);
-  const glyph = (TYPE_META[/** @type {string} */ (blockType)] ?? TYPE_META_FALLBACK).glyph;
+  const TypeBadge = typeIconFor(blockType);
 
   let inner;
   let innerTag;
@@ -298,7 +300,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
           className={INK_CHIP_CLASS}
           style={regionChipStyle({ roomy, straddle, highlight, accent: ACCENT })}
         >
-          <span aria-hidden="true" style={{ fontWeight: 700, opacity: 0.85 }}>{glyph}</span>
+          <TypeBadge size={CHROME_ICON} style={{ flexShrink: 0, opacity: 0.8 }} />
           {fullPath}
           {dirty && (
             <span

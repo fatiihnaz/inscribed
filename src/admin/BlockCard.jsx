@@ -18,7 +18,7 @@
  */
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, Undo2, Lock, List as ListIcon } from "../shared/style/icons.jsx";
+import { ChevronDown, Undo2, Lock, typeIconFor } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
@@ -33,7 +33,7 @@ import { CollectionRecordForm } from "./CollectionRecordForm.jsx";
 import { BlockConflictNotice } from "./BlockConflictNotice.jsx";
 import { TranslationPrompt } from "./TranslationPrompt.jsx";
 import { blockResetStyle, dirtyDotStyle, rowContainerStyle, rowHeaderStyle, rowGuideBodyStyle, rowPathStyle, typeIconStyle, groupIconStyle } from "./drawer-styles.js";
-import { TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, HAIRLINE, FONT_SANS, FONT_MONO, R_MD, TYPE_META, TYPE_META_FALLBACK } from "../shared/style/tokens.js";
+import { TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, HAIRLINE, FONT_SANS, FONT_MONO, R_MD } from "../shared/style/tokens.js";
 
 // Field-weight types: a single light editor, rendered always-open as a form
 // field. Everything else (RichText/Image/List/Collection/unknown) keeps the
@@ -641,28 +641,20 @@ function blockPreview(blockType, value, t) {
 }
 
 /**
- * Block-type glyph badge (Aa for Text, ¶ for Rich, etc.), the cue admins scan
- * the list by. Monochrome on purpose: every row carries one, so per-type
- * colours would turn the form into confetti; the glyph shape alone does the
- * telling.
+ * Block-type badge, the cue admins scan the list by. Monochrome on purpose:
+ * every row carries one, so per-type colours would turn the form into confetti;
+ * the shape alone does the telling.
  *
  * @param {{ type: BlockType, compact?: boolean }} props
  */
-// Types whose glyph reads poorly when centered get a real SVG icon instead.
-const TYPE_ICON_OVERRIDES = { List: ListIcon };
-
 function TypeIcon({ type, compact }) {
-  const meta = TYPE_META[type] ?? TYPE_META_FALLBACK;
-  const Override = TYPE_ICON_OVERRIDES[type];
+  const Badge = typeIconFor(type);
   return (
     <span
       aria-hidden="true"
-      style={compact ? { ...groupIconStyle, font: typeIconStyle.font } : {
-        ...typeIconStyle,
-        color: TEXT_MUTED,
-      }}
+      style={compact ? groupIconStyle : { ...typeIconStyle, color: TEXT_MUTED }}
     >
-      {Override ? <Override size={12} /> : meta.glyph}
+      <Badge size={13} />
     </span>
   );
 }

@@ -21,7 +21,7 @@
  */
 
 import { useMemo } from "react";
-import { Pencil } from "../shared/style/icons.jsx";
+import { Pencil, TypeCollection, typeIconFor } from "../shared/style/icons.jsx";
 
 import { stableStringify } from "../shared/util/stable-stringify.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
@@ -29,7 +29,7 @@ import { diffWords, diffLines, stripHtml, lcsIndexPairs } from "./word-diff.js";
 
 import { emptyStateStyle } from "../editors/fields/styles.js";
 import { paneStyle, listStyle, rowContainerStyle, rowHeaderStyle, rowGuideBodyStyle, rowPathStyle, typeIconStyle } from "./drawer-styles.js";
-import { TEXT_MUTED, TEXT_FAINT, TEXT, HAIRLINE, SURFACE_1, RADIUS_SM, R_SM, FONT_MONO, COLLECTION_ACCENT, COLLECTION_LINE, STATUS_OK, STATUS_DANGER, STATUS_WARN, TYPE_META, TYPE_META_FALLBACK, FONT_SANS } from "../shared/style/tokens.js";
+import { TEXT_MUTED, TEXT_FAINT, TEXT, HAIRLINE, SURFACE_1, RADIUS_SM, R_SM, FONT_MONO, COLLECTION_ACCENT, COLLECTION_LINE, STATUS_OK, STATUS_DANGER, STATUS_WARN, FONT_SANS } from "../shared/style/tokens.js";
 
 /**
  * @import { BlockResponse, BlockType, ItemSchema } from "../shared/contracts/schemas.js"
@@ -130,12 +130,12 @@ const EMPTY_TRANSLATIONS = /** @type {import("../core/hooks/use-cms-save.js").Tr
  * @param {{ preview: import("../core/hooks/use-cms-save.js").TranslationPreview }} props
  */
 function TranslationDiffCard({ preview }) {
-  const meta = TYPE_META[preview.blockType] ?? TYPE_META_FALLBACK;
+  const TypeBadge = typeIconFor(preview.blockType);
   return (
     <div style={rowContainerStyle}>
       <div style={rowHeaderStyle}>
         <span aria-hidden="true" style={{ ...typeIconStyle, color: TEXT_MUTED }}>
-          {meta.glyph}
+          <TypeBadge size={13} />
         </span>
         <span style={rowPathStyle} title={preview.blockPath}>
           {preview.blockPath}
@@ -176,12 +176,11 @@ const localeBadgeStyle = /** @type {React.CSSProperties} */ ({
  */
 function CollectionDraftCard({ collectionKey, count, onGoToCollection }) {
   const t = useCmsStrings();
-  const meta = TYPE_META.Collection;
   return (
     <div style={rowContainerStyle}>
       <div style={rowHeaderStyle}>
         <span aria-hidden="true" style={{ ...typeIconStyle, color: TEXT_MUTED }}>
-          {meta.glyph}
+          <TypeCollection size={13} />
         </span>
         <span style={rowPathStyle} title={collectionKey}>
           {collectionKey}
@@ -214,7 +213,7 @@ function CollectionDraftCard({ collectionKey, count, onGoToCollection }) {
  */
 function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
   const t = useCmsStrings();
-  const meta = TYPE_META[block.blockType] ?? TYPE_META_FALLBACK;
+  const TypeBadge = typeIconFor(block.blockType);
   const next = draft !== undefined ? draft : block.draftValue;
   const prev = block.value;
 
@@ -231,10 +230,10 @@ function BlockDiffCard({ block, draft, itemSchema, onGoToBlock }) {
   return (
     <div style={rowContainerStyle}>
       <div style={rowHeaderStyle}>
-        {/* Monochrome like the block list's glyphs: every row carries one, so
+        {/* Monochrome like the block list's badges: every row carries one, so
             per-type colour would turn the list into confetti. */}
         <span aria-hidden="true" style={{ ...typeIconStyle, color: TEXT_MUTED }}>
-          {meta.glyph}
+          <TypeBadge size={13} />
         </span>
         <span style={rowPathStyle} title={block.blockPath}>
           {block.blockPath}

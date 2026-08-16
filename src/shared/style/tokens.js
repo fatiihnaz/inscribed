@@ -151,28 +151,28 @@ export const FONT_MONO = 'var(--ins-font-mono, ui-monospace, SFMono-Regular, "SF
 export const BORDER_SOFT   = HAIRLINE;
 export const TEXT_PRIMARY  = TEXT_HI;
 // ---------------------------------------------------------------------------
-// Block-type metadata (glyph + accent). Drives the TypeIcon badge and the
-// type label on each block card header.
+// Block-type metadata (colour + label). The badge drawing lives with the rest
+// of the icons; see `typeIconFor` in `icons.jsx`.
 // ---------------------------------------------------------------------------
 
 /**
- * Badge for a blockType this build doesn't know, e.g. an older SDK against a
+ * Metadata for a blockType this build doesn't know, e.g. an older SDK against a
  * newer backend. Keeps the row rendering instead of throwing on the lookup.
  *
- * @type {{ glyph: string, color: string, label: string }}
+ * @type {{ color: string, label: string }}
  */
-export const TYPE_META_FALLBACK = { glyph: "Aa", color: "rgb(186, 204, 230)", label: "Unknown" };
+export const TYPE_META_FALLBACK = { color: "rgb(186, 204, 230)", label: "Unknown" };
 
-/** @type {Record<string, { glyph: string, color: string, label: string }>} */
+/** @type {Record<string, { color: string, label: string }>} */
 export const TYPE_META = {
-  ShortText:  { glyph: "Aa", color: "rgb(186, 204, 230)", label: "Short" },
-  LongText:   { glyph: "≡a", color: "rgb(186, 204, 230)", label: "Long" },
-  RichText:   { glyph: "¶", color: "rgb(208, 192, 230)", label: "Rich" },
-  Image:      { glyph: "▢", color: "rgb(174, 218, 184)", label: "Image" },
-  Link:       { glyph: "↗", color: "rgb(228, 204, 164)", label: "Link" },
-  Date:       { glyph: "◷", color: "rgb(184, 222, 214)", label: "Date" },
-  List:       { glyph: "≡", color: "rgb(222, 204, 174)", label: "List" },
-  Collection: { glyph: "◫", color: COLLECTION_ACCENT, label: "Item" },
+  ShortText:  { color: "rgb(186, 204, 230)", label: "Short" },
+  LongText:   { color: "rgb(186, 204, 230)", label: "Long" },
+  RichText:   { color: "rgb(208, 192, 230)", label: "Rich" },
+  Image:      { color: "rgb(174, 218, 184)", label: "Image" },
+  Link:       { color: "rgb(228, 204, 164)", label: "Link" },
+  Date:       { color: "rgb(184, 222, 214)", label: "Date" },
+  List:       { color: "rgb(222, 204, 174)", label: "List" },
+  Collection: { color: COLLECTION_ACCENT, label: "Item" },
 };
 
 // Legacy alias: TYPE_STYLES had { color, bg, ring, label } per type.

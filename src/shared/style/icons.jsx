@@ -6,6 +6,9 @@
  *
  * To add one: copy its `__iconNode` array from the lucide-react package and
  * add an export.
+ *
+ * The block-type badges at the bottom are our own drawings in the same
+ * grammar; lucide's 24px-grid detail breaks up at the 12px they render at.
  */
 
 import { createElement, forwardRef } from "react";
@@ -156,6 +159,12 @@ export const Plus = createIcon("plus", [
   ["path", { d: "M12 5v14", key: "s699le" }],
 ]);
 
+export const Image = createIcon("image", [
+  ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", ry: "2", key: "1m3agn" }],
+  ["circle", { cx: "9", cy: "9", r: "2", key: "af1f0g" }],
+  ["path", { d: "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21", key: "1xmnt7" }],
+]);
+
 export const Upload = createIcon("upload", [
   ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
   ["polyline", { points: "17 8 12 3 7 8", key: "t8dd8p" }],
@@ -266,3 +275,102 @@ export const Link = createIcon("link", [
   ["path", { d: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71", key: "1cjeqo" }],
   ["path", { d: "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71", key: "19qd67" }],
 ]);
+
+// ---------------------------------------------------------------------------
+// Block-type badges
+//
+// One family, separating by shape rather than by letter ("Aa" and "≡a" were the
+// old glyphs, and a letterform is what stops reading as an icon). Two rules
+// hold the set together at badge size: every coordinate is even, so each stroke
+// lands on a whole pixel at 12px, and the stroke stays at the default 2, which
+// is exactly 1px there. Thinning it puts the edge on a half pixel.
+//
+// Image is the exception: it borrows lucide's own drawing above, so it sits off
+// that grid.
+// ---------------------------------------------------------------------------
+
+export const TypeShortText = createIcon("type-short-text", [
+  ["path", { d: "M6 9h12", key: "short-1" }],
+  ["path", { d: "M6 15h6", key: "short-2" }],
+]);
+
+export const TypeLongText = createIcon("type-long-text", [
+  ["path", { d: "M4 6h16", key: "long-1" }],
+  ["path", { d: "M4 12h16", key: "long-2" }],
+  ["path", { d: "M4 18h10", key: "long-3" }],
+]);
+
+// The paragraph again, behind a rule: text that carries formatting. Same 6/12/18
+// grid, so the rule spans the lines exactly rather than overhanging them.
+export const TypeRichText = createIcon("type-rich-text", [
+  ["path", { d: "M4 6v12", key: "rich-rule" }],
+  ["path", { d: "M10 6h10", key: "rich-1" }],
+  ["path", { d: "M10 12h10", key: "rich-2" }],
+  ["path", { d: "M10 18h6", key: "rich-3" }],
+]);
+
+export const TypeLink = createIcon("type-link", [
+  ["path", { d: "M10 6H8a4 4 0 0 0 0 8h2", key: "link-left" }],
+  ["path", { d: "M14 6h2a4 4 0 0 1 0 8h-2", key: "link-right" }],
+  ["path", { d: "M8 10h8", key: "link-bar" }],
+]);
+
+export const TypeDate = createIcon("type-date", [
+  ["rect", { width: "16", height: "14", x: "4", y: "6", rx: "2", key: "date-frame" }],
+  ["path", { d: "M8 4v4", key: "date-tab-left" }],
+  ["path", { d: "M16 4v4", key: "date-tab-right" }],
+  ["path", { d: "M4 12h16", key: "date-rule" }],
+]);
+
+export const TypeList = createIcon("type-list", [
+  ["path", { d: "M8 6h12", key: "list-1" }],
+  ["path", { d: "M8 12h12", key: "list-2" }],
+  ["path", { d: "M8 18h12", key: "list-3" }],
+  ["path", { d: "M4 6h.01", key: "list-dot-1" }],
+  ["path", { d: "M4 12h.01", key: "list-dot-2" }],
+  ["path", { d: "M4 18h.01", key: "list-dot-3" }],
+]);
+
+export const TypeCollection = createIcon("type-collection", [
+  ["path", { d: "M8 4h10a2 2 0 0 1 2 2v10", key: "collection-back" }],
+  ["rect", { width: "12", height: "12", x: "4", y: "8", rx: "2", key: "collection-front" }],
+]);
+
+// Not a block type: the CmsGroup label. Four corners, which is the dashed frame
+// the group draws around its children, reduced to a badge.
+export const TypeGroup = createIcon("type-group", [
+  ["path", { d: "M4 8V6a2 2 0 0 1 2-2h2", key: "group-tl" }],
+  ["path", { d: "M16 4h2a2 2 0 0 1 2 2v2", key: "group-tr" }],
+  ["path", { d: "M20 16v2a2 2 0 0 1-2 2h-2", key: "group-br" }],
+  ["path", { d: "M8 20H6a2 2 0 0 1-2-2v-2", key: "group-bl" }],
+]);
+
+export const TypeUnknown = createIcon("type-unknown", [
+  ["rect", { width: "16", height: "16", x: "4", y: "4", rx: "2", key: "unknown-frame" }],
+  ["path", { d: "M12 12h.01", key: "unknown-dot" }],
+]);
+
+/** @type {Record<string, typeof TypeShortText>} */
+const TYPE_ICONS = {
+  ShortText: TypeShortText,
+  // "Text" predates the Short/Long split and still reaches renderBlock, so it
+  // takes the paragraph instead of falling through to the unknown frame.
+  Text: TypeLongText,
+  LongText: TypeLongText,
+  RichText: TypeRichText,
+  Image,
+  Link: TypeLink,
+  Date: TypeDate,
+  List: TypeList,
+  Collection: TypeCollection,
+};
+
+/**
+ * Falls back to the empty frame rather than throwing: an older SDK against a
+ * newer backend still has to render the row.
+ *
+ * @param {string | null | undefined} blockType
+ */
+export function typeIconFor(blockType) {
+  return TYPE_ICONS[/** @type {string} */ (blockType)] ?? TypeUnknown;
+}

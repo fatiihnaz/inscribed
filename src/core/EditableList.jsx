@@ -34,7 +34,7 @@
 
 import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  Plus, Trash2, GripVertical,
+  Plus, Trash2, GripVertical, TypeList,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
 } from "../shared/style/icons.jsx";
 
@@ -54,7 +54,7 @@ import {
 import { useContentRadius } from "./hooks/use-content-radius.js";
 import {
   ACCENT, DUR_FAST, EASE, FONT_SANS, FS_XS, R_SM,
-  STATUS_DANGER, TEXT, TEXT_HI, RING_RADIUS, TYPE_META,
+  STATUS_DANGER, TEXT, TEXT_HI, RING_RADIUS,
 } from "../shared/style/tokens.js";
 import {
   BLOCK_TAGS,
@@ -338,9 +338,7 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
           className={INK_CHIP_CLASS}
           style={regionChipStyle({ roomy, highlight: isActive, accent: ACCENT })}
         >
-          <span aria-hidden="true" style={{ fontWeight: 700, opacity: 0.85 }}>
-            {TYPE_META.List.glyph}
-          </span>
+          <TypeList size={CHROME_ICON} style={{ flexShrink: 0, opacity: 0.8 }} />
           {fullPath}
           {dirty && <span aria-label={t("block.unsavedDot")} style={chipDirtyDotStyle} />}
         </button>

@@ -36,11 +36,12 @@ import { useCollectionLocale } from "../collections/hooks/use-collection-locale.
 import { stableStringify } from "../shared/util/stable-stringify.js";
 
 import { useCollectionEditor } from "../collections/hooks/use-collection-editor.js";
+import { Menu } from "./Menu.jsx";
 import { CollectionRecordForm, DraftIndicator } from "./CollectionRecordForm.jsx";
 import { CollectionFieldsForm, SlugField } from "../collections/CollectionFieldsForm.jsx";
 import { emptyStateStyle } from "../editors/fields/styles.js";
 import { buttonBaseStyle, paneStyle, btnGhostStyle, searchWrapStyle, searchInputStyle, searchClearStyle } from "./drawer-styles.js";
-import { BG, BG_RAISED, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, STATUS_DANGER, BORDER, HAIRLINE, SURFACE_1, FONT_MONO, FONT_SANS, RADIUS, R_BADGE, R_SM, R_BTN } from "../shared/style/tokens.js";
+import { BG, BG_RAISED, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, STATUS_DANGER, BORDER, HAIRLINE, SURFACE_1, FONT_MONO, FONT_SANS, PANEL_TRANSITION, RADIUS, R_BADGE, R_SM, R_BTN } from "../shared/style/tokens.js";
 
 const DEFAULT_DRAWER_PAGE_SIZE = 50;
 
@@ -409,55 +410,52 @@ function ListToolbar({
   // One language is not a choice, and none at all means the collection isn't
   // localized: either way there is nothing to switch between.
   const showLocales = (locales?.length ?? 0) > 1;
+  const ascending = direction === "asc";
+  const directionLabel = ascending ? t("collections.sortAsc") : t("collections.sortDesc");
+
+  const sortOptions = options.map((opt) => ({
+    value: opt.value,
+    label: opt.labelKey ? t(opt.labelKey) : (opt.label ?? opt.value),
+  }));
 
   return (
     <div style={toolbarStyle}>
-      <select
+      <Menu
         value={column}
-        onChange={(e) => onSortChange(`${e.target.value}:${direction}`)}
-        className="inscribed-field"
-        style={sortSelectStyle}
-        aria-label={t("collections.sortBy")}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.labelKey ? t(opt.labelKey) : opt.label}
-          </option>
-        ))}
-      </select>
+        options={sortOptions}
+        onChange={(next) => onSortChange(`${next}:${direction}`)}
+        label={t("collections.sortBy")}
+      />
 
       <button
         type="button"
-        onClick={() => onSortChange(`${column}:${direction === "asc" ? "desc" : "asc"}`)}
+        onClick={() => onSortChange(`${column}:${ascending ? "desc" : "asc"}`)}
         className="inscribed-btn-ghost"
         style={toolbarButtonStyle}
-        aria-label={direction === "asc" ? t("collections.sortAsc") : t("collections.sortDesc")}
-        title={direction === "asc" ? t("collections.sortAsc") : t("collections.sortDesc")}
+        aria-label={directionLabel}
+        title={directionLabel}
       >
-        {direction === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
+        {/* Swapped, not rotated: a 180° flip passes through horizontal, where an
+            arrow points at nothing and reads as a spinner. `mode="wait"` lets
+            the old one collapse before the new one grows, so the two arrowheads
+            never occupy the button at once. */}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={direction}
+            style={directionIconStyle}
+            initial={{ scale: 0.35, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.35, opacity: 0 }}
+            transition={{ duration: 0.13, ease: PANEL_TRANSITION.ease }}
+          >
+            {ascending ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
+          </motion.span>
+        </AnimatePresence>
       </button>
 
       <span style={{ flex: 1 }} />
 
-      {showLocales ? (
-        <div style={localeSwitchStyle} role="group" aria-label={t("collections.viewLocale")}>
-          {locales.map((code) => {
-            const active = code === locale;
-            return (
-              <button
-                key={code}
-                type="button"
-                onClick={() => onLocaleChange(code)}
-                aria-pressed={active}
-                title={t("collections.viewLocaleIs", { locale: code.toUpperCase() })}
-                style={{ ...(active ? localeChipCurrentStyle : localeChipStyle), cursor: "pointer" }}
-              >
-                {code.toUpperCase()}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      {showLocales ? <LocaleSwitch locales={locales} locale={locale} onChange={onLocaleChange} /> : null}
 
       <button
         type="button"
@@ -472,6 +470,55 @@ function ListToolbar({
       >
         <Archive size={13} />
       </button>
+    </div>
+  );
+}
+
+// Past this many languages the flat switch is wider than the space the toolbar
+// has left, so it folds into a menu. Three fits beside the sort picker at the
+// drawer's width; four does not.
+const SEGMENTED_LOCALE_LIMIT = 3;
+
+/**
+ * Flat while the languages fit, a menu once they don't. Two codes are one tap
+ * apart and that is worth keeping; eight would either wrap the toolbar onto a
+ * second line or scroll sideways, and both are worse than one extra tap.
+ *
+ * @param {{ locales: string[], locale: string | null, onChange: (next: string) => void }} props
+ */
+function LocaleSwitch({ locales, locale, onChange }) {
+  const t = useCmsStrings();
+
+  if (locales.length > SEGMENTED_LOCALE_LIMIT) {
+    return (
+      <Menu
+        value={locale ?? locales[0]}
+        options={locales.map((code) => ({ value: code, label: code.toUpperCase() }))}
+        onChange={onChange}
+        label={t("collections.viewLocale")}
+        triggerStyle={localeMenuTriggerStyle}
+      />
+    );
+  }
+
+  return (
+    <div style={localeSwitchStyle} role="group" aria-label={t("collections.viewLocale")}>
+      {locales.map((code) => {
+        const active = code === locale;
+        return (
+          <button
+            key={code}
+            type="button"
+            onClick={() => onChange(code)}
+            aria-pressed={active}
+            className="inscribed-seg"
+            title={t("collections.viewLocaleIs", { locale: code.toUpperCase() })}
+            style={active ? { ...localeChipCurrentStyle, cursor: "pointer" } : localeSegStyle}
+          >
+            {code.toUpperCase()}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -904,7 +951,20 @@ const translationBarStyle = /** @type {React.CSSProperties} */ ({
 
 const localeSwitchStyle = /** @type {React.CSSProperties} */ ({
   display: "inline-flex",
-  gap: 4,
+  gap: 2,
+});
+
+// The unselected halves of the segmented switch. Deliberately without a
+// `background`: the hover fill is a class rule, and an inline background (even
+// `transparent`) outranks it.
+const localeSegStyle = /** @type {React.CSSProperties} */ ({
+  font: `600 9px/1 ${FONT_SANS}`,
+  letterSpacing: "0.05em",
+  padding: "4px 7px",
+  borderRadius: R_BADGE,
+  border: 0,
+  color: TEXT_MUTED,
+  cursor: "pointer",
 });
 
 const localeChipBase = /** @type {React.CSSProperties} */ ({
@@ -1328,7 +1388,10 @@ const searchBarStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
 });
 
+// `position: relative` anchors the sort menu. The toolbar sits outside the
+// list's scroll box, so the panel can hang past it without being clipped.
 const toolbarStyle = /** @type {React.CSSProperties} */ ({
+  position: "relative",
   display: "flex",
   alignItems: "center",
   gap: 6,
@@ -1336,34 +1399,40 @@ const toolbarStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
 });
 
-const sortSelectStyle = /** @type {React.CSSProperties} */ ({
-  flex: "0 1 auto",
-  minWidth: 0,
-  padding: "4px 6px",
-  background: "transparent",
-  border: `1px solid ${HAIRLINE}`,
-  borderRadius: R_SM,
-  color: TEXT_MID,
-  font: `11px/1.4 ${FONT_SANS}`,
+// A two-letter code is a short label, so it gets the tracking the segmented
+// chips use rather than reading as a cramped word.
+const localeMenuTriggerStyle = /** @type {React.CSSProperties} */ ({
+  letterSpacing: "0.04em",
 });
 
+// Centres the arrow while it is mid-swap, when its own box is scaled down.
+const directionIconStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+});
+
+// No inline `border`, `background` or `color`: the frame and both hover states
+// come from `.inscribed-btn-ghost`, and an inline value of any of the three
+// outranks the class, which is what left these two buttons inert on hover. The
+// dropped border is also what puts them at the menu trigger's 24px rather than
+// 26px, so the strip finally lines up.
 const toolbarButtonStyle = /** @type {React.CSSProperties} */ ({
+  boxSizing: "border-box",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
   width: 24,
   height: 24,
   padding: 0,
-  background: "transparent",
-  border: `1px solid ${HAIRLINE}`,
+  border: 0,
   borderRadius: R_SM,
-  color: TEXT_MUTED,
   cursor: "pointer",
 });
 
 const toolbarButtonOnStyle = /** @type {React.CSSProperties} */ ({
   background: COLLECTION_SOFT,
-  borderColor: COLLECTION_LINE,
+  boxShadow: `inset 0 0 0 1px ${COLLECTION_LINE}`,
   color: COLLECTION_ACCENT,
 });
 

@@ -1071,4 +1071,21 @@ export const panelCss = `
     background: ${COLLECTION_SOFT};
     box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
   }
+
+  /* Menu (the toolbar's sort/language pickers). The selected row keeps the
+     collection accent on hover, so hovering never reads as reselecting. */
+  .inscribed-menu-item:hover { background: ${SURFACE_1}; color: ${TEXT_HI}; }
+  .inscribed-menu-item:focus-visible {
+    background: ${SURFACE_1};
+    box-shadow: inset 0 0 0 1px ${BORDER};
+  }
+  .inscribed-menu-item[data-selected="true"]:hover { color: ${COLLECTION_ACCENT}; }
+
+  /* Segmented language switch, used while the list is short enough to lay flat. */
+  .inscribed-seg {
+    background: transparent;
+    color: ${TEXT_MUTED};
+    transition: background 140ms ease, color 140ms ease;
+  }
+  .inscribed-seg:hover:not([aria-pressed="true"]) { background: ${SURFACE_1}; color: ${TEXT_HI}; }
 `;

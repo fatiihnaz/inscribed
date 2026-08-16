@@ -3,17 +3,21 @@
 /**
  * @file `<InlineImagePlaceholder>`: on-page drop-zone for an *empty* Image
  * block in admin mode. An empty block has no `<img>` to hover, so instead of the
- * bare "-" marker this renders the same upload dropzone as the drawer's
- * `ImageEditor` (click or drag to upload); URL/alt entry stays in the drawer,
- * reached via the label chip.
+ * bare "-" marker this renders an upload dropzone (click or drag); URL/alt entry
+ * stays in the drawer, reached via the label chip.
  *
- * Neutral gray + currentColor tones so it reads on a light or dark page.
+ * Dashed accent, like the list's add slot: on this page that is the shape a
+ * place-something-goes takes.
  */
 
 import { useRef, useState } from "react";
 
 import { useImageUpload } from "../use-image-upload.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
+import { Upload } from "../../shared/style/icons.jsx";
+import {
+  ACCENT, DUR_FAST, EASE, STATUS_DANGER, RING_RADIUS, R_PILL,
+} from "../../shared/style/tokens.js";
 
 /**
  * @param {Object} props
@@ -57,13 +61,13 @@ export function InlineImagePlaceholder({ onChange, style }) {
         justifyContent: "center",
         gap: 6,
         padding: "20px 16px",
-        border: `1.5px dashed ${isDragging ? "color-mix(in srgb, currentColor 45%, transparent)" : "rgba(127,127,127,0.3)"}`,
-        borderRadius: style?.borderRadius ?? 8,
-        background: isDragging ? "rgba(127,127,127,0.09)" : "rgba(127,127,127,0.04)",
+        border: `1.5px dashed color-mix(in srgb, ${ACCENT} ${isDragging ? 70 : 30}%, transparent)`,
+        borderRadius: style?.borderRadius ?? RING_RADIUS,
+        background: `color-mix(in srgb, ${ACCENT} ${isDragging ? 10 : 4}%, transparent)`,
         color: "inherit",
         fontFamily: "inherit",
         cursor: isUploading ? "default" : "pointer",
-        transition: "border-color 140ms ease, background-color 140ms ease",
+        transition: `border-color ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE}`,
       }}
     >
       {isUploading ? (
@@ -79,7 +83,7 @@ export function InlineImagePlaceholder({ onChange, style }) {
         </div>
       ) : (
         <>
-          <UploadIcon />
+          <Upload size={20} strokeWidth={1.75} style={{ opacity: 0.6 }} />
           <span style={hintStrongStyle}>
             {isDragging ? t("editors.image.drop") : t("editors.image.upload")}
           </span>
@@ -104,30 +108,19 @@ export function InlineImagePlaceholder({ onChange, style }) {
   );
 }
 
-function UploadIcon() {
-  return (
-    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ opacity: 0.6 }}>
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
-  );
-}
-
 const hintStrongStyle = { fontSize: 12.5, fontWeight: 500, opacity: 0.85 };
 const hintStyle = { fontSize: 11, opacity: 0.5 };
-const errorTextStyle = { fontSize: 11.5, marginTop: 2, color: "rgb(200,70,80)" };
+const errorTextStyle = { fontSize: 11.5, marginTop: 2, color: STATUS_DANGER };
 const progressTrackStyle = {
   width: "80%",
   height: 3,
-  borderRadius: 99,
-  background: "rgba(127,127,127,0.2)",
+  borderRadius: R_PILL,
+  background: `color-mix(in srgb, ${ACCENT} 20%, transparent)`,
   overflow: "hidden",
 };
 const progressFillStyle = {
   height: "100%",
-  borderRadius: 99,
-  background: "currentColor",
-  opacity: 0.55,
-  transition: "width 300ms ease",
+  borderRadius: R_PILL,
+  background: ACCENT,
+  transition: `width 300ms ${EASE}`,
 };

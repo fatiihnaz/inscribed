@@ -37,10 +37,13 @@ export const bgActive = (accent) => `color-mix(in srgb, ${accent} 5%, transparen
 export const haloInset = (roomy) => (roomy ? ROOMY_INSET : 2);
 
 /**
- * @param {{ display: string, roomy: boolean, highlight: boolean, hovered: boolean, accent: string }} args
+ * @param {{
+ *   display: string, roomy: boolean, highlight: boolean, hovered: boolean,
+ *   accent: string, radius?: string | number | null,
+ * }} args
  * @returns {React.CSSProperties}
  */
-export function regionBoxStyle({ display, roomy, highlight, hovered, accent }) {
+export function regionBoxStyle({ display, roomy, highlight, hovered, accent, radius }) {
   const inset = haloInset(roomy);
   const tint = bgActive(accent);
   return {
@@ -52,14 +55,16 @@ export function regionBoxStyle({ display, roomy, highlight, hovered, accent }) {
     // Carries the tint across the gap to the ring, so the two read as one card
     // rather than a fill with a detached outline around it.
     boxShadow: highlight ? `0 0 0 ${inset}px ${tint}` : "none",
-    borderRadius: RING_RADIUS,
+    // The browser derives the outline's corners from this plus the offset, so
+    // handing it the content's own radius is what keeps the ring concentric.
+    borderRadius: radius ?? RING_RADIUS,
     transition: "outline-color 0.15s ease, background-color 0.2s ease, box-shadow 0.2s ease",
   };
 }
 
 // Translucent ink + blur rather than a solid fill, so anything floating on the
-// ring line reads lightly over a bright page.
-const INK_SURFACE = /** @type {React.CSSProperties} */ ({
+// ring line reads lightly over a bright page, or over a photograph.
+export const INK_SURFACE = /** @type {React.CSSProperties} */ ({
   background: "color-mix(in srgb, var(--ins-bg, #1c1815) 82%, transparent)",
   backdropFilter: "blur(8px)",
   WebkitBackdropFilter: "blur(8px)",

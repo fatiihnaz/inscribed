@@ -2,10 +2,12 @@
 
 /**
  * @file `<InlineImageOverlay>`: on-image edit affordance for a filled Image
- * block. A semi-transparent scrim with "Değiştir" / "Kaldır" sits over the top
- * of the image (dark scrim + white text reads on any picture, same treatment as
- * ImageEditor's preview). Details (alt text, URL) live in the drawer, reached
- * via the label chip; this surface is just the quick replace/remove.
+ * block. Details (alt text, URL) live in the drawer, reached via the label
+ * chip; this surface is just the quick replace/remove.
+ *
+ * It is the same ink row a region's actions ride on, anchored inside the
+ * picture rather than on a ring line: translucent and blurred, so it reads over
+ * any photograph without a scrim of its own.
  *
  * The root is `pointer-events: none` so hover and a click on the bare image
  * still reach it (opening the drawer); only the button group opts back in.
@@ -16,6 +18,10 @@ import { useRef } from "react";
 
 import { useImageUpload } from "../use-image-upload.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
+import { INK_SURFACE, regionActionButtonStyle } from "../../core/page-region-chrome.js";
+import {
+  BORDER, FONT_MONO, STATUS_DANGER, TEXT_HI, TEXT_MID, R_SM,
+} from "../../shared/style/tokens.js";
 
 /**
  * @param {Object} props
@@ -39,7 +45,7 @@ export function InlineImageOverlay({ value, onChange }) {
       <span style={actionsStyle}>
         <button
           type="button"
-          style={btnStyle}
+          style={regionActionButtonStyle({ font: FONT_MONO, accent: TEXT_MID })}
           onClick={(e) => {
             e.stopPropagation();
             inputRef.current?.click();
@@ -48,16 +54,20 @@ export function InlineImageOverlay({ value, onChange }) {
           {t("editors.image.replace")}
         </button>
         {value?.src ? (
-          <button
-            type="button"
-            style={btnStyle}
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange({ src: "", alt });
-            }}
-          >
-            {t("editors.image.remove")}
-          </button>
+          <>
+            {/* Same rule the list row draws before its delete. */}
+            <span aria-hidden="true" style={dividerStyle} />
+            <button
+              type="button"
+              style={regionActionButtonStyle({ font: FONT_MONO, accent: STATUS_DANGER })}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange({ src: "", alt });
+              }}
+            >
+              {t("editors.image.remove")}
+            </button>
+          </>
         ) : null}
       </span>
 
@@ -93,49 +103,50 @@ const rootStyle = /** @type {React.CSSProperties} */ ({
   display: "block",
 });
 
+// Shape mirrors `regionActionsStyle`; only the anchoring differs, since this
+// row sits inside the picture rather than on a ring line.
 const actionsStyle = /** @type {React.CSSProperties} */ ({
+  ...INK_SURFACE,
   position: "absolute",
   top: 8,
   right: 8,
-  display: "flex",
-  gap: 6,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 2,
+  padding: 2,
+  borderRadius: R_SM,
   pointerEvents: "auto",
 });
 
-// Copied from ImageEditor's overlay buttons: dark scrim + white, safe on any image.
-const btnStyle = /** @type {React.CSSProperties} */ ({
-  padding: "4px 10px",
-  borderRadius: 6,
-  border: "1px solid rgba(255,255,255,0.25)",
-  background: "rgba(20,20,20,0.55)",
-  color: "#fff",
-  fontSize: 11,
-  fontWeight: 500,
-  cursor: "pointer",
-  fontFamily: "inherit",
-  backdropFilter: "blur(6px)",
+const dividerStyle = /** @type {React.CSSProperties} */ ({
+  width: 1,
+  alignSelf: "stretch",
+  margin: "0 2px",
+  background: BORDER,
 });
 
 const progressStyle = /** @type {React.CSSProperties} */ ({
+  ...INK_SURFACE,
   position: "absolute",
   inset: 0,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background: "rgba(20,20,20,0.45)",
-  color: "#fff",
-  fontSize: 12,
-  fontWeight: 500,
+  color: TEXT_HI,
+  fontFamily: FONT_MONO,
+  fontSize: 11,
+  letterSpacing: "0.02em",
 });
 
 const errorStyle = /** @type {React.CSSProperties} */ ({
+  ...INK_SURFACE,
   position: "absolute",
   left: 8,
   right: 8,
   bottom: 8,
   padding: "4px 8px",
-  borderRadius: 6,
-  background: "rgba(180,40,50,0.85)",
-  color: "#fff",
+  borderRadius: R_SM,
+  color: STATUS_DANGER,
+  fontFamily: FONT_MONO,
   fontSize: 11,
 });

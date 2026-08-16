@@ -17,6 +17,8 @@ import { EditorContent } from "@tiptap/react";
 
 import { useRichTextEditor } from "../rich-text/use-rich-text-editor.js";
 import { RichTextToolbar } from "../rich-text/RichTextToolbar.jsx";
+import { INK_SURFACE } from "../../core/page-region-chrome.js";
+import { BORDER, RADIUS, TEXT_HI } from "../../shared/style/tokens.js";
 
 const MARGIN = 8;
 
@@ -106,16 +108,16 @@ export function InlineRichText({ value, onChange, onFocus, onBlur, anchorRef, st
               // without it a click here blurs the editor and hides the bar.
               onMouseDown={(e) => e.preventDefault()}
               style={{
+                ...INK_SURFACE,
                 position: "fixed",
                 top: pos?.top ?? -9999,
                 left: pos?.left ?? -9999,
                 visibility: pos ? "visible" : "hidden",
                 zIndex: 2147483000,
                 maxWidth: `calc(100vw - ${2 * MARGIN}px)`,
-                background: "var(--ins-bg, #1c1815)",
-                color: "var(--ins-text, #f5f0e8)",
-                border: "1px solid rgba(127,127,127,0.24)",
-                borderRadius: "var(--ins-radius, 10px)",
+                color: TEXT_HI,
+                border: `1px solid ${BORDER}`,
+                borderRadius: RADIUS,
                 boxShadow: "0 8px 28px -6px rgba(0,0,0,0.4)",
               }}
             >

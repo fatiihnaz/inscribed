@@ -15,9 +15,16 @@ export const core = Object.freeze({
 
   "core.text.placeholder": "Add text…",
 
-  // Per-item controls on an admin-mode list.
+  // Per-item controls on an admin-mode list. Which pair of move labels applies
+  // is decided at hover time from the items' own boxes: a list laid out in a
+  // flex row moves left and right, not up and down.
   "core.item.moveUp": "Move up",
   "core.item.moveDown": "Move down",
+  "core.item.moveLeft": "Move left",
+  "core.item.moveRight": "Move right",
+  "core.item.reorder": "Drag to reorder",
+  "core.item.position": "Item {index} of {total}",
+  "core.item.moveTo": "Type a position to move it there",
   "core.item.remove": "Delete",
   "core.item.add": "Add item",
   "core.item.addLabel": "Add a new item",

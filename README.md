@@ -482,6 +482,15 @@ label chip on the block as a whole:
 The `as` wrapper renders in public mode too, so the layout is identical for
 visitors and admins, only the ring and chip are admin-only.
 
+Admins get an add slot after the last item, drawn as a ghost of a real card so
+the grid keeps its shape. Pass `inlineAdd={false}` for layouts a ghost card
+would spoil (a slider, a fixed-size grid); items are then added from the drawer
+and the rest of the page-side editing is unchanged.
+
+```jsx
+<EditableList blockPath="hero.slides" as="div" inlineAdd={false} itemSchema={{ … }}>
+```
+
 > `<EditableList>` uses a render-prop, a function child, so it must live in a
 > `"use client"` component. Wrap the usage and import that wrapper into your
 > server page. The Collection components below take element children instead,

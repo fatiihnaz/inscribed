@@ -73,6 +73,15 @@ export const ChevronRight = createIcon("chevron-right", [
   ["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }],
 ]);
 
+export const GripVertical = createIcon("grip-vertical", [
+  ["circle", { cx: "9", cy: "5", r: "1", key: "grip-l1" }],
+  ["circle", { cx: "9", cy: "12", r: "1", key: "grip-l2" }],
+  ["circle", { cx: "9", cy: "19", r: "1", key: "grip-l3" }],
+  ["circle", { cx: "15", cy: "5", r: "1", key: "grip-r1" }],
+  ["circle", { cx: "15", cy: "12", r: "1", key: "grip-r2" }],
+  ["circle", { cx: "15", cy: "19", r: "1", key: "grip-r3" }],
+]);
+
 export const ChevronsLeft = createIcon("chevrons-left", [
   ["path", { d: "m11 17-5-5 5-5", key: "13zhaf" }],
   ["path", { d: "m18 17-5-5 5-5", key: "h8a8et" }],

@@ -32,8 +32,11 @@
  * the page-side ring + label chip on the block as a whole.
  */
 
-import { Fragment, useContext, useEffect, useRef, useState } from "react";
-import { Plus, Trash2, ChevronUp, ChevronDown } from "../shared/style/icons.jsx";
+import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Plus, Trash2, GripVertical,
+  ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
+} from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsRoute } from "./hooks/use-cms-route.js";
@@ -42,12 +45,22 @@ import { useStoreSelector } from "../shared/state/store.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
 import { stableStringify } from "../shared/util/stable-stringify.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../shared/state/group-context.js";
-import { addItem, makeDefaultItem, moveItem, removeItem } from "../shared/util/list-ops.js";
-import { ACCENT, FONT_MONO, STATUS_DANGER, BG_RAISED, BORDER, TYPE_META } from "../shared/style/tokens.js";
+import { addItem, makeDefaultItem, moveItem, moveItemTo, moveItemToIndex, removeItem } from "../shared/util/list-ops.js";
+import { PositionField } from "../shared/ui/PositionField.jsx";
+import {
+  layoutBox, neighbourDirection, useListReorder,
+  LANDING_TRANSFORM, SHIFT_TRANSFORM, SETTLE_MS, SHIFT_MS,
+} from "./hooks/use-list-reorder.js";
+import {
+  ACCENT, BORDER, DUR_FAST, EASE, FONT_MONO, FONT_SANS,
+  STATUS_DANGER, TEXT_MID, TEXT_MUTED, RING_RADIUS, TYPE_META,
+} from "../shared/style/tokens.js";
 import {
   BLOCK_TAGS,
   regionBoxStyle,
   regionChipStyle,
+  regionActionsStyle,
+  regionActionButtonStyle,
   chipDirtyDotStyle,
 } from "./page-region-chrome.js";
 
@@ -78,21 +91,36 @@ import {
  * @property {boolean} [visible]
  *   When `false`, the list is dropped from the drawer and read-only on the page
  *   (items still ship to the DOM). Wins over `editable`; inheritable from `<CmsGroup>`.
+ * @property {boolean} [inlineAdd]
+ *   Default `true`. Set `false` to drop the in-page add slot, for layouts a
+ *   ghost card would spoil (a slider, a fixed grid). Items can still be added
+ *   from the drawer, and the rest of the page-side editing is untouched.
+ *   Without `as`, an empty list then renders nothing at all, so the drawer is
+ *   the only way in.
  */
 
-const ITEM_RING       = `inset 0 0 0 1.5px color-mix(in srgb, ${ACCENT} 30%, transparent)`;
-const ITEM_BG         = `color-mix(in srgb, ${ACCENT} 5%, transparent)`;
-const ACCENT_DIM      = `color-mix(in srgb, ${ACCENT} 65%, transparent)`;
-const DANGER          = STATUS_DANGER;
-// Match the admin drawer's raised panel surface so the per-item controls
-// visually belong to the same admin layer.
-const PANEL_BG        = BG_RAISED;
-const PANEL_BORDER    = `1px solid ${BORDER}`;
+const ACCENT_DIM = `color-mix(in srgb, ${ACCENT} 65%, transparent)`;
+
+// Held card: off the page, over its neighbours rather than between them.
+const LIFT_SHADOW = "0 12px 28px -8px rgba(0, 0, 0, 0.45), 0 2px 8px -2px rgba(0, 0, 0, 0.3)";
+
+/** @type {Record<string, typeof ChevronUp>} */
+const DIRECTION_ICON = {
+  up: ChevronUp, down: ChevronDown, left: ChevronLeft, right: ChevronRight,
+};
+
+/** @type {Record<string, string>} */
+const DIRECTION_LABEL = {
+  up: "core.item.moveUp",
+  down: "core.item.moveDown",
+  left: "core.item.moveLeft",
+  right: "core.item.moveRight",
+};
 
 /**
  * @param {EditableListProps} props
  */
-export function EditableList({ blockPath, itemSchema, children, defaultValue, scope, editable, visible, as, ...rest }) {
+export function EditableList({ blockPath, itemSchema, children, defaultValue, scope, editable, visible, inlineAdd = true, as, ...rest }) {
   void defaultValue; void scope; // discovery-only
   const {
     isAdmin, blocksStore, contentDraftsStore, uiStore, setDraft,
@@ -157,6 +185,22 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   /** @param {Record<string, *>[]} next */
   const setItems = (next) => setDraft(fullPath, next);
 
+  // Index keys leave the DOM nodes in place and swap their content, so the
+  // button just clicked now drives a different item. Sending focus after the
+  // item keeps a second press on the same one.
+  const [focusRequest, setFocusRequest] = useState(
+    /** @type {{ index: number, dir: -1 | 1 } | null} */ (null),
+  );
+  const clearFocusRequest = useCallback(() => setFocusRequest(null), []);
+
+  const { drag, flip, suppress, registerNode, beginDrag, animateMove } = useListReorder({
+    onReorder: (from, to) => {
+      const next = moveItemTo(items, from, to);
+      if (next !== items) setItems(next);
+    },
+  });
+
+
   // Public visitors and read-only/hidden lists get the plain passthrough: items
   // render, but no add/move/delete. The drawer card lock/removal is the
   // registry's job. `as` still renders, so the layout doesn't shift between
@@ -170,7 +214,6 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
     return <Wrapper {...rest}>{body}</Wrapper>;
   }
 
-  const defaultItem = makeDefaultItem(itemSchema);
   const onAdd = () => setItems(addItem(items, itemSchema));
   /** @param {number} i */
   const onRemove = (i) => setItems(removeItem(items, i));
@@ -178,6 +221,17 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   const onMove = (i, dir) => {
     const next = moveItem(items, i, dir);
     if (next === items) return;
+    // Before the commit: the boxes have to be measured as they still are.
+    animateMove(i, i + dir);
+    setItems(next);
+    setFocusRequest({ index: i + dir, dir });
+  };
+  /** @param {number} i @param {number} seat */
+  const onMoveTo = (i, seat) => {
+    const target = Math.max(0, Math.min(seat, items.length - 1));
+    const next = moveItemToIndex(items, i, target);
+    if (next === items) return;
+    animateMove(i, target);
     setItems(next);
   };
 
@@ -186,21 +240,39 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
       {items.map((item, i) => (
         <AdminItemWrapper
           key={i}
+          index={i}
+          total={items.length}
+          registerNode={registerNode}
+          onGrip={beginDrag}
+          dragging={drag?.from === i}
+          settling={drag?.settling ?? false}
+          // Two booleans for the whole drag: positions travel to the DOM as CSS
+          // variables, so crossing a slot costs a style write, not a render.
+          shifting={drag != null}
+          flipOffset={flip?.get(i) ?? null}
+          suppressSlide={suppress}
+          focusRequest={focusRequest?.index === i ? focusRequest.dir : null}
+          onFocusHandled={clearFocusRequest}
           onActivate={() => {
             setActiveBlock(fullPath);
             setActiveListItem({ path: fullPath, index: i });
           }}
           onRemove={() => onRemove(i)}
-          onMoveUp={i > 0 ? () => onMove(i, -1) : null}
-          onMoveDown={i < items.length - 1 ? () => onMove(i, 1) : null}
+          onMoveTo={(seat) => onMoveTo(i, seat)}
+          onMoveBack={i > 0 ? () => onMove(i, -1) : null}
+          onMoveForward={i < items.length - 1 ? () => onMove(i, 1) : null}
         >
           {children(item, i)}
         </AdminItemWrapper>
       ))}
 
-      <GhostAddSlot onAdd={onAdd}>
-        {children(defaultItem, items.length)}
-      </GhostAddSlot>
+      {/* The slot mirrors a real card, so the render-prop is only called with a
+          blank item when the slot is actually there. */}
+      {inlineAdd ? (
+        <GhostAddSlot onAdd={onAdd}>
+          {children(makeDefaultItem(itemSchema), items.length)}
+        </GhostAddSlot>
+      ) : null}
     </>
   );
 
@@ -262,52 +334,218 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
 }
 
 /**
+ * One item's edit shell, in the same vocabulary as `EditableRegion`: neutral
+ * ring on hover and the shared ink row of actions straddling the ring line.
+ *
+ * Hover-only by design: clicking an item selects the *list*, so the accent ring
+ * belongs on the list wrapper and a second accent here would just double it.
+ *
+ * The row stays mounted at zero opacity rather than being conditional, because
+ * an unmounted control cannot be tabbed to and a grip that vanished mid-gesture
+ * would drop its pointer capture.
+ *
  * @param {{
  *   children: React.ReactNode,
+ *   index: number,
+ *   total: number,
+ *   registerNode: (index: number, el: HTMLElement | null) => void,
+ *   onGrip: (index: number, event: React.PointerEvent) => void,
+ *   dragging: boolean,
+ *   settling: boolean,
+ *   shifting: boolean,
+ *   flipOffset: { dx: number, dy: number } | null,
+ *   suppressSlide: boolean,
+ *   focusRequest: -1 | 1 | null,
+ *   onFocusHandled: () => void,
  *   onActivate: () => void,
  *   onRemove: () => void,
- *   onMoveUp: (() => void) | null,
- *   onMoveDown: (() => void) | null,
+ *   onMoveTo: (seat: number) => void,
+ *   onMoveBack: (() => void) | null,
+ *   onMoveForward: (() => void) | null,
  * }} props
  */
-function AdminItemWrapper({ children, onActivate, onRemove, onMoveUp, onMoveDown }) {
+function AdminItemWrapper({
+  children, index, total, registerNode, onGrip,
+  dragging, settling, shifting, flipOffset, suppressSlide,
+  focusRequest, onFocusHandled,
+  onActivate, onRemove, onMoveTo, onMoveBack, onMoveForward,
+}) {
   const t = useCmsStrings();
+  const boxRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const backRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
+  const forwardRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
   const [isHovered, setIsHovered] = useState(false);
+  const [focusWithin, setFocusWithin] = useState(false);
+  // Measured, not assumed: in a two-column grid the item on the right moves
+  // *down* to go forward. A property of the slot rather than the item, so it
+  // only has to survive a relayout.
+  const [dirs, setDirs] = useState(/** @type {{ back: string, forward: string }} */ ({
+    back: "up", forward: "down",
+  }));
+
+  const shown = isHovered || focusWithin || dragging;
+
+  useLayoutEffect(() => {
+    if (!shown) return undefined;
+    const measure = () => {
+      const el = boxRef.current;
+      if (!el) return;
+      const self = layoutBox(el);
+      const previous = el.previousElementSibling;
+      const next = el.nextElementSibling;
+      setDirs({
+        back: (previous && neighbourDirection(self, layoutBox(/** @type {*} */ (previous)))) || "up",
+        forward: (next && neighbourDirection(self, layoutBox(/** @type {*} */ (next)))) || "down",
+      });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [shown]);
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    const wanted = focusRequest === -1 ? backRef.current : forwardRef.current;
+    // At an end the wanted button is disabled and cannot take focus; the
+    // opposite one keeps the row reachable. `preventScroll` leaves the smooth
+    // scroll the move already started alone.
+    const fallback = focusRequest === -1 ? forwardRef.current : backRef.current;
+    (wanted && !wanted.disabled ? wanted : fallback)?.focus({ preventScroll: true });
+    onFocusHandled();
+  }, [focusRequest, onFocusHandled]);
+
+  const BackIcon = DIRECTION_ICON[dirs.back];
+  const ForwardIcon = DIRECTION_ICON[dirs.forward];
+  const backLabel = t(DIRECTION_LABEL[dirs.back]);
+  const forwardLabel = t(DIRECTION_LABEL[dirs.forward]);
+
+  const chrome = regionBoxStyle({
+    display: "block",
+    roomy: true,
+    highlight: false,
+    hovered: isHovered && !dragging,
+    accent: ACCENT,
+  });
+  // The held card tracks the pointer 1:1, so it must not be interpolated.
+  // `suppressSlide` covers the frame the array changes under the nodes, where a
+  // slide would drag the new content in from the old slot.
+  const tracking = dragging && !settling;
+  const slide = suppressSlide || tracking
+    ? "none"
+    : `transform ${dragging ? SETTLE_MS : SHIFT_MS}ms ${EASE}`;
+
   return (
     <div
+      ref={(el) => {
+        boxRef.current = el;
+        registerNode(index, el);
+      }}
       onClick={onActivate}
       style={{
-        position: "relative",
+        ...chrome,
         cursor: "pointer",
-        boxShadow: isHovered ? ITEM_RING : undefined,
-        backgroundColor: isHovered ? ITEM_BG : undefined,
-        transition: "box-shadow 0.15s ease, background-color 0.2s ease",
+        transform: shifting
+          ? SHIFT_TRANSFORM
+          : flipOffset
+            ? `translate3d(${flipOffset.dx}px, ${flipOffset.dy}px, 0)`
+            : undefined,
+        zIndex: dragging ? 9997 : undefined,
+        boxShadow: dragging ? LIFT_SHADOW : chrome.boxShadow,
+        transition: [chrome.transition, slide].filter((part) => part !== "none").join(", "),
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {children}
-      {isHovered ? (
-        <div
-          style={controlsStyle}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {onMoveUp ? (
-            <button type="button" onClick={onMoveUp} style={iconButtonStyle} title={t("core.item.moveUp")}>
-              <ChevronUp size={12} />
-            </button>
-          ) : null}
-          {onMoveDown ? (
-            <button type="button" onClick={onMoveDown} style={iconButtonStyle} title={t("core.item.moveDown")}>
-              <ChevronDown size={12} />
-            </button>
-          ) : null}
-          <button type="button" onClick={onRemove} style={dangerButtonStyle} title={t("core.item.remove")}>
-            <Trash2 size={12} />
-          </button>
-        </div>
+      {/* First child so the card paints over it once it settles on top. */}
+      {dragging ? (
+        <span
+          aria-hidden="true"
+          style={{
+            ...landingSlotStyle,
+            transform: LANDING_TRANSFORM,
+            opacity: settling ? 0 : 1,
+            transition: `opacity ${SETTLE_MS}ms ${EASE}`,
+          }}
+        />
       ) : null}
+      {children}
+      <div
+        style={{
+          ...regionActionsStyle({ roomy: true }),
+          opacity: shown ? 1 : 0,
+          pointerEvents: shown ? "auto" : "none",
+          transition: `opacity ${DUR_FAST} ${EASE}`,
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onFocus={() => setFocusWithin(true)}
+        // Focus moving between the row's own buttons must not close it.
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) setFocusWithin(false);
+        }}
+      >
+        <button
+          type="button"
+          onPointerDown={(e) => onGrip(index, e)}
+          style={{
+            ...regionActionButtonStyle({ font: FONT_MONO, accent: TEXT_MID }),
+            cursor: dragging ? "grabbing" : "grab",
+            // Without this a touch drag scrolls the page instead.
+            touchAction: "none",
+          }}
+          title={t("core.item.reorder")}
+          aria-label={t("core.item.reorder")}
+        >
+          <GripVertical size={12} />
+        </button>
+        <PositionField
+          index={index}
+          total={total}
+          onMoveTo={onMoveTo}
+          label={t("core.item.position", { index: index + 1, total })}
+          editLabel={t("core.item.moveTo")}
+          style={positionStyle}
+          inputStyle={positionInputStyle}
+        >
+          {index + 1}/{total}
+        </PositionField>
+        {/* Both arrows stay mounted, disabled at the ends: dropping one would
+            resize the row and shift the others out from under the cursor. */}
+        <button
+          ref={backRef}
+          type="button"
+          onClick={onMoveBack ?? undefined}
+          disabled={!onMoveBack}
+          style={regionActionButtonStyle({ font: FONT_MONO, accent: TEXT_MID, disabled: !onMoveBack })}
+          title={backLabel}
+          aria-label={backLabel}
+        >
+          <BackIcon size={12} />
+        </button>
+        <button
+          ref={forwardRef}
+          type="button"
+          onClick={onMoveForward ?? undefined}
+          disabled={!onMoveForward}
+          style={regionActionButtonStyle({ font: FONT_MONO, accent: TEXT_MID, disabled: !onMoveForward })}
+          title={forwardLabel}
+          aria-label={forwardLabel}
+        >
+          <ForwardIcon size={12} />
+        </button>
+        {/* Delete earns a rule of its own: it is the one action here that
+            cannot be undone by pressing the opposite button. */}
+        <span aria-hidden="true" style={dividerStyle} />
+        <button
+          type="button"
+          onClick={onRemove}
+          style={regionActionButtonStyle({ font: FONT_MONO, accent: STATUS_DANGER })}
+          title={t("core.item.remove")}
+          aria-label={t("core.item.remove")}
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -344,16 +582,15 @@ function GhostAddSlot({ children, onAdd }) {
       style={{
         position: "relative",
         cursor: "pointer",
-        borderRadius: 8,
+        borderRadius: RING_RADIUS,
         background: lit
           ? `color-mix(in srgb, ${ACCENT} 10%, transparent)`
           : `color-mix(in srgb, ${ACCENT} 4%, transparent)`,
-        border: lit
-          ? `1.5px dashed color-mix(in srgb, ${ACCENT} 70%, transparent)`
-          : `1.5px dashed color-mix(in srgb, ${ACCENT} 30%, transparent)`,
-        transition: "background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease",
-        transform: lit ? "translateY(-1px)" : undefined,
-        outline: "none",
+        // An outline, not a border: the slot mirrors a real item's footprint,
+        // and a border would make it 3px larger than every card beside it.
+        outline: `1.5px dashed color-mix(in srgb, ${ACCENT} ${lit ? 70 : 30}%, transparent)`,
+        outlineOffset: 0,
+        transition: "background-color 0.18s ease, outline-color 0.18s ease",
       }}
     >
       <div style={ghostHiddenStyle} aria-hidden="true">
@@ -376,37 +613,45 @@ function GhostAddSlot({ children, onAdd }) {
 // Styles (kept inline; admin overlays only render in admin mode)
 // ---------------------------------------------------------------------------
 
-const controlsStyle = /** @type {React.CSSProperties} */ ({
+// Dashed like the add slot: it reads as a place something goes.
+const landingSlotStyle = /** @type {React.CSSProperties} */ ({
   position: "absolute",
-  top: 4,
-  right: 4,
-  display: "inline-flex",
-  gap: 4,
-  padding: 3,
-  background: PANEL_BG,
-  border: PANEL_BORDER,
-  borderRadius: 6,
-  boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
-  zIndex: 9999,
+  inset: 0,
+  boxSizing: "border-box",
+  border: `1.5px dashed color-mix(in srgb, ${ACCENT} 55%, transparent)`,
+  borderRadius: RING_RADIUS,
+  background: `color-mix(in srgb, ${ACCENT} 8%, transparent)`,
+  pointerEvents: "none",
 });
 
-const iconButtonStyle = /** @type {React.CSSProperties} */ ({
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: 22,
-  height: 22,
-  border: "none",
-  background: "transparent",
-  color: ACCENT_DIM,
-  borderRadius: 4,
-  cursor: "pointer",
-  padding: 0,
+const positionStyle = /** @type {React.CSSProperties} */ ({
+  padding: "0 4px",
+  color: TEXT_MUTED,
+  fontFamily: FONT_MONO,
+  fontSize: 9.5,
+  fontVariantNumeric: "tabular-nums",
+  letterSpacing: "0.02em",
+  whiteSpace: "nowrap",
 });
 
-const dangerButtonStyle = /** @type {React.CSSProperties} */ ({
-  ...iconButtonStyle,
-  color: DANGER,
+// Sized in `ch` off the same mono, so switching to the input does not resize the row.
+const positionInputStyle = /** @type {React.CSSProperties} */ ({
+  ...positionStyle,
+  width: "3ch",
+  padding: "0 2px",
+  border: 0,
+  borderRadius: 3,
+  background: `color-mix(in srgb, ${ACCENT} 22%, transparent)`,
+  color: "var(--ins-text, #fff)",
+  textAlign: "center",
+  outline: "none",
+});
+
+const dividerStyle = /** @type {React.CSSProperties} */ ({
+  width: 1,
+  alignSelf: "stretch",
+  margin: "0 2px",
+  background: BORDER,
 });
 
 const ghostHiddenStyle = /** @type {React.CSSProperties} */ ({
@@ -421,7 +666,7 @@ const ghostOverlayStyle = /** @type {React.CSSProperties} */ ({
   alignItems: "center",
   justifyContent: "center",
   gap: 6,
-  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+  fontFamily: FONT_SANS,
   fontSize: 13,
   fontWeight: 500,
   letterSpacing: "0.02em",

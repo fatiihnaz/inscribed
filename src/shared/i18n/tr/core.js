@@ -16,6 +16,11 @@ export const core = Object.freeze({
 
   "core.item.moveUp": "Yukarı taşı",
   "core.item.moveDown": "Aşağı taşı",
+  "core.item.moveLeft": "Sola taşı",
+  "core.item.moveRight": "Sağa taşı",
+  "core.item.reorder": "Sürükleyerek sırala",
+  "core.item.position": "Öğe {index} / {total}",
+  "core.item.moveTo": "Taşımak için sıra numarası yaz",
   "core.item.remove": "Sil",
   "core.item.add": "Öğe ekle",
   "core.item.addLabel": "Yeni öğe ekle",

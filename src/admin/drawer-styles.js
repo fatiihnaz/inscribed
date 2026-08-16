@@ -13,7 +13,7 @@ import {
   PANEL_WIDTH, HANDLE_WIDTH, HANDLE_OVERLAP, RAIL_WIDTH, RAIL_EDGE_RADIUS,
   R_BADGE, R_SM, R_BTN, R_MD, R_PILL,
   FS_SM,
-  EASE,
+  DUR_BASE, EASE,
   BG, BG_RAIL, BG_RAISED, BG_SUNKEN,
   SURFACE_1, SURFACE_2, SURFACE_3,
   HAIRLINE, BORDER, BORDER_HI, BORDER_FOCUS,
@@ -145,6 +145,8 @@ export const headerStyle = {
 
 // Echoes the rail's active glyph, so the header restates the current area in
 // the same language rather than with a heading.
+// The fill and tint cross-fade while the glyph inside rolls over, so the badge
+// changes area in one gesture rather than snapping colour under a moving icon.
 export const headerBadgeStyle = {
   flexShrink: 0,
   width: 22,
@@ -156,6 +158,7 @@ export const headerBadgeStyle = {
   background: SURFACE_1,
   boxShadow: `inset 0 0 0 1px ${HAIRLINE}`,
   color: TEXT_MID,
+  transition: `background ${DUR_BASE} ${EASE}, color ${DUR_BASE} ${EASE}`,
 };
 
 export const headerBadgeCollectionStyle = {
@@ -190,14 +193,15 @@ export const headerCrumbStyle = {
   cursor: "pointer",
 };
 
-// The segment the user is on: carries the weight a separate title used to, and
-// the only part allowed to shrink since it can be arbitrarily long.
+// The segment the user is on. It separates by colour alone, inheriting the
+// row's size and weight: at 13/600 against the row's 12/500 it read as a
+// heading that had wandered into the path. Still the only part allowed to
+// shrink, since it can be arbitrarily long.
 export const headerCrumbCurrentStyle = {
   minWidth: 0,
-  padding: "3px 2px",
-  fontSize: 13,
-  fontWeight: 600,
-  letterSpacing: "-0.01em",
+  // Left padding matches a crumb button's, so the separator sits the same
+  // distance from the text on both sides.
+  padding: "3px 4px",
   color: TEXT_HI,
   whiteSpace: "nowrap",
   overflow: "hidden",

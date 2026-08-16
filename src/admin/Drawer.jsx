@@ -25,7 +25,7 @@
  * layout + state only.
  */
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
@@ -917,26 +917,76 @@ function PanelHeader({
   const t = useCmsStrings();
   const isCollections = mode === "collections";
 
+  const crumbs = buildCrumbs({
+    isCollections, segments, collectionKey, t, onNavigate, onBackToCollections,
+  });
+
+  // Leading crumbs that survived the move keep their key, so only the tail past
+  // this point animates.
+  const keys = crumbs.map((c) => c.key);
+  const previousKeys = useRef(keys);
+  let shared = 0;
+  while (
+    shared < keys.length
+    && shared < previousKeys.current.length
+    && keys[shared] === previousKeys.current[shared]
+  ) shared += 1;
+  useEffect(() => {
+    previousKeys.current = keys;
+  });
+
   return (
     <header style={headerStyle}>
       <span
         style={isCollections
-          ? { ...headerBadgeStyle, ...headerBadgeCollectionStyle }
-          : headerBadgeStyle}
+          ? { ...headerBadgeStyle, ...headerBadgeRollStyle, ...headerBadgeCollectionStyle }
+          : { ...headerBadgeStyle, ...headerBadgeRollStyle }}
         aria-hidden="true"
       >
-        {isCollections ? <Layers size={12} /> : <FileText size={12} />}
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.span
+            key={mode}
+            variants={rollVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={ROLL_TRANSITION}
+            style={rollLayerStyle}
+          >
+            {isCollections ? <Layers size={12} /> : <FileText size={12} />}
+          </motion.span>
+        </AnimatePresence>
       </span>
 
-      <nav style={headerPathStyle} aria-label={t("drawer.location")}>
-        {isCollections ? (
-          <CollectionsPath
-            collectionKey={collectionKey}
-            onBack={onBackToCollections}
-          />
-        ) : (
-          <PagePath segments={segments} onNavigate={onNavigate} />
-        )}
+      <nav style={headerPathRollStyle} aria-label={t("drawer.location")}>
+        {/* Switching area turns the whole path as one drum; moving within an
+            area animates only the crumbs that changed. The inner presence
+            remounts with the area, so `initial={false}` keeps its crumbs from
+            replaying inside a drum that is already turning. */}
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.span
+            key={mode}
+            variants={rollVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={ROLL_TRANSITION}
+            style={rollRowStyle}
+          >
+            <AnimatePresence mode="popLayout" initial={false}>
+              {crumbs.map((crumb, i) => (
+                <HeaderCrumb
+                  key={crumb.key}
+                  crumb={crumb}
+                  showSeparator={i > 0}
+                  enterDelay={Math.max(0, i - shared) * CRUMB_STEP}
+                  // Deepest-first on the way out.
+                  exitDelay={(crumbs.length - 1 - i) * CRUMB_STEP}
+                />
+              ))}
+            </AnimatePresence>
+          </motion.span>
+        </AnimatePresence>
       </nav>
 
       <HeaderStatusPill
@@ -950,87 +1000,168 @@ function PanelHeader({
   );
 }
 
+// Always one way: Page and Collections are neighbouring areas, so deriving a
+// direction from their depth had the drum reverse whenever the collection
+// happened to have a record open. Past ~35° the tilt reads as distortion.
+const rollVariants = {
+  enter: { y: 12, rotateX: 34, scale: 0.94, opacity: 0 },
+  center: { y: 0, rotateX: 0, scale: 1, opacity: 1 },
+  exit: { y: -12, rotateX: -34, scale: 0.94, opacity: 0 },
+};
+
+// Opacity is the short one, so the two labels never overlap as readable text.
+const ROLL_TRANSITION = {
+  y: { duration: 0.3, ease: PANEL_TRANSITION.ease },
+  rotateX: { duration: 0.3, ease: PANEL_TRANSITION.ease },
+  scale: { duration: 0.3, ease: PANEL_TRANSITION.ease },
+  opacity: { duration: 0.16, ease: "linear" },
+};
+
+// The perspective is what makes the tilt read as rotation instead of a squash.
+const headerBadgeRollStyle = /** @type {React.CSSProperties} */ ({
+  overflow: "hidden",
+  perspective: 220,
+});
+
+const headerPathRollStyle = /** @type {React.CSSProperties} */ ({
+  ...headerPathStyle,
+  perspective: 600,
+});
+
+const rollLayerStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+});
+
+// Carries the gap between crumbs, which is tight because they already have
+// their own padding.
+const rollRowStyle = /** @type {React.CSSProperties} */ ({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 1,
+  minWidth: 0,
+  whiteSpace: "nowrap",
+});
+
+const CRUMB_STEP = 0.05;
+
+// Both ends sit below the line: appearing already means "went deeper" and
+// leaving means "came back", so the crumb needs no direction of its own.
+const CRUMB_HIDDEN = { opacity: 0, y: 9, rotateX: 32, scale: 0.9 };
+const CRUMB_SHOWN = { opacity: 1, y: 0, rotateX: 0, scale: 1 };
+const CRUMB_ENTER = { duration: 0.26, ease: PANEL_TRANSITION.ease };
+const CRUMB_EXIT = { duration: 0.2, ease: PANEL_TRANSITION.ease };
+
+/**
+ * One crumb and the separator before it. `forwardRef` is required: `popLayout`
+ * pins the outgoing child out of the flow through a ref, and swallowing it
+ * leaves the mode nothing to measure.
+ *
+ * @type {React.ForwardRefExoticComponent<{
+ *   crumb: { key: string, label: string, title?: string, current?: boolean, onClick?: () => void },
+ *   showSeparator: boolean,
+ *   enterDelay: number,
+ *   exitDelay: number,
+ * } & React.RefAttributes<HTMLSpanElement>>}
+ */
+const HeaderCrumb = forwardRef(function HeaderCrumb(
+  { crumb, showSeparator, enterDelay, exitDelay }, ref,
+) {
+  // Frozen at mount: the delay collapses to zero once the effect records the
+  // new keys, and a fresh transition mid-flight restarts the animation.
+  const enter = useRef(enterDelay).current;
+  const enterTransition = useMemo(
+    () => ({ ...CRUMB_ENTER, delay: enter }),
+    [enter],
+  );
+  const exitTarget = useMemo(
+    () => ({ ...CRUMB_HIDDEN, transition: { ...CRUMB_EXIT, delay: exitDelay } }),
+    [exitDelay],
+  );
+
+  return (
+    <motion.span
+      ref={ref}
+      initial={CRUMB_HIDDEN}
+      animate={CRUMB_SHOWN}
+      exit={exitTarget}
+      transition={enterTransition}
+      style={crumbWrapStyle}
+    >
+      {showSeparator ? <span style={headerSepStyle}>/</span> : null}
+      {crumb.onClick ? (
+        <Crumb label={crumb.label} title={crumb.title} onClick={crumb.onClick} />
+      ) : (
+        <span
+          style={crumb.current ? headerCrumbCurrentStyle : { ...headerCrumbStyle, cursor: "default" }}
+          title={crumb.title}
+        >
+          {crumb.label}
+        </span>
+      )}
+    </motion.span>
+  );
+});
+
 // Deep paths collapse their middle rather than wrapping. Keeping the last two
 // segments preserves the "which section am I in" cue that a bare filename loses.
 const MAX_VISIBLE_SEGMENTS = 2;
 
 /**
- * `~ / about / team`, where every part except the last navigates the host app.
+ * The path as data rather than markup, so the header can diff one location
+ * against the next by key. A crumb with no `onClick` renders as text.
  *
  * @param {{
+ *   isCollections: boolean,
  *   segments: { label: string, href: string }[],
+ *   collectionKey: string | null,
+ *   t: (key: string, vars?: Record<string, *>) => string,
  *   onNavigate: (href: string) => void,
- * }} props
+ *   onBackToCollections: () => void,
+ * }} args
+ * @returns {{ key: string, label: string, title?: string, current?: boolean, onClick?: () => void }[]}
  */
-function PagePath({ segments, onNavigate }) {
-  const t = useCmsStrings();
+function buildCrumbs({ isCollections, segments, collectionKey, t, onNavigate, onBackToCollections }) {
+  if (isCollections) {
+    // The area's own landing page reads like the site root on `/`: a crumb, not
+    // an emphasised current segment, and with nowhere to navigate from.
+    const head = collectionKey
+      ? { key: "collections", label: t("drawer.collections"), title: t("drawer.collectionList"), onClick: onBackToCollections }
+      : { key: "collections", label: t("drawer.collections") };
+    return collectionKey
+      ? [head, { key: `collection:${collectionKey}`, label: collectionKey, title: collectionKey, current: true }]
+      : [head];
+  }
+
   const isCollapsed = segments.length > MAX_VISIBLE_SEGMENTS;
   const shown = isCollapsed ? segments.slice(-MAX_VISIBLE_SEGMENTS) : segments;
   const hidden = isCollapsed ? segments.slice(0, -MAX_VISIBLE_SEGMENTS) : [];
 
-  return (
-    <>
-      <Crumb label={t("drawer.home")} title={t("drawer.home")} onClick={() => onNavigate("/")} />
-      {isCollapsed ? (
-        <>
-          <span style={headerSepStyle}>/</span>
-          {/* Jumps to the deepest hidden ancestor; the title spells out what
-              was folded away so the path stays readable. */}
-          <Crumb
-            label="…"
-            title={hidden.map((s) => s.label).join(" / ")}
-            onClick={() => onNavigate(hidden[hidden.length - 1].href)}
-          />
-        </>
-      ) : null}
-      {shown.map((segment, i) => {
-        const isLast = i === shown.length - 1;
-        return (
-          <span key={segment.href} style={crumbWrapStyle}>
-            <span style={headerSepStyle}>/</span>
-            {isLast ? (
-              <span style={headerCrumbCurrentStyle} title={segment.label}>
-                {segment.label}
-              </span>
-            ) : (
-              <Crumb
-                label={segment.label}
-                title={segment.href}
-                onClick={() => onNavigate(segment.href)}
-              />
-            )}
-          </span>
-        );
-      })}
-    </>
-  );
-}
-
-/**
- * `collections / news`. The parent doubles as the way back to the list, which
- * is why the mode needs no separate back bar.
- *
- * @param {{ collectionKey: string | null, onBack: () => void }} props
- */
-function CollectionsPath({ collectionKey, onBack }) {
-  const t = useCmsStrings();
-  if (!collectionKey) {
-    // Styled as a crumb, not as the emphasised current segment, so the area's
-    // own landing page reads the same as the site root does on `/`. Nowhere to
-    // navigate from here, so it drops the button's pointer cursor.
-    return (
-      <span style={{ ...headerCrumbStyle, cursor: "default" }}>{t("drawer.collections")}</span>
-    );
+  const crumbs = [
+    { key: "root", label: t("drawer.home"), title: t("drawer.home"), onClick: () => onNavigate("/") },
+  ];
+  if (isCollapsed) {
+    // Jumps to the deepest hidden ancestor; the title spells out what was
+    // folded away so the path stays readable.
+    crumbs.push({
+      key: "ellipsis",
+      label: "…",
+      title: hidden.map((s) => s.label).join(" / "),
+      onClick: () => onNavigate(hidden[hidden.length - 1].href),
+    });
   }
-  return (
-    <>
-      <Crumb label={t("drawer.collections")} title={t("drawer.collectionList")} onClick={onBack} />
-      <span style={headerSepStyle}>/</span>
-      <span style={headerCrumbCurrentStyle} title={collectionKey}>
-        {collectionKey}
-      </span>
-    </>
-  );
+  shown.forEach((segment, i) => {
+    const isLast = i === shown.length - 1;
+    crumbs.push({
+      key: segment.href,
+      label: segment.label,
+      title: isLast ? segment.label : segment.href,
+      current: isLast,
+      onClick: isLast ? undefined : () => onNavigate(segment.href),
+    });
+  });
+  return crumbs;
 }
 
 /**
@@ -1053,7 +1184,7 @@ function Crumb({ label, title, onClick }) {
 const crumbWrapStyle = /** @type {React.CSSProperties} */ ({
   display: "inline-flex",
   alignItems: "center",
-  gap: 2,
+  gap: 1,
   minWidth: 0,
 });
 

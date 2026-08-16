@@ -51,6 +51,7 @@ import {
   layoutBox, neighbourDirection, useListReorder,
   LANDING_TRANSFORM, SHIFT_TRANSFORM, SETTLE_MS, SHIFT_MS,
 } from "./hooks/use-list-reorder.js";
+import { useContentRadius } from "./hooks/use-content-radius.js";
 import {
   ACCENT, BORDER, DUR_FAST, EASE, FONT_MONO, FONT_SANS,
   STATUS_DANGER, TEXT_MID, TEXT_MUTED, RING_RADIUS, TYPE_META,
@@ -384,6 +385,10 @@ function AdminItemWrapper({
   }));
 
   const shown = isHovered || focusWithin || dragging;
+  // Every list styles its cards differently, so the ring takes whatever radius
+  // the consumer gave theirs. Measured only while the ring is up, which keeps a
+  // long list from resolving styles for rows nobody is looking at.
+  const contentRadius = useContentRadius(boxRef, shown);
 
   useLayoutEffect(() => {
     if (!shown) return undefined;
@@ -425,6 +430,7 @@ function AdminItemWrapper({
     highlight: false,
     hovered: isHovered && !dragging,
     accent: ACCENT,
+    radius: contentRadius,
   });
   // The held card tracks the pointer 1:1, so it must not be interpolated.
   // `suppressSlide` covers the frame the array changes under the nodes, where a
@@ -460,6 +466,7 @@ function AdminItemWrapper({
       {dragging ? (
         <span
           aria-hidden="true"
+          data-ins-chrome=""
           style={{
             ...landingSlotStyle,
             transform: LANDING_TRANSFORM,

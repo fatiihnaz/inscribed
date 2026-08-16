@@ -24,7 +24,7 @@
  * same item twice on a page yields one drawer card, not two.
  */
 
-import { isValidElement, useContext, useEffect, useId, useMemo, useState } from "react";
+import { isValidElement, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
@@ -33,6 +33,7 @@ import { CollectionItemContext } from "./item-context.js";
 import { CmsGroupContext, CmsGroupVisibilityContext } from "../shared/state/group-context.js";
 import { useCollectionItem } from "./hooks/use-collection.js";
 import { useStoreSelector } from "../shared/state/store.js";
+import { useContentRadius } from "../core/hooks/use-content-radius.js";
 import { useRecordDraftRole } from "./hooks/use-draft-driver.js";
 import { useCollectionEditor } from "./hooks/use-collection-editor.js";
 import { COLLECTION_ACCENT, FONT_MONO, STATUS_DANGER, STATUS_OK, TEXT_MID, TYPE_META } from "../shared/style/tokens.js";
@@ -348,20 +349,26 @@ const SAVE_STATES = {
  */
 function CollectionEditWrapper({ onClick, isActive, label, dirty, tag, actions, children }) {
   const t = useCmsStrings();
+  const boxRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
   const [isHovered, setIsHovered] = useState(false);
   const showChip = isHovered || isActive;
 
   const display = tag && BLOCK_TAGS.has(tag) ? "block" : "inline-block";
   const roomy = display === "block";
+  // Records render whatever card the consumer wrote, so the ring takes its
+  // radius rather than imposing the house one.
+  const contentRadius = useContentRadius(boxRef, showChip);
 
   return (
     <span
+      ref={boxRef}
       style={regionBoxStyle({
         display,
         roomy,
         highlight: isActive,
         hovered: isHovered,
         accent: COLLECTION_ACCENT,
+        radius: contentRadius,
       })}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

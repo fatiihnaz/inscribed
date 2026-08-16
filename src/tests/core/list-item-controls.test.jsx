@@ -142,6 +142,25 @@ describe("list item controls", () => {
     expect(screen.getAllByLabelText("Delete")).toHaveLength(3);
   });
 
+  it("rings a card with the card's own radius, not the house one", async () => {
+    await mount();
+    const [wrapper] = itemWrappers();
+    const card = /** @type {HTMLElement} */ (wrapper?.firstElementChild);
+    // The consumer's card, whatever shape they gave it.
+    vi.spyOn(window, "getComputedStyle").mockImplementation((el) => /** @type {*} */ (
+      el === card
+        ? { borderTopLeftRadius: "20px", borderTopRightRadius: "20px",
+            borderBottomRightRadius: "20px", borderBottomLeftRadius: "20px" }
+        : { overflowY: "visible" }
+    ));
+
+    await act(async () => {
+      fireEvent.mouseEnter(/** @type {*} */ (wrapper));
+    });
+
+    expect(/** @type {HTMLElement} */ (wrapper).style.borderRadius).toBe("20px");
+  });
+
   it("shows the add slot by default", async () => {
     await mount();
     expect(screen.getByLabelText("Add a new item")).toBeTruthy();

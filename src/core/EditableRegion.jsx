@@ -23,6 +23,7 @@ import { useCmsStrings } from "./hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { isBlockDirty, resolveBlockValue } from "./resolve.js";
 import { useImageOverlayFits } from "../editors/inline/use-image-overlay-fits.js";
+import { useContentRadius } from "./hooks/use-content-radius.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../shared/state/group-context.js";
 import { ACCENT, TYPE_META, TYPE_META_FALLBACK } from "../shared/style/tokens.js";
 import {
@@ -128,6 +129,12 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   // Stand the on-image overlay down when the picture is too small to hold the
   // scrim buttons. Admin + Image only.
   const imageOverlayFits = useImageOverlayFits(wrapperRef, isAdmin && blockType === "Image");
+
+  // Images are a box the visitor can see, so the ring has to take their shape:
+  // a boxy ring around a circular avatar, or a rounded one cutting across a
+  // square photo's corners, both read as a mistake. Text has no visible box, so
+  // it keeps the house radius.
+  const contentRadius = useContentRadius(wrapperRef, isAdmin && blockType === "Image");
 
   if (!isAdmin || visibilityMode) return rendered;
 
@@ -252,6 +259,7 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
           highlight,
           hovered: isHovered,
           accent: ACCENT,
+          radius: contentRadius,
         }),
         ...(wrapperMargin ?? {}),
       }}

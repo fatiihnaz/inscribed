@@ -123,7 +123,7 @@ export const ACCENT_LINE   = "color-mix(in srgb, var(--ins-accent, #c9b896) 30%,
 // (outline + shadow spread), never padding, so it costs no layout. A CmsGroup
 // outline must clear it to actually enclose its children.
 //
-// Keep it under half the chip's height (~9px): the chip straddles the halo's
+// Keep it under half the chip's height (10px): the chip straddles the halo's
 // top line, so a larger inset leaves a gap between chip and content that the
 // pointer can fall through, dropping hover and taking the chip with it.
 export const ROOMY_INSET   = 8;

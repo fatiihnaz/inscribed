@@ -36,9 +36,12 @@ import { useStoreSelector } from "../shared/state/store.js";
 import { useContentRadius } from "../core/hooks/use-content-radius.js";
 import { useRecordDraftRole } from "./hooks/use-draft-driver.js";
 import { useCollectionEditor } from "./hooks/use-collection-editor.js";
-import { COLLECTION_ACCENT, FONT_MONO, STATUS_DANGER, STATUS_OK, TEXT_MID, TYPE_META } from "../shared/style/tokens.js";
+import { COLLECTION_ACCENT, STATUS_DANGER, STATUS_OK, TEXT_HI, TYPE_META } from "../shared/style/tokens.js";
 import {
   BLOCK_TAGS,
+  INK_BTN_CLASS,
+  INK_CHIP_CLASS,
+  ensureInkChromeStyle,
   regionBoxStyle,
   regionChipStyle,
   regionActionsStyle,
@@ -304,7 +307,8 @@ function RecordActions({ editor, dirty }) {
         }}
         disabled={!dirty || busy}
         title={t("collections.undoRecordDraft")}
-        style={regionActionButtonStyle({ font: FONT_MONO, accent: TEXT_MID, disabled: !dirty || busy })}
+        className={INK_BTN_CLASS}
+        style={regionActionButtonStyle({ accent: TEXT_HI, disabled: !dirty || busy })}
       >
         {t("block.undo")}
       </button>
@@ -317,7 +321,8 @@ function RecordActions({ editor, dirty }) {
         }}
         disabled={inert || busy}
         title={editor.error ?? t("collections.publishRecord")}
-        style={regionActionButtonStyle({ font: FONT_MONO, accent, disabled: inert })}
+        className={INK_BTN_CLASS}
+        style={regionActionButtonStyle({ accent, disabled: inert })}
       >
         {t(labelKey)}
       </button>
@@ -327,7 +332,7 @@ function RecordActions({ editor, dirty }) {
 
 const SAVE_STATES = {
   idle:   { labelKey: "status.save", accent: COLLECTION_ACCENT },
-  saving: { labelKey: "collections.saving", accent: TEXT_MID },
+  saving: { labelKey: "collections.saving", accent: TEXT_HI },
   saved:  { labelKey: "collections.saved", accent: STATUS_OK },
   failed: { labelKey: "collections.error", accent: STATUS_DANGER },
 };
@@ -352,6 +357,10 @@ function CollectionEditWrapper({ onClick, isActive, label, dirty, tag, actions, 
   const boxRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
   const [isHovered, setIsHovered] = useState(false);
   const showChip = isHovered || isActive;
+
+  useEffect(() => {
+    ensureInkChromeStyle();
+  }, []);
 
   const display = tag && BLOCK_TAGS.has(tag) ? "block" : "inline-block";
   const roomy = display === "block";
@@ -383,12 +392,8 @@ function CollectionEditWrapper({ onClick, isActive, label, dirty, tag, actions, 
           }}
           title={t("collections.openInPanel")}
           aria-label={t("collections.openRecordInPanel", { label })}
-          style={regionChipStyle({
-            roomy,
-            highlight: isActive,
-            accent: COLLECTION_ACCENT,
-            font: FONT_MONO,
-          })}
+          className={INK_CHIP_CLASS}
+          style={regionChipStyle({ roomy, highlight: isActive, accent: COLLECTION_ACCENT })}
         >
           <span aria-hidden="true" style={{ fontWeight: 700, opacity: 0.85 }}>
             {COLLECTION_GLYPH}

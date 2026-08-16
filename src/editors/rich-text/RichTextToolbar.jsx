@@ -40,7 +40,9 @@ export function RichTextToolbar({ editor, disabled, className, style, dense }) {
   }, []);
 
   const cls = dense ? `${className ? `${className} ` : ""}inscribed-rte-dense` : className;
-  const rowStyle = { ...toolbarStyle, ...(dense ? { padding: 3, gap: 1 } : null), ...style };
+  // Dense matches the page-side ink pills exactly: 2px of padding around 18px
+  // controls, so the floating bar and a region's actions row are one family.
+  const rowStyle = { ...toolbarStyle, ...(dense ? { padding: 2, gap: 1 } : null), ...style };
 
   if (!editor) {
     return <div className={className} style={{ ...rowStyle, minHeight: 34 }} />;
@@ -150,7 +152,7 @@ function Btn({ active, disabled, onClick, title, ariaLabel, children }) {
 }
 
 function Sep() {
-  return <span aria-hidden="true" style={sepStyle} />;
+  return <span aria-hidden="true" className="inscribed-rte-sep" style={sepStyle} />;
 }
 
 const toolbarStyle = /** @type {React.CSSProperties} */ ({
@@ -197,8 +199,14 @@ function ensureToolbarStyle() {
       height: 26px;
     }
     .inscribed-rte-dense .inscribed-rte-btn {
-      width: 22px;
-      height: 22px;
+      width: 18px;
+      height: 18px;
+    }
+    /* Geometry is inline on the separator, so the dense override needs the
+       same escape hatch the active state uses. */
+    .inscribed-rte-dense .inscribed-rte-sep {
+      height: 12px !important;
+      margin: 0 3px !important;
     }
     .inscribed-rte-btn:hover:not(:disabled) {
       background: ${SURFACE_HOVER};

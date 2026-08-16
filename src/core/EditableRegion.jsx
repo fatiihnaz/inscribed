@@ -28,6 +28,9 @@ import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "
 import { ACCENT, TYPE_META, TYPE_META_FALLBACK } from "../shared/style/tokens.js";
 import {
   BLOCK_TAGS,
+  INK_CHIP_CLASS,
+  ensureInkChromeStyle,
+  haloInset,
   regionBoxStyle,
   regionChipStyle,
   chipDirtyDotStyle,
@@ -105,6 +108,10 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
     registerEditorVisibility(fullPath, visibilityMode);
     return () => unregisterEditorVisibility(fullPath);
   }, [isAdmin, fullPath, visibilityMode, registerEditorVisibility, unregisterEditorVisibility]);
+
+  useEffect(() => {
+    if (isAdmin) ensureInkChromeStyle();
+  }, [isAdmin]);
 
   // Subscribe to just this block's draft, so a keystroke elsewhere doesn't
   // re-render us. Two selectors (presence + value) so an explicit empty/null
@@ -215,6 +222,10 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           anchorRef={wrapperRef}
+          // The bar rides the ring line, which is painted outside the content
+          // box; without the inset it centres on the box instead and lands on
+          // the first line of prose.
+          ringInset={haloInset(BLOCK_TAGS.has(innerTag))}
           style={{ cursor: "text" }}
         />
       </Suspense>
@@ -248,6 +259,11 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
   // Full halo only for block-level text/rich; images stay tight (the overlay
   // anchors to the image) and inline keeps a hair (no mid-sentence crowding).
   const roomy = wrapperDisplay === "block" && !isImageType;
+  // An image is a box the visitor can see, so its chip rides the ring line the
+  // way a block-level region's does, even though the halo stays tight. Only
+  // inline text keeps clear of the content, where a straddling chip would sit
+  // on the sentence.
+  const straddle = roomy || isImageType;
 
   return (
     <span
@@ -279,12 +295,8 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
           }}
           title={t("core.chip.open")}
           aria-label={t("core.chip.openBlock", { path: fullPath })}
-          style={regionChipStyle({
-            roomy,
-            highlight,
-            accent: ACCENT,
-            font: "ui-monospace, 'SF Mono', monospace",
-          })}
+          className={INK_CHIP_CLASS}
+          style={regionChipStyle({ roomy, straddle, highlight, accent: ACCENT })}
         >
           <span aria-hidden="true" style={{ fontWeight: 700, opacity: 0.85 }}>{glyph}</span>
           {fullPath}

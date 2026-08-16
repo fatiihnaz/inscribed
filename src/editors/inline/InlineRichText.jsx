@@ -17,8 +17,8 @@ import { EditorContent } from "@tiptap/react";
 
 import { useRichTextEditor } from "../rich-text/use-rich-text-editor.js";
 import { RichTextToolbar } from "../rich-text/RichTextToolbar.jsx";
-import { INK_SURFACE } from "../../core/page-region-chrome.js";
-import { BORDER, RADIUS, TEXT_HI } from "../../shared/style/tokens.js";
+import { INK_EDGE, INK_SURFACE } from "../../core/page-region-chrome.js";
+import { R_MD, TEXT_HI } from "../../shared/style/tokens.js";
 
 const MARGIN = 8;
 
@@ -41,9 +41,12 @@ function ensureInlineRteStyle() {
  * @param {(value: string) => void} props.onChange
  * @param {() => void} [props.onFocus]
  * @param {() => void} [props.onBlur]
+ * @param {number} [props.ringInset]
+ *   How far the anchor's ring is painted outside its content box. The bar
+ *   centres on the ring, not on the box.
  * @param {React.CSSProperties} [props.style]
  */
-export function InlineRichText({ value, onChange, onFocus, onBlur, anchorRef, style }) {
+export function InlineRichText({ value, onChange, onFocus, onBlur, anchorRef, ringInset = 0, style }) {
   const editor = useRichTextEditor({ value, onChange, contentClass: "inscribed-inline-rte" });
   const [focused, setFocused] = useState(false);
   const [pos, setPos] = useState(/** @type {{ top: number, left: number } | null} */ (null));
@@ -85,7 +88,7 @@ export function InlineRichText({ value, onChange, onFocus, onBlur, anchorRef, st
       const vw = window.innerWidth;
       const centered = rect.left + rect.width / 2 - barW / 2;
       const left = Math.min(Math.max(MARGIN, centered), vw - barW - MARGIN);
-      const top = Math.max(MARGIN, rect.top - barH / 2);
+      const top = Math.max(MARGIN, rect.top - ringInset - barH / 2);
       setPos({ top, left });
     };
     place();
@@ -95,7 +98,7 @@ export function InlineRichText({ value, onChange, onFocus, onBlur, anchorRef, st
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
     };
-  }, [focused, anchorRef]);
+  }, [focused, anchorRef, ringInset]);
 
   return (
     <div style={style}>
@@ -109,6 +112,7 @@ export function InlineRichText({ value, onChange, onFocus, onBlur, anchorRef, st
               onMouseDown={(e) => e.preventDefault()}
               style={{
                 ...INK_SURFACE,
+                ...INK_EDGE,
                 position: "fixed",
                 top: pos?.top ?? -9999,
                 left: pos?.left ?? -9999,
@@ -116,9 +120,10 @@ export function InlineRichText({ value, onChange, onFocus, onBlur, anchorRef, st
                 zIndex: 2147483000,
                 maxWidth: `calc(100vw - ${2 * MARGIN}px)`,
                 color: TEXT_HI,
-                border: `1px solid ${BORDER}`,
-                borderRadius: RADIUS,
-                boxShadow: "0 8px 28px -6px rgba(0,0,0,0.4)",
+                borderRadius: R_MD,
+                // A step above the pills: this one floats over the whole page
+                // rather than riding a ring line. The glass rim is kept.
+                boxShadow: `${INK_EDGE.boxShadow}, 0 10px 30px -8px rgba(0, 0, 0, 0.45)`,
               }}
             >
               <RichTextToolbar editor={editor} dense />

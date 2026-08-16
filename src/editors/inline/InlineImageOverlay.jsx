@@ -14,13 +14,17 @@
  * EditableRegion renders this only when the image is large enough to hold it.
  */
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { useImageUpload } from "../use-image-upload.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
-import { INK_SURFACE, regionActionButtonStyle } from "../../core/page-region-chrome.js";
+import { Trash2, Upload } from "../../shared/style/icons.jsx";
 import {
-  BORDER, FONT_MONO, STATUS_DANGER, TEXT_HI, TEXT_MID, R_SM,
+  CHROME_ICON, CHROME_STROKE, INK_BTN_CLASS, INK_SURFACE,
+  ensureInkChromeStyle, inkDividerStyle, inkRowStyle, regionActionButtonStyle,
+} from "../../core/page-region-chrome.js";
+import {
+  FONT_SANS, FS_XS, STATUS_DANGER, TEXT_HI, R_SM,
 } from "../../shared/style/tokens.js";
 
 /**
@@ -34,6 +38,10 @@ export function InlineImageOverlay({ value, onChange }) {
   const { upload, isUploading, progress, error } = useImageUpload();
   const alt = value?.alt ?? "";
 
+  useEffect(() => {
+    ensureInkChromeStyle();
+  }, []);
+
   /** @param {File} file */
   const handleFile = async (file) => {
     const url = await upload(file);
@@ -45,26 +53,34 @@ export function InlineImageOverlay({ value, onChange }) {
       <span style={actionsStyle}>
         <button
           type="button"
-          style={regionActionButtonStyle({ font: FONT_MONO, accent: TEXT_MID })}
+          className={INK_BTN_CLASS}
+          style={regionActionButtonStyle({ accent: TEXT_HI })}
+          title={t("editors.image.replace")}
           onClick={(e) => {
             e.stopPropagation();
             inputRef.current?.click();
           }}
         >
+          <Upload size={CHROME_ICON} strokeWidth={CHROME_STROKE} />
           {t("editors.image.replace")}
         </button>
         {value?.src ? (
           <>
             {/* Same rule the list row draws before its delete. */}
-            <span aria-hidden="true" style={dividerStyle} />
+            <span aria-hidden="true" style={inkDividerStyle} />
             <button
               type="button"
-              style={regionActionButtonStyle({ font: FONT_MONO, accent: STATUS_DANGER })}
+              className={INK_BTN_CLASS}
+              style={regionActionButtonStyle({ accent: STATUS_DANGER })}
+              title={t("editors.image.remove")}
               onClick={(e) => {
                 e.stopPropagation();
                 onChange({ src: "", alt });
               }}
             >
+              {/* The list row's delete icon, so the two surfaces read as one
+                  vocabulary. */}
+              <Trash2 size={CHROME_ICON} strokeWidth={CHROME_STROKE} />
               {t("editors.image.remove")}
             </button>
           </>
@@ -103,26 +119,14 @@ const rootStyle = /** @type {React.CSSProperties} */ ({
   display: "block",
 });
 
-// Shape mirrors `regionActionsStyle`; only the anchoring differs, since this
-// row sits inside the picture rather than on a ring line.
+// The row a region's actions ride on, re-anchored: this one sits inside the
+// picture rather than on a ring line.
 const actionsStyle = /** @type {React.CSSProperties} */ ({
-  ...INK_SURFACE,
+  ...inkRowStyle,
   position: "absolute",
   top: 8,
   right: 8,
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 2,
-  padding: 2,
-  borderRadius: R_SM,
   pointerEvents: "auto",
-});
-
-const dividerStyle = /** @type {React.CSSProperties} */ ({
-  width: 1,
-  alignSelf: "stretch",
-  margin: "0 2px",
-  background: BORDER,
 });
 
 const progressStyle = /** @type {React.CSSProperties} */ ({
@@ -133,9 +137,11 @@ const progressStyle = /** @type {React.CSSProperties} */ ({
   alignItems: "center",
   justifyContent: "center",
   color: TEXT_HI,
-  fontFamily: FONT_MONO,
-  fontSize: 11,
-  letterSpacing: "0.02em",
+  fontFamily: FONT_SANS,
+  fontSize: FS_XS,
+  fontWeight: 500,
+  fontVariantNumeric: "tabular-nums",
+  letterSpacing: "0.01em",
 });
 
 const errorStyle = /** @type {React.CSSProperties} */ ({
@@ -144,9 +150,10 @@ const errorStyle = /** @type {React.CSSProperties} */ ({
   left: 8,
   right: 8,
   bottom: 8,
-  padding: "4px 8px",
+  padding: "5px 8px",
   borderRadius: R_SM,
   color: STATUS_DANGER,
-  fontFamily: FONT_MONO,
-  fontSize: 11,
+  fontFamily: FONT_SANS,
+  fontSize: FS_XS,
+  fontWeight: 500,
 });

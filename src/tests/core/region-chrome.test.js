@@ -68,15 +68,27 @@ describe("floating rows", () => {
   // The chip and the actions row are children of the region, so hover survives
   // the pointer's trip onto them only while row and content box touch.
   it("anchor flush against the content box", () => {
-    const chip = regionChipStyle({ roomy: false, highlight: false, accent: "#fff", font: "mono" });
+    const chip = regionChipStyle({ roomy: false, highlight: false, accent: "#fff" });
     expect(chip.top).toBe(0);
     expect(chip.transform).toBe("translateY(-100%)");
 
-    const roomyChip = regionChipStyle({ roomy: true, highlight: false, accent: "#fff", font: "mono" });
+    const roomyChip = regionChipStyle({ roomy: true, highlight: false, accent: "#fff" });
     expect(roomyChip.top).toBe(-ROOMY_INSET);
     expect(roomyChip.transform).toBe("translateY(-50%)");
 
     expect(regionActionsStyle({ roomy: true }).top).toBe(-ROOMY_INSET);
     expect(regionActionsStyle({ roomy: false }).top).toBe(0);
+  });
+
+  // An image's halo stays tight, but its chip still rides the ring line: the
+  // two came from one `roomy` flag once, which left every image's chip floating
+  // above a line that ran underneath it.
+  it("straddles a tight ring when asked, on the tight inset", () => {
+    const onImage = regionChipStyle({
+      roomy: false, straddle: true, highlight: false, accent: "#fff",
+    });
+    expect(onImage.top).toBe(-haloInset(false));
+    expect(onImage.transform).toBe("translateY(-50%)");
+    expect(haloInset(false)).toBeLessThan(ROOMY_INSET);
   });
 });

@@ -21,10 +21,13 @@ import { useEffect, useRef, useState } from "react";
  * @param {React.ReactNode} props.children     The readout, e.g. "2/5" or "2".
  * @param {React.CSSProperties} props.style
  * @param {React.CSSProperties} props.inputStyle
+ * @param {string} [props.className]
+ *   Readout only. The input carries its own fill, which a caller's hover or
+ *   focus rules would paint over.
  * @param {boolean} [props.disabled]
  */
 export function PositionField({
-  index, total, onMoveTo, label, editLabel, children, style, inputStyle, disabled,
+  index, total, onMoveTo, label, editLabel, children, style, inputStyle, className, disabled,
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -87,6 +90,7 @@ export function PositionField({
         setDraft(String(index + 1));
         setEditing(true);
       }}
+      className={className}
       style={{ ...style, cursor: disabled ? "inherit" : "text", userSelect: "none" }}
     >
       {children}

@@ -13,7 +13,10 @@
  * the page, so an admin sees the published layout pixel for pixel.
  */
 
-import { ROOMY_INSET, RING_RADIUS } from "../shared/style/tokens.js";
+import {
+  BORDER, DUR_FAST, EASE, FONT_MONO, FONT_SANS, FS_2XS, FS_XS,
+  R_MD, R_SM, RING_RADIUS, ROOMY_INSET,
+} from "../shared/style/tokens.js";
 
 /** Tags that make a region block-level, which is what earns it the full halo. */
 export const BLOCK_TAGS = new Set([
@@ -62,98 +65,216 @@ export function regionBoxStyle({ display, roomy, highlight, hovered, accent, rad
   };
 }
 
-// Translucent ink + blur rather than a solid fill, so anything floating on the
-// ring line reads lightly over a bright page, or over a photograph.
+// Frosted glass. The fill has to stay thin for the page to actually read
+// through it; the saturation boost is what keeps the colours behind it alive
+// rather than washed to grey, which is most of what sells the effect.
+//
+// The fill sets the ramp everything on this surface uses, so it is not a free
+// taste knob: 64% is the floor (below it TEXT_HI itself drops under 4.5:1 on a
+// white page), and 68% keeps a little headroom while still reading as glass.
+// Thickening or thinning it means checking the ramp again, not just this number.
 export const INK_SURFACE = /** @type {React.CSSProperties} */ ({
-  background: "color-mix(in srgb, var(--ins-bg, #1c1815) 82%, transparent)",
-  backdropFilter: "blur(8px)",
-  WebkitBackdropFilter: "blur(8px)",
+  background: "color-mix(in srgb, var(--ins-bg, #1c1815) 68%, transparent)",
+  backdropFilter: "blur(20px) saturate(200%)",
+  WebkitBackdropFilter: "blur(20px) saturate(200%)",
 });
 
-// A roomy region's row straddles the halo's top line; a tight one's clears the
-// content entirely. Either way the row must touch the content box: it is a
-// child, so hover survives the trip onto it only while the two stay contiguous.
-const floatOnRing = (roomy) => ({
+// The lit edge every floating ink surface shares. Without the hairline the
+// glass has no rim and melts into a dark photograph; the inset highlight is the
+// light catching its top edge, and the drop shadow lifts it off a bright page.
+export const INK_EDGE = /** @type {React.CSSProperties} */ ({
+  border: `1px solid ${BORDER}`,
+  boxShadow: [
+    `inset 0 1px 0 color-mix(in srgb, var(--ins-surface, #fff) 16%, transparent)`,
+    "0 4px 14px -6px rgba(0, 0, 0, 0.5)",
+    "0 1px 2px rgba(0, 0, 0, 0.2)",
+  ].join(", "),
+});
+
+// One control size for the whole page-side chrome. A row of buttons has to hold
+// a full control; the chip holds one line of 10px type, so it gets its own
+// height rather than sitting inside a half-empty pill.
+const PILL_PAD = 2;
+const CHIP_HEIGHT = 20;
+
+/** Height of one control, and the icon that sits in it. */
+export const CHROME_CONTROL = 18;
+export const CHROME_ICON = 12;
+export const CHROME_STROKE = 1.75;
+
+const PILL_HEIGHT = CHROME_CONTROL + 2 * PILL_PAD + 2; // + the hairline, top and bottom
+
+/**
+ * The pill a row of page-side actions is drawn on, minus its anchoring, so the
+ * on-image overlay can reuse the shape without the ring-line placement.
+ */
+export const inkRowStyle = /** @type {React.CSSProperties} */ ({
+  ...INK_SURFACE,
+  ...INK_EDGE,
+  boxSizing: "border-box",
+  height: PILL_HEIGHT,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 1,
+  padding: PILL_PAD,
+  borderRadius: R_MD,
+});
+
+/** Separates an irreversible action from the rest of a row. */
+export const inkDividerStyle = /** @type {React.CSSProperties} */ ({
+  flex: "0 0 auto",
+  width: 1,
+  height: 12,
+  margin: "0 3px",
+  background: BORDER,
+});
+
+/**
+ * Where a pill sits relative to the region's ring.
+ *
+ * Straddling centres it on the ring line, which is what makes the line look
+ * like it runs through the pill rather than under it. Not straddling stacks it
+ * on top of the content instead: the right call for inline text, where half a
+ * pill would land on the sentence being edited.
+ *
+ * Either way the pill must touch the content box. It is a child, so hover
+ * survives the pointer's trip onto it only while the two stay contiguous, which
+ * is why the non-straddling case anchors at 0 rather than at the ring.
+ *
+ * @param {boolean} roomy
+ * @param {boolean} straddle
+ */
+const floatOnRing = (roomy, straddle) => ({
   position: /** @type {const} */ ("absolute"),
-  top: roomy ? -haloInset(roomy) : 0,
-  transform: roomy ? "translateY(-50%)" : "translateY(-100%)",
+  top: straddle ? -haloInset(roomy) : 0,
+  transform: straddle ? "translateY(-50%)" : "translateY(-100%)",
   zIndex: 9999,
 });
 
 /**
- * The label chip: a real button, not a decorative tag.
+ * The label chip: a real button, not a decorative tag. Mono, because what it
+ * carries is a block path: a literal identifier, the one thing the type ramp
+ * reserves the mono face for.
  *
- * @param {{ roomy: boolean, highlight: boolean, accent: string, font: string }} args
+ * @param {{
+ *   roomy: boolean, highlight: boolean, accent: string, straddle?: boolean,
+ * }} args
  * @returns {React.CSSProperties}
  */
-export function regionChipStyle({ roomy, highlight, accent, font }) {
-  return {
-    ...floatOnRing(roomy),
+export function regionChipStyle({ roomy, highlight, accent, straddle = roomy }) {
+  return /** @type {React.CSSProperties} */ ({
+    ...floatOnRing(roomy, straddle),
     ...INK_SURFACE,
+    ...INK_EDGE,
+    boxSizing: "border-box",
     left: 0,
+    height: CHIP_HEIGHT,
     display: "inline-flex",
     alignItems: "center",
-    gap: 4,
-    padding: "2px 6px",
-    border: 0,
-    borderRadius: 6,
+    gap: 5,
+    padding: "0 7px",
+    borderRadius: R_MD,
     color: highlight ? accent : "var(--ins-text, #fff)",
-    fontFamily: font,
-    fontSize: 9.5,
+    fontFamily: FONT_MONO,
+    fontSize: FS_2XS,
     fontWeight: 500,
     letterSpacing: "0.02em",
-    lineHeight: 1.5,
+    lineHeight: 1,
     whiteSpace: "nowrap",
     cursor: "pointer",
-  };
+    "--ins-ink-fg": accent,
+  });
 }
 
 /**
  * Row of per-region actions, anchored opposite the label chip so a region
  * carrying both reads as one line rather than two stacked pills.
  *
- * @param {{ roomy: boolean }} args
+ * @param {{ roomy: boolean, straddle?: boolean }} args
  * @returns {React.CSSProperties}
  */
-export function regionActionsStyle({ roomy }) {
+export function regionActionsStyle({ roomy, straddle = roomy }) {
   return {
-    ...floatOnRing(roomy),
-    ...INK_SURFACE,
+    ...floatOnRing(roomy, straddle),
+    ...inkRowStyle,
     right: 0,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 2,
-    padding: 2,
-    borderRadius: 6,
   };
 }
 
 /**
- * One button inside `regionActionsStyle`. Ink comes from the row behind it, so
- * the button itself stays transparent.
+ * One button inside `inkRowStyle`. Ink comes from the row behind it, so the
+ * button itself stays transparent; the accent travels to the injected sheet as
+ * a custom property, which is what tints its hover wash.
  *
- * @param {{ font: string, accent?: string, disabled?: boolean }} args
+ * Sans, not mono: labels and counts are prose, and the mono face is spoken for
+ * (see `regionChipStyle`).
+ *
+ * @param {{ accent?: string, disabled?: boolean, iconOnly?: boolean }} args
  * @returns {React.CSSProperties}
  */
-export function regionActionButtonStyle({ font, accent, disabled }) {
-  return {
+export function regionActionButtonStyle({ accent, disabled, iconOnly }) {
+  const fg = accent ?? "var(--ins-text, #fff)";
+  return /** @type {React.CSSProperties} */ ({
+    boxSizing: "border-box",
     display: "inline-flex",
     alignItems: "center",
-    gap: 3,
-    padding: "2px 6px",
+    justifyContent: "center",
+    gap: 5,
+    height: CHROME_CONTROL,
+    width: iconOnly ? CHROME_CONTROL : undefined,
+    padding: iconOnly ? 0 : "0 8px",
     border: 0,
-    borderRadius: 4,
+    borderRadius: R_SM,
     background: "transparent",
-    color: accent ?? "var(--ins-text, #fff)",
-    fontFamily: font,
-    fontSize: 9.5,
+    color: fg,
+    fontFamily: FONT_SANS,
+    fontSize: FS_XS,
     fontWeight: 500,
-    letterSpacing: "0.02em",
-    lineHeight: 1.5,
+    letterSpacing: "0.01em",
+    lineHeight: 1,
     whiteSpace: "nowrap",
     cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.45 : 1,
-  };
+    opacity: disabled ? 0.4 : 1,
+    "--ins-ink-fg": fg,
+  });
+}
+
+// Hover, press and focus rings can't be expressed inline, so they live in one
+// sheet injected on first admin render (the same trick `RichTextToolbar` uses).
+export const INK_BTN_CLASS = "ins-ink-btn";
+export const INK_CHIP_CLASS = "ins-ink-chip";
+
+let inkStyleInjected = false;
+
+/** Idempotent; safe to call from every surface that draws this chrome. */
+export function ensureInkChromeStyle() {
+  if (inkStyleInjected || typeof document === "undefined") return;
+  inkStyleInjected = true;
+  const el = document.createElement("style");
+  el.setAttribute("data-inscribed-ink-chrome", "");
+  // `!important` throughout: the pill fills are inline (they carry the blur),
+  // and an inline background outranks any class rule without it.
+  el.textContent = `
+    .${INK_BTN_CLASS}, .${INK_CHIP_CLASS} {
+      transition: background-color ${DUR_FAST} ${EASE},
+                  border-color ${DUR_FAST} ${EASE},
+                  opacity ${DUR_FAST} ${EASE};
+    }
+    .${INK_BTN_CLASS}:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--ins-ink-fg, #fff) 18%, transparent) !important;
+    }
+    .${INK_BTN_CLASS}:active:not(:disabled) {
+      background: color-mix(in srgb, var(--ins-ink-fg, #fff) 28%, transparent) !important;
+    }
+    .${INK_CHIP_CLASS}:hover {
+      border-color: color-mix(in srgb, var(--ins-surface, #fff) 22%, transparent) !important;
+    }
+    .${INK_BTN_CLASS}:focus-visible, .${INK_CHIP_CLASS}:focus-visible {
+      outline: 1.5px solid var(--ins-ink-fg, currentColor);
+      outline-offset: -1.5px;
+    }
+  `;
+  document.head.appendChild(el);
 }
 
 /**

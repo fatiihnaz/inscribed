@@ -15,7 +15,8 @@
 import { useContext, useState } from "react";
 
 import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../shared/state/group-context.js";
-import { ACCENT, BG_RAISED, ROOMY_INSET } from "../shared/style/tokens.js";
+import { regionChipStyle } from "./page-region-chrome.js";
+import { ACCENT, ROOMY_INSET } from "../shared/style/tokens.js";
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsStrings } from "./hooks/use-cms-strings.js";
 
@@ -92,27 +93,16 @@ export function CmsGroup({ name, children, style, editable, visible }) {
             <span
               aria-hidden="true"
               style={{
-                position: "absolute",
+                // The same glass pill every other page-side label is drawn on;
+                // only the anchoring is the group's own, since its dashed ring
+                // sits further out than a region's halo.
+                ...regionChipStyle({ roomy: true, highlight: false, accent: ACCENT }),
                 // Straddle the outline's top line at the right, so it sits on the
                 // dashed line and clears the child block chips (which sit top-left).
                 top: -GROUP_OFFSET,
+                left: "auto",
                 right: 8 - GROUP_OFFSET,
-                transform: "translateY(-50%)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                background: BG_RAISED,
-                color: "var(--ins-text, #fff)",
-                borderRadius: 6,
-                padding: "2px 6px",
-                fontSize: 10,
-                fontWeight: 500,
-                letterSpacing: "0.02em",
-                lineHeight: 1.5,
-                whiteSpace: "nowrap",
                 pointerEvents: "none",
-                fontFamily: "ui-monospace, 'SF Mono', monospace",
-                zIndex: 9999,
               }}
             >
               <span style={{ fontWeight: 700, opacity: 0.85 }}>§</span>

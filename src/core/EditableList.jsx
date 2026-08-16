@@ -53,11 +53,18 @@ import {
 } from "./hooks/use-list-reorder.js";
 import { useContentRadius } from "./hooks/use-content-radius.js";
 import {
-  ACCENT, BORDER, DUR_FAST, EASE, FONT_MONO, FONT_SANS,
-  STATUS_DANGER, TEXT_MID, TEXT_MUTED, RING_RADIUS, TYPE_META,
+  ACCENT, DUR_FAST, EASE, FONT_SANS, FS_XS, R_SM,
+  STATUS_DANGER, TEXT, TEXT_HI, RING_RADIUS, TYPE_META,
 } from "../shared/style/tokens.js";
 import {
   BLOCK_TAGS,
+  CHROME_CONTROL,
+  CHROME_ICON,
+  CHROME_STROKE,
+  INK_BTN_CLASS,
+  INK_CHIP_CLASS,
+  ensureInkChromeStyle,
+  inkDividerStyle,
   regionBoxStyle,
   regionChipStyle,
   regionActionsStyle,
@@ -164,6 +171,13 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
     registerEditorVisibility(fullPath, visibilityMode);
     return () => unregisterEditorVisibility(fullPath);
   }, [isAdmin, fullPath, visibilityMode, registerEditorVisibility, unregisterEditorVisibility]);
+
+  // Covers the item rows too: they are children, so their own effects have
+  // already run by the time this one does, and neither can be interacted with
+  // before the first paint.
+  useEffect(() => {
+    if (isAdmin) ensureInkChromeStyle();
+  }, [isAdmin]);
 
   // Subscribe to just this list's draft slice (two-selector presence/value, see
   // EditableRegion) so typing in one list doesn't re-render siblings.
@@ -321,7 +335,8 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
           }}
           title={t("core.chip.open")}
           aria-label={t("core.chip.openList", { path: fullPath })}
-          style={regionChipStyle({ roomy, highlight: isActive, accent: ACCENT, font: FONT_MONO })}
+          className={INK_CHIP_CLASS}
+          style={regionChipStyle({ roomy, highlight: isActive, accent: ACCENT })}
         >
           <span aria-hidden="true" style={{ fontWeight: 700, opacity: 0.85 }}>
             {TYPE_META.List.glyph}
@@ -494,8 +509,9 @@ function AdminItemWrapper({
         <button
           type="button"
           onPointerDown={(e) => onGrip(index, e)}
+          className={INK_BTN_CLASS}
           style={{
-            ...regionActionButtonStyle({ font: FONT_MONO, accent: TEXT_MID }),
+            ...regionActionButtonStyle({ accent: TEXT_HI, iconOnly: true }),
             cursor: dragging ? "grabbing" : "grab",
             // Without this a touch drag scrolls the page instead.
             touchAction: "none",
@@ -503,7 +519,7 @@ function AdminItemWrapper({
           title={t("core.item.reorder")}
           aria-label={t("core.item.reorder")}
         >
-          <GripVertical size={12} />
+          <GripVertical size={CHROME_ICON} strokeWidth={CHROME_STROKE} />
         </button>
         <PositionField
           index={index}
@@ -511,6 +527,7 @@ function AdminItemWrapper({
           onMoveTo={onMoveTo}
           label={t("core.item.position", { index: index + 1, total })}
           editLabel={t("core.item.moveTo")}
+          className={INK_BTN_CLASS}
           style={positionStyle}
           inputStyle={positionInputStyle}
         >
@@ -523,34 +540,37 @@ function AdminItemWrapper({
           type="button"
           onClick={onMoveBack ?? undefined}
           disabled={!onMoveBack}
-          style={regionActionButtonStyle({ font: FONT_MONO, accent: TEXT_MID, disabled: !onMoveBack })}
+          className={INK_BTN_CLASS}
+          style={regionActionButtonStyle({ accent: TEXT_HI, disabled: !onMoveBack, iconOnly: true })}
           title={backLabel}
           aria-label={backLabel}
         >
-          <BackIcon size={12} />
+          <BackIcon size={CHROME_ICON} strokeWidth={CHROME_STROKE} />
         </button>
         <button
           ref={forwardRef}
           type="button"
           onClick={onMoveForward ?? undefined}
           disabled={!onMoveForward}
-          style={regionActionButtonStyle({ font: FONT_MONO, accent: TEXT_MID, disabled: !onMoveForward })}
+          className={INK_BTN_CLASS}
+          style={regionActionButtonStyle({ accent: TEXT_HI, disabled: !onMoveForward, iconOnly: true })}
           title={forwardLabel}
           aria-label={forwardLabel}
         >
-          <ForwardIcon size={12} />
+          <ForwardIcon size={CHROME_ICON} strokeWidth={CHROME_STROKE} />
         </button>
         {/* Delete earns a rule of its own: it is the one action here that
             cannot be undone by pressing the opposite button. */}
-        <span aria-hidden="true" style={dividerStyle} />
+        <span aria-hidden="true" style={inkDividerStyle} />
         <button
           type="button"
           onClick={onRemove}
-          style={regionActionButtonStyle({ font: FONT_MONO, accent: STATUS_DANGER })}
+          className={INK_BTN_CLASS}
+          style={regionActionButtonStyle({ accent: STATUS_DANGER, iconOnly: true })}
           title={t("core.item.remove")}
           aria-label={t("core.item.remove")}
         >
-          <Trash2 size={12} />
+          <Trash2 size={CHROME_ICON} strokeWidth={CHROME_STROKE} />
         </button>
       </div>
     </div>
@@ -631,34 +651,35 @@ const landingSlotStyle = /** @type {React.CSSProperties} */ ({
   pointerEvents: "none",
 });
 
+// Tabular figures, not mono: the readout is a number, and with the digits
+// locked to one width the counter no longer twitches as items are moved.
 const positionStyle = /** @type {React.CSSProperties} */ ({
-  padding: "0 4px",
-  color: TEXT_MUTED,
-  fontFamily: FONT_MONO,
-  fontSize: 9.5,
+  display: "inline-flex",
+  alignItems: "center",
+  height: CHROME_CONTROL,
+  padding: "0 5px",
+  borderRadius: R_SM,
+  color: TEXT,
+  fontFamily: FONT_SANS,
+  fontSize: FS_XS,
+  fontWeight: 500,
   fontVariantNumeric: "tabular-nums",
-  letterSpacing: "0.02em",
+  letterSpacing: "0.01em",
   whiteSpace: "nowrap",
+  "--ins-ink-fg": TEXT,
 });
 
-// Sized in `ch` off the same mono, so switching to the input does not resize the row.
+// Sized in `ch` off the same tabular figures, so switching to the input does
+// not resize the row.
 const positionInputStyle = /** @type {React.CSSProperties} */ ({
   ...positionStyle,
   width: "3ch",
   padding: "0 2px",
   border: 0,
-  borderRadius: 3,
   background: `color-mix(in srgb, ${ACCENT} 22%, transparent)`,
   color: "var(--ins-text, #fff)",
   textAlign: "center",
   outline: "none",
-});
-
-const dividerStyle = /** @type {React.CSSProperties} */ ({
-  width: 1,
-  alignSelf: "stretch",
-  margin: "0 2px",
-  background: BORDER,
 });
 
 const ghostHiddenStyle = /** @type {React.CSSProperties} */ ({
@@ -680,3 +701,4 @@ const ghostOverlayStyle = /** @type {React.CSSProperties} */ ({
   pointerEvents: "none",
   transition: "color 0.18s ease",
 });
+

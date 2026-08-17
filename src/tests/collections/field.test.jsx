@@ -126,6 +126,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("placeholder", () => {
+  it("defaults to the panel's own wording rather than a baked-in string", async () => {
+    mockFetch();
+    renderItem({ children: <CollectionField name="title" as="h1" /> });
+    await waitFor(() => expect(editableOf("Q1 raporu")).not.toBeNull());
+    // The block-side `<EditableRegion>` reads the same key. Divergence here is
+    // invisible until someone runs the panel in a language and finds one
+    // surface speaking another.
+    expect(editableOf("Q1 raporu")?.getAttribute("data-placeholder"))
+      .toBe(en["core.text.placeholder"]);
+  });
+
+  it("still lets the caller override it", async () => {
+    mockFetch();
+    renderItem({ children: <CollectionField name="title" as="h1" placeholder="Başlık" /> });
+    await waitFor(() => expect(editableOf("Q1 raporu")).not.toBeNull());
+    expect(editableOf("Q1 raporu")?.getAttribute("data-placeholder")).toBe("Başlık");
+  });
+});
+
 describe("read-only rendering", () => {
   it("renders the value as plain text for a visitor", async () => {
     mockFetch();

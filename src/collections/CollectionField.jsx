@@ -31,6 +31,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { useCollectionContext } from "./context.js";
 import { useEditorField } from "./hooks/use-collection-editor.js";
 import { useCollectionItemScope } from "./item-context.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useImageOverlayFits } from "../editors/inline/use-image-overlay-fits.js";
 import { InlineTextEditor } from "../editors/inline/InlineTextEditor.jsx";
 import { InlineImageOverlay } from "../editors/inline/InlineImageOverlay.jsx";
@@ -57,15 +58,18 @@ const EDITABLE_TYPES = new Set([...TEXT_TYPES, "RichText", "Image"]);
  *   than as text. Required for those: a visitor has no schema to read the type
  *   from, so without it they would see the tags while an admin saw a formatted
  *   editor. Sanitised on every render, server and client.
- * @property {string} [placeholder]  Shown while the field is empty, admin-only.
+ * @property {string} [placeholder]
+ *   Shown while the field is empty, admin-only. Defaults to the panel's own
+ *   "add text" wording, in whatever language the panel is running in.
  */
 
 /**
  * @param {CollectionFieldProps & Record<string, *>} props
  */
-export function CollectionField({ name, as, html, placeholder = "Metin ekle…", ...rest }) {
+export function CollectionField({ name, as, html, placeholder, ...rest }) {
   const { collection, slug, scopeId, item, editor } = useCollectionItemScope();
   const { registerInlineField, unregisterInlineField } = useCollectionContext();
+  const t = useCmsStrings();
   const [isHovered, setIsHovered] = useState(false);
   const richAnchorRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
 
@@ -148,7 +152,7 @@ export function CollectionField({ name, as, html, placeholder = "Metin ekle…",
       tag={as ?? "span"}
       value={typeof value === "string" ? value : ""}
       singleLine={field.type === "ShortText"}
-      placeholder={placeholder}
+      placeholder={placeholder ?? t("core.text.placeholder")}
       data-collection-field={name}
       onInput={setField}
       onMouseEnter={() => setIsHovered(true)}

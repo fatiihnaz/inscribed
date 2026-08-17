@@ -483,12 +483,12 @@ The `as` wrapper renders in public mode too, so the layout is identical for
 visitors and admins, only the ring and chip are admin-only.
 
 Admins get an add slot after the last item, drawn as a ghost of a real card so
-the grid keeps its shape. Pass `inlineAdd={false}` for layouts a ghost card
-would spoil (a slider, a fixed-size grid); items are then added from the drawer
-and the rest of the page-side editing is unchanged.
+the grid keeps its shape. Pass `noInlineAdd` for layouts a ghost card would
+spoil (a slider, a fixed-size grid); items are then added from the drawer and
+the rest of the page-side editing is unchanged.
 
 ```jsx
-<EditableList blockPath="hero.slides" as="div" inlineAdd={false} itemSchema={{ … }}>
+<EditableList blockPath="hero.slides" as="div" noInlineAdd itemSchema={{ … }}>
 ```
 
 > `<EditableList>` uses a render-prop, a function child, so it must live in a
@@ -1121,16 +1121,22 @@ overlay and the block's card in the admin drawer:
 
 | Prop | Type | Default | Behaviour |
 | ---- | ---- | ------- | --------- |
-| `editable` | `boolean` | `true` | When `false`, the block is **read-only**: no inline overlay on the page, and its drawer card stays visible but locked (every field disabled, with a lock badge). |
-| `visible` | `boolean` | `true` | When `false`, the block is **removed from the admin drawer entirely** (no card, no count) and renders read-only on the page. Takes precedence over `editable`. |
+| `readOnly` | `boolean` | `false` | The block is **read-only**: no inline overlay on the page, and its drawer card stays visible but locked (every field disabled, with a lock badge). |
+| `hidden` | `boolean` | `false` | The block is **removed from the admin drawer entirely** (no card, no count) and renders read-only on the page. Takes precedence over `readOnly`. |
 
 These are **runtime-only** gates discovery still syncs the block and seeds its
 row, so the content renders normally for every visitor; only the *editing*
-surface is affected. `visible={false}` is the stronger of the two: a block the
-admin panel can't see is never editable either.
+surface is affected. `hidden` is the stronger of the two: a block the admin
+panel can't see is never editable either.
+
+Both are plain booleans, so a fixed gate is JSX shorthand: `<EditableRegion hidden>`.
+The inverted spelling, `editable={false}` and `visible={false}`, still works and
+still means the same thing; where both appear on one component the more
+restrictive wins.
 
 The props carry no role logic themselves. Compute the boolean however your app
-resolves roles and pass it in:
+resolves roles and pass it in. This is the case the older spelling reads better
+in, which is why it stayed:
 
 ```jsx
 // Derive canEdit from your auth context / session
@@ -1151,11 +1157,11 @@ included); precedence is **most restrictive wins** (`hidden` > `readonly` >
 normal), so a child can *tighten* the section's mode but not loosen it:
 
 ```jsx
-<CmsGroup name="hero" editable={false}>
+<CmsGroup name="hero" readOnly>
   {/* whole section read-only in the drawer */}
   <EditableRegion blockPath="title" blockType="ShortText" defaultValue="Welcome" as="h1" />
   {/* a child can go further and hide itself, but can't re-enable editing */}
-  <EditableRegion blockPath="badge" blockType="ShortText" defaultValue="New" visible={false} />
+  <EditableRegion blockPath="badge" blockType="ShortText" defaultValue="New" hidden />
 </CmsGroup>
 ```
 

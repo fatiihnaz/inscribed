@@ -318,7 +318,7 @@ Client's locales at sync time.
    `InlineImageOverlay` / `InlineImagePlaceholder`, which `<EditableRegion>`
    swaps in for admins; keep heavy deps lazy (see the RichText note below).
 4. Thread the `disabled` prop through the editor and honour it on every
-   interactive surface. Read-only blocks (`editable={false}`, or anything inside
+   interactive surface. Read-only blocks (`readOnly`, or anything inside
    a locked `<CmsGroup>`) flow a `disabled` flag down through `FieldEditor`; an
    editor that ignores it stays editable when it shouldn't. The
    `editorVisibility` registry (populated by `<EditableRegion>` /

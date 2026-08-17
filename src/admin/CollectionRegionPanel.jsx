@@ -35,7 +35,7 @@ import { useCollectionMeta } from "../collections/hooks/use-my-collections.js";
 import { useCollectionLocale } from "../collections/hooks/use-collection-locale.js";
 import { stableStringify } from "../shared/util/stable-stringify.js";
 
-import { useCollectionEditor } from "../collections/hooks/use-collection-editor.js";
+import { useCollectionEditor, useEditorDirty } from "../collections/hooks/use-collection-editor.js";
 import { Menu } from "./Menu.jsx";
 import { CollectionRecordForm, DraftIndicator } from "./CollectionRecordForm.jsx";
 import { CollectionFieldsForm, SlugField } from "../collections/CollectionFieldsForm.jsx";
@@ -1070,7 +1070,9 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
   const role = useDrawerDraftRole(collectionKey, slug, true);
   const editor = useCollectionEditor(collectionKey, slug, role);
   const meta = useCollectionMeta(collectionKey);
-  const isDirty = editor.hasDraft && editor.canEdit;
+  const dirty = useEditorDirty(editor);
+  const isDirty = dirty && editor.canEdit;
+  const nothingToSave = !dirty && !editor.isVirtual;
 
   return (
     <DetailPane
@@ -1157,7 +1159,7 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
           <button
             type="button"
             onClick={editor.save}
-            disabled={editor.isPending}
+            disabled={editor.isPending || nothingToSave}
             className="inscribed-btn-collection"
             style={saveButtonStyle}
           >

@@ -175,6 +175,27 @@ describe("collection publish vs. an in-flight draft autosave", () => {
     expect(server.draftData).toBe(null);
   });
 
+  it("goes clean again when the edit is taken back to the published value", async () => {
+    await mount();
+
+    act(() => { probe.editor.setValues({ title: TYPED }); });
+    await tick();
+    await act(async () => { draftPuts[0].land(); });
+    await settle();
+    expect(probe.editor.hasDraft).toBe(true);
+
+    // Undone by hand (ctrl-Z, or deleting back to it). The autosave has already
+    // landed by now, which is the case the old comparison got wrong: it asked
+    // whether the values matched the last payload the server took, and that is
+    // the draft, not the published row.
+    act(() => { probe.editor.setValues({ title: PUBLISHED }); });
+    await settle();
+
+    expect(calls).toContain("deleteCollectionItemDraft");
+    expect(server.draftData).toBe(null);
+    expect(probe.editor.hasDraft).toBe(false);
+  });
+
   it("does not let the raced write patch draftData back onto the published row", async () => {
     await mount();
 

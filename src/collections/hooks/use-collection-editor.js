@@ -201,6 +201,46 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     [collectionStore, editorId],
   );
 
+  // What a publish would have to change. Compared against, rather than
+  // `lastSyncedRef`: that one tracks the last payload the server took, so once
+  // an autosave lands it no longer answers "is this the published value".
+  const publishedPayload = useMemo(
+    () => (schema
+      ? stableStringify(buildPayload(schema.fields, seedValues(schema.fields, item?.data ?? {})))
+      : null),
+    [schema, item?.data],
+  );
+
+  /**
+   * Stand the record's draft down, locally and on the server. Cleanup is a
+   * DELETE, not an echo-PUT of the published payload: an echo can lose a race
+   * with a concurrent publish and recreate a draft instead of clearing one.
+   */
+  const dropDraft = useCallback(() => {
+    clearCollectionDraft(collection, slug);
+    const current = itemRef.current;
+    if (!current || current.draftData == null) return;
+    // In-place patch, so list windows don't refetch the server's still-dirty
+    // state before the DELETE lands.
+    patchCollectionItem(collection, slug, { ...current, draftData: null });
+    // Cancel first, then queue: an autosave already in flight must land before
+    // the DELETE, or it would undo the cleanup it overtook.
+    const queueKey = itemDraftKey(collection, slug);
+    draftQueue.cancel(queueKey);
+    draftQueue.enqueue(queueKey, async () => {
+      try {
+        const token = await getAccessToken();
+        await config.transport.deleteCollectionItemDraft(collection, slug, { accessToken: token });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[inscribed] collection draft cleanup failed:", err);
+      }
+    });
+  }, [
+    collection, slug, clearCollectionDraft, patchCollectionItem, draftQueue,
+    getAccessToken, config,
+  ]);
+
   // A user edit and its handoff to the shared draft happen together, rather
   // than the edit landing and an effect noticing it a render later. The draft
   // is what every other surface renders, so the two must not drift apart.
@@ -211,17 +251,17 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
       if (!active && !mirror) return;
       if (!schema || !itemRef.current?.canEdit) return;
       const payload = buildPayload(schema.fields, next);
-      // Typed back to the server's view: drop the overlay so consumers fall
-      // back to `draftData ?? data` instead of holding an identical copy.
-      if (stableStringify(payload) === lastSyncedRef.current) {
-        clearCollectionDraft(collection, slug);
+      // Edited back to what is published: there is nothing left to publish, so
+      // the draft goes rather than lingering as an identical copy.
+      if (stableStringify(payload) === publishedPayload) {
+        dropDraft();
       } else {
         setCollectionDraft(collection, slug, payload);
       }
     },
     [
       editorId, setEditorValues, active, mirror, schema, collection, slug,
-      setCollectionDraft, clearCollectionDraft,
+      setCollectionDraft, publishedPayload, dropDraft,
     ],
   );
 
@@ -434,43 +474,10 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     updateCollectionItem, clearCollectionDraft, onAfterCollectionSave, refetch, t,
   ]);
 
-  // Revert local edits to the published baseline. Optimistically clears
-  // `draftData` on the cached item so `hasDraft` flips off (badge + dirty
-  // icon disappear) the moment the user clicks Geri al. The seeding
-  // effect then reseeds `values` + `lastSyncedRef` from `item.data`, so
-  // the autosave effect's next pass is a no-op (no re-overlay, no PUT).
-  // Backend cleanup is a fire-and-forget DELETE, not an echo-PUT of the
-  // published payload: an echo can lose a race with a concurrent publish
-  // (the payload it sends is no longer the current published value, so it
-  // recreates a draft instead of clearing one) — DELETE can't.
   const undoDraft = useCallback(() => {
-    clearCollectionDraft(collection, slug);
-    const item = itemRef.current;
-    if (!schema || !item || item.draftData == null) return;
     setError(null);
-    // In-place patch, not `updateCollectionItem`, so list windows don't refetch
-    // and re-seed from the server's still-dirty state before the cleanup DELETE.
-    patchCollectionItem(collection, slug, { ...item, draftData: null });
-    // Cancel first, then queue: a pending autosave for this record is now
-    // obsolete, and one already in flight must land before the DELETE or the
-    // cleanup would be undone by the write it overtook.
-    const queueKey = itemDraftKey(collection, slug);
-    draftQueue.cancel(queueKey);
-    draftQueue.enqueue(queueKey, async () => {
-      try {
-        const token = await getAccessToken();
-        await config.transport.deleteCollectionItemDraft(
-          collection, slug, { accessToken: token },
-        );
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn("[inscribed] collection undo draft cleanup failed:", err);
-      }
-    });
-  }, [
-    schema, collection, slug, clearCollectionDraft, patchCollectionItem,
-    draftQueue, getAccessToken, config,
-  ]);
+    dropDraft();
+  }, [dropDraft]);
 
   // Archive and restore share a shape: both move the row between views without
   // touching its content, both answer with the row's own version, and both make
@@ -581,6 +588,24 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
       itemLoading, itemError, refetch, collection, slug,
     ],
   );
+}
+
+/**
+ * Whether a publish would send anything: the live overlay draft unioned with
+ * the server's. A hook rather than a field on the editor state, because the
+ * overlay flips on the first keystroke and the editor object must keep its
+ * identity across one (it is what the record scope hangs off).
+ *
+ * @param {CollectionEditorState} editor
+ * @returns {boolean}
+ */
+export function useEditorDirty(editor) {
+  const { collectionStore } = useCollectionContext();
+  const hasLocalDraft = useStoreSelector(
+    collectionStore,
+    (s) => s.drafts.has(`${editor.collection}:${editor.slug}`),
+  );
+  return hasLocalDraft || editor.hasDraft;
 }
 
 /**

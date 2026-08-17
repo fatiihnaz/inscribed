@@ -14,7 +14,7 @@ import { AnimatePresence, motion } from "framer-motion";
 
 import { CmsApiError } from "../shared/contracts/errors.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
-import { useEditorValues } from "../collections/hooks/use-collection-editor.js";
+import { useEditorDirty, useEditorValues } from "../collections/hooks/use-collection-editor.js";
 import { CollectionFieldsForm } from "../collections/CollectionFieldsForm.jsx";
 import { buttonBaseStyle } from "./drawer-styles.js";
 import { TEXT_MUTED, TEXT_FAINT, FONT_MONO, FONT_SANS, STATUS_OK, STATUS_WARN, STATUS_DANGER, ACCENT, SURFACE_1, SURFACE_2, HAIRLINE, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, R_BADGE, R_PILL } from "../shared/style/tokens.js";
@@ -49,6 +49,7 @@ export function CollectionRecordForm({ editor, showMetaRow = true, showActions =
     meLoading, meError, itemLoading, itemError,
   } = editor;
   const values = useEditorValues(editorId);
+  const isDirty = useEditorDirty(editor);
 
   if (meLoading || itemLoading) {
     return <div style={hintStyle}>{t("collections.loading")}</div>;
@@ -77,6 +78,7 @@ export function CollectionRecordForm({ editor, showMetaRow = true, showActions =
   // A group-level lock is as final as the record's own permissions here.
   const editable = canEdit && !readOnly;
   const disabled = isPending || !editable;
+  const nothingToSave = !isDirty && !isVirtual;
 
   return (
     <div style={containerStyle}>
@@ -121,7 +123,7 @@ export function CollectionRecordForm({ editor, showMetaRow = true, showActions =
           <button
             type="button"
             onClick={save}
-            disabled={disabled}
+            disabled={disabled || nothingToSave}
             className="inscribed-btn-collection"
             style={saveButtonStyle}
           >

@@ -35,8 +35,8 @@ export const collections = Object.freeze({
   "collections.noneAccessible": "You can't reach any collection.",
   "collections.fieldCount_one": "{count} field",
   "collections.fieldCount_other": "{count} fields",
-  "collections.canCreate": "new records allowed",
-  "collections.onThisPage": "on this page",
+  "collections.sectionOnPage": "On this page",
+  "collections.sectionOther": "Other collections",
 
   // One collection's rows, sections and detail pane.
   "collections.searchRecords": "Search records",
@@ -47,6 +47,11 @@ export const collections = Object.freeze({
   "collections.searchScope": "Searched the {loaded} loaded records; {remaining} more to load.",
   "collections.loadMore": "Load more ({remaining} left)",
   "collections.allRecords": "All",
+  "collections.timeNow": "just now",
+  "collections.timeMinutes": "{n}m",
+  "collections.timeHours": "{n}h",
+  "collections.timeDays": "{n}d",
+  "collections.editedAt": "Last edited {when}",
   "collections.sortBy": "Sort by",
   "collections.sortSlug": "Slug",
   "collections.sortCreatedAt": "Created",

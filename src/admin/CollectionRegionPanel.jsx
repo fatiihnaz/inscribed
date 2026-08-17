@@ -40,8 +40,8 @@ import { Menu } from "./Menu.jsx";
 import { CollectionRecordForm, DraftIndicator } from "./CollectionRecordForm.jsx";
 import { CollectionFieldsForm, SlugField } from "../collections/CollectionFieldsForm.jsx";
 import { emptyStateStyle } from "../editors/fields/styles.js";
-import { buttonBaseStyle, paneStyle, btnGhostStyle, searchWrapStyle, searchInputStyle, searchClearStyle } from "./drawer-styles.js";
-import { BG, BG_RAISED, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, STATUS_DANGER, BORDER, HAIRLINE, SURFACE_1, FONT_MONO, FONT_SANS, PANEL_TRANSITION, RADIUS, R_BADGE, R_SM, R_BTN } from "../shared/style/tokens.js";
+import { buttonBaseStyle, paneStyle, btnGhostStyle, searchWrapStyle, searchInputStyle, searchClearStyle, dirtyDotStyle, rowPathStyle } from "./drawer-styles.js";
+import { BG, BG_RAISED, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, STATUS_DANGER, BORDER, HAIRLINE, SURFACE_1, FONT_MONO, FONT_SANS, PANEL_TRANSITION, R_BADGE, R_MD, R_SM, R_BTN } from "../shared/style/tokens.js";
 
 const DEFAULT_DRAWER_PAGE_SIZE = 50;
 
@@ -114,6 +114,31 @@ function sortableColumns(schema) {
     .filter((f) => f.sortable)
     .map((f) => ({ value: f.name, label: f.label || f.name }));
   return [...base, ...own];
+}
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+/**
+ * Compact age, for the right edge of a row. Switches to a plain date after a
+ * week, where "23d" stops being a span anyone can picture.
+ *
+ * @param {string | undefined} iso
+ * @param {(key: string, vars?: Record<string, *>) => string} t
+ * @returns {string | null}
+ */
+function shortAge(iso, t) {
+  if (!iso) return null;
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return null;
+  const elapsed = Date.now() - then;
+  // A clock skewed a little ahead of the server would otherwise render "-0m".
+  if (elapsed < MINUTE) return t("collections.timeNow");
+  if (elapsed < HOUR) return t("collections.timeMinutes", { n: Math.floor(elapsed / MINUTE) });
+  if (elapsed < DAY) return t("collections.timeHours", { n: Math.floor(elapsed / HOUR) });
+  if (elapsed < 7 * DAY) return t("collections.timeDays", { n: Math.floor(elapsed / DAY) });
+  return new Date(then).toLocaleDateString();
 }
 
 /**
@@ -583,6 +608,7 @@ function DerivedRows({ collectionKey, listParams, dirtySlugs, titleField, query,
             canEdit={row.canEdit}
             archived={row.isArchived === true}
             dirty={dirtySlugs.has(/** @type {string} */ (row.slug))}
+            updatedAt={row.updatedAt}
             onOpen={() => onOpenItem(/** @type {string} */ (row.slug))}
           />
         </li>
@@ -706,6 +732,7 @@ function RegionSection({
                 canEdit={item.canEdit}
                 archived={item.isArchived === true}
                 dirty={dirtySlugs.has(item.slug)}
+                updatedAt={item.updatedAt ?? item.createdAt}
                 onOpen={() => onOpenItem(item.slug)}
               />
             </li>
@@ -763,17 +790,30 @@ function RegionHeader({ filter, loaded, total }) {
 }
 
 /**
- * One collection item as a quiet list row: slug, readonly chip, dirty dot,
- * trailing chevron. All editing happens in the detail pane.
+ * One collection item as a list row: the drawer's own row, with a record where
+ * a block would be.
  *
- * @param {{ slug: string, canEdit: boolean, archived?: boolean, dirty: boolean, onOpen: () => void }} props
+ * The block list leads with the identifier and previews the value beside it;
+ * this row swaps the two, because a block is looked up by its path and a record
+ * is looked up by its title. The roles keep their families either way: prose in
+ * the sans, the slug in the mono, in the same preview slot at the same size a
+ * closed card gives its value.
+ *
+ * @param {{
+ *   slug: string, title: string | null, canEdit: boolean, archived?: boolean,
+ *   dirty: boolean, updatedAt?: string, onOpen: () => void,
+ * }} props
  */
-function RegionItemRow({ slug, title, canEdit, archived, dirty, onOpen }) {
+function RegionItemRow({ slug, title, canEdit, archived, dirty, updatedAt, onOpen }) {
   const t = useCmsStrings();
   // No title resolves when the schema has no textual field: the slug then takes
-  // the headline and keeps its identifier styling instead of being dressed up
-  // as prose.
+  // the lead and keeps its identifier styling instead of being dressed up as
+  // prose, which also leaves the preview slot empty rather than printing the
+  // same string twice.
   const headline = title ?? slug;
+  const age = shortAge(updatedAt, t);
+  // The row prints "3g"; hovering it says which day that was.
+  const stamp = age && updatedAt ? new Date(updatedAt).toLocaleString() : "";
 
   return (
     <button
@@ -782,25 +822,38 @@ function RegionItemRow({ slug, title, canEdit, archived, dirty, onOpen }) {
       className="inscribed-region-row"
       style={rowStyle}
     >
-      <span style={rowTextColStyle}>
-        <span style={rowHeadlineRowStyle}>
-          <span style={title ? rowTitleStyle : rowSlugHeadlineStyle} title={headline}>
-            {headline}
-          </span>
-          {!canEdit ? <span style={readonlyChipStyle}>{t("block.readOnly")}</span> : null}
-          {archived ? (
-            <span style={archivedChipStyle}>{t("collections.archivedBadge")}</span>
-          ) : null}
-          {dirty ? (
-            <span style={rowDirtyDotStyle} aria-label={t("block.unsavedDot")} />
-          ) : null}
+      {/* Headline and dot are one cluster, not two siblings of the row: the
+          headline is what grows into the row's slack, so a dot beside it in the
+          row's own flow gets carried along to the far end and reads as the
+          slug's. Inside the cluster the headline takes its own width and the
+          dot sits against the last letter. */}
+      <span style={rowLeadStyle}>
+        <span style={title ? rowTitleStyle : rowSlugHeadlineStyle} title={headline}>
+          {headline}
         </span>
-        {title ? (
-          <span style={rowSlugStyle} title={slug}>{slug}</span>
-        ) : null}
+        {dirty ? <span style={rowDotStyle} aria-label={t("block.unsavedDot")} /> : null}
       </span>
 
-      <span className="inscribed-region-row-chevron" style={rowChevronStyle} aria-hidden="true">
+      {title ? (
+        <span className="inscribed-row-slug" style={rowSlugStyle} title={slug}>{slug}</span>
+      ) : null}
+
+      {!canEdit ? <span style={readonlyChipStyle}>{t("block.readOnly")}</span> : null}
+      {archived ? (
+        <span style={archivedChipStyle}>{t("collections.archivedBadge")}</span>
+      ) : null}
+
+      {age ? (
+        <span
+          className="inscribed-row-age"
+          style={rowAgeStyle}
+          title={t("collections.editedAt", { when: stamp })}
+        >
+          {age}
+        </span>
+      ) : null}
+
+      <span className="inscribed-list-chevron" style={rowChevronStyle} aria-hidden="true">
         <ChevronRight size={13} />
       </span>
     </button>
@@ -1281,10 +1334,12 @@ const regionHeaderStyle = /** @type {React.CSSProperties} */ ({
   padding: "14px 16px 4px",
 });
 
+// Sentence case, matching the collections list's section headings: the drawer
+// has one voice for labelling a group of rows, and it isn't tracked-out
+// micro-caps.
 const regionAllLabelStyle = /** @type {React.CSSProperties} */ ({
-  font: `500 10.5px/1 ${FONT_SANS}`,
-  letterSpacing: "0.055em",
-  textTransform: "uppercase",
+  font: `500 11px/1 ${FONT_SANS}`,
+  letterSpacing: "-0.005em",
   color: TEXT_MUTED,
 });
 
@@ -1313,74 +1368,104 @@ const regionCountStyle = /** @type {React.CSSProperties} */ ({
   color: TEXT_FAINT,
 });
 
+// No box around the list and no rules between the rows: the drawer groups by
+// spacing and rounded fills, never by frames. A bordered group with dividers is
+// a table, and it read as one imported from somewhere else.
+//
+// The rows start at the panel's own 16px inset, same as the search field, the
+// toolbar and the section header above them. A row's rounded edge is what has
+// to land on that line; its text then sits further in, exactly as a block card
+// does on the Page tab.
 const rowGroupStyle = /** @type {React.CSSProperties} */ ({
-  margin: "0 16px",
-  padding: 0,
-  borderRadius: RADIUS,
-  boxShadow: `inset 0 0 0 1px ${HAIRLINE}`,
-  overflow: "hidden",
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+  margin: 0,
+  padding: "0 16px",
 });
 
+// One control height for the whole drawer: a ShortText input is 12px of text in
+// 9px of padding, and the collections list a level up is the same 32px box.
+// `boxSizing` is required, not tidiness: nothing resets it in the panel, so
+// under content-box the min-height would stack on top of the padding.
 const rowStyle = /** @type {React.CSSProperties} */ ({
+  boxSizing: "border-box",
   display: "flex",
   alignItems: "center",
   gap: 8,
   width: "100%",
-  padding: "9px 12px",
+  minHeight: 32,
+  padding: "6px 12px",
   border: 0,
+  borderRadius: R_MD,
   cursor: "pointer",
   textAlign: "left",
   fontFamily: "inherit",
   color: "inherit",
 });
 
-// Two lines, no leading badge: an initial derived from the title would just
-// restate what the title already says. The collections list one level up keeps
-// its badge because a collection is a category you learn to recognise; a record
-// is identified by its own headline.
-const rowTextColStyle = /** @type {React.CSSProperties} */ ({
-  flex: 1,
-  minWidth: 0,
-  display: "flex",
-  flexDirection: "column",
-  gap: 2,
+// Beside the chevron, where every other row in the drawer keeps it, rather than
+// in a reserved slot off the left edge.
+const rowDotStyle = /** @type {React.CSSProperties} */ ({
+  ...dirtyDotStyle,
+  background: COLLECTION_ACCENT,
+  boxShadow: `0 0 5px color-mix(in srgb, ${COLLECTION_ACCENT} 50%, transparent)`,
 });
 
-const rowHeadlineRowStyle = /** @type {React.CSSProperties} */ ({
+// Holds the row's slack, so everything after it lands in the right lane.
+const rowLeadStyle = /** @type {React.CSSProperties} */ ({
+  flex: "1 1 auto",
+  minWidth: 0,
   display: "flex",
   alignItems: "center",
   gap: 6,
-  minWidth: 0,
 });
 
-// The headline is prose (a field value), so it takes the sans.
+// The lead: prose (a field value), so the sans, one tone above the block path
+// it stands in for because a title is what the eye is actually hunting. Sized
+// from its own text, so the dot beside it stays against the text rather than
+// against the far edge of a box that grew.
 const rowTitleStyle = /** @type {React.CSSProperties} */ ({
+  flex: "0 1 auto",
   minWidth: 0,
-  font: `500 12px/1.2 ${FONT_SANS}`,
+  font: `500 11px/1.2 ${FONT_SANS}`,
   color: TEXT,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
 });
 
-// Fallback headline: still an identifier, so it keeps the mono.
+// Fallback lead: an identifier now, so it is the block path's own style, with
+// the same basis override the title above takes.
 const rowSlugHeadlineStyle = /** @type {React.CSSProperties} */ ({
+  ...rowPathStyle,
+  flex: "0 1 auto",
+});
+
+// The preview slot, on a closed block card's terms: yields to the lead, never
+// takes more than the row's back half. Colour lives on `.inscribed-row-slug` so
+// the row's hover rule can lift it; an inline colour would outrank it.
+const rowSlugStyle = /** @type {React.CSSProperties} */ ({
+  flex: "0 1 auto",
   minWidth: 0,
-  font: `500 12px/1.2 ${FONT_MONO}`,
-  color: TEXT,
+  maxWidth: "45%",
+  font: `11px/1.2 ${FONT_MONO}`,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
 });
 
-// Secondary line under a resolved title.
-const rowSlugStyle = /** @type {React.CSSProperties} */ ({
-  minWidth: 0,
-  font: `500 10.5px/1.2 ${FONT_MONO}`,
-  color: TEXT_MUTED,
+// Right edge of the row. Tabular figures plus a floor width and right
+// alignment: without both, "5 dk" and "12.08.2026" start in different places
+// and the column the ages are supposed to form never appears. Colour is on
+// `.inscribed-row-age`, same reason as the slug above.
+const rowAgeStyle = /** @type {React.CSSProperties} */ ({
+  flexShrink: 0,
+  minWidth: 30,
+  textAlign: "right",
+  font: `500 10px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
 });
 
 const searchBarStyle = /** @type {React.CSSProperties} */ ({
@@ -1442,30 +1527,37 @@ const searchScopeNoteStyle = /** @type {React.CSSProperties} */ ({
   color: TEXT_MUTED,
 });
 
-const rowDirtyDotStyle = /** @type {React.CSSProperties} */ ({
-  width: 6,
-  height: 6,
-  borderRadius: "50%",
-  background: COLLECTION_ACCENT,
-  boxShadow: `0 0 5px color-mix(in srgb, ${COLLECTION_ACCENT} 50%, transparent)`,
-  flexShrink: 0,
-});
-
 const rowChevronStyle = /** @type {React.CSSProperties} */ ({
   display: "inline-flex",
   color: TEXT_FAINT,
   flexShrink: 0,
 });
 
-const readonlyChipStyle = /** @type {React.CSSProperties} */ ({
-  color: TEXT_MUTED,
-  textTransform: "uppercase",
-  fontSize: 9,
-  padding: "1px 6px",
-  background: SURFACE_1,
-  borderRadius: 3,
-  letterSpacing: "0.05em",
+// One recipe for every state tag a record wears, in the row and in the detail
+// header alike: the create lane's draft badge, minus its tint. They used to be
+// two hand-rolled boxes at a radius (3) that exists nowhere else in the scale.
+const stateChipStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
+  font: `600 9px/1 ${FONT_SANS}`,
+  letterSpacing: "0.045em",
+  textTransform: "uppercase",
+  padding: "3px 5px",
+  borderRadius: R_BADGE,
+});
+
+const readonlyChipStyle = /** @type {React.CSSProperties} */ ({
+  ...stateChipStyle,
+  background: SURFACE_1,
+  color: TEXT_MUTED,
+});
+
+// A tinted fill rather than red lettering on the neutral one: archived is a
+// state, not an error, and the old pairing put the loudest colour in the row on
+// its quietest surface.
+const archivedChipStyle = /** @type {React.CSSProperties} */ ({
+  ...stateChipStyle,
+  background: `color-mix(in srgb, ${STATUS_DANGER} 12%, transparent)`,
+  color: STATUS_DANGER,
 });
 
 const errorBoxStyle = /** @type {React.CSSProperties} */ ({
@@ -1558,17 +1650,6 @@ const detailTitleStyle = /** @type {React.CSSProperties} */ ({
 const detailVersionStyle = /** @type {React.CSSProperties} */ ({
   font: `500 11px/1 ${FONT_MONO}`,
   color: TEXT_MUTED,
-  flexShrink: 0,
-});
-
-const archivedChipStyle = /** @type {React.CSSProperties} */ ({
-  color: STATUS_DANGER,
-  textTransform: "uppercase",
-  fontSize: 9,
-  padding: "1px 6px",
-  background: SURFACE_1,
-  borderRadius: 3,
-  letterSpacing: "0.05em",
   flexShrink: 0,
 });
 

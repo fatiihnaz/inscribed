@@ -1531,7 +1531,7 @@ function TabButton({ id, label, count, active, dirty, accent = ACCENT, onClick }
         <span
           style={accent === ACCENT
             ? tabDirtyDotStyle
-            : { ...tabDirtyDotStyle, background: accent, boxShadow: `0 0 6px ${accent}80` }}
+            : { ...tabDirtyDotStyle, background: accent, boxShadow: `0 0 4px ${accent}80` }}
           aria-label={t("drawer.unsavedDot")}
         />
       ) : null}

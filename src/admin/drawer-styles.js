@@ -294,11 +294,12 @@ export const tabCountBadgeActiveStyle = {
 };
 
 export const tabDirtyDotStyle = {
-  width: 6,
-  height: 6,
+  flexShrink: 0,
+  width: 4,
+  height: 4,
   borderRadius: "50%",
   background: ACCENT,
-  boxShadow: `0 0 6px ${ACCENT_GLOW}`,
+  boxShadow: `0 0 4px ${ACCENT_GLOW}`,
   marginLeft: -2,
 };
 
@@ -978,18 +979,58 @@ export const panelCss = `
 
   .inscribed-create-card { transition: background 140ms ease, box-shadow 140ms ease; }
 
-  /* Region tab: quiet item rows in a divided group. Divider via inset shadow so
-     row hover backgrounds don't repaint the hairline. */
+  /* Collections landing rows. A collection is a container, so it takes the
+     group header's fill on hover rather than a row's lighter lift. */
+  .inscribed-collection-row {
+    background: transparent;
+    transition: background 140ms ease;
+  }
+  .inscribed-collection-row:hover { background: ${SURFACE_2}; }
+
+  /* One collection's record rows. No rules between them, no frame around them;
+     they separate by spacing and a rounded hover fill, the way the rest of the
+     drawer groups things. */
   .inscribed-region-row {
     background: transparent;
     transition: background 140ms ease;
   }
   .inscribed-region-row:hover { background: ${SURFACE_1}; }
-  li + li > .inscribed-region-row { box-shadow: inset 0 1px 0 ${HAIRLINE}; }
-  .inscribed-region-row-chevron {
-    transition: transform 200ms ${EASE}, color 140ms ease;
+
+  /* Keyboard parity: the rows are buttons, and tabbing through them showed
+     nothing but the chevron. A ring rather than the browser outline, so the
+     mark follows the row's own radius. */
+  .inscribed-region-row:focus-visible,
+  .inscribed-collection-row:focus-visible {
+    outline: none;
+    background: ${SURFACE_1};
+    box-shadow: inset 0 0 0 1px ${BORDER};
   }
-  .inscribed-region-row:hover .inscribed-region-row-chevron {
+
+  /* A record row's second rank (its slug, its age). Faint enough at rest that
+     the headline is what the eye lands on, readable once the row is the one
+     being pointed at. */
+  .inscribed-row-slug, .inscribed-row-age {
+    color: ${TEXT_FAINT};
+    transition: color 140ms ease;
+  }
+  .inscribed-region-row:hover .inscribed-row-slug,
+  .inscribed-region-row:hover .inscribed-row-age,
+  .inscribed-region-row:focus-visible .inscribed-row-slug,
+  .inscribed-region-row:focus-visible .inscribed-row-age { color: ${TEXT_MUTED}; }
+
+  /* Navigation chevron shared by both collection lists (the block list's own
+     chevron is a disclosure that rotates, not this). Repeated down every row it
+     stops being an affordance and turns into texture, so only the row being
+     pointed at shows one. It keeps its space either way, so nothing shifts. */
+  .inscribed-list-chevron {
+    opacity: 0;
+    transition: transform 200ms ${EASE}, color 140ms ease, opacity 140ms ease;
+  }
+  .inscribed-region-row:hover .inscribed-list-chevron,
+  .inscribed-region-row:focus-visible .inscribed-list-chevron,
+  .inscribed-collection-row:hover .inscribed-list-chevron,
+  .inscribed-collection-row:focus-visible .inscribed-list-chevron {
+    opacity: 1;
     transform: translateX(2px);
     color: ${TEXT_MID};
   }
@@ -1092,4 +1133,4 @@ export const panelCss = `
     transition: background 140ms ease, color 140ms ease;
   }
   .inscribed-seg:hover:not([aria-pressed="true"]) { background: ${SURFACE_1}; color: ${TEXT_HI}; }
-`;
+`;

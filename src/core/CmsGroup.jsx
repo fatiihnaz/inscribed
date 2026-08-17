@@ -14,7 +14,7 @@
 
 import { useContext, useState } from "react";
 
-import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../shared/state/group-context.js";
+import { CmsGroupContext, CmsGroupVisibilityContext, ownVisibility, strongerVisibility } from "../shared/state/group-context.js";
 import { CHROME_ICON, regionChipStyle } from "./page-region-chrome.js";
 import { TypeGroup } from "../shared/style/icons.jsx";
 import { ACCENT, ROOMY_INSET } from "../shared/style/tokens.js";
@@ -26,15 +26,21 @@ import { useCmsStrings } from "./hooks/use-cms-strings.js";
  * @property {string} name        Section name. Joined with parent CmsGroups via dots.
  * @property {React.ReactNode} children
  * @property {React.CSSProperties} [style]   Forwarded to the wrapper div in admin mode.
+ * @property {boolean} [readOnly]
+ *   Section-level lock. Every descendant `<EditableRegion>` / `<EditableList>`
+ *   renders read-only (page + drawer card disabled), as if each carried
+ *   `readOnly`. Children may tighten further (a child `hidden` still hides),
+ *   but cannot loosen past the group.
+ * @property {boolean} [hidden]
+ *   Section-level hide. Every descendant is removed from the admin drawer and
+ *   renders read-only on the page. Takes precedence over `readOnly`. Inherited
+ *   by nested groups (most restrictive wins).
  * @property {boolean} [editable]
- *   Section-level lock. When `false`, every descendant `<EditableRegion>` /
- *   `<EditableList>` renders read-only (page + drawer card disabled), as if
- *   each carried `editable={false}`. Children may tighten further (a child
- *   `visible={false}` still hides), but cannot loosen past the group.
+ *   Deprecated, use `readOnly`. Older, inverted spelling: `editable={false}`
+ *   locks the section. Still honoured.
  * @property {boolean} [visible]
- *   Section-level hide. When `false`, every descendant is removed from the
- *   admin drawer and renders read-only on the page. Takes precedence over
- *   `editable`. Inherited by nested groups (most restrictive wins).
+ *   Deprecated, use `hidden`. Older, inverted spelling: `visible={false}` hides
+ *   the section. Still honoured.
  */
 
 const RING_COLOR_HOVER = `color-mix(in srgb, ${ACCENT} 50%, transparent)`;
@@ -46,7 +52,7 @@ const GROUP_OFFSET     = ROOMY_INSET + 4;
 /**
  * @param {CmsGroupProps} props
  */
-export function CmsGroup({ name, children, style, editable, visible }) {
+export function CmsGroup({ name, children, style, hidden, readOnly, editable, visible }) {
   const { isAdmin } = useCmsContext();
   const t = useCmsStrings();
   const parentPrefix = useContext(CmsGroupContext);
@@ -55,8 +61,7 @@ export function CmsGroup({ name, children, style, editable, visible }) {
 
   const prefix = parentPrefix ? `${parentPrefix}.${name}` : name;
 
-  const ownMode = visible === false ? "hidden" : editable === false ? "readonly" : null;
-  const visibility = strongerVisibility(parentVisibility, ownMode);
+  const visibility = strongerVisibility(parentVisibility, ownVisibility({ hidden, readOnly, visible, editable }));
 
   if (!isAdmin) {
     return (

@@ -46,3 +46,22 @@ export function strongerVisibility(a, b) {
   const rb = b ? VISIBILITY_RANK[b] : 0;
   return rb > ra ? b : a;
 }
+
+/**
+ * Fold a component's own gate props into a visibility mode.
+ *
+ * `hidden` / `readOnly` are the current spelling; `visible` / `editable` are the
+ * older one, still honoured. Both spellings are opt-outs (neither `visible` nor
+ * `editable` ever loosened anything, which is why `=== false` and not truthiness),
+ * so a component carrying both resolves most-restrictive-wins like everywhere
+ * else. Kept here rather than inline in the three components so retiring the old
+ * spelling is two deletions.
+ *
+ * @param {{ hidden?: boolean, readOnly?: boolean, visible?: boolean, editable?: boolean }} props
+ * @returns {"hidden"|"readonly"|null}
+ */
+export function ownVisibility({ hidden, readOnly, visible, editable }) {
+  if (hidden || visible === false) return "hidden";
+  if (readOnly || editable === false) return "readonly";
+  return null;
+}

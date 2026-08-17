@@ -24,7 +24,7 @@ import { useStoreSelector } from "../shared/state/store.js";
 import { isBlockDirty, resolveBlockValue } from "./resolve.js";
 import { useImageOverlayFits } from "../editors/inline/use-image-overlay-fits.js";
 import { useContentRadius } from "./hooks/use-content-radius.js";
-import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../shared/state/group-context.js";
+import { CmsGroupContext, CmsGroupVisibilityContext, ownVisibility, strongerVisibility } from "../shared/state/group-context.js";
 import { ACCENT } from "../shared/style/tokens.js";
 import { typeIconFor } from "../shared/style/icons.jsx";
 import {
@@ -65,12 +65,20 @@ const InlineRichText = lazy(() =>
  * @property {"global"} [scope]
  *   Discovery-only. `"global"` writes the region to the `globalSlug` manifest
  *   entry (for header/footer/site-wide UI) so one block backs every page.
+ * @property {boolean} [readOnly]
+ *   The region is read-only on the page and its drawer card is locked (still
+ *   shown, fields disabled). Default follows `isAdmin`.
+ * @property {boolean} [hidden]
+ *   The region is dropped from the drawer entirely and read-only on the page;
+ *   content still ships to the public DOM, so this gates editing, not secrecy.
+ *   Wins over `readOnly`. Consumed here, so it never reaches the DOM as the
+ *   HTML attribute of the same name.
  * @property {boolean} [editable]
- *   When `false`, the region is read-only on the page and its drawer card is
- *   locked (still shown, fields disabled). Default follows `isAdmin`.
+ *   Deprecated, use `readOnly`. Older, inverted spelling: `editable={false}`
+ *   locks the region. Still honoured.
  * @property {boolean} [visible]
- *   When `false`, the region is dropped from the drawer entirely and read-only
- *   on the page; content still ships to the public DOM. Wins over `editable`.
+ *   Deprecated, use `hidden`. Older, inverted spelling: `visible={false}` hides
+ *   the region. Still honoured.
  */
 
 const EMPTY_PLACEHOLDER = "-";
@@ -86,7 +94,7 @@ const INLINE_TEXT_TYPES = new Set(["ShortText", "LongText"]);
 // `blockType` / `defaultValue` / `scope` are discovery-only; aliased here so
 // they don't leak into ...rest (onto DOM nodes) or shadow the local `blockType`.
 // eslint-disable-next-line no-unused-vars
-export function EditableRegion({ blockPath, as, editable, visible, blockType: _bt, defaultValue: _dv, scope: _scope, ...rest }) {
+export function EditableRegion({ blockPath, as, hidden, readOnly, editable, visible, blockType: _bt, defaultValue: _dv, scope: _scope, ...rest }) {
   const {
     isAdmin, blocksStore, contentDraftsStore, uiStore, setActiveBlock, setDraft,
     registerEditorVisibility, unregisterEditorVisibility,
@@ -100,11 +108,10 @@ export function EditableRegion({ blockPath, as, editable, visible, blockType: _b
 
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 
-  // Register the `visible`/`editable` override with the drawer, folding in any
+  // Register the `hidden`/`readOnly` override with the drawer, folding in any
   // enclosing group mode (most restrictive wins; a region can tighten but not
   // loosen). Admin-only, so public visitors skip the churn.
-  const ownMode = visible === false ? "hidden" : editable === false ? "readonly" : null;
-  const visibilityMode = strongerVisibility(groupVisibility, ownMode);
+  const visibilityMode = strongerVisibility(groupVisibility, ownVisibility({ hidden, readOnly, visible, editable }));
   useEffect(() => {
     if (!isAdmin || !visibilityMode) return undefined;
     registerEditorVisibility(fullPath, visibilityMode);

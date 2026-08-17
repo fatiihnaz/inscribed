@@ -40,6 +40,16 @@ export const bgActive = (accent) => `color-mix(in srgb, ${accent} 5%, transparen
 export const haloInset = (roomy) => (roomy ? ROOMY_INSET : 2);
 
 /**
+ * Stacking level for a region whose chrome is showing. The ring is the
+ * wrapper's own outline, painted outside its box, so a sibling that paints
+ * later covers it; unlike the chip, it cannot float out on a z-index of its
+ * own. Applied only while hovered or selected, so a resting region never
+ * creates a stacking context the host page did not ask for. Below the drawer
+ * (9998) and the chip (9999).
+ */
+export const CHROME_LIFT_Z = 9997;
+
+/**
  * @param {{
  *   display: string, roomy: boolean, highlight: boolean, hovered: boolean,
  *   accent: string, radius?: string | number | null,
@@ -51,6 +61,7 @@ export function regionBoxStyle({ display, roomy, highlight, hovered, accent, rad
   const tint = bgActive(accent);
   return {
     position: "relative",
+    zIndex: highlight || hovered ? CHROME_LIFT_Z : undefined,
     display,
     outline: `${highlight ? 1.5 : 1}px solid ${highlight ? accent : hovered ? RING_LINE : "transparent"}`,
     outlineOffset: inset,

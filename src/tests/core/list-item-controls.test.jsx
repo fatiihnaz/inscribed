@@ -80,6 +80,9 @@ async function mount(props = {}) {
   });
 }
 
+const listWarnings = (spy) =>
+  spy.mock.calls.map(([m]) => String(m)).filter((m) => m.includes("<EditableList"));
+
 /** The wrapper each item's chrome hangs on: grip -> actions row -> wrapper. */
 const itemWrappers = () =>
   screen.getAllByLabelText("Drag to reorder").map((grip) => grip.parentElement?.parentElement);
@@ -130,7 +133,7 @@ describe("list item controls", () => {
   });
 
   it("drops the in-page add slot on request, keeping everything else", async () => {
-    await mount({ inlineAdd: false });
+    await mount({ noInlineAdd: true });
 
     expect(screen.queryByLabelText("Add a new item")).toBe(null);
     // Nor is the render-prop called with a blank item, which is what the slot
@@ -140,6 +143,33 @@ describe("list item controls", () => {
     // Still a fully editable list otherwise.
     expect(screen.getAllByLabelText("Drag to reorder")).toHaveLength(3);
     expect(screen.getAllByLabelText("Delete")).toHaveLength(3);
+  });
+
+  it("drops the slot for the older spelling too", async () => {
+    await mount({ inlineAdd: false });
+    expect(screen.queryByLabelText("Add a new item")).toBe(null);
+    expect(screen.getAllByLabelText("Drag to reorder")).toHaveLength(3);
+  });
+
+  it("says so when layout props arrive with no `as` to put them on", async () => {
+    // Otherwise the props are dropped in silence and the symptom reads as a
+    // CSS problem rather than a missing prop.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await mount({ className: "feature-grid", style: { display: "grid" } });
+
+    // Matched on our own message: the provider warns about the inline `config`
+    // literal these tests mount with, which is not what is under test.
+    const ours = listWarnings(warn);
+    expect(ours).toHaveLength(1);
+    expect(ours[0]).toContain("className");
+    expect(ours[0]).toContain("style");
+  });
+
+  it("stays quiet once `as` is there to take them", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await mount({ as: "div", className: "feature-grid" });
+
+    expect(listWarnings(warn)).toHaveLength(0);
   });
 
   it("rings a card with the card's own radius, not the house one", async () => {

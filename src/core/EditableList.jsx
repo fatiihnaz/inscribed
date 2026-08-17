@@ -44,7 +44,7 @@ import { useCmsStrings } from "./hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
 import { stableStringify } from "../shared/util/stable-stringify.js";
-import { CmsGroupContext, CmsGroupVisibilityContext, strongerVisibility } from "../shared/state/group-context.js";
+import { CmsGroupContext, CmsGroupVisibilityContext, ownVisibility, strongerVisibility } from "../shared/state/group-context.js";
 import { addItem, makeDefaultItem, moveItem, moveItemTo, moveItemToIndex, removeItem } from "../shared/util/list-ops.js";
 import { PositionField } from "../shared/ui/PositionField.jsx";
 import {
@@ -60,6 +60,7 @@ import {
   BLOCK_TAGS,
   CHROME_CONTROL,
   CHROME_ICON,
+  CHROME_LIFT_Z,
   CHROME_STROKE,
   INK_BTN_CLASS,
   INK_CHIP_CLASS,
@@ -93,18 +94,27 @@ import {
  *   Discovery-only seed, default `[]`. Pass an array to pre-seed items.
  * @property {"global"} [scope]
  *   Discovery-only. `"global"` shares the list across every page.
+ * @property {boolean} [readOnly]
+ *   The list is read-only (no add/move/delete) and its drawer card is locked.
+ *   Mirrors `<EditableRegion readOnly>` and `<CmsGroup>`.
+ * @property {boolean} [hidden]
+ *   The list is dropped from the drawer and read-only on the page (items still
+ *   ship to the DOM). Wins over `readOnly`; inheritable from `<CmsGroup>`.
+ *   Consumed here, so it never reaches the wrapper as the HTML attribute.
+ * @property {boolean} [noInlineAdd]
+ *   Drops the in-page add slot, for layouts a ghost card would spoil (a slider,
+ *   a fixed grid). Items can still be added from the drawer, and the rest of the
+ *   page-side editing is untouched. Without `as`, an empty list then renders
+ *   nothing at all, so the drawer is the only way in.
  * @property {boolean} [editable]
- *   When `false`, the list is read-only (no add/move/delete) and its drawer
- *   card is locked. Mirrors `<EditableRegion editable>` and `<CmsGroup>`.
+ *   Deprecated, use `readOnly`. Older, inverted spelling: `editable={false}`
+ *   locks the list. Still honoured.
  * @property {boolean} [visible]
- *   When `false`, the list is dropped from the drawer and read-only on the page
- *   (items still ship to the DOM). Wins over `editable`; inheritable from `<CmsGroup>`.
+ *   Deprecated, use `hidden`. Older, inverted spelling: `visible={false}` hides
+ *   the list. Still honoured.
  * @property {boolean} [inlineAdd]
- *   Default `true`. Set `false` to drop the in-page add slot, for layouts a
- *   ghost card would spoil (a slider, a fixed grid). Items can still be added
- *   from the drawer, and the rest of the page-side editing is untouched.
- *   Without `as`, an empty list then renders nothing at all, so the drawer is
- *   the only way in.
+ *   Deprecated, use `noInlineAdd`. Older, inverted spelling: `inlineAdd={false}`
+ *   drops the slot. Still honoured.
  */
 
 const ACCENT_DIM = `color-mix(in srgb, ${ACCENT} 65%, transparent)`;
@@ -128,7 +138,7 @@ const DIRECTION_LABEL = {
 /**
  * @param {EditableListProps} props
  */
-export function EditableList({ blockPath, itemSchema, children, defaultValue, scope, editable, visible, inlineAdd = true, as, ...rest }) {
+export function EditableList({ blockPath, itemSchema, children, defaultValue, scope, hidden, readOnly, noInlineAdd, editable, visible, inlineAdd = true, as, ...rest }) {
   void defaultValue; void scope; // discovery-only
   const {
     isAdmin, blocksStore, contentDraftsStore, uiStore, setDraft,
@@ -144,10 +154,11 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   // Auto-prefix under a `<CmsGroup>`, matching discovery's static rule.
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 
-  // Fold own `visible`/`editable` with the inherited group mode, most
+  // Fold own `hidden`/`readOnly` with the inherited group mode, most
   // restrictive wins (see EditableRegion).
-  const ownMode = visible === false ? "hidden" : editable === false ? "readonly" : null;
-  const visibilityMode = strongerVisibility(groupVisibility, ownMode);
+  const visibilityMode = strongerVisibility(groupVisibility, ownVisibility({ hidden, readOnly, visible, editable }));
+  // Either spelling switches the slot off.
+  const showInlineAdd = inlineAdd && !noInlineAdd;
 
   // Hand the schema to the drawer so it can build the per-field item editor.
   // Keyed on the schema's *shape*, not its identity: consumers write it as an
@@ -178,6 +189,19 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   useEffect(() => {
     if (isAdmin) ensureInkChromeStyle();
   }, [isAdmin]);
+
+  // Without `as` there is no element for `rest` to land on, so it is dropped.
+  // Worth saying out loud: the symptom is a layout prop that silently does
+  // nothing, which reads as a styling bug rather than a missing prop. Joined
+  // into a string because `rest` is a fresh object every render.
+  const droppedProps = as ? "" : Object.keys(rest).join(", ");
+  useEffect(() => {
+    if (!droppedProps || process.env.NODE_ENV === "production") return;
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[inscribed] <EditableList blockPath="${fullPath}"> received ${droppedProps} but no \`as\`, so those props are dropped and the list renders no element of its own. Pass \`as\` (e.g. as="div") to fold your container into the list.`,
+    );
+  }, [droppedProps, fullPath]);
 
   // Subscribe to just this list's draft slice (two-selector presence/value, see
   // EditableRegion) so typing in one list doesn't re-render siblings.
@@ -283,7 +307,7 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
 
       {/* The slot mirrors a real card, so the render-prop is only called with a
           blank item when the slot is actually there. */}
-      {inlineAdd ? (
+      {showInlineAdd ? (
         <GhostAddSlot onAdd={onAdd}>
           {children(makeDefaultItem(itemSchema), items.length)}
         </GhostAddSlot>
@@ -468,7 +492,7 @@ function AdminItemWrapper({
           : flipOffset
             ? `translate3d(${flipOffset.dx}px, ${flipOffset.dy}px, 0)`
             : undefined,
-        zIndex: dragging ? 9997 : undefined,
+        zIndex: dragging ? CHROME_LIFT_Z : chrome.zIndex,
         boxShadow: dragging ? LIFT_SHADOW : chrome.boxShadow,
         transition: [chrome.transition, slide].filter((part) => part !== "none").join(", "),
       }}

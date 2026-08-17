@@ -147,11 +147,12 @@ export function middleware(req) {
 }
 ```
 
-Whatever your `matcher` excludes gets no header. If one of those paths 404s
-(`/favicon.ico` on a site that ships no icon), Next renders not-found through
-your **root layout**, so a `<CmsPage>` there runs without a pathname and warns
-once. That case is harmless. The same warning on every page means the matcher
-is not covering your pages, and then content really is wrong.
+Whatever your `matcher` excludes gets no header, and a `<CmsPage>` that gets
+neither a header nor a `slug` falls back to `/`, which means every page reads
+the same blocks. In development it warns once per process, but only for a real
+page request: an excluded path that 404s (`/favicon.ico` on a site that ships no
+icon) renders not-found through your **root layout** and reaches `<CmsPage>` the
+same way, and that case is harmless enough to stay quiet.
 
 ### 3. Build a page factory
 

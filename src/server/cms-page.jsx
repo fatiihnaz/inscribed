@@ -366,28 +366,48 @@ async function resolvePathnameFromHeaders(warnWhenMissing) {
   const pathname = h.get(PATHNAME_HEADER);
   if (pathname) return pathname;
 
-  if (warnWhenMissing && !warnedMissingPathname && process.env.NODE_ENV !== "production") {
+  if (
+    warnWhenMissing &&
+    !warnedMissingPathname &&
+    process.env.NODE_ENV !== "production" &&
+    isPageRequest(h)
+  ) {
     warnedMissingPathname = true;
     // eslint-disable-next-line no-console
     console.warn(
       `[inscribed] <CmsPage> rendered without a slug prop and no "${PATHNAME_HEADER}" ` +
-        'request header was found. Falling back to "/".\n' +
-        "  If every page reads the same content, your middleware is missing or its " +
-        "matcher does not cover them: add it, or pass slug={...} explicitly.\n" +
-        "  If pages are fine, this is a path your matcher deliberately excludes " +
-        "(favicon.ico, robots.txt) that 404'd, and Next rendered not-found through " +
-        "your root layout. Harmless.",
+        'request header was found, so every page will read the blocks of "/".\n' +
+        "  Add the middleware from `inscribed/middleware`, widen its matcher to cover " +
+        "this route, or pass slug={...} explicitly.",
     );
   }
   return "/";
 }
 
 /**
- * Once per process, because the two causes are told apart by how often this
- * fires rather than by anything readable here: a missing middleware trips it on
- * every page, while an excluded path trips it occasionally and harmlessly.
- * Repeating the second case teaches people to scroll past the first.
+ * Whether the request is a page view rather than an asset fetch.
+ *
+ * A path the matcher deliberately excludes (`/favicon.ico`, `/robots.txt`) with
+ * no file behind it 404s, and Next renders not-found through the root layout:
+ * `<CmsPage>` then runs headerless through no fault of the app. Those arrive as
+ * image or wildcard-accept requests, so gating on a navigation (`document`), an
+ * RSC payload, or HTML keeps the warning for the case that is actually broken.
+ *
+ * A non-browser client asking for a page with a wildcard `accept` is the trade:
+ * it stays silent, but the same missing middleware warns on the first real
+ * browser hit.
+ *
+ * @param {Awaited<ReturnType<typeof headers>>} h
  */
+function isPageRequest(h) {
+  return (
+    h.has("rsc") ||
+    h.get("sec-fetch-dest") === "document" ||
+    (h.get("accept") ?? "").includes("text/html")
+  );
+}
+
+/** Once per process: a missing middleware trips this on every page render. */
 let warnedMissingPathname = false;
 
 /**

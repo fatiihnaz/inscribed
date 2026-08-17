@@ -526,8 +526,8 @@ function AdminItemWrapper({
           label={t("core.item.position", { index: index + 1, total })}
           editLabel={t("core.item.moveTo")}
           className={INK_BTN_CLASS}
-          style={positionStyle}
-          inputStyle={positionInputStyle}
+          style={{ ...positionStyle, width: positionBoxWidth(total) }}
+          inputStyle={{ ...positionInputStyle, width: positionBoxWidth(total) }}
         >
           {index + 1}/{total}
         </PositionField>
@@ -649,11 +649,31 @@ const landingSlotStyle = /** @type {React.CSSProperties} */ ({
   pointerEvents: "none",
 });
 
+/**
+ * The box the readout and the position input share.
+ *
+ * Sized for the widest the readout can ever get in this list ("12/12", not
+ * "1/12") rather than for what it says right now, so the pill holds still both
+ * when an item is dragged past ninth place and when the readout is opened for
+ * typing. Figures are tabular, so a digit is exactly 1ch; the separator is
+ * narrower than a digit, which is where the padding's slack comes from.
+ *
+ * @param {number} total
+ */
+function positionBoxWidth(total) {
+  const digits = String(Math.max(total, 1)).length;
+  return `calc(${digits * 2 + 1}ch + 10px)`;
+}
+
 // Tabular figures, not mono: the readout is a number, and with the digits
 // locked to one width the counter no longer twitches as items are moved.
+// `boxSizing` is explicit because the width includes the padding and the host
+// page's reset is not ours to assume.
 const positionStyle = /** @type {React.CSSProperties} */ ({
   display: "inline-flex",
   alignItems: "center",
+  justifyContent: "center",
+  boxSizing: "border-box",
   height: CHROME_CONTROL,
   padding: "0 5px",
   borderRadius: R_SM,
@@ -667,12 +687,10 @@ const positionStyle = /** @type {React.CSSProperties} */ ({
   "--ins-ink-fg": TEXT,
 });
 
-// Sized in `ch` off the same tabular figures, so switching to the input does
-// not resize the row.
+// The readout's own box, down to the padding, so opening the field changes the
+// fill and nothing else.
 const positionInputStyle = /** @type {React.CSSProperties} */ ({
   ...positionStyle,
-  width: "3ch",
-  padding: "0 2px",
   border: 0,
   background: `color-mix(in srgb, ${ACCENT} 22%, transparent)`,
   color: "var(--ins-text, #fff)",

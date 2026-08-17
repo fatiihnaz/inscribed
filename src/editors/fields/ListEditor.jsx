@@ -293,8 +293,8 @@ function ListItemCard({
             onMoveTo={onMoveTo}
             label={t("core.item.position", { index: index + 1, total })}
             editLabel={t("core.item.moveTo")}
-            style={listItemIndexStyle}
-            inputStyle={listItemIndexInputStyle}
+            style={{ ...listItemIndexStyle, width: indexBoxWidth(total) }}
+            inputStyle={{ ...listItemIndexInputStyle, width: indexBoxWidth(total) }}
             disabled={disabled}
           >
             {index + 1}
@@ -462,10 +462,25 @@ const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
   color: TEXT_MUTED,
 });
 
-// Gold index chip, tinted to keep this surface distinct from the Collection editor.
+/**
+ * The box the badge and the position input share. Sized from the list's length
+ * rather than the item's own number, so nothing resizes when item 9 becomes
+ * item 10 either. The face is mono, so a digit is exactly 1ch; the floor keeps
+ * a single-digit badge the 20px square it was drawn as.
+ *
+ * @param {number} total
+ */
+function indexBoxWidth(total) {
+  const digits = String(Math.max(total, 1)).length;
+  return `max(20px, calc(${digits}ch + 10px))`;
+}
+
+// Gold index chip, tinted to keep this surface distinct from the Collection
+// editor. `boxSizing` is explicit because the width above includes the padding
+// and nothing in the drawer resets it.
 const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
-  width: 20,
+  boxSizing: "border-box",
   height: 20,
   display: "inline-flex",
   alignItems: "center",
@@ -478,10 +493,10 @@ const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
   background: `color-mix(in srgb, ${ACCENT} 12%, transparent)`,
 });
 
-// Same 20px square as the badge, so typing a position does not resize the row.
+// The badge's own box, so typing a position never resizes the row. Only the
+// fill changes, which is the whole signal that the readout has become a field.
 const listItemIndexInputStyle = /** @type {React.CSSProperties} */ ({
   ...listItemIndexStyle,
-  width: 26,
   padding: 0,
   border: 0,
   background: `color-mix(in srgb, ${ACCENT} 26%, transparent)`,

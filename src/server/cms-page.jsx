@@ -80,7 +80,7 @@ const PATHNAME_HEADER = "x-pathname";
  * @property {*} Provider
  *   The CMS provider component, typically `CmsProvider` or your own wrapper
  *   around it. Receives `config`, `isAdmin`, `userSub`, `initialBlocks`,
- *   `onAfterSave`, and `session`.
+ *   `onAfterSave`, `session`, and (when `collections` is given) `collections`.
  *
  * The three auth callbacks below form a `CmsAuthAdapter` (see `shared/contracts/auth.js`);
  * omit them all for a public read-only site, or spread an adapter from an
@@ -102,11 +102,12 @@ const PATHNAME_HEADER = "x-pathname";
  *   need one (feeding NextAuth's `<SessionProvider>`, say) opt in here and pick
  *   the fields that may travel: `sessionForClient: (s) => ({ user: s.user })`.
  * @property {CollectionPrimitives} [collections]
- *   Opt in to the server-rendered `<CollectionRegion>` / `<CollectionItem>`,
- *   which the factory then returns alongside `CmsPage`. Pass
- *   `{ CollectionRecord, CollectionRows }` imported from
- *   `inscribed/collections`; omit it and an app that doesn't use collections
- *   pulls none of that in.
+ *   Opt in to collections, on both sides at once: the factory returns the
+ *   server-rendered `<CollectionRegion>` / `<CollectionItem>` alongside
+ *   `CmsPage`, and hands `CollectionProvider` to `Provider` so the client state
+ *   exists too. Pass `{ CollectionProvider, CollectionRecord, CollectionRows }`
+ *   imported from `inscribed/collections`; omit it and an app that doesn't use
+ *   collections pulls none of that in.
  * @property {(key: string, slug?: string) => void | Promise<void>} [onAfterCollectionSave]
  *   Server Action run after a collection record is published, typically
  *   `revalidateCmsCollection` from `inscribed/actions`. Needed whenever
@@ -119,8 +120,8 @@ const PATHNAME_HEADER = "x-pathname";
  */
 
 /**
- * The client components the server-rendered binding components render into.
- * Import both from `inscribed/collections` and pass them here.
+ * The client half of the collections capability. Import all three from
+ * `inscribed/collections` and pass them here.
  *
  * They are options rather than imports because only a module's own exports
  * become client references across the RSC boundary: reached from this server
@@ -128,6 +129,11 @@ const PATHNAME_HEADER = "x-pathname";
  * object built here they would arrive `undefined`.
  *
  * @typedef {Object} CollectionPrimitives
+ * @property {*} CollectionProvider
+ *   Forwarded to `Provider` as its `collections` prop, which is what mounts the
+ *   collection state for the page bindings and the drawer alike. It travels in
+ *   this bag so opting in stays one decision: a client provider without the
+ *   server components (or the reverse) is a half-wired app.
  * @property {*} CollectionRecord
  * @property {*} CollectionRows
  */
@@ -162,6 +168,16 @@ export function createCmsPage(options) {
   }
   if (!config) {
     throw new Error("createCmsPage: `config` option is required");
+  }
+  // Caught here rather than at the first render of a binding: without it the
+  // page renders, and the failure surfaces as `useCollectionContext` throwing
+  // somewhere far from the wiring that caused it.
+  if (collections && !collections.CollectionProvider) {
+    throw new Error(
+      "createCmsPage: `collections` is missing `CollectionProvider`. Import it from " +
+        "\"inscribed/collections\" and pass it alongside the others: " +
+        "collections: { CollectionProvider, CollectionRecord, CollectionRows }",
+    );
   }
 
   // Normalized once at module scope, so every request reuses one object.
@@ -213,6 +229,7 @@ export function createCmsPage(options) {
       <Provider config={normalizedConfig} isAdmin={deriveAdmin(session)} userSub={deriveUserSub(session)}
         initialBlocks={initialBlocks} onAfterSave={onAfterSave}
         onAfterCollectionSave={onAfterCollectionSave}
+        collections={collections?.CollectionProvider}
         session={sessionForClient ? sessionForClient(session) : undefined}
       >
         {children}

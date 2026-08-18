@@ -20,6 +20,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
+import { CollectionProvider } from "../../collections/CollectionProvider.jsx";
 import { CollectionItem } from "../../collections/CollectionItem.jsx";
 import { CollectionField } from "../../collections/CollectionField.jsx";
 import { useCollectionContext } from "../../collections/context.js";
@@ -92,7 +93,7 @@ function Probe() {
 function renderItem({ isAdmin = true, children } = {}) {
   claimed = new Set();
   return render(
-    <CmsProvider config={{ baseUrl: BASE }} isAdmin={isAdmin} getAccessToken={async () => "tok"}>
+    <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin={isAdmin} getAccessToken={async () => "tok"}>
       <Probe />
       <CollectionItem collection="news" slug="q1" fallback={<p>…</p>}>
         {children}
@@ -110,7 +111,7 @@ function renderTwice(name = "title") {
   claimed = new Map();
   mockFetch();
   return render(
-    <CmsProvider config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
+    <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
       <Probe />
       {[0, 1].map((i) => (
         <CollectionItem key={i} collection="news" slug="q1" fallback={<p>…</p>}>
@@ -223,7 +224,7 @@ describe("in-place editing", () => {
     await waitFor(() => expect(claimed.has("news:q1")).toBe(true));
 
     rerender(
-      <CmsProvider config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
+      <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
         <Probe />
         <CollectionItem collection="news" slug="q1">
           <h1>bare</h1>
@@ -395,7 +396,7 @@ describe("driver election", () => {
     mockFetch();
     claimed = new Map();
     render(
-      <CmsProvider config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
+      <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
         <Probe />
         {[0, 1].map((i) => (
           <CollectionItem key={i} collection="news" slug="q1" fallback={<p>…</p>}>
@@ -416,7 +417,7 @@ describe("misuse", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(() =>
       render(
-        <CmsProvider config={{ baseUrl: BASE }} isAdmin={false} getAccessToken={async () => "tok"}>
+        <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin={false} getAccessToken={async () => "tok"}>
           <CollectionField name="title" />
         </CmsProvider>,
       ),

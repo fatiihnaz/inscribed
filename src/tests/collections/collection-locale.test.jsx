@@ -26,6 +26,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
+import { CollectionProvider } from "../../collections/CollectionProvider.jsx";
 import { CollectionComposer } from "../../collections/CollectionComposer.jsx";
 import { useCollection } from "../../collections/hooks/use-collection.js";
 import { createCmsConfig } from "../../shared/config.js";
@@ -88,7 +89,7 @@ function renderComposer() {
 
 function renderInProvider(children) {
   return render(
-    <CmsProvider config={CONFIG} isAdmin getAccessToken={async () => "tok"}>
+    <CmsProvider collections={CollectionProvider} config={CONFIG} isAdmin getAccessToken={async () => "tok"}>
       {children}
     </CmsProvider>,
   );

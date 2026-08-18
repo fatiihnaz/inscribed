@@ -21,6 +21,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
+import { CollectionProvider } from "../../collections/CollectionProvider.jsx";
 import { CollectionRegionPanel } from "../../admin/CollectionRegionPanel.jsx";
 import { createCmsConfig } from "../../shared/config.js";
 import { createTranslator, resolveStrings } from "../../shared/i18n/translate.js";
@@ -71,7 +72,7 @@ function mockFetch(locales, extraMeta = []) {
 
 function renderPanel(key = KEY) {
   return render(
-    <CmsProvider config={CONFIG} isAdmin getAccessToken={async () => "tok"}>
+    <CmsProvider collections={CollectionProvider} config={CONFIG} isAdmin getAccessToken={async () => "tok"}>
       <CollectionRegionPanel collectionKey={key} scope="global" />
     </CmsProvider>,
   );
@@ -139,7 +140,7 @@ describe("what the switch drives", () => {
     await waitFor(() => expect(listLocales()).toContain("en"));
 
     rerender(
-      <CmsProvider config={CONFIG} isAdmin getAccessToken={async () => "tok"}>
+      <CmsProvider collections={CollectionProvider} config={CONFIG} isAdmin getAccessToken={async () => "tok"}>
         <CollectionRegionPanel collectionKey="probe-events" scope="global" />
       </CmsProvider>,
     );

@@ -9,11 +9,12 @@
  * Kept apart because collections are opt-in (`inscribed/collections`) and the
  * core editor must not depend on this layer. The provider reads `config`,
  * `isAdmin`, and `getAccessToken` from `CmsContext`, so it must mount inside
- * `<CmsProvider>`.
+ * `<CmsProvider>`, which takes it as the `collections` prop.
  */
 
 import { createContext, useContext } from "react";
 
+import { createStore } from "../shared/state/store.js";
 import { stableStringify } from "../shared/util/stable-stringify.js";
 
 /**
@@ -193,6 +194,42 @@ export function collectionRegionBindingId(collection, filter) {
 export const CollectionContext = createContext(null);
 
 /**
+ * Stand-in for `collectionStore` in an app that didn't opt into collections.
+ * Never written, so every selector over it returns the same empty slice for
+ * the life of the page.
+ *
+ * The drawer is the one surface that renders either way and reads these slices
+ * unconditionally (bindings, caches, drafts all feed its dirty counts). Handing
+ * it this store keeps those reads honest without a null branch per selector.
+ *
+ * @type {import("../shared/state/store.js").Store<CollectionStoreState>}
+ */
+export const EMPTY_COLLECTION_STORE = createStore({
+  itemCache: new Map(),
+  listCache: new Map(),
+  drafts: new Map(),
+  draftSavedAt: new Map(),
+  bindings: new Map(),
+  inlineFields: new Map(),
+  createLanes: new Map(),
+  editorValues: new Map(),
+  activeItem: null,
+  meta: { byKey: new Map(), order: [], isLoading: false, error: null },
+});
+
+/**
+ * The collection context, or null when the app didn't pass `collections` to
+ * `<CmsProvider>`. Only the drawer needs this: it renders for both kinds of app
+ * and hides its collection surfaces when there is nothing behind them.
+ * Everything else uses `useCollectionContext`, where absence is a wiring bug.
+ *
+ * @returns {CollectionContextValue | null}
+ */
+export function useOptionalCollectionContext() {
+  return useContext(CollectionContext);
+}
+
+/**
  * Read the current collection context. Throws if used outside
  * `<CollectionProvider>`.
  *
@@ -202,9 +239,10 @@ export function useCollectionContext() {
   const ctx = useContext(CollectionContext);
   if (!ctx) {
     throw new Error(
-      "Collection hooks/components must be used inside <CollectionProvider> " +
-        "(mounted automatically by <CmsProvider>; in a future major it becomes " +
-        "opt-in via the `collections` option of createCmsPage).",
+      "Collection hooks/components must be used inside <CollectionProvider>. " +
+        "Opt in by passing it to your provider: <CmsProvider collections={CollectionProvider}>, " +
+        "or via createCmsPage({ collections: { CollectionProvider, CollectionRecord, CollectionRows } }). " +
+        "Import CollectionProvider from \"inscribed/collections\".",
     );
   }
   return ctx;

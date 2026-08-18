@@ -11,10 +11,10 @@
  * else: a keystroke touches one region, a panel toggle touches the panel, an
  * autosave roundtrip touches the block it saved.
  *
- * This is the composition root, and the only file in `core/` allowed to reach
- * up a layer: it mounts `collections/CollectionProvider` so apps don't have to,
- * and `admin/Drawer` behind `next/dynamic`. Every other core module imports
- * downward only.
+ * This is the composition root: it mounts `admin/Drawer` behind `next/dynamic`
+ * and wraps the tree in the `collections` provider when the app passed one. It
+ * never imports that provider itself, so an app without collections keeps the
+ * whole layer out of its bundle.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -36,7 +36,6 @@ import { contentDraftKey } from "../shared/state/draft-keys.js";
 import { resolveBlockValue } from "./resolve.js";
 import { useCmsContent } from "./hooks/use-cms-content.js";
 import { useCmsStrings } from "./hooks/use-cms-strings.js";
-import { CollectionProvider } from "../collections/CollectionProvider.jsx";
 
 /**
  * @import { CmsConfig } from "../shared/config.js"
@@ -77,6 +76,7 @@ function useConstant(create) {
  * @param {import("../shared/contracts/transport.js").CmsTransport} [props.transport]   Custom client transport. Defaults to REST from `config`. Passed here, not via `config`, because it holds functions that can't cross the RSC boundary.
  * @param {{ name: string|null, email: string|null, image: string|null } | null} [props.userInfo]   Identity for the admin panel footer. Null in public mode.
  * @param {(key: string, slug?: string) => void | Promise<void>} [props.onAfterCollectionSave]   Server Action run after a collection record is published, typically `revalidateCmsCollection` from `inscribed/actions`.
+ * @param {React.ComponentType<{ children: React.ReactNode }>} [props.collections]   Opt in to collections by passing `CollectionProvider` from `inscribed/collections`. Handed in rather than imported here so an app without collections never pulls the layer into its bundle. `createCmsPage({ collections })` passes it for you.
  * @param {() => void} [props.onSignOut]   Invoked by the admin panel's logout button.
  * @param {React.ReactNode} props.children
  */
@@ -90,6 +90,7 @@ export function CmsProvider({
   getAccessToken,
   transport,
   userInfo: userInfoProp = null,
+  collections: CollectionsRoot,
   onSignOut,
   children,
 }) {
@@ -1116,27 +1117,33 @@ export function CmsProvider({
     ],
   );
 
+  const tree = (
+    <>
+      {/* Admin-only client refetch so post-save `triggerRefetch` and the
+          autosave roundtrip pull fresh versions in without a navigation.
+          Public visitors refresh via `router.refresh()` above instead. */}
+      {isAdmin ? <ContentLoader /> : null}
+      <PageShell isAdmin={isAdmin}>{children}</PageShell>
+      {isAdmin ? <AdminDrawer /> : null}
+      {sessionExpired && browserAuth ? (
+        <SessionExpiredNotice
+          onSignIn={() => browserAuth.login()}
+          onDismiss={() => setSessionExpired(false)}
+        />
+      ) : null}
+    </>
+  );
+
   return (
     <CmsContext.Provider value={value}>
       {themeCss ? <style>{themeCss}</style> : null}
-      {/* Collections are opt-in (see `inscribed/collections`), mounted here so
-          page bindings and the drawer's collection tabs share one
-          `CollectionContext`. It reads `config`/`isAdmin`/`getAccessToken` from
-          `CmsContext`, so it must live inside this provider. */}
-      <CollectionProvider>
-        {/* Admin-only client refetch so post-save `triggerRefetch` and the
-            autosave roundtrip pull fresh versions in without a navigation.
-            Public visitors refresh via `router.refresh()` above instead. */}
-        {isAdmin ? <ContentLoader /> : null}
-        <PageShell isAdmin={isAdmin}>{children}</PageShell>
-        {isAdmin ? <AdminDrawer /> : null}
-        {sessionExpired && browserAuth ? (
-          <SessionExpiredNotice
-            onSignIn={() => browserAuth.login()}
-            onDismiss={() => setSessionExpired(false)}
-          />
-        ) : null}
-      </CollectionProvider>
+      {/* The collections provider wraps the drawer as well as the page: both
+          sides of a binding read one `CollectionContext`, and the drawer is a
+          sibling of `children`, not a descendant. That is why this is a prop
+          rather than something the app nests inside `<CmsProvider>` itself.
+          It reads `config`/`isAdmin`/`getAccessToken` from `CmsContext`, so it
+          belongs inside that provider and outside everything else. */}
+      {CollectionsRoot ? <CollectionsRoot>{tree}</CollectionsRoot> : tree}
     </CmsContext.Provider>
   );
 }

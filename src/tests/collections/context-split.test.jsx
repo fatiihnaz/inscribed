@@ -37,6 +37,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
+import { CollectionProvider } from "../../collections/CollectionProvider.jsx";
 import { CollectionItem } from "../../collections/CollectionItem.jsx";
 import { useCollectionContext } from "../../collections/context.js";
 
@@ -106,7 +107,7 @@ function renderCollections(children, onReady = () => {}) {
   mockFetch();
   const handleEl = <Handle onReady={onReady} />;
   const tree = (kids) => (
-    <CmsProvider config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
+    <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
       {CONSUMER}
       {handleEl}
       {kids}

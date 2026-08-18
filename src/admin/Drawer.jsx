@@ -27,6 +27,7 @@
 
 import { forwardRef, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   ChevronsLeft, ChevronDown, ChevronLeft, ChevronRight,
@@ -34,19 +35,16 @@ import {
 } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
-import { useCollectionContext } from "../collections/context.js";
+import { EMPTY_COLLECTION_STORE, useOptionalCollectionContext } from "../collections/context.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { collectDirtyBlocks, collectDirtyRecords, dirtyCollectionKeys } from "./dirty.js";
 import { isBlockDirty } from "../core/resolve.js";
 import { useCmsSave } from "../core/hooks/use-cms-save.js";
 import { useCmsRoute } from "../core/hooks/use-cms-route.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
-import { useMyCollections } from "../collections/hooks/use-my-collections.js";
 import { describeSaveError } from "./save-error.js";
 
 import { BlockCard } from "./BlockCard.jsx";
-import { CollectionRegionPanel } from "./CollectionRegionPanel.jsx";
-import { CollectionsPane } from "./CollectionsPane.jsx";
 import { ChangesPanel } from "./ChangesPanel.jsx";
 import { Collapse } from "./Collapse.jsx";
 
@@ -54,12 +52,28 @@ import { emptyStateStyle } from "../editors/fields/styles.js";
 import { panelStyle, paneContainerStyle, paneStyle, railStyle, railButtonStyle, railDirtyDotStyle, railIndicatorStyle, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
 import { PANEL_WIDTH, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, BG, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER } from "../shared/style/tokens.js";
 
+// The two collections-mode panes carry the whole collections layer behind them
+// (record cache, schema form, /me). Lazy so the drawer costs the same on a site
+// without collections, where the rail button that opens them is hidden anyway.
+const CollectionsPane = dynamic(
+  () => import("./CollectionsPane.jsx").then((m) => m.CollectionsPane),
+  { ssr: false },
+);
+const CollectionRegionPanel = dynamic(
+  () => import("./CollectionRegionPanel.jsx").then((m) => m.CollectionRegionPanel),
+  { ssr: false },
+);
+
 /**
  * @import { BlockResponse } from "../shared/contracts/schemas.js"
  */
 
 /** @type {Map<string, BlockResponse>} */
 const EMPTY_BLOCKS = new Map();
+
+// Module scope so it stays identity-stable across renders: it stands in for
+// `setActiveCollectionItem` in an effect's dependency list.
+function noop() {}
 
 export function Drawer() {
   const t = useCmsStrings();
@@ -89,15 +103,20 @@ export function Drawer() {
   const unresolvedConflicts = useStoreSelector(uiStore, (s) => s.conflictBlocks.size);
   const itemSchemas = useStoreSelector(registryStore, (s) => s.itemSchemas);
   const editorVisibility = useStoreSelector(registryStore, (s) => s.editorVisibility);
-  // Collection state lives in its own provider, which CmsProvider always wraps
-  // the drawer in, so the throwing reader is safe here.
-  const { setActiveCollectionItem, collectionStore } = useCollectionContext();
+  // Collections are opt-in, so the drawer is the one admin surface that has to
+  // render without them: the reader is the non-throwing one, and the empty
+  // store keeps every aggregate below reading as "no collections" rather than
+  // branching. Read straight off the store instead of `useMyCollections()`,
+  // which throws by design when the provider is absent.
+  const collectionCtx = useOptionalCollectionContext();
+  const collectionStore = collectionCtx?.collectionStore ?? EMPTY_COLLECTION_STORE;
+  const setActiveCollectionItem = collectionCtx?.setActiveCollectionItem ?? noop;
   const activeCollectionItem = useStoreSelector(collectionStore, (s) => s.activeItem);
   const collectionBindings = useStoreSelector(collectionStore, (s) => s.bindings);
   const collectionListCache = useStoreSelector(collectionStore, (s) => s.listCache);
   const collectionItemCache = useStoreSelector(collectionStore, (s) => s.itemCache);
   const collectionDrafts = useStoreSelector(collectionStore, (s) => s.drafts);
-  const myCollections = useMyCollections().collections;
+  const myCollections = useStoreSelector(collectionStore, (s) => s.meta.order);
   const {
     dirtyCount, isSaving, error, translationPreviews,
     save: onSaveAll, discard: onDiscardAll,
@@ -488,6 +507,7 @@ export function Drawer() {
         <ModeRail
           mode={mode}
           onChange={setMode}
+          showCollections={collectionCtx !== null}
           pageDirty={pageDirty || globalDirty}
           collectionsDirty={collectionDirtyTotal > 0}
         />
@@ -673,11 +693,12 @@ export function Drawer() {
  * @param {{
  *   mode: "page"|"collections",
  *   onChange: (mode: "page"|"collections") => void,
+ *   showCollections: boolean,
  *   pageDirty: boolean,
  *   collectionsDirty: boolean,
  * }} props
  */
-function ModeRail({ mode, onChange, pageDirty, collectionsDirty }) {
+function ModeRail({ mode, onChange, showCollections, pageDirty, collectionsDirty }) {
   const t = useCmsStrings();
   return (
     <nav style={railStyle} aria-label={t("drawer.sections")}>
@@ -689,15 +710,21 @@ function ModeRail({ mode, onChange, pageDirty, collectionsDirty }) {
         accent={ACCENT}
         onClick={() => onChange("page")}
       />
-      <RailButton
-        icon={Layers}
-        label={t("drawer.collections")}
-        active={mode === "collections"}
-        dirty={collectionsDirty}
-        accent={COLLECTION_ACCENT}
-        isCollection
-        onClick={() => onChange("collections")}
-      />
+      {/* Hidden, not disabled, when the app didn't opt into collections: there
+          is no area behind it to explain. An app that did opt in keeps the
+          button even while /me is empty, so a permissions-narrowed list still
+          reads as a place the user knows, not as a vanished section. */}
+      {showCollections ? (
+        <RailButton
+          icon={Layers}
+          label={t("drawer.collections")}
+          active={mode === "collections"}
+          dirty={collectionsDirty}
+          accent={COLLECTION_ACCENT}
+          isCollection
+          onClick={() => onChange("collections")}
+        />
+      ) : null}
     </nav>
   );
 }

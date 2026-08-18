@@ -24,6 +24,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
+import { CollectionProvider } from "../../collections/CollectionProvider.jsx";
 import { useCollectionEditor } from "../../collections/hooks/use-collection-editor.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
 import { en } from "../../shared/i18n/en/index.js";
@@ -126,7 +127,7 @@ const transport = {
 async function mount() {
   await act(async () => {
     render(
-      <CmsProvider
+      <CmsProvider collections={CollectionProvider}
         config={{ baseUrl: "https://api.test" }}
         transport={/** @type {*} */ (transport)}
         isAdmin

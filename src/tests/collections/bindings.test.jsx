@@ -22,6 +22,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
+import { CollectionProvider } from "../../collections/CollectionProvider.jsx";
 import { CollectionItem } from "../../collections/CollectionItem.jsx";
 import { CollectionRegion } from "../../collections/CollectionRegion.jsx";
 import { CmsGroup } from "../../core/CmsGroup.jsx";
@@ -76,7 +77,7 @@ function renderTree(ui) {
   published = [];
   mockFetch();
   return render(
-    <CmsProvider config={{ baseUrl: BASE }} isAdmin={false} getAccessToken={async () => "tok"}>
+    <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin={false} getAccessToken={async () => "tok"}>
       <Probe />
       {ui}
     </CmsProvider>,
@@ -119,7 +120,7 @@ describe("item bindings", () => {
     await waitFor(() => expect(Object.keys(latest())).toHaveLength(1));
 
     rerender(
-      <CmsProvider config={{ baseUrl: BASE }} isAdmin={false} getAccessToken={async () => "tok"}>
+      <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin={false} getAccessToken={async () => "tok"}>
         <Probe />
         {item()}
       </CmsProvider>,
@@ -127,7 +128,7 @@ describe("item bindings", () => {
     expect(Object.keys(latest())).toEqual(["collection:news:q1"]);
 
     rerender(
-      <CmsProvider config={{ baseUrl: BASE }} isAdmin={false} getAccessToken={async () => "tok"}>
+      <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin={false} getAccessToken={async () => "tok"}>
         <Probe />
       </CmsProvider>,
     );
@@ -175,7 +176,7 @@ describe("region bindings", () => {
     // A fresh literal with the same contents: same window, so the registry must
     // stay put rather than churn every consumer memo behind it.
     rerender(
-      <CmsProvider config={{ baseUrl: BASE }} isAdmin={false} getAccessToken={async () => "tok"}>
+      <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin={false} getAccessToken={async () => "tok"}>
         <Probe />
         <CollectionRegion collection="news" filter={{ featured: true }}>{() => null}</CollectionRegion>
       </CmsProvider>,

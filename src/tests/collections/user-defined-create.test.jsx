@@ -24,6 +24,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
+import { CollectionProvider } from "../../collections/CollectionProvider.jsx";
 import { CollectionRegionPanel } from "../../admin/CollectionRegionPanel.jsx";
 import { createTranslator, resolveStrings } from "../../shared/i18n/translate.js";
 
@@ -80,7 +81,7 @@ function mockFetch({ meta = eventsMeta(), upsert } = {}) {
 
 function renderPanel() {
   return render(
-    <CmsProvider config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
+    <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
       <CollectionRegionPanel collectionKey={KEY} scope="global" />
     </CmsProvider>,
   );

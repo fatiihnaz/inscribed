@@ -23,6 +23,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
+import { CollectionProvider } from "../../collections/CollectionProvider.jsx";
 import { CollectionComposer } from "../../collections/CollectionComposer.jsx";
 // Through the catalog: the panel's wording is configurable, so a literal here
 // would break on a reword rather than on a bug.
@@ -78,7 +79,7 @@ function mockFetch({ me, virtualItems }) {
 
 function renderComposer({ isAdmin = true, props = {} } = {}) {
   return render(
-    <CmsProvider config={{ baseUrl: BASE }} isAdmin={isAdmin} getAccessToken={async () => "tok"}>
+    <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin={isAdmin} getAccessToken={async () => "tok"}>
       <CollectionComposer collection="news" {...props} />
     </CmsProvider>,
   );

@@ -505,7 +505,9 @@ renders its records.
 
 The collection layer is an **opt-in capability** with its own entry point: import
 it from `inscribed/collections`, not `inscribed`, so apps that don't use
-collections never pull it into their bundle.
+collections never pull it into their bundle. Opting in is one decision, the
+`collections` option below; nothing in `inscribed` reaches into the layer on its
+own, including the provider that holds its state.
 
 - `<CollectionRegion collection="news" filter={...} limit={...}>` renders a list.
 - `<CollectionItem collection="news" slug="q1-notes">` renders one record.
@@ -532,25 +534,36 @@ beside `CmsPage`:
 ```jsx
 // app/lib/cms.jsx
 import { CmsProvider } from "inscribed";
-import { CollectionRecord, CollectionRows } from "inscribed/collections";
+import { CollectionProvider, CollectionRecord, CollectionRows } from "inscribed/collections";
 import { createCmsConfig, createCmsPage } from "inscribed/page";
 import { revalidateCmsCollection, revalidateCmsSlug } from "inscribed/actions";
 
 export const { CmsPage, CollectionRegion, CollectionItem } = createCmsPage({
   config: createCmsConfig({ baseUrl: process.env.CMS_URL }),
   Provider: CmsProvider,
-  collections: { CollectionRecord, CollectionRows },
+  collections: { CollectionProvider, CollectionRecord, CollectionRows },
   onAfterSave: revalidateCmsSlug,
   onAfterCollectionSave: revalidateCmsCollection,
 });
 ```
 
-`CollectionRecord` and `CollectionRows` are internals; they appear in your wiring
-for the same reason `Provider` does. Only a module's own **exports** become client
-references across the Server → Client boundary, so the client half of these
-components has to be handed in by name: reached from the server entry's own
-imports it would lose its `"use client"` boundary, and wrapped in an object it
-would arrive `undefined`.
+All three are internals; they appear in your wiring for the same reason
+`Provider` does. Only a module's own **exports** become client references across
+the Server → Client boundary, so the client half of these components has to be
+handed in by name: reached from the server entry's own imports it would lose its
+`"use client"` boundary, and wrapped in an object it would arrive `undefined`.
+
+`CollectionProvider` holds the collection state that the page bindings and the
+admin drawer share. The factory forwards it to `Provider` as the `collections`
+prop; mounting `<CmsProvider>` yourself means passing it there directly:
+
+```jsx
+<CmsProvider config={config} collections={CollectionProvider}>
+```
+
+It has to be a prop rather than something you nest inside `<CmsProvider>`,
+because it wraps the admin drawer too, and the drawer is a sibling of your
+`children`, not a descendant.
 
 Each server component is a synchronous shell wrapping its own `<Suspense>` around
 an async fetch. That is what keeps a slow collection off the critical path: the

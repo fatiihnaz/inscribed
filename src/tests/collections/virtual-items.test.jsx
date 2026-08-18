@@ -23,6 +23,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
+import { CollectionProvider } from "../../collections/CollectionProvider.jsx";
 import { useCollection } from "../../collections/hooks/use-collection.js";
 import { useCollectionContext } from "../../collections/context.js";
 
@@ -77,7 +78,7 @@ function renderProbe(envelope) {
   seen = undefined;
   mockFetch(envelope);
   return render(
-    <CmsProvider config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
+    <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
       <Probe />
     </CmsProvider>,
   );

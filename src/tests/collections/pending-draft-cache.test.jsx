@@ -22,6 +22,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
+import { CollectionProvider } from "../../collections/CollectionProvider.jsx";
 import { CollectionComposer } from "../../collections/CollectionComposer.jsx";
 
 const BASE = "https://api.test";
@@ -61,7 +62,7 @@ function mockFetch() {
 /** The provider outlives the composer, so the cache survives an unmount. */
 function Harness({ open }) {
   return (
-    <CmsProvider config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
+    <CmsProvider collections={CollectionProvider} config={{ baseUrl: BASE }} isAdmin getAccessToken={async () => "tok"}>
       {open ? <CollectionComposer collection="news" /> : null}
     </CmsProvider>
   );

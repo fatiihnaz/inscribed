@@ -176,11 +176,14 @@ describe("list item controls", () => {
     await mount();
     const [wrapper] = itemWrappers();
     const card = /** @type {HTMLElement} */ (wrapper?.firstElementChild);
-    // The consumer's card, whatever shape they gave it.
+    // The consumer's card, whatever shape they gave it. It carries a fill as
+    // well as a radius because that is what makes the radius visible; the ring
+    // only matches content that paints a box.
     vi.spyOn(window, "getComputedStyle").mockImplementation((el) => /** @type {*} */ (
       el === card
         ? { borderTopLeftRadius: "20px", borderTopRightRadius: "20px",
-            borderBottomRightRadius: "20px", borderBottomLeftRadius: "20px" }
+            borderBottomRightRadius: "20px", borderBottomLeftRadius: "20px",
+            backgroundColor: "rgb(255, 255, 255)" }
         : { overflowY: "visible" }
     ));
 

@@ -13,27 +13,32 @@
  * `.inscribed-collapse`; Collection bodies stay mounted across collapse so the
  * inner `useCollectionItem` fetch isn't replayed on reopen.
  *
- * Collection blocks get a dedicated lane: `<CollectionBlockCard>` lifts the
- * editor's draft state so the header can show the "Geri al" reset.
+ * Collection blocks get a dedicated lane in `CollectionBlockCard.jsx`, loaded
+ * lazily: it is the drawer's only reach into the collections layer, so an app
+ * without collections leaves that graph unfetched.
  */
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, Undo2, Lock, typeIconFor } from "../shared/style/icons.jsx";
+import dynamic from "next/dynamic";
+import { Undo2, Lock } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { isBlockDirty, resolveBlockValue } from "../core/resolve.js";
-import { useDrawerDraftRole } from "../collections/hooks/use-draft-driver.js";
 
 import { FieldEditor } from "../editors/fields/FieldEditor.jsx";
 import { ListEditor } from "../editors/fields/ListEditor.jsx";
-import { useCollectionEditor } from "../collections/hooks/use-collection-editor.js";
-import { CollectionRecordForm } from "./CollectionRecordForm.jsx";
 import { BlockConflictNotice } from "./BlockConflictNotice.jsx";
 import { TranslationPrompt } from "./TranslationPrompt.jsx";
-import { blockResetStyle, dirtyDotStyle, rowContainerStyle, rowHeaderStyle, rowGuideBodyStyle, rowPathStyle, typeIconStyle, groupIconStyle } from "./drawer-styles.js";
-import { TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, HAIRLINE, FONT_SANS, FONT_MONO, R_MD } from "../shared/style/tokens.js";
+import { CardHeader, TypeIcon, disclosureBodyStyle, disclosureRowStyle, fieldPathStyle, rowClassName, rowInsetStyle } from "./block-card-chrome.jsx";
+import { blockResetStyle, dirtyDotStyle } from "./drawer-styles.js";
+import { TEXT_MUTED, HAIRLINE, R_MD } from "../shared/style/tokens.js";
+
+const CollectionLane = dynamic(
+  () => import("./CollectionBlockCard.jsx").then((m) => m.CollectionLane),
+  { ssr: false },
+);
 
 // Field-weight types: a single light editor, rendered always-open as a form
 // field. Everything else (RichText/Image/List/Collection/unknown) keeps the
@@ -41,17 +46,7 @@ import { TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, HAIRLINE, FONT_SAN
 const INLINE_TYPES = new Set(["ShortText", "LongText", "Date", "Link"]);
 
 /**
- * @param {React.CSSProperties} base
- * @param {boolean} topLevel
- */
-function rowInsetStyle(base, topLevel) {
-  return topLevel
-    ? { ...base, paddingLeft: 6 }
-    : { ...base, marginLeft: 6, paddingLeft: 6 };
-}
-
-/**
- * @import { BlockResponse, BlockType, ItemSchema } from "../shared/contracts/schemas.js"
+ * @import { BlockResponse, ItemSchema } from "../shared/contracts/schemas.js"
  */
 
 /**
@@ -119,23 +114,9 @@ function useBlockDraft(block) {
  */
 export const BlockCard = memo(function BlockCard(props) {
   if (props.block.blockType === "Collection") {
-    const binding = /** @type {{ collection?: string, slug?: string }} */ (
-      props.block.value ?? {}
-    );
-    if (typeof binding.collection !== "string" || typeof binding.slug !== "string") {
-      return (
-        <InvalidCollectionCard
-          block={props.block}
-          topLevel={props.topLevel}
-          displayPath={props.displayPath}
-        />
-      );
-    }
     return (
-      <CollectionBlockCard
+      <CollectionLane
         block={props.block}
-        collection={binding.collection}
-        slug={binding.slug}
         isActive={props.isActive}
         readOnly={props.readOnly}
         topLevel={props.topLevel}
@@ -281,50 +262,6 @@ const editorSlotStyle = /** @type {React.CSSProperties} */ ({
   minWidth: 0,
 });
 
-const fieldPathStyle = rowPathStyle;
-
-// Disclosure rows (heavy blocks): the shared row shell, with a clickable header
-// instead of an always-open editor. Only the pointer affordance is local; the
-// geometry lives in the styles module so the changes preview matches it.
-const disclosureRowStyle = rowContainerStyle;
-
-const disclosureHeaderStyle = /** @type {React.CSSProperties} */ ({
-  ...rowHeaderStyle,
-  cursor: "pointer",
-  userSelect: "none",
-});
-
-const disclosureBodyStyle = rowGuideBodyStyle;
-
-/**
- * Card for a Collection block whose `value` is missing `{ collection, slug }`.
- * Separate from `CollectionBlockCard` so `useCollectionEditor` only runs with a
- * valid pair.
- *
- * @param {{ block: BlockResponse, topLevel: boolean, displayPath?: string }} props
- */
-function InvalidCollectionCard({ block, topLevel, displayPath }) {
-  const t = useCmsStrings();
-  return (
-    <div
-      className="inscribed-field-row inscribed-field-row-collection"
-      style={rowInsetStyle(disclosureRowStyle, topLevel)}
-    >
-      <div style={{ ...disclosureHeaderStyle, cursor: "default" }}>
-        <TypeIcon type={block.blockType} compact={topLevel} />
-        <span style={fieldPathStyle} title={block.blockPath}>
-          {displayPath ?? block.blockPath}
-        </span>
-      </div>
-      <div style={disclosureBodyStyle}>
-        <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
-          {t("block.invalidCollection", { shape: "{ collection, slug }" })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /**
  * @param {{
  *   block: BlockResponse,
@@ -416,200 +353,6 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
 }
 
 /**
- * Collection block lane: owns the editor's draft state so the header can render
- * the "Geri al" reset next to the chevron.
- *
- * @param {{
- *   block: BlockResponse,
- *   collection: string,
- *   slug: string,
- *   isActive: boolean,
- *   topLevel: boolean,
- *   displayPath?: string,
- * }} props
- */
-function CollectionBlockCard({ block, collection, slug, isActive, readOnly, topLevel, displayPath }) {
-  const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
-  const { setActiveBlock, uiStore } = useCmsContext();
-  const isDrawerOpen = useStoreSelector(uiStore, (s) => s.isDrawerOpen);
-  // The page's own `<CollectionField>`s drive the draft when they exist; this
-  // card then shows the same values without a second autosave loop behind them.
-  const [isOpen, setIsOpen] = useState(false);
-  // Nobody is looking at a collapsed card behind a shut panel, so it stops
-  // re-seeding on every keystroke until it comes back into view.
-  const role = useDrawerDraftRole(collection, slug, isDrawerOpen && isOpen);
-  const editor = useCollectionEditor(collection, slug, role);
-  // A locked card surfaces no dirty state, same as a readOnly block row.
-  const isDirty = !readOnly && editor.hasDraft && editor.canEdit;
-
-  const onFocus = useCallback(
-    () => setActiveBlock(block.blockPath),
-    [setActiveBlock, block.blockPath],
-  );
-
-  useEffect(() => {
-    if (isActive) setIsOpen(true);
-  }, [isActive]);
-
-  useEffect(() => {
-    if (isActive && ref.current) {
-      ref.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }, [isActive]);
-
-  const handleHeaderClick = () => {
-    setIsOpen(!isOpen);
-    if (!isOpen) onFocus();
-  };
-
-  const record = `${collection} · ${slug}`;
-
-  return (
-    <div
-      ref={ref}
-      className={rowClassName({ isActive, isCollection: true })}
-      style={rowInsetStyle(disclosureRowStyle, topLevel)}
-    >
-      <CardHeader
-        block={block}
-        isOpen={isOpen}
-        isDirty={isDirty}
-        isCollection
-        topLevel={topLevel}
-        displayPath={displayPath}
-        preview={displayPath === record ? null : record}
-        onHeaderClick={handleHeaderClick}
-        onReset={editor.undoDraft}
-      />
-      <div
-        className={`inscribed-collapse${isOpen ? " is-open" : ""}`}
-        aria-hidden={!isOpen}
-        onMouseDown={onFocus}
-      >
-        <div style={disclosureBodyStyle}>
-          <CollectionRecordForm editor={editor} readOnly={readOnly} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Row class string: shares the form-row base (active ring) with `FieldRow`;
- * the collection variant swaps the ring tone. Dirty state travels on the
- * header dot, not the container.
- *
- * @param {{ isActive: boolean, isCollection: boolean }} args
- */
-function rowClassName({ isActive, isCollection }) {
-  const parts = ["inscribed-field-row"];
-  if (isCollection) parts.push("inscribed-field-row-collection");
-  if (isActive) parts.push("is-active");
-  return parts.join(" ");
-}
-
-/**
- * Shared header row for both lanes. Clicking it toggles the body; the reset
- * button (only when dirty) stops propagation so undo doesn't also toggle.
- * `preview` (a one-line value summary) shows only while closed, so a shut
- * card still tells what's inside.
- *
- * @param {{
- *   block: BlockResponse,
- *   isOpen: boolean,
- *   isDirty: boolean,
- *   isCollection?: boolean,
- *   readOnly?: boolean,
- *   preview?: string | null,
- *   topLevel: boolean,
- *   displayPath?: string,
- *   onHeaderClick: () => void,
- *   onReset: () => void,
- * }} props
- */
-function CardHeader({ block, isOpen, isDirty, isCollection, readOnly, preview, topLevel, displayPath, onHeaderClick, onReset }) {
-  const t = useCmsStrings();
-  return (
-    <button
-      type="button"
-      onClick={onHeaderClick}
-      aria-expanded={isOpen}
-      className="inscribed-disclosure-header"
-      style={disclosureHeaderStyle}
-    >
-      <TypeIcon type={block.blockType} compact={topLevel} />
-      <span className="inscribed-row-label" style={{ ...fieldPathStyle, color: undefined }} title={block.blockPath}>
-        {displayPath ?? block.blockPath}
-      </span>
-
-      {!isOpen && preview ? (
-        <span style={cardPreviewStyle} title={preview}>{preview}</span>
-      ) : null}
-
-      {isDirty ? (
-        <span
-          style={isCollection ? { ...dirtyDotStyle, background: COLLECTION_ACCENT, boxShadow: `0 0 5px ${COLLECTION_ACCENT}80` } : dirtyDotStyle}
-          aria-label={t("block.unsavedDot")}
-        />
-      ) : null}
-
-      {isDirty ? (
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => { e.stopPropagation(); onReset(); }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              e.stopPropagation();
-              onReset();
-            }
-          }}
-          className={`inscribed-icon-button${isCollection ? " inscribed-icon-button-collection" : ""}`}
-          style={blockResetStyle}
-          aria-label={t("block.undoThis")}
-          title={t("block.undo")}
-        >
-          <Undo2 size={13} />
-        </span>
-      ) : null}
-
-      {readOnly ? (
-        <span
-          style={{ display: "inline-flex", color: TEXT_MUTED }}
-          title={t("block.readOnlyTitle")}
-          aria-label={t("block.readOnly")}
-        >
-          <Lock size={12} />
-        </span>
-      ) : null}
-
-      <span
-        className="inscribed-row-chevron"
-        style={{
-          display: "inline-flex",
-          transition: "transform 220ms cubic-bezier(0.32, 0.72, 0.18, 1), color 140ms ease",
-          transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-        }}
-      >
-        <ChevronDown size={13} />
-      </span>
-    </button>
-  );
-}
-
-const cardPreviewStyle = /** @type {React.CSSProperties} */ ({
-  flex: "0 1 auto",
-  minWidth: 0,
-  maxWidth: "45%",
-  font: `11px/1.2 ${FONT_SANS}`,
-  color: TEXT_FAINT,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-});
-
-/**
  * One-line value summary for a closed heavy card. Returns null when there is
  * nothing meaningful to show (the header then stays as-is).
  *
@@ -638,25 +381,6 @@ function blockPreview(blockType, value, t) {
     default:
       return null;
   }
-}
-
-/**
- * Block-type badge, the cue admins scan the list by. Monochrome on purpose:
- * every row carries one, so per-type colours would turn the form into confetti;
- * the shape alone does the telling.
- *
- * @param {{ type: BlockType, compact?: boolean }} props
- */
-function TypeIcon({ type, compact }) {
-  const Badge = typeIconFor(type);
-  return (
-    <span
-      aria-hidden="true"
-      style={compact ? groupIconStyle : { ...typeIconStyle, color: TEXT_MUTED }}
-    >
-      <Badge size={13} />
-    </span>
-  );
 }
 
 /**

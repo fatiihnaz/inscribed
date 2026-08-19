@@ -71,6 +71,7 @@ function useConstant(create) {
  * @param {string|null} [props.userSub]
  * @param {boolean} [props.isAdmin]
  * @param {BlockResponse[]} [props.initialBlocks]   Server-fetched blocks, seeded into the map before first paint to avoid SSR flicker.
+ * @param {{ slug: string, locale: string|null }} [props.initialRoute]   What `initialBlocks` are *for*. Without it the client re-derives both from the pathname, which is wrong on a route whose slug was pinned (`<CmsPage slug="/news/[id]">`) and cannot tell a carried-over language from a current one. `createCmsPage` passes it.
  * @param {(slug: string, locale?: string) => void | Promise<void>} [props.onAfterSave]   Server Action run after a save, typically `revalidateCmsSlug`. `locale` is undefined on a single-language site.
  * @param {() => Promise<string>} [props.getAccessToken]   Returns the user's JWT, added as `Authorization: Bearer` on writes. When omitted and `config.clientKey` is set, the built-in browser auth (reference backend `/auth/*`) takes over; omit both for public mode.
  * @param {import("../shared/contracts/transport.js").CmsTransport} [props.transport]   Custom client transport. Defaults to REST from `config`. Passed here, not via `config`, because it holds functions that can't cross the RSC boundary.
@@ -85,6 +86,7 @@ export function CmsProvider({
   userSub: userSubProp = null,
   isAdmin: isAdminProp = false,
   initialBlocks,
+  initialRoute,
   onAfterSave,
   onAfterCollectionSave,
   getAccessToken,
@@ -260,19 +262,17 @@ export function CmsProvider({
 
   const pathname = usePathname() ?? "/";
   const router = useRouter();
-  // `pathname` keys the blocks cache, `routeSlug` is what the backend stores
-  // under. Identical until a locale prefix is configured, and the pair must
-  // stay distinguishable everywhere below: mixing them up either collapses two
-  // locales into one cache entry or PUTs to a slug that was never synced.
+  // The URL slug: what a link points at, derived from the pathname. Not
+  // necessarily what the backend stores under, which is `contentRoute` below.
   const { slug: routeSlug, locale } = resolveCmsRoute(pathname, normalizedConfig);
   // Only read while the blocks store is created, so it is the mount-time route.
   const initialPathname = pathname;
 
-  // Keyed by slug, then by blockPath. The slug dimension is what makes a return
-  // visit instant: a region reads `get(slug).get(path)`, so the moment the route
-  // commits it already sees the blocks it fetched last time, with no effect in
-  // between to leave a frame of placeholders. Seeded from `initialBlocks` so
-  // regions render real values during SSR and first paint.
+  // Keyed by pathname, then by blockPath. Pathname rather than slug because two
+  // locales share one slug and each renders its own route. A return visit is
+  // instant off this map, with no effect in between to leave a frame of
+  // placeholders. Seeded from `initialBlocks` so regions render real values
+  // during SSR and first paint.
   const blocksStore = useConstant(() =>
     createStore(
       /** @type {Map<string, Map<string, BlockResponse>>} */ (
@@ -316,35 +316,35 @@ export function CmsProvider({
   const setDraftsState = contentDraftsStore.set;
   const setTranslationDraftsState = translationDraftsStore.set;
 
-  // Replace one slug's blocks wholesale; what `useCmsContent` calls once a
-  // fetch lands. Other slugs' entries stay, which is the cache.
+  // Replace one route's blocks wholesale; what `useCmsContent` calls once a
+  // fetch lands. Other routes' entries stay, which is the cache.
   const commitBlocks = useCallback(
-    /** @param {string} slug @param {Map<string, BlockResponse>} blocks */
-    (slug, blocks) => {
+    /** @param {string} pathname @param {Map<string, BlockResponse>} blocks */
+    (pathname, blocks) => {
       blocksStore.set((s) => {
         const next = new Map(s);
-        next.set(slug, blocks);
+        next.set(pathname, blocks);
         return next;
       });
     },
     [blocksStore],
   );
 
-  // Patch the blocks of one slug in place, for the autosave mirror and discard.
+  // Patch one route's blocks in place, for the autosave mirror and discard.
   // An updater returning its input is a no-op, as with the plain store.
   const patchBlocks = useCallback(
     /**
-     * @param {string} slug
+     * @param {string} pathname
      * @param {(prev: Map<string, BlockResponse>) => Map<string, BlockResponse>} updater
      */
-    (slug, updater) => {
+    (pathname, updater) => {
       blocksStore.set((s) => {
-        const prev = s.get(slug);
+        const prev = s.get(pathname);
         if (!prev) return s;
         const blocks = updater(prev);
         if (blocks === prev) return s;
         const next = new Map(s);
-        next.set(slug, blocks);
+        next.set(pathname, blocks);
         return next;
       });
     },
@@ -444,6 +444,7 @@ export function CmsProvider({
     if (before.slug !== after.slug || before.locale === after.locale) return;
     const carried = blocksStore.get().get(from);
     if (!carried) return;
+    provisionalRef.current.add(to);
     /** @type {Map<string, BlockResponse>} */
     const next = new Map();
     for (const [path, block] of carried) {
@@ -458,6 +459,20 @@ export function CmsProvider({
   // One effect for both triggers, because the refetch decision below needs to
   // see them together: whether fresh server blocks arrived *with* this
   // navigation is exactly what says if another fetch is needed.
+  // What the blocks now in the store were fetched for, and for which pathname.
+  // The client cannot re-derive `slug`: on `<CmsPage slug="/news/[id]">` the
+  // pathname is `/news/1`, a slug the backend never saw. State, not a ref,
+  // because `useCmsContent` addresses its fetch with it.
+  const [contentRoute, setContentRoute] = useState(() => ({
+    pathname: initialPathname,
+    slug: initialRoute?.slug ?? routeSlug,
+    locale: initialRoute?.locale ?? locale,
+  }));
+  // Entries `carryLocaleSwitch` wrote: the previous language's blocks, standing
+  // in until the real ones arrive. Present in the store but not an answer, so
+  // nothing may read their presence as "this route is already served".
+  const provisionalRef = useRef(/** @type {Set<string>} */ (new Set()));
+
   const initialBlocksRef = useRef(initialBlocks);
   const lastPathnameRef = useRef(pathname);
   useEffect(() => {
@@ -468,9 +483,19 @@ export function CmsProvider({
     initialBlocksRef.current = initialBlocks;
     lastPathnameRef.current = pathname;
 
-    // New server content lands under the route it describes.
-    if (blocksChanged) commitBlocks(pathname, indexBlocksByPath(initialBlocks ?? []));
-    else if (pathChanged) carryLocaleSwitch(previousPathname, pathname);
+    // New server content lands under the route it describes, and settles what
+    // that route's blocks are for.
+    if (blocksChanged) {
+      commitBlocks(pathname, indexBlocksByPath(initialBlocks ?? []));
+      provisionalRef.current.delete(pathname);
+      setContentRoute({
+        pathname,
+        slug: initialRoute?.slug ?? routeSlug,
+        locale: initialRoute?.locale ?? locale,
+      });
+    } else if (pathChanged) {
+      carryLocaleSwitch(previousPathname, pathname);
+    }
     // Conflicts go with the drafts they were raised against.
     patchUi({ activeBlock: null, conflictBlocks: new Set() });
     setDraftsState(new Map());
@@ -479,20 +504,28 @@ export function CmsProvider({
     // them, so surviving a navigation would leave an edit nothing can reach.
     setTranslationDraftsState(new Map());
 
-    // A navigation needs at most one refetch, and only when there is nothing to
-    // show. A slug already in the store renders from it immediately and
-    // `<ContentLoader>` revalidates behind that, so no nudge is warranted.
+    // A navigation needs at most one refetch. A route already answered renders
+    // from the store immediately and needs no nudge; a provisional entry only
+    // looks answered, and skipping the nudge on one is how a locale switch used
+    // to leave a public visitor reading the previous language all session.
     if (!pathChanged || blocksChanged) return;
-    if (blocksStore.get().has(pathname)) return;
-    // Nothing cached for this route. An editor's client refetch will fill it,
-    // and `router.refresh()` could not help them anyway: the SSR fetch carries
-    // a service token and its response is ISR-cached under one tag for every
-    // visitor, so it structurally cannot carry an admin's `draftValue`. Public
-    // visitors run no client fetch at all, so for them the server is the only
-    // path, and a root-layout `<CmsPage>` (whose props survive a route change)
-    // is what actually needs the nudge.
+    if (blocksStore.get().has(pathname) && !provisionalRef.current.has(pathname)) return;
+    // An editor's client refetch fills this, and `router.refresh()` could not
+    // help them anyway: the SSR response is ISR-cached under one tag for every
+    // visitor, so it structurally cannot carry their `draftValue`.
+    //
+    // Navigating off the route the server described drops `contentSlug`, and
+    // the fetch falls back to deriving one. That is safe here and only here: a
+    // slug can only be pinned per page (`<CmsPage slug="/news/[id]">`), and a
+    // page that pins one re-renders on the way in, so fresh blocks arrive with
+    // it and this branch is never reached. A root-layout `<CmsPage>` pins
+    // nothing, so the server derives the same slug the client would.
     if (isAdmin) return;
     router.refresh();
+    // `contentRoute`, `initialRoute`, `routeSlug` and `locale` are read as the
+    // values current with this navigation, never as triggers: the effect must
+    // fire on a route or content change and nothing else.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialBlocks, pathname, isAdmin, router, blocksStore, commitBlocks, carryLocaleSwitch, setDraftsState, setTranslationDraftsState, patchUi]);
 
   // Drop drafts for blocks that no longer exist (e.g. after a manifest sync
@@ -1047,6 +1080,10 @@ export function CmsProvider({
       isAdmin,
       userSub,
       userInfo,
+      // The slug the backend stores this route under, when the server told us.
+      // Null once we have navigated away from the route it described, and a
+      // null here means "ask, don't derive".
+      contentSlug: contentRoute.pathname === pathname ? contentRoute.slug : null,
       onSignOut: onSignOut ? stableOnSignOut : browserSession ? browserSignOut : null,
 
       blocksStore,
@@ -1084,6 +1121,8 @@ export function CmsProvider({
       isAdmin,
       userSub,
       userInfo,
+      contentRoute,
+      pathname,
       onSignOut,
       stableOnSignOut,
       browserSession,
@@ -1137,12 +1176,9 @@ export function CmsProvider({
   return (
     <CmsContext.Provider value={value}>
       {themeCss ? <style>{themeCss}</style> : null}
-      {/* The collections provider wraps the drawer as well as the page: both
-          sides of a binding read one `CollectionContext`, and the drawer is a
-          sibling of `children`, not a descendant. That is why this is a prop
-          rather than something the app nests inside `<CmsProvider>` itself.
-          It reads `config`/`isAdmin`/`getAccessToken` from `CmsContext`, so it
-          belongs inside that provider and outside everything else. */}
+      {/* A prop rather than something the app nests itself, because it must
+          wrap the drawer too, and the drawer is a sibling of `children`. It
+          reads `config`/`isAdmin`/`getAccessToken`, so it sits inside here. */}
       {CollectionsRoot ? <CollectionsRoot>{tree}</CollectionsRoot> : tree}
     </CmsContext.Provider>
   );

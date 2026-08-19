@@ -76,6 +76,7 @@ import { createContext, useContext } from "react";
  * @property {string|null} userSub
  * @property {{ name: string|null, email: string|null, image: string|null } | null} userInfo  Admin-only: identity for the panel footer. Null when no session.
  * @property {(() => void) | null} onSignOut  Admin-only: invoked by the panel's logout button. Null when no auth wiring.
+ * @property {string|null} contentSlug  The slug the backend stores the current route under, as reported by the server render. Differs from the URL slug on a pinned route (`<CmsPage slug="/news/[id]">`). Null once the client has navigated off the route the server described, and that null means "ask the server", not "derive it".
  *
  * @property {Store<Map<string, Map<string, BlockResponse>>>} blocksStore
  *   Blocks keyed by slug, then by blockPath, and it keeps every route visited

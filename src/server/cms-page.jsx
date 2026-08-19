@@ -81,7 +81,9 @@ const PATHNAME_HEADER = "x-pathname";
  * @property {*} Provider
  *   The CMS provider component, typically `CmsProvider` or your own wrapper
  *   around it. Receives `config`, `isAdmin`, `userSub`, `initialBlocks`,
- *   `onAfterSave`, `session`, and (when `collections` is given) `collections`.
+ *   `initialRoute`, `onAfterSave`, `session`, and (when `collections` is given)
+ *   `collections`. A wrapper must forward all of them; spreading `{...props}`
+ *   is what does that.
  *
  * The three auth callbacks below form a `CmsAuthAdapter` (see `shared/contracts/auth.js`);
  * omit them all for a public read-only site, or spread an adapter from an
@@ -235,7 +237,8 @@ export function createCmsPage(options) {
 
     return (
       <Provider config={normalizedConfig} isAdmin={deriveAdmin(session)} userSub={deriveUserSub(session)}
-        initialBlocks={initialBlocks} onAfterSave={onAfterSave}
+        initialBlocks={initialBlocks} initialRoute={{ slug: resolvedSlug, locale: resolvedLocale }}
+        onAfterSave={onAfterSave}
         onAfterCollectionSave={onAfterCollectionSave}
         collections={collections?.CollectionProvider}
         session={sessionForClient ? sessionForClient(session) : undefined}

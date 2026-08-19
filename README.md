@@ -309,6 +309,11 @@ Dynamic routes are the one place the slug is also written by hand: the
 <CmsPage slug="/news/[id]">
 ```
 
+The pinned slug travels to the client too, as `initialRoute`, so the editor's
+refetch addresses `/news/[id]` rather than re-deriving `/news/1` from the URL.
+That matters only if you mount `<CmsProvider>` through a wrapper of your own:
+forward the prop, or spread `{...props}`.
+
 > **Check the derivation** with `cms-sync --dry-run`. It prints each slug beside
 > the page file it came from, which is where a surprise shows up.
 

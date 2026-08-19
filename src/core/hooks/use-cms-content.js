@@ -38,8 +38,13 @@ const EMPTY_BLOCKS = new Map();
  */
 
 export function useCmsContent() {
-  const { config, blocksStore, commitBlocks, uiStore, triggerRefetch, getAccessToken } = useCmsContext();
-  const { pathname, slug, locale } = useCmsRoute();
+  const { config, blocksStore, commitBlocks, uiStore, triggerRefetch, getAccessToken, contentSlug } = useCmsContext();
+  const { pathname, slug: urlSlug, locale } = useCmsRoute();
+  // The pathname is the URL's slug, not necessarily the backend's: on
+  // `<CmsPage slug="/news/[id]">` they differ, and fetching the derived one
+  // would address a slug that was never synced. `contentSlug` is what the
+  // server actually read, and is null once we have navigated off that route.
+  const slug = contentSlug ?? urlSlug;
   const refetchToken = useStoreSelector(uiStore, (s) => s.refetchToken);
 
   // Blocks come straight off the store rather than a local copy: the same map

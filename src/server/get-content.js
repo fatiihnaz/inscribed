@@ -12,6 +12,7 @@ import { createRestTransport } from "../defaults/transport.js";
 import { mergePageBlocks, resolveGlobalSlug } from "../core/merge-blocks.js";
 import { ensureCmsConfig } from "../shared/config.js";
 import { noServiceToken } from "../defaults/service-token.js";
+import { handleSsrFailure } from "./ssr-failure.js";
 
 /**
  * @import { CmsConfig } from "../shared/config.js"
@@ -151,9 +152,15 @@ export async function getCmsContent(config, slug, options) {
  * A `contentOptions.locale` reaches both fetches, so the header and footer
  * arrive in the page's own language rather than the Client's default.
  *
+ * The two fetches fail independently: the page's blocks and the global slug's
+ * are separate content, and losing one is no reason to discard the other. They
+ * used to share a fate, so a page-slug failure blanked the header and footer
+ * too, even though that request had succeeded. See `ssr-failure.js` for what
+ * "fail" does.
+ *
  * @param {CmsConfig} config
  * @param {string} slug
- * @param {{ contentOptions?: GetCmsContentOptions }} [options]
+ * @param {{ contentOptions?: GetCmsContentOptions, onSsrError?: import("./ssr-failure.js").SsrErrorReporter | null }} [options]
  * @returns {Promise<BlockResponse[]>}
  */
 export async function getCmsPageBlocks(config, slug, options) {
@@ -162,15 +169,24 @@ export async function getCmsPageBlocks(config, slug, options) {
     options?.contentOptions?.accessToken ?? (await getServiceToken());
 
   const globalSlug = resolveGlobalSlug(config.globalSlug, slug);
+  const locale = options?.contentOptions?.locale ?? null;
+  const onSsrError = options?.onSsrError;
 
   const [content, globalContent] = await Promise.all([
-    getCmsContent(config, slug, { ...options?.contentOptions, accessToken }),
+    getCmsContent(config, slug, { ...options?.contentOptions, accessToken })
+      .catch((err) => {
+        handleSsrFailure(err, { kind: "page", target: slug, locale }, onSsrError);
+        return { slug, blocks: [] };
+      }),
     globalSlug
       // Caller tags stay off this one: the __global entry is shared by every
       // page, and a page-specific tag on it would let that page's revalidation
       // drop everyone's header/footer.
       ? getCmsContent(config, globalSlug, { ...options?.contentOptions, tags: undefined, accessToken })
-          .catch(() => ({ slug: globalSlug, blocks: [] }))
+          .catch((err) => {
+            handleSsrFailure(err, { kind: "global", target: globalSlug, locale }, onSsrError);
+            return { slug: globalSlug, blocks: [] };
+          })
       : Promise.resolve({ slug: "", blocks: [] }),
   ]);
 

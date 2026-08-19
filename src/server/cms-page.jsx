@@ -52,6 +52,7 @@ import { ensureCmsConfig } from "../shared/config.js";
 import { localizePath, resolveCmsRoute } from "../shared/route.js";
 import { buildListParams } from "../collections/params.js";
 import { publicAuth } from "../defaults/auth.js";
+import { handleSsrFailure } from "./ssr-failure.js";
 
 // Re-exported here (not from the client entry) because config factories run in
 // server modules (app/lib/cms.jsx), and the index bundle's "use client" would
@@ -117,6 +118,15 @@ const PATHNAME_HEADER = "x-pathname";
  *   `revalidateCmsSlug` from `inscribed/actions`. Import it consumer-side and
  *   pass it explicitly; importing it here would strip its "use server" status
  *   during bundling.
+ * @property {import("./ssr-failure.js").SsrErrorReporter} [onSsrError]
+ *   Called when an SSR content fetch fails against a reachable-but-broken or
+ *   unreachable backend: `(err, { kind, target, locale })`, where `kind` is
+ *   `"page" | "global" | "collection"`. Wire it to your error reporter.
+ *
+ *   Default: nothing. The SDK logs a failed fetch in development only, and an
+ *   outage in production is otherwise silent, which is exactly the case this
+ *   seam exists for. Not called for a 404 (absent content is not a failure).
+ *   A throw from the reporter is swallowed.
  */
 
 /**
@@ -160,6 +170,7 @@ export function createCmsPage(options) {
     sessionForClient,
     onAfterSave,
     onAfterCollectionSave,
+    onSsrError,
     collections,
   } = options;
 
@@ -210,20 +221,17 @@ export function createCmsPage(options) {
     // The session and the content are independent, so they overlap rather than
     // queue: a session that hits a database or decrypts a JWT would otherwise
     // sit in front of every content request.
-    const [session, blocksResult] = await Promise.all([
+    // No catch here: `getCmsPageBlocks` already decides per fetch what a
+    // failure means (see `ssr-failure.js`), and what reaches this far is
+    // something the page must not render through: a framework bail-out signal,
+    // or a build-phase refusal.
+    const [session, initialBlocks] = await Promise.all([
       getSession(),
       getCmsPageBlocks(serverConfig, resolvedSlug, {
         contentOptions: { locale: resolvedLocale },
-      }).catch((err) => {
-        // Backend offline or page not yet synced: render with empty blocks.
-        if (process.env.NODE_ENV !== "production") {
-          // eslint-disable-next-line no-console
-          console.warn(`[inscribed] SSR content fetch failed for "${resolvedSlug}":`, err);
-        }
-        return [];
+        onSsrError,
       }),
     ]);
-    const initialBlocks = blocksResult;
 
     return (
       <Provider config={normalizedConfig} isAdmin={deriveAdmin(session)} userSub={deriveUserSub(session)}
@@ -270,7 +278,7 @@ export function createCmsPage(options) {
   if (!collections) return { CmsPage, localePath, getCmsRoute };
   return {
     CmsPage, localePath, getCmsRoute,
-    ...createServerCollections(serverConfig, collections),
+    ...createServerCollections(serverConfig, collections, onSsrError),
   };
 }
 
@@ -283,8 +291,9 @@ export function createCmsPage(options) {
  *
  * @param {import("../shared/config.js").CmsConfig} serverConfig
  * @param {CollectionPrimitives} primitives
+ * @param {import("./ssr-failure.js").SsrErrorReporter} [onSsrError]
  */
-function createServerCollections(serverConfig, { CollectionRecord, CollectionRows }) {
+function createServerCollections(serverConfig, { CollectionRecord, CollectionRows }, onSsrError) {
   async function RegionRows({ collection, filter, limit, offset, as, empty, children, rest }) {
     // Resolved here rather than passed down from `CmsPage`: a region can be
     // mounted anywhere in the tree, and this component is already async.
@@ -296,11 +305,9 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
       ({ items } = await getCmsCollection(serverConfig, collection, params));
     } catch (err) {
       // Same posture as the block fetch: a page whose collection is unreachable
-      // still renders, with the region's own empty branch.
-      if (process.env.NODE_ENV !== "production") {
-        // eslint-disable-next-line no-console
-        console.warn(`[inscribed] SSR collection fetch failed for "${collection}":`, err);
-      }
+      // still renders, with the region's own empty branch, but that render is
+      // kept out of the cache so it doesn't outlive the outage.
+      handleSsrFailure(err, { kind: "collection", target: collection, locale }, onSsrError);
     }
 
     // `CollectionRows` registers the window with the drawer itself: that needs
@@ -334,11 +341,11 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
     try {
       item = await getCmsCollectionItem(serverConfig, collection, slug);
     } catch (err) {
+      // This one already told absence apart from failure, which is the split
+      // `handleSsrFailure` now applies everywhere; it keeps its own `missing`
+      // node for the 404 and falls through to `error` for the rest.
       if (/** @type {*} */ (err)?.isNotFound) return missing ?? null;
-      if (process.env.NODE_ENV !== "production") {
-        // eslint-disable-next-line no-console
-        console.warn(`[inscribed] SSR collection item fetch failed for "${collection}/${slug}":`, err);
-      }
+      handleSsrFailure(err, { kind: "collection", target: `${collection}/${slug}` }, onSsrError);
       return errorNode ?? missing ?? null;
     }
     if (!item) return missing ?? null;

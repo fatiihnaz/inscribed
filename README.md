@@ -1213,6 +1213,48 @@ exception, and deliberately: a locale is one more dimension of a list window, an
 write can move rows between windows exactly as a filter change does, so every
 window shares the one collection tag.
 
+#### When the backend is unreachable
+
+A content fetch that fails does not take the page down: it renders with the
+blocks it has, and a collection region renders its `empty` branch. The page and
+the global slug fail independently, so a page-level failure still leaves the
+header and footer in place.
+
+What that render is *worth* depends on why the fetch failed, so the three cases
+are kept apart:
+
+| | Render | Cached |
+| --- | --- | --- |
+| `404` (page not synced, anonymous read off) | empty | yes: the content really is absent |
+| unreachable at build time | none, `next build` fails | — |
+| unreachable at request time | empty | **no** |
+
+The last row is the one that matters. Cached content is written with
+`revalidate: false`, so without this an empty render taken during a
+seconds-long outage would sit in the cache until someone published that exact
+slug. It stays out of the cache instead, and the next request tries again.
+
+Failing the build is the other half: an unreachable backend during `next build`
+would otherwise bake empty content into every prerendered page and ship it as a
+green deploy.
+
+Production is silent about all of this. Pass `onSsrError` to hear about it:
+
+```jsx
+createCmsPage({
+  config,
+  Provider: CmsProvider,
+  onSsrError: (err, { kind, target, locale }) => Sentry.captureException(err, {
+    tags: { cms: kind, target, locale },
+  }),
+});
+```
+
+`kind` is `"page" | "global" | "collection"`, `target` the slug or collection
+key. It is not called for a 404, which is absence rather than failure. The SDK
+also logs to the console in development only; a throw from your reporter is
+swallowed.
+
 **Drafts never survive a server read.** `getCmsContent`, `getCmsPageBlocks`,
 `getCmsCollection` and `getCmsCollectionItem` drop `draftValue` and `draftData`
 before returning. These responses are ISR-cached under one tag for **every**

@@ -2,13 +2,8 @@
 
 /**
  * @file The drawer's Collection card lane, split off `BlockCard` so it loads
- * behind `next/dynamic`. It is the only part of the drawer that reaches into
- * the collections layer, so an admin on a site without collections never
- * downloads that graph (`useCollectionEditor` pulls the record cache, the
- * schema form and `/me` behind it).
- *
- * Reachable only through a synthesised `blockType: "Collection"` row, which
- * exists only when a page binding registered one, which requires the provider.
+ * behind `next/dynamic`. It is the drawer's only reach into the collections
+ * layer, so a site without collections never downloads that graph.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -27,8 +22,8 @@ import { TEXT_MUTED } from "../shared/style/tokens.js";
  */
 
 /**
- * Entry point for the lane: validates the binding before anything reads it, so
- * `useCollectionEditor` only ever runs with a real (collection, slug) pair.
+ * Validates the binding first, so `useCollectionEditor` only ever runs with a
+ * real (collection, slug) pair.
  *
  * @param {{
  *   block: BlockResponse,
@@ -56,11 +51,7 @@ export function CollectionLane({ block, isActive, readOnly, topLevel, displayPat
   );
 }
 
-/**
- * Card for a Collection block whose `value` is missing `{ collection, slug }`.
- *
- * @param {{ block: BlockResponse, topLevel: boolean, displayPath?: string }} props
- */
+/** @param {{ block: BlockResponse, topLevel: boolean, displayPath?: string }} props */
 function InvalidCollectionCard({ block, topLevel, displayPath }) {
   const t = useCmsStrings();
   return (

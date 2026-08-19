@@ -1,12 +1,10 @@
 "use client";
 
 /**
- * @file Row shell shared by the drawer's card lanes: the disclosure geometry,
- * the type badge, and the clickable header.
+ * @file Row shell shared by the drawer's card lanes.
  *
- * Its own module rather than exports off `BlockCard`, because the Collection
- * lane loads behind `next/dynamic` and importing back into its loader would
- * put the two files in a cycle.
+ * Its own module rather than exports off `BlockCard`: the Collection lane loads
+ * behind `next/dynamic`, and importing back into its loader would be a cycle.
  */
 
 import { ChevronDown, Undo2, Lock, typeIconFor } from "../shared/style/icons.jsx";

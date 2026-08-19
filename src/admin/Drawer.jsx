@@ -103,11 +103,9 @@ export function Drawer() {
   const unresolvedConflicts = useStoreSelector(uiStore, (s) => s.conflictBlocks.size);
   const itemSchemas = useStoreSelector(registryStore, (s) => s.itemSchemas);
   const editorVisibility = useStoreSelector(registryStore, (s) => s.editorVisibility);
-  // Collections are opt-in, so the drawer is the one admin surface that has to
-  // render without them: the reader is the non-throwing one, and the empty
-  // store keeps every aggregate below reading as "no collections" rather than
-  // branching. Read straight off the store instead of `useMyCollections()`,
-  // which throws by design when the provider is absent.
+  // Collections are opt-in, so this is the one admin surface that must render
+  // without them. Read off the store rather than `useMyCollections()`, which
+  // throws by design when the provider is absent.
   const collectionCtx = useOptionalCollectionContext();
   const collectionStore = collectionCtx?.collectionStore ?? EMPTY_COLLECTION_STORE;
   const setActiveCollectionItem = collectionCtx?.setActiveCollectionItem ?? noop;
@@ -710,10 +708,8 @@ function ModeRail({ mode, onChange, showCollections, pageDirty, collectionsDirty
         accent={ACCENT}
         onClick={() => onChange("page")}
       />
-      {/* Hidden, not disabled, when the app didn't opt into collections: there
-          is no area behind it to explain. An app that did opt in keeps the
-          button even while /me is empty, so a permissions-narrowed list still
-          reads as a place the user knows, not as a vanished section. */}
+      {/* Hidden without the provider: there is no area behind it. An app that
+          opted in keeps it even while /me is empty. */}
       {showCollections ? (
         <RailButton
           icon={Layers}

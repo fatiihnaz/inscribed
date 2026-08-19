@@ -194,13 +194,9 @@ export function collectionRegionBindingId(collection, filter) {
 export const CollectionContext = createContext(null);
 
 /**
- * Stand-in for `collectionStore` in an app that didn't opt into collections.
- * Never written, so every selector over it returns the same empty slice for
- * the life of the page.
- *
- * The drawer is the one surface that renders either way and reads these slices
- * unconditionally (bindings, caches, drafts all feed its dirty counts). Handing
- * it this store keeps those reads honest without a null branch per selector.
+ * Stand-in for an app that didn't opt into collections. Never written, so the
+ * drawer (which reads these slices unconditionally) needs no null branch per
+ * selector.
  *
  * @type {import("../shared/state/store.js").Store<CollectionStoreState>}
  */
@@ -218,10 +214,9 @@ export const EMPTY_COLLECTION_STORE = createStore({
 });
 
 /**
- * The collection context, or null when the app didn't pass `collections` to
- * `<CmsProvider>`. Only the drawer needs this: it renders for both kinds of app
- * and hides its collection surfaces when there is nothing behind them.
- * Everything else uses `useCollectionContext`, where absence is a wiring bug.
+ * Null when the app didn't pass `collections` to `<CmsProvider>`. Only the
+ * drawer needs this; everywhere else absence is a wiring bug, so they use
+ * `useCollectionContext`.
  *
  * @returns {CollectionContextValue | null}
  */

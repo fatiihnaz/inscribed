@@ -184,3 +184,40 @@ describe("region bindings", () => {
     expect(published).toHaveLength(publishCount);
   });
 });
+
+describe("a slug that isn't the record's own", () => {
+  // The mocked backend answers every per-slug read with the record at "q1", so
+  // asking for anything else is exactly what an alias read looks like on the
+  // wire: 200, and only the body's `slug` says the address moved.
+  it("binds the record's slug, not the one the page asked for", async () => {
+    renderTree(item({ slug: "eski-adres" }));
+    await waitFor(() => expect(Object.keys(latest())).toEqual(["collection:news:q1"]));
+    expect(latest()["collection:news:q1"].slug).toBe("q1");
+  });
+
+  it("collapses an alias and the canonical address into one card", async () => {
+    // Two elements, one record: the drawer must not offer two ways to edit it,
+    // and the two must not race each other's drafts.
+    renderTree(<>{item({ slug: "eski-adres" })}{item()}</>);
+    await waitFor(() => expect(Object.keys(latest())).toEqual(["collection:news:q1"]));
+  });
+
+  it("warns in dev that the page is relying on an alias", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    renderTree(item({ slug: "eski-adres" }));
+    await waitFor(() => expect(
+      warn.mock.calls.some((call) => String(call[0]).includes("points at an old address")),
+    ).toBe(true));
+  });
+
+  it("stays quiet when only the case differs", async () => {
+    // Slugs are lowercased server-side, so this is normalisation, not a rename,
+    // and telling the author to update the page would be wrong.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    renderTree(item({ slug: "Q1" }));
+    await waitFor(() => expect(Object.keys(latest())).toEqual(["collection:news:q1"]));
+    expect(
+      warn.mock.calls.some((call) => String(call[0]).includes("points at an old address")),
+    ).toBe(false);
+  });
+});

@@ -140,20 +140,43 @@ export function CollectionRecord({ collection, slug, item, group, label, fromReg
   // is how the provider elects one of them to drive the shared draft.
   const scopeId = useId();
 
-  const bindingId = collectionItemBindingId(collection, slug);
+  // What the caller asked for and what the record actually is can differ two
+  // ways: slugs are lowercased server-side, and a renamed record still answers
+  // to its old address. Everything downstream keys off this (cache, draft slot,
+  // binding id, the drawer's card), so it has to be the record's own slug, or
+  // one row ends up addressed two ways and the writes land on an alias.
+  const recordSlug = item.slug ?? slug;
+  const bindingId = collectionItemBindingId(collection, recordSlug);
   const cardGroup = group ?? groupPrefix;
-  const cardLabel = label ?? `${collection} · ${slug}`;
+  const cardLabel = label ?? `${collection} · ${recordSlug}`;
+
+  // Case alone is normalisation, not an alias, so it warns about neither.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (recordSlug.toLowerCase() === slug.toLowerCase()) return;
+    // Naming the redirect matters more than naming the binding: editing keeps
+    // working either way, so the part that goes unnoticed is the old URL still
+    // serving the page, splitting the record across two addresses.
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[inscribed] <CollectionItem collection="${collection}" slug="${slug}"> points at an old ` +
+        `address; the record now lives at "${recordSlug}". The binding follows the record, so ` +
+        "editing is unaffected. But if this route is addressed by the slug, the old URL is still " +
+        `serving the page: export CollectionItem.metadata("${collection}") as generateMetadata ` +
+        "to settle it.",
+    );
+  }, [collection, slug, recordSlug]);
 
   // Hand the binding to the drawer for its Page-tab card. Public visitors
   // register too, keeping register/unregister symmetric across mode switches.
   useEffect(() => {
     /** @type {import("../shared/contracts/schemas.js").CollectionBinding} */
-    const binding = { collection, slug, group: cardGroup, label: cardLabel };
+    const binding = { collection, slug: recordSlug, group: cardGroup, label: cardLabel };
     if (fromRegion) binding.fromRegion = fromRegion;
     registerCollectionBinding(bindingId, binding);
     return () => unregisterCollectionBinding(bindingId);
   }, [
-    bindingId, collection, slug, cardGroup, cardLabel, fromRegion,
+    bindingId, collection, recordSlug, cardGroup, cardLabel, fromRegion,
     registerCollectionBinding, unregisterCollectionBinding,
   ]);
 
@@ -168,14 +191,14 @@ export function CollectionRecord({ collection, slug, item, group, label, fromReg
   }, [isAdmin, bindingId, groupVisibility, registerEditorVisibility, unregisterEditorVisibility]);
 
   // Booleans, not the maps: editing another record leaves this binding alone.
-  const hasDraft = useStoreSelector(collectionStore, (st) => st.drafts.has(`${collection}:${slug}`));
+  const hasDraft = useStoreSelector(collectionStore, (st) => st.drafts.has(`${collection}:${recordSlug}`));
   const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === bindingId);
 
   // Readers still get a scope: `<CollectionField>` renders the value for them,
   // it just has no editor behind it.
   const readScope = useMemo(
-    () => ({ collection, slug, scopeId, item, editor: null }),
-    [collection, slug, scopeId, item],
+    () => ({ collection, slug: recordSlug, scopeId, item, editor: null }),
+    [collection, recordSlug, scopeId, item],
   );
 
   if (!isAdmin || !item.canEdit || groupVisibility) {
@@ -189,7 +212,7 @@ export function CollectionRecord({ collection, slug, item, group, label, fromReg
   return (
     <CollectionEditScope
       collection={collection}
-      slug={slug}
+      slug={recordSlug}
       scopeId={scopeId}
       item={item}
       bindingId={bindingId}

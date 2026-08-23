@@ -60,6 +60,11 @@ export function cmsCollectionTag(key) {
  * No locale: a slug is unique across the whole collection, translations
  * included, so it already names one record in one language.
  *
+ * A record read through one of its old addresses is tagged under that address,
+ * not the canonical one, so a publish naming the canonical slug doesn't drop it
+ * by this tag. It comes down with `cmsCollectionTag` instead, which every entry
+ * also carries and every publish also revalidates.
+ *
  * @param {string} key
  * @param {string} slug
  * @returns {string}

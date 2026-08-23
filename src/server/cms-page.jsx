@@ -46,6 +46,7 @@
 
 import { Suspense } from "react";
 import { headers } from "next/headers";
+import { notFound, permanentRedirect } from "next/navigation";
 
 import { getCmsCollection, getCmsCollectionItem, getCmsPageBlocks } from "./get-content.js";
 import { ensureCmsConfig } from "../shared/config.js";
@@ -156,6 +157,7 @@ const PATHNAME_HEADER = "x-pathname";
  *   CmsPage: (props: { slug?: string, locale?: string, children: React.ReactNode }) => Promise<React.ReactElement>,
  *   localePath: (slug: string, locale?: string) => string,
  *   getCmsRoute: () => Promise<import("../shared/route.js").CmsRoute>,
+ *   resolveCollectionItem: (key: string, slug: string, options?: import("./get-content.js").GetCmsContentOptions & { path?: (slug: string) => string }) => Promise<import("../shared/contracts/schemas.js").CollectionItemResponse>,
  *   CollectionRegion?: *,
  *   CollectionItem?: *,
  * }}
@@ -278,11 +280,146 @@ export function createCmsPage(options) {
     return resolveCmsRoute(await resolvePathnameFromHeaders(false), normalizedConfig);
   }
 
-  if (!collections) return { CmsPage, localePath, getCmsRoute };
-  return {
-    CmsPage, localePath, getCmsRoute,
-    ...createServerCollections(serverConfig, collections, onSsrError),
-  };
+  /**
+   * Fetch one record for a detail route, and settle the route while doing it:
+   * a slug with no record 404s, and a slug that turns out to be an old address
+   * redirects to the canonical one before anything renders.
+   *
+   * Renaming leaves the old slug behind as an alias, so the API answers a read
+   * of it with 200 and the canonical `slug` in the body. That is deliberately
+   * not a redirect: an HTTP client would follow it silently and the app would
+   * never learn the record had moved. Which makes the redirect the app's job,
+   * and this is it, so no consumer has to remember the comparison.
+   *
+   * Two conditions decide whether the redirect reaches the wire as a status at
+   * all, both measured rather than assumed: it must be awaited in the page body
+   * (not in `generateMetadata`, which streams), and the segment must have no
+   * `loading.js` (which flushes the shell first). Miss either and Next falls
+   * back to a `<meta http-equiv="refresh">`: right for the visitor, invisible to
+   * a crawler. `CollectionItem.metadata` is the placement that does not depend
+   * on any of this.
+   *
+   * `permanentRedirect` emits 308 rather than 301. From a Server Component
+   * those are the only two on offer (307 and 308), and Google treats 308 as
+   * 301 for canonicalization, so the SEO half holds. The half that doesn't:
+   * neither can carry a `Cache-Control`, and a 308 sticks in browser caches as
+   * hard as a 301. Rename a slug, then rename it back, and whoever saw the
+   * first redirect keeps following it. Route handlers are the way out if that
+   * matters more than the one-line setup.
+   *
+   * @param {string} key
+   * @param {string} slug   The slug from the route, canonical or alias.
+   * @param {import("./get-content.js").GetCmsContentOptions & { path?: (slug: string) => string }} [options]
+   *   `path` builds the redirect target from the canonical slug. Omit it and the
+   *   current pathname's last segment is swapped, which is right for the usual
+   *   `/news/[slug]` shape and keeps any locale prefix the visitor arrived
+   *   under. Pass one when the slug isn't the last segment.
+   * @returns {Promise<import("../shared/contracts/schemas.js").CollectionItemResponse>}
+   */
+  async function resolveCollectionItem(key, slug, options) {
+    let item;
+    try {
+      item = await getCmsCollectionItem(serverConfig, key, slug, options);
+    } catch (err) {
+      if (/** @type {*} */ (err)?.isNotFound) notFound();
+      // Reports and decides whether this render may be cached; the page has no
+      // empty state to fall back on, so it never renders either way.
+      handleSsrFailure(err, { kind: "collection", target: `${key}/${slug}` }, onSsrError);
+      throw err;
+    }
+
+    if (item.slug === slug) return item;
+
+    const target = options?.path
+      ? options.path(item.slug)
+      : await canonicalPathFor(item.slug);
+    // Outside the try: `permanentRedirect` signals by throwing, and catching it
+    // here would turn the redirect into a failed fetch.
+    if (target) permanentRedirect(target);
+    return item;
+  }
+
+  /**
+   * A whole `generateMetadata` for a collection detail route, so the page can
+   * say what it is about without also having to know how Next resolves a route.
+   *
+   * The canonical link is what this is for, and it is the part that always
+   * works. Measured against Next 15 in a production build:
+   *
+   *   - from here, the redirect does *not* reach the wire as a status. Metadata
+   *     streams, so the response has already started: Next falls back to a
+   *     `<meta http-equiv="refresh">`. The visitor still lands on the right
+   *     page; a crawler sees 200, and the canonical link is what tells it where
+   *     the record actually lives.
+   *   - from the page body it is a real 308, but only while the segment has no
+   *     `loading.js`. With one, the shell flushes first and it degrades exactly
+   *     as above. And awaiting there costs the page its streaming.
+   *
+   * So this is the default: the guaranteed half is free, and nothing about it
+   * depends on which other files happen to sit in the route. `resolve` in the
+   * page body stays available for anyone who wants the hard redirect and can
+   * hold to its conditions.
+   *
+   * The record is read twice, here and in the binding, and fetched once: same
+   * URL and same tags, so Next serves the second from its cache. Measured, not
+   * assumed: one request per page render reaches the backend.
+   *
+   * @param {string} key
+   * @param {((item: import("../shared/contracts/schemas.js").CollectionItemResponse) => *) | Record<string, *>} [mapOrOptions]
+   *   A function mapping the record to metadata fields is the common case.
+   *   Pass an object instead to reach the rest: `map` (the same function),
+   *   `param` (route segment holding the slug, default `"slug"`), plus anything
+   *   `resolveCollectionItem` takes.
+   * @returns {(props: { params: * }) => Promise<*>}
+   */
+  function collectionMetadata(key, mapOrOptions) {
+    const options = typeof mapOrOptions === "function"
+      ? { map: mapOrOptions }
+      : (mapOrOptions ?? {});
+    const { map, param = "slug", ...resolveOptions } = options;
+
+    return async function generateMetadata(props) {
+      const params = await props?.params;
+      const slug = params?.[param];
+      if (typeof slug !== "string") {
+        throw new Error(
+          `CollectionItem.metadata("${key}"): no "${param}" in this route's params. ` +
+            'Pass { param: "…" } naming the segment that holds the slug.',
+        );
+      }
+
+      const item = await resolveCollectionItem(key, slug, resolveOptions);
+      // Reached only when the redirect above did not happen, which includes the
+      // case where it could not: the canonical link is what carries the record's
+      // real address to search engines either way, so it is built from the
+      // record rather than from what the route asked for.
+      const canonical = resolveOptions.path
+        ? resolveOptions.path(item.slug)
+        : await canonicalPathFor(item.slug);
+      const mapped = map ? await map(item) : null;
+
+      return {
+        ...mapped,
+        // Spread last so a caller setting its own `alternates` (hreflang for a
+        // translated record, say) keeps them, and can override the canonical.
+        alternates: { ...(canonical ? { canonical } : null), ...mapped?.alternates },
+      };
+    };
+  }
+
+  const serverCollections = collections
+    ? createServerCollections(serverConfig, collections, onSsrError)
+    : null;
+  if (serverCollections) {
+    // Hung off the component instead of only sitting beside it, because these
+    // are always used together on a detail route and the factory module is the
+    // wrong place to have to remember that: an app already exporting
+    // `CollectionItem` reaches both without touching its own wiring.
+    serverCollections.CollectionItem.resolve = resolveCollectionItem;
+    serverCollections.CollectionItem.metadata = collectionMetadata;
+  }
+
+  return { CmsPage, localePath, getCmsRoute, resolveCollectionItem, ...serverCollections };
 }
 
 /**
@@ -353,6 +490,10 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
     }
     if (!item) return missing ?? null;
 
+    // `slug` goes through as asked for, not as resolved: `CollectionRecord`
+    // reconciles it against the record's own slug (an alias read, or a case the
+    // backend normalised) in one place, for this entry point and the client one
+    // alike.
     return (
       <CollectionRecord collection={collection} slug={slug} item={item} group={group} label={label}>
         {children}
@@ -436,6 +577,43 @@ function isPageRequest(h) {
 
 /** Once per process: a missing middleware trips this on every page render. */
 let warnedMissingPathname = false;
+
+/**
+ * Where a record that moved to `canonicalSlug` now lives, derived from the path
+ * the visitor asked for by swapping its last segment.
+ *
+ * That covers `/news/[slug]` and, because `x-pathname` is the pre-rewrite path,
+ * carries any locale prefix along with it: `/en/news/old` becomes `/en/news/new`
+ * without this knowing the site is localized at all.
+ *
+ * Returns null when the path has no segment to swap, which in practice means the
+ * middleware isn't installed and the header defaulted to "/". Redirecting on a
+ * guess would send visitors somewhere that doesn't exist, so the caller renders
+ * at the old address instead and dev gets told to pass `path`.
+ *
+ * @param {string} canonicalSlug
+ * @returns {Promise<string | null>}
+ */
+async function canonicalPathFor(canonicalSlug) {
+  const pathname = await resolvePathnameFromHeaders(false);
+  const cut = pathname.lastIndexOf("/");
+  if (cut < 0 || pathname.slice(cut + 1) === "") {
+    if (!warnedMissingRedirectPath && process.env.NODE_ENV !== "production") {
+      warnedMissingRedirectPath = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[inscribed] resolveCollectionItem() could not build a redirect target for "${canonicalSlug}" ` +
+          `from pathname "${pathname}".\n` +
+          "  Add the middleware from `inscribed/middleware`, or pass path: (slug) => `/news/${slug}`.",
+      );
+    }
+    return null;
+  }
+  return `${pathname.slice(0, cut + 1)}${encodeURIComponent(canonicalSlug)}`;
+}
+
+/** Same once-per-process budget as the pathname warning above. */
+let warnedMissingRedirectPath = false;
 
 /**
  * Split the request's pathname into `{ locale, slug }`.

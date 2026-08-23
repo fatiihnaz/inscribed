@@ -28,6 +28,20 @@ export const collections = Object.freeze({
   "collections.restore": "Restore",
   "collections.archivedNotice": "Archived. Restore it to edit again.",
 
+  // Renaming a record's slug. The old address stays behind as an alias.
+  "collections.renameRecord": "Change the address",
+  "collections.renameTitle": "New address",
+  "collections.renameSubmit": "Change",
+  "collections.renameCancel": "Cancel",
+  "collections.renameHint": "The old address keeps working and points here.",
+  "collections.renameDirty": "Save or undo the unsaved changes first.",
+  "collections.renameTaken": "\"{slug}\" already holds a record. Pick another address.",
+  "collections.renameDisabled": "Addresses can't be changed in this collection.",
+  "collections.renameAliasWarning": "\"{slug}\" is {conflicting}'s old address. Take it and that address points here instead, breaking links to {conflicting}.",
+  "collections.renameAliasWarningUnnamed": "\"{slug}\" is another record's old address. Take it and that address points here instead, breaking links to that record.",
+  "collections.renameAliasConfirm": "Take it anyway",
+  "collections.recordMoved": "This record moved to \"{slug}\". The current version is loaded; your edits are still here, check them and save again.",
+
   // The collections list (rail landing surface).
   "collections.searchCollections": "Search collections",
   "collections.loadingList": "Loading collections…",

@@ -21,7 +21,7 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Archive, ArchiveRestore, ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Plus, Undo2, Search } from "../shared/style/icons.jsx";
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Pencil, Plus, Undo2, Search, X } from "../shared/style/icons.jsx";
 
 import { useCollectionContext } from "../collections/context.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
@@ -871,12 +871,16 @@ function RegionItemRow({ slug, title, canEdit, archived, dirty, updatedAt, onOpe
  * @param {{
  *   onBack: () => void,
  *   title: string,
+ *   titleContent?: React.ReactNode,
  *   meta?: React.ReactNode,
  *   footer?: React.ReactNode,
  *   children: React.ReactNode,
  * }} props
+ *   `titleContent` replaces the heading itself while `title` stays the plain
+ *   string the pane is labelled by, so a heading that turns into an input still
+ *   announces the record it belongs to.
  */
-function DetailPane({ onBack, title, meta, subhead, footer, children }) {
+function DetailPane({ onBack, title, titleContent, meta, subhead, footer, children }) {
   const t = useCmsStrings();
   useEffect(() => {
     /** @param {KeyboardEvent} e */
@@ -908,7 +912,7 @@ function DetailPane({ onBack, title, meta, subhead, footer, children }) {
         >
           <ChevronLeft size={15} />
         </button>
-        <span style={detailTitleStyle} title={title}>{title}</span>
+        {titleContent ?? <span style={detailTitleStyle} title={title}>{title}</span>}
         {meta}
       </header>
       {subhead}
@@ -1068,25 +1072,52 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
   // The pane is always on screen when mounted, so it mirrors; whether it also
   // writes depends on the page not already owning the record's draft.
   const role = useDrawerDraftRole(collectionKey, slug, true);
-  const editor = useCollectionEditor(collectionKey, slug, role);
+  // A rename lands the record at another address, and this pane is keyed by the
+  // one it was opened at, so reopening at the new slug is what moves it. That
+  // also remounts, which is what closes the heading's editor.
+  const editor = useCollectionEditor(collectionKey, slug, { ...role, onRenamed: onOpenItem });
   const meta = useCollectionMeta(collectionKey);
   const dirty = useEditorDirty(editor);
   const isDirty = dirty && editor.canEdit;
   const nothingToSave = !dirty && !editor.isVirtual;
+  const [renaming, setRenaming] = useState(false);
+
+  const closeRename = () => {
+    setRenaming(false);
+    editor.dismissRenameConflict();
+  };
 
   return (
     <DetailPane
       onBack={onBack}
       title={slug}
-      subhead={
-        <TranslationChips
-          item={editor.item}
-          locales={meta?.locales}
-          canEdit={editor.canEdit}
-          onOpenItem={onOpenItem}
-          onAddTranslation={onAddTranslation}
+      // The slug is the heading, so changing it happens there rather than in a
+      // form somewhere below that repeats what the heading already says.
+      titleContent={
+        <SlugHeading
+          editor={editor}
+          slug={slug}
+          editing={renaming}
+          disabled={isDirty}
+          onStart={() => setRenaming(true)}
+          onClose={closeRename}
         />
       }
+      subhead={
+        <>
+          {renaming ? <RenameNotice editor={editor} /> : null}
+          <TranslationChips
+            item={editor.item}
+            locales={meta?.locales}
+            canEdit={editor.canEdit}
+            onOpenItem={onOpenItem}
+            onAddTranslation={onAddTranslation}
+          />
+        </>
+      }
+      // Kept through the edit rather than hidden for room. Dropping them gave
+      // the row's width back the instant editing ended, which collapsed the
+      // input that was still animating out and dragged its icons left with it.
       meta={
         <>
           {editor.isArchived ? (
@@ -1171,6 +1202,212 @@ function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddTranslat
       <CollectionRecordForm editor={editor} showMetaRow={false} showActions={false} />
     </DetailPane>
   );
+}
+
+/**
+ * The pane's heading: the record's slug, and the pencil that turns it into an
+ * input. The address is what the heading already shows, so editing it anywhere
+ * else would mean printing the same string twice and asking which one is live.
+ *
+ * @param {{
+ *   editor: import("../collections/hooks/use-collection-editor.js").CollectionEditorState,
+ *   slug: string,
+ *   editing: boolean,
+ *   disabled: boolean,
+ *   onStart: () => void,
+ *   onClose: () => void,
+ * }} props
+ *   `disabled` is the unsaved-changes gate: renaming consumes a version, so a
+ *   row with a pending edit has to settle it first. Disabled rather than hidden,
+ *   with the reason in the tooltip.
+ */
+function SlugHeading({ editor, slug, editing, disabled, onStart, onClose }) {
+  const t = useCmsStrings();
+
+  if (!editor.canRename) {
+    return <span style={detailTitleStyle} title={slug}>{slug}</span>;
+  }
+
+  // The two states share one grid cell, so they cross-fade over each other
+  // rather than one leaving a gap for the other to fill. That also pins the
+  // row: the cell is as tall as the taller state whichever one is showing, so
+  // opening the editor moves nothing.
+  //
+  // The heading itself is the control, so the pencil is a mark at the end of
+  // the slug rather than a button beside it: nothing here should read as a
+  // second thing to press. Keyed on the mode, which is what remounts the editor
+  // per edit, so the input always opens on the record's current slug rather
+  // than on whatever was typed and abandoned last time.
+  return (
+    <div style={slugSlotStyle}>
+      <AnimatePresence initial={false}>
+        <motion.div
+          key={editing ? "edit" : "view"}
+          style={slugCellStyle}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          // The state on its way out still overlaps the one arriving, so it
+          // stops taking clicks the moment it starts leaving.
+          exit={{ opacity: 0, pointerEvents: "none" }}
+          transition={SLUG_TRANSITION}
+        >
+          {editing ? (
+            <SlugEditor editor={editor} slug={slug} onClose={onClose} />
+          ) : (
+            <button
+              type="button"
+              onClick={onStart}
+              disabled={disabled || editor.isPending}
+              className="inscribed-slug-edit"
+              style={slugButtonStyle}
+              title={disabled ? t("collections.renameDirty") : t("collections.renameRecord")}
+            >
+              <span style={slugTextStyle}>{slug}</span>
+              <Pencil size={11} className="inscribed-slug-pencil" style={slugPencilStyle} />
+            </button>
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// Short enough that the heading reads as opening rather than as a scene change,
+// on the curve the panel's other swaps already use.
+const SLUG_TRANSITION = { duration: 0.16, ease: [0.32, 0.72, 0.18, 1] };
+
+/**
+ * @param {{
+ *   editor: import("../collections/hooks/use-collection-editor.js").CollectionEditorState,
+ *   slug: string,
+ *   onClose: () => void,
+ * }} props
+ */
+function SlugEditor({ editor, slug, onClose }) {
+  const t = useCmsStrings();
+  const [value, setValue] = useState(slug);
+  const { renameConflict, dismissRenameConflict, isPending, rename } = editor;
+
+  const trimmed = value.trim();
+  const submittable = trimmed !== "" && trimmed !== slug && !isPending;
+
+  return (
+    <>
+      <input
+        type="text"
+        value={value}
+        // Editing the target invalidates the warning it produced, which
+        // otherwise sits there inviting a confirm for a slug nobody typed.
+        onChange={(e) => {
+          setValue(e.target.value);
+          if (renameConflict) dismissRenameConflict();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            if (submittable) rename(trimmed);
+          }
+          // The pane closes on Escape, and while this is open that is the wrong
+          // thing to lose: the key belongs to the input first.
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            onClose();
+          }
+        }}
+        disabled={isPending}
+        spellCheck={false}
+        autoFocus
+        aria-label={t("collections.renameTitle")}
+        placeholder={t("collections.slugPlaceholder")}
+        title={t("collections.renameHint")}
+        className="inscribed-slug-input"
+        style={slugInputStyle}
+      />
+      {/* In from the edge they will sit at, a beat apart, so the row reads as
+          the controls arriving rather than as two more things appearing. */}
+      <motion.button
+        type="button"
+        onClick={onClose}
+        disabled={isPending}
+        className="inscribed-slug-icon"
+        style={slugIconButtonStyle}
+        initial={{ opacity: 0, x: 6 }}
+        // The stagger belongs to the arrival only: carried on `transition` it
+        // would delay the exit too, and hold the whole swap open waiting for it.
+        animate={{ opacity: 1, x: 0, transition: { ...SLUG_TRANSITION, delay: 0.04 } }}
+        exit={{ opacity: 0, x: 6 }}
+        transition={SLUG_TRANSITION}
+        aria-label={t("collections.renameCancel")}
+        title={t("collections.renameCancel")}
+      >
+        <X size={13} />
+      </motion.button>
+      <motion.button
+        type="button"
+        onClick={() => { if (submittable) rename(trimmed); }}
+        disabled={!submittable}
+        // Disabled is exactly "nothing to submit", so the accent follows it
+        // through CSS rather than being recomputed here.
+        className="inscribed-slug-icon inscribed-slug-icon-confirm"
+        style={slugIconButtonStyle}
+        initial={{ opacity: 0, x: 6 }}
+        animate={{ opacity: 1, x: 0, transition: { ...SLUG_TRANSITION, delay: 0.08 } }}
+        exit={{ opacity: 0, x: 6 }}
+        transition={SLUG_TRANSITION}
+        aria-label={t("collections.renameSubmit")}
+        title={t("collections.renameSubmit")}
+      >
+        <Check size={13} />
+      </motion.button>
+    </>
+  );
+}
+
+/**
+ * What sits under the heading while its slug is being edited, and only when
+ * there is something to say: an alias clash that needs an answer, or any other
+ * refusal. Nothing renders otherwise, so opening the editor moves nothing.
+ *
+ * The clash is the reason this is a notice rather than a toast: it is the one
+ * failure the editor can act on, and acting on it takes an address off another
+ * record, so it renders as a warning naming that record and a second, explicit
+ * button, never as an automatic retry.
+ *
+ * @param {{ editor: import("../collections/hooks/use-collection-editor.js").CollectionEditorState }} props
+ */
+function RenameNotice({ editor }) {
+  const t = useCmsStrings();
+  const { renameConflict, isPending, rename, error } = editor;
+
+  if (renameConflict) {
+    return (
+      <div style={renameWarningStyle}>
+        <span>
+          {renameConflict.conflictingSlug
+            ? t("collections.renameAliasWarning", {
+                slug: renameConflict.slug,
+                conflicting: renameConflict.conflictingSlug,
+              })
+            : t("collections.renameAliasWarningUnnamed", { slug: renameConflict.slug })}
+        </span>
+        <button
+          type="button"
+          onClick={() => rename(renameConflict.slug, { replaceAlias: true })}
+          disabled={isPending}
+          className="inscribed-btn-ghost"
+          style={renameConfirmStyle}
+        >
+          {t("collections.renameAliasConfirm")}
+        </button>
+      </div>
+    );
+  }
+
+  // Repeated from the form below on purpose: a refusal about the address should
+  // be readable next to the address, not scrolled past the record's fields.
+  if (error) return <div style={renameErrorStyle}>{error}</div>;
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1658,6 +1895,112 @@ const detailVersionStyle = /** @type {React.CSSProperties} */ ({
 const archiveNoticeStyle = /** @type {React.CSSProperties} */ ({
   font: `11px/1.4 ${FONT_SANS}`,
   color: TEXT_MUTED,
+});
+
+// One grid cell holding both states, stacked. Grid rather than a stack of
+// absolutes so the cell still measures its content: the row keeps whichever
+// state is taller and never resizes as they swap.
+const slugSlotStyle = /** @type {React.CSSProperties} */ ({
+  flex: 1,
+  minWidth: 0,
+  display: "grid",
+  alignItems: "center",
+});
+
+const slugCellStyle = /** @type {React.CSSProperties} */ ({
+  gridArea: "1 / 1",
+  minWidth: 0,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+});
+
+// The heading is the control, so the button carries none of a button's chrome:
+// no background, no border, no padding. What it adds is the hit area and the
+// keyboard focus the slug needs to be pressable at all.
+const slugButtonStyle = /** @type {React.CSSProperties} */ ({
+  flex: "0 1 auto",
+  minWidth: 0,
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  padding: 0,
+  border: 0,
+  background: "none",
+  color: "inherit",
+  textAlign: "left",
+});
+
+// Sized to its content rather than to the row, so the pencil that follows sits
+// against the end of the slug instead of drifting to the far edge.
+const slugTextStyle = /** @type {React.CSSProperties} */ ({
+  minWidth: 0,
+  font: `500 12.5px/1.2 ${FONT_MONO}`,
+  color: TEXT,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
+// Colour comes from the stylesheet so hover and focus can move it; only the
+// layout belongs here.
+const slugPencilStyle = /** @type {React.CSSProperties} */ ({
+  flexShrink: 0,
+});
+
+// The heading's own metrics, and deliberately no padding or border: the header's
+// height comes from the 24px back button, and anything taller here would move
+// the row the moment editing opened. The underline is an inset shadow for the
+// same reason, since a real border occupies a pixel; it lives in the stylesheet
+// so focus can take it over.
+const slugInputStyle = /** @type {React.CSSProperties} */ ({
+  flex: 1,
+  minWidth: 0,
+  font: `500 12.5px/1.2 ${FONT_MONO}`,
+  color: TEXT,
+  padding: 0,
+  border: 0,
+  background: "transparent",
+});
+
+const slugIconButtonStyle = /** @type {React.CSSProperties} */ ({
+  width: 20,
+  height: 20,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 0,
+  border: 0,
+  background: "none",
+  borderRadius: R_SM,
+  cursor: "pointer",
+  flexShrink: 0,
+});
+
+// The notices below sit in the pane's subhead, between the header and the
+// record's fields, so they carry the header's own gutter rather than a card of
+// their own.
+const renameErrorStyle = /** @type {React.CSSProperties} */ ({
+  font: `11px/1.4 ${FONT_SANS}`,
+  color: `color-mix(in srgb, ${STATUS_DANGER} 55%, #fff)`,
+  padding: "7px 16px",
+  background: `color-mix(in srgb, ${STATUS_DANGER} 10%, transparent)`,
+});
+
+const renameWarningStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 8,
+  font: `11px/1.4 ${FONT_SANS}`,
+  color: `color-mix(in srgb, ${STATUS_DANGER} 55%, #fff)`,
+  padding: "7px 16px",
+  background: `color-mix(in srgb, ${STATUS_DANGER} 10%, transparent)`,
+});
+
+const renameConfirmStyle = /** @type {React.CSSProperties} */ ({
+  ...btnGhostStyle,
+  flexShrink: 0,
+  color: `color-mix(in srgb, ${STATUS_DANGER} 55%, #fff)`,
 });
 
 const detailBodyStyle = /** @type {React.CSSProperties} */ ({

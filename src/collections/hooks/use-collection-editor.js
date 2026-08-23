@@ -66,6 +66,18 @@ function isVirtualItem(item) {
  *   Take the record out of every default view, keeping its slug and content.
  *   No-op while the row is virtual or already archived.
  * @property {() => void} restore
+ * @property {(nextSlug: string, options?: { replaceAlias?: boolean }) => void} rename
+ *   Move the record to another slug, leaving the old one behind as an alias.
+ *   No-op unless `canRename`, and refuses a rename while the row is dirty: the
+ *   call bumps the version, so a draft autosave still holding the old one would
+ *   start answering 409 the moment it lands.
+ * @property {boolean} canRename
+ * @property {{ slug: string, conflictingSlug: string | null } | null} renameConflict
+ *   Set when a rename was refused because the target is another record's old
+ *   address. The way past it is `rename(slug, { replaceAlias: true })`, but only
+ *   once the user has agreed to break that record's inbound links, so this is
+ *   surfaced as a question rather than retried automatically.
+ * @property {() => void} dismissRenameConflict
  * @property {boolean} hasDraft
  * @property {boolean} canEdit
  * @property {boolean} isArchived
@@ -109,9 +121,19 @@ function isVirtualItem(item) {
  *     `false` and stops re-seeding on every keystroke.
  *
  *   A surface that is neither reads the record once and leaves the draft alone.
+ *
+ *   `onRenamed` is called with the record's new slug whenever this surface's
+ *   address stops being current: a rename it performed itself, or one someone
+ *   else performed, which any write here discovers as `reason: "moved"`. The
+ *   hook addresses the record by the `slug` it was given, so a surface holding
+ *   that slug in its own state has to move; nothing here can do it for them.
  * @returns {CollectionEditorState}
  */
-export function useCollectionEditor(collection, slug, { active = true, mirror = true, scopeId } = {}) {
+export function useCollectionEditor(
+  collection,
+  slug,
+  { active = true, mirror = true, scopeId, onRenamed } = {},
+) {
   const { config, getAccessToken, onAfterCollectionSave } = useCmsContext();
   const t = useCmsStrings();
   // Only the create branch of `save` needs this: a published record is
@@ -122,6 +144,7 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     draftQueue,
     updateCollectionItem,
     patchCollectionItem,
+    invalidateCollectionItem,
     invalidateCollectionList,
     setCollectionDraft,
     clearCollectionDraft,
@@ -150,6 +173,9 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   const slugSource = meta?.slugSource ?? null;
 
   const [error, setError] = useState(/** @type {string | null} */ (null));
+  const [renameConflict, setRenameConflict] = useState(
+    /** @type {{ slug: string, conflictingSlug: string | null } | null} */ (null),
+  );
   const [isPending, startTransition] = useTransition();
   const [draftStatus, setDraftStatus] = useState(
     /** @type {"idle"|"saving"|"failed"} */ ("idle"),
@@ -176,6 +202,10 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   // that often would churn the record scope the fields hang off.
   const itemRef = useRef(item);
   itemRef.current = item;
+  // Same reason as `itemRef`: the host passes this inline, and depending on it
+  // directly would re-bind `rename` on every render of the surface.
+  const onRenamedRef = useRef(onRenamed);
+  onRenamedRef.current = onRenamed;
 
   /**
    * The shared draft: what any surface editing this record has typed but not
@@ -239,6 +269,60 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
   }, [
     collection, slug, clearCollectionDraft, patchCollectionItem, draftQueue,
     getAccessToken, config,
+  ]);
+
+  /**
+   * Move this surface's state to the address the record actually lives at, after
+   * a write came back `reason: "moved"`.
+   *
+   * Whatever the user has typed rides along in the shared draft instead of being
+   * thrown away. That is the whole point of being refused rather than silently
+   * redirected: the write did not happen, so the text is still unsaved, and it
+   * has somewhere valid to go.
+   *
+   * The record itself is re-read rather than carried over, because a `moved`
+   * response names an address and nothing else, and a caller this far behind has
+   * no claim about what is at that address now.
+   *
+   * @param {string} canonicalSlug
+   */
+  const repointToCanonical = useCallback((canonicalSlug) => {
+    if (!canonicalSlug || canonicalSlug === slug) return;
+    const carried = collectionStore.get().drafts.get(`${collection}:${slug}`);
+    // Anything still scheduled here is aimed at an address that no longer
+    // accepts writes.
+    const staleKey = itemDraftKey(collection, slug);
+    draftQueue.cancel(staleKey);
+    // Clear the slot we are walking away from. Deleting a draft is the one call
+    // the old address still answers, precisely so a repointing client can tidy
+    // up after itself; skip it and this user's half-written text sits at a slug
+    // nothing reads until its TTL runs out. Safe because the text is not being
+    // discarded: it rides along below and autosaves again at the new address.
+    draftQueue.enqueue(staleKey, async () => {
+      try {
+        const token = await getAccessToken();
+        await config.transport.deleteCollectionItemDraft(collection, slug, { accessToken: token });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[inscribed] orphaned collection draft cleanup failed:", err);
+      }
+    });
+    setCollectionDraftSavedAt(collection, slug, null);
+    clearCollectionDraft(collection, slug);
+    invalidateCollectionItem(collection, slug);
+    if (carried !== undefined) setCollectionDraft(collection, canonicalSlug, carried);
+    // Both ends are stale: this tab is behind by at least the write that moved
+    // the row, and every window still lists it under the address it left.
+    invalidateCollectionItem(collection, canonicalSlug);
+    invalidateCollectionList(collection);
+    // The same seam a rename we performed ourselves reports through. A page-side
+    // record needs no host help: its binding follows `item.slug`, so the re-read
+    // above is what rebinds it.
+    onRenamedRef.current?.(canonicalSlug);
+  }, [
+    collection, slug, collectionStore, draftQueue, getAccessToken, config,
+    setCollectionDraftSavedAt, clearCollectionDraft, setCollectionDraft,
+    invalidateCollectionItem, invalidateCollectionList,
   ]);
 
   // A user edit and its handoff to the shared draft happen together, rather
@@ -347,6 +431,14 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         setCollectionDraftSavedAt(collection, slug, formatClock(new Date()));
       } catch (err) {
         if (ctx.isStale()) return;
+        // The one write that can carry straight over: a draft has no version to
+        // clash on and it is this user's own text, so repointing is enough and
+        // the effect re-schedules it at the new address on the next render.
+        if (err instanceof CmsApiError && err.isMovedConflict && err.conflictingSlug) {
+          repointToCanonical(err.conflictingSlug);
+          setDraftStatus("idle");
+          return;
+        }
         // Same reasoning as the block lane: a conflict means the row moved
         // under this draft, not that the draft is worthless. Refetch and let
         // the effect re-schedule itself, since it depends on `item` and
@@ -370,7 +462,7 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     });
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, localDraft, item, schema, slug, collection, isPending]);
+  }, [active, localDraft, item, schema, slug, collection, isPending, repointToCanonical]);
 
   // A slug the user owns but has never saved reads as virtual until the first
   // publish; a missing read (404, or still in flight) is not the same thing,
@@ -452,6 +544,13 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         if (err instanceof CmsApiError && err.isArchivedConflict) {
           setError(t("collections.archivedConflict"));
           await refetch();
+        } else if (err instanceof CmsApiError && err.isMovedConflict && err.conflictingSlug) {
+          // Repointed but deliberately not re-sent: this tab's version is as
+          // stale as its slug, so replaying the payload at the new address could
+          // overwrite whatever landed there. The user gets the current record
+          // and their own edits side by side, and decides.
+          repointToCanonical(err.conflictingSlug);
+          setError(t("collections.recordMoved", { slug: err.conflictingSlug }));
         } else if (err instanceof CmsApiError && err.isConflict) {
           setError(t("collections.versionConflict"));
           await refetch();
@@ -471,7 +570,8 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     });
   }, [
     schema, collection, slug, locale, readValues, getAccessToken, config, draftQueue,
-    updateCollectionItem, clearCollectionDraft, onAfterCollectionSave, refetch, t,
+    updateCollectionItem, clearCollectionDraft, onAfterCollectionSave, refetch,
+    repointToCanonical, t,
   ]);
 
   const undoDraft = useCallback(() => {
@@ -507,6 +607,9 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         if (err instanceof CmsApiError && err.isArchivedConflict) {
           // Someone archived it first; the end state is the one we wanted.
           await refetch();
+        } else if (err instanceof CmsApiError && err.isMovedConflict && err.conflictingSlug) {
+          repointToCanonical(err.conflictingSlug);
+          setError(t("collections.recordMoved", { slug: err.conflictingSlug }));
         } else if (err instanceof CmsApiError && err.isConflict) {
           setError(t("collections.versionConflict"));
           await refetch();
@@ -519,7 +622,7 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     });
   }, [
     collection, slug, getAccessToken, config, invalidateCollectionList,
-    refetch, onAfterCollectionSave, t,
+    refetch, onAfterCollectionSave, repointToCanonical, t,
   ]);
 
   const restore = useCallback(() => {
@@ -535,7 +638,10 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
         updateCollectionItem(collection, slug, restored);
         await onAfterCollectionSave(collection, slug);
       } catch (err) {
-        if (err instanceof CmsApiError && err.isForbidden) {
+        if (err instanceof CmsApiError && err.isMovedConflict && err.conflictingSlug) {
+          repointToCanonical(err.conflictingSlug);
+          setError(t("collections.recordMoved", { slug: err.conflictingSlug }));
+        } else if (err instanceof CmsApiError && err.isForbidden) {
           setError(t("collections.editForbidden"));
         } else {
           setError(/** @type {Error} */ (err).message);
@@ -544,8 +650,117 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     });
   }, [
     collection, slug, getAccessToken, config, updateCollectionItem,
-    onAfterCollectionSave, t,
+    onAfterCollectionSave, repointToCanonical, t,
   ]);
+
+  // Three independent "can this happen at all" answers, none of which may be
+  // assumed from the others: the transport has to implement the call, the
+  // collection has to allow renames (`slugEditable`), and this user has to own
+  // this row (`canEdit`). A missing flag or a missing method both read as no,
+  // so an older backend or a hand-written transport simply shows no affordance
+  // rather than failing once someone presses it.
+  const canRename = typeof config.transport.renameCollectionItem === "function"
+    && meta?.slugEditable === true
+    && canEdit && !isVirtual && !isArchived;
+
+  const dismissRenameConflict = useCallback(() => setRenameConflict(null), []);
+
+  /**
+   * Rename is not a draft operation and not a content write, but it consumes a
+   * version like both: the row comes back one higher, which is why a dirty row
+   * is refused rather than renamed. An autosave still holding the old version
+   * would answer 409 from here on, and the draft slot is addressed by slug, so
+   * the write in flight would be aimed at an address that just became an alias.
+   */
+  const rename = useCallback(
+    /** @param {string} nextSlug @param {{ replaceAlias?: boolean }} [options] */
+    (nextSlug, { replaceAlias = false } = {}) => {
+      // No-op rather than throw, like every other guard here: a transport that
+      // can't rename is the same non-event as a row that has nothing to rename.
+      if (typeof config.transport.renameCollectionItem !== "function") return;
+      const current = itemRef.current;
+      if (!current || isVirtualItem(current) || current.isArchived) return;
+      const version = current.version;
+      if (typeof version !== "number") return;
+      const target = nextSlug.trim();
+      if (!target || target === slug) return;
+      if (
+        collectionStore.get().drafts.has(`${collection}:${slug}`)
+        || current.draftData != null
+      ) {
+        setError(t("collections.renameDirty"));
+        return;
+      }
+      setError(null);
+      setRenameConflict(null);
+      startTransition(async () => {
+        try {
+          const token = await getAccessToken();
+          const renamed = await config.transport.renameCollectionItem(
+            collection,
+            slug,
+            { slug: target, version },
+            { accessToken: token, replaceAlias },
+          );
+          // Nothing may write to the old address again: a lane still holding a
+          // scheduled draft would PUT to what is now an alias.
+          draftQueue.cancel(itemDraftKey(collection, slug));
+          setCollectionDraftSavedAt(collection, slug, null);
+          clearCollectionDraft(collection, slug);
+          // The old entry has to go rather than linger: it is keyed by a slug
+          // that now resolves to this same record, so leaving it would let two
+          // cache entries claim one row.
+          invalidateCollectionItem(collection, slug);
+          // Seeds the new address and drops every list window for the
+          // collection, which is what a slug change needs: the default sort is
+          // `slug:asc`, so the row moves and page boundaries shift with it.
+          updateCollectionItem(collection, renamed.slug, { ...renamed, draftData: null });
+          // Both addresses, and both for the same reason: the new one has no
+          // cache entry yet, and the old one is still cached as a 200 that has
+          // to become a redirect.
+          try {
+            await onAfterCollectionSave(collection, slug);
+            await onAfterCollectionSave(collection, renamed.slug);
+          } catch (revalidateErr) {
+            // eslint-disable-next-line no-console
+            console.warn("[inscribed] onAfterCollectionSave failed:", revalidateErr);
+          }
+          onRenamedRef.current?.(renamed.slug);
+        } catch (err) {
+          // The path slug, not the target: this surface is renaming from an
+          // address the record already left. Repointing is the whole fix; the
+          // rename itself is still there to be made from the right place.
+          if (err instanceof CmsApiError && err.isMovedConflict && err.conflictingSlug) {
+            repointToCanonical(err.conflictingSlug);
+            setError(t("collections.recordMoved", { slug: err.conflictingSlug }));
+          } else if (err instanceof CmsApiError && err.isAliasConflict) {
+            // Recoverable, but only the user can decide: forcing it repoints
+            // that address here and breaks whatever still links to it.
+            setRenameConflict({ slug: target, conflictingSlug: err.conflictingSlug });
+          } else if (err instanceof CmsApiError && err.isSlugTakenConflict) {
+            setError(t("collections.renameTaken", { slug: err.conflictingSlug ?? target }));
+          } else if (err instanceof CmsApiError && err.isArchivedConflict) {
+            setError(t("collections.archivedConflict"));
+            await refetch();
+          } else if (err instanceof CmsApiError && err.isConflict) {
+            setError(t("collections.versionConflict"));
+            await refetch();
+          } else if (err instanceof CmsApiError && err.isForbidden) {
+            setError(t("collections.editForbidden"));
+          } else if (err instanceof CmsApiError && err.status === 400) {
+            setError(t("collections.renameDisabled"));
+          } else {
+            setError(/** @type {Error} */ (err).message);
+          }
+        }
+      });
+    },
+    [
+      collection, slug, collectionStore, getAccessToken, config, draftQueue,
+      setCollectionDraftSavedAt, clearCollectionDraft, invalidateCollectionItem,
+      updateCollectionItem, onAfterCollectionSave, refetch, repointToCanonical, t,
+    ],
+  );
 
   // Memoised, and deliberately free of anything that moves per keystroke: this
   // object goes into the record's scope, so its identity is what decides
@@ -563,6 +778,10 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
       undoDraft,
       archive,
       restore,
+      rename,
+      canRename,
+      renameConflict,
+      dismissRenameConflict,
       hasDraft,
       canEdit,
       isArchived,
@@ -582,7 +801,8 @@ export function useCollectionEditor(collection, slug, { active = true, mirror = 
     }),
     [
       schema, slugSource, item, editorId, readValues, setValuesFromUser,
-      save, undoDraft, archive, restore, hasDraft, canEdit, isArchived,
+      save, undoDraft, archive, restore, rename, canRename, renameConflict,
+      dismissRenameConflict, hasDraft, canEdit, isArchived,
       isVirtual, isPending, error,
       draftStatus, lastDraftSavedAt, publishedFlash, meLoading, meError,
       itemLoading, itemError, refetch, collection, slug,

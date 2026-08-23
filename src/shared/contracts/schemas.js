@@ -241,6 +241,12 @@
  *     claims and arrives as a `derived` entry in `virtualItems`. `PUT` at that
  *     same slug is what materialises it, and a non-administrator may do so for
  *     their own derived slugs and nothing else.
+ * @property {boolean} [slugEditable]
+ *   Whether a saved record's slug may be changed through
+ *   `PUT /cms/collections/{key}/{slug}/slug`. Per collection, so it answers
+ *   "can slugs move here at all", not "may this user move this one": gate the
+ *   affordance on `slugEditable && item.canEdit`, or a user is offered a rename
+ *   on a row they do not own and gets a 403.
  * @property {string[]} [locales]
  *   Languages this collection holds, in the collection's own definition rather
  *   than the site's: a collection is shared, so its coverage can be narrower
@@ -407,9 +413,21 @@
  *   409 only, and only for a per-block version conflict. Absent (not empty) on
  *   a plain write race, where no block-level expectation exists.
  * @property {string} [reason]
- *   409 only: which kind of conflict this is. `"archived"` means the row was
- *   taken down rather than overtaken, so restore is the way forward and a merge
- *   screen would be the wrong answer. Absent on a plain version conflict.
+ *   409 only: which kind of conflict this is. Absent on a plain version
+ *   conflict, which is the case every other value has to be told apart from.
+ *
+ *   - `"archived"` — the row was taken down rather than overtaken, so restore
+ *     is the way forward and a merge screen would be the wrong answer.
+ *   - `"taken"` — rename only: a live or archived record already holds the
+ *     requested slug. Nothing to offer but a different slug.
+ *   - `"alias"` — rename only: the requested slug is another record's old
+ *     address. Recoverable with `?replaceAlias=true`, but only after asking:
+ *     it repoints that address at this record, breaking inbound links to the
+ *     other one.
+ * @property {string} [conflictingSlug]
+ *   `"taken"` / `"alias"` only: the slug of the record standing in the way. For
+ *   `"alias"` that is the record whose links `replaceAlias` would break, so the
+ *   confirmation can name it.
  * @property {*[]} [errors]   Validation failures behind a 400.
  */
 

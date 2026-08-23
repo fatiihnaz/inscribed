@@ -67,6 +67,26 @@
  *   reserved and the content survives. `version` must match or the call is a
  *   409, and it is not consumed, so the number that archived also restores.
  * @property {(key: string, slug: string, opts?: CmsRequestOptions) => Promise<CollectionItemResponse>} restoreCollectionItem
+ * @property {(key: string, slug: string, payload: { slug: string, version: number }, opts?: CmsRequestOptions & { replaceAlias?: boolean }) => Promise<CollectionItemResponse>} [renameCollectionItem]
+ *   Optional, and absence is an answer rather than a gap: a transport for a
+ *   backend with no rename endpoint has nothing to implement here, and the
+ *   editor reads a missing method the same way it reads a collection that never
+ *   sent `slugEditable` — the affordance doesn't appear. So leaving it out
+ *   costs nothing and never throws.
+ *
+ *   Move a saved record to a new slug, answering with the record itself at its
+ *   new address and a version one higher. `version` is required and behaves
+ *   like a save's: send the one the caller is holding or get a 409. The old
+ *   slug becomes an alias, so reads of it keep resolving.
+ *
+ *   Two further 409s are specific to this call, told apart by `reason` on the
+ *   error: `"taken"` (a record already holds the slug) and `"alias"` (the slug
+ *   is another record's old address). `replaceAlias` forces past the second by
+ *   repointing that address here, which breaks inbound links to the record
+ *   named in `conflictingSlug`, so send it only on a user's say-so.
+ *
+ *   The response's `slug` is canonical and the caller's is now stale: keep
+ *   writing to the old one and the next save addresses an alias.
  * @property {(key: string, slug: string, payload: { data: * }, opts?: CmsRequestOptions) => Promise<void>} saveCollectionItemDraft
  * @property {(key: string, slug: string, opts?: CmsRequestOptions) => Promise<void>} deleteCollectionItemDraft
  * @property {(key: string, payload: { data: * }, opts?: CmsRequestOptions & { translationGroup?: string }) => Promise<void>} saveCollectionNewDraft

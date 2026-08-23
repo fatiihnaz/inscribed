@@ -94,6 +94,11 @@ export const Check = createIcon("check", [
   ["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }],
 ]);
 
+export const X = createIcon("x", [
+  ["path", { d: "M18 6 6 18", key: "x-1" }],
+  ["path", { d: "m6 6 12 12", key: "x-2" }],
+]);
+
 export const ArrowUp = createIcon("arrow-up", [
   ["path", { d: "m5 12 7-7 7 7", key: "hav0vg" }],
   ["path", { d: "M12 19V5", key: "x0mq9r" }],
@@ -336,8 +341,6 @@ export const TypeCollection = createIcon("type-collection", [
   ["rect", { width: "12", height: "12", x: "4", y: "8", rx: "2", key: "collection-front" }],
 ]);
 
-// Not a block type: the CmsGroup label. Four corners, which is the dashed frame
-// the group draws around its children, reduced to a badge.
 export const TypeGroup = createIcon("type-group", [
   ["path", { d: "M4 8V6a2 2 0 0 1 2-2h2", key: "group-tl" }],
   ["path", { d: "M16 4h2a2 2 0 0 1 2 2v2", key: "group-tr" }],
@@ -353,8 +356,6 @@ export const TypeUnknown = createIcon("type-unknown", [
 /** @type {Record<string, typeof TypeShortText>} */
 const TYPE_ICONS = {
   ShortText: TypeShortText,
-  // "Text" predates the Short/Long split and still reaches renderBlock, so it
-  // takes the paragraph instead of falling through to the unknown frame.
   Text: TypeLongText,
   LongText: TypeLongText,
   RichText: TypeRichText,

@@ -952,6 +952,42 @@ export const panelCss = `
     color: ${TEXT_FAINT};
   }
 
+  .inscribed-slug-edit { transition: color 140ms ease; }
+  .inscribed-slug-edit:focus-visible { outline: none; }
+  .inscribed-slug-pencil { color: ${TEXT_FAINT}; transition: color 140ms ease; }
+  .inscribed-slug-edit:hover:not(:disabled) .inscribed-slug-pencil,
+  .inscribed-slug-edit:focus-visible .inscribed-slug-pencil { color: ${TEXT_MID}; }
+  .inscribed-slug-edit:disabled { cursor: default; }
+  .inscribed-slug-edit:disabled .inscribed-slug-pencil { opacity: 0.4; }
+
+  .inscribed-slug-input {
+    box-shadow: inset 0 -1px 0 ${COLLECTION_LINE};
+    transition: box-shadow 140ms ease;
+  }
+  .inscribed-slug-input:focus {
+    outline: none;
+    box-shadow: inset 0 -1px 0 ${COLLECTION_ACCENT};
+  }
+
+  .inscribed-slug-icon {
+    color: ${TEXT_MUTED};
+    transition: color 140ms ease, background-color 140ms ease;
+  }
+  .inscribed-slug-icon:focus-visible { outline: none; }
+  .inscribed-slug-icon:hover:not(:disabled),
+  .inscribed-slug-icon:focus-visible {
+    color: ${TEXT_HI};
+    background-color: ${SURFACE_2};
+  }
+  .inscribed-slug-icon:disabled { opacity: 0.4; cursor: default; }
+  /* After the shared rules, so the confirm keeps its accent through both. */
+  .inscribed-slug-icon-confirm:not(:disabled) { color: ${COLLECTION_ACCENT}; }
+  .inscribed-slug-icon-confirm:not(:disabled):hover,
+  .inscribed-slug-icon-confirm:focus-visible {
+    color: ${COLLECTION_ACCENT};
+    background-color: ${COLLECTION_SOFT};
+  }
+
   ul[data-cms-list]::-webkit-scrollbar { display: none; }
 
   /* Status dot pulse for the saving state */

@@ -22,8 +22,9 @@ export class CmsApiError extends Error {
    * @param {ProblemDetails|null} [args.problem]
    * @param {BlockConflict[]|null} [args.conflicts]
    * @param {string|null} [args.reason]
+   * @param {string|null} [args.conflictingSlug]
    */
-  constructor({ status, detail, title, problem, conflicts, reason }) {
+  constructor({ status, detail, title, problem, conflicts, reason, conflictingSlug }) {
     super(detail || title || `CMS request failed (${status})`);
     this.name = "CmsApiError";
     this.status = status;
@@ -40,12 +41,19 @@ export class CmsApiError extends Error {
      */
     this.conflicts = conflicts ?? null;
     /**
-     * Machine-readable discriminator on a 409, when the backend sends one.
-     * Currently `"archived"`.
+     * Machine-readable discriminator on a 409, when the backend sends one:
+     * `"archived"`, `"taken"` or `"alias"`.
      *
      * @type {string|null}
      */
     this.reason = reason ?? null;
+    /**
+     * Which record is in the way on a `"taken"` / `"alias"` conflict, so the
+     * message can name it rather than saying "some other record".
+     *
+     * @type {string|null}
+     */
+    this.conflictingSlug = conflictingSlug ?? null;
   }
 
   get isConflict() {
@@ -59,6 +67,42 @@ export class CmsApiError extends Error {
    */
   get isArchivedConflict() {
     return this.status === 409 && this.reason === "archived";
+  }
+
+  /**
+   * The slug in the *path* is an old address: the record moved, and this caller
+   * is still writing to where it used to be. `conflictingSlug` is where it lives
+   * now.
+   *
+   * The backend refuses rather than following the alias on purpose. A write that
+   * silently redirected would land on a record the caller never named, and the
+   * caller would never learn its address was stale, so it would keep doing it.
+   * Answered by every write path: publish, draft, archive, restore, rename.
+   */
+  get isMovedConflict() {
+    return this.status === 409 && this.reason === "moved";
+  }
+
+  /**
+   * A rename was refused because a live or archived record already holds the
+   * requested slug. Only a different slug gets past it.
+   */
+  get isSlugTakenConflict() {
+    return this.status === 409 && this.reason === "taken";
+  }
+
+  /**
+   * A rename was refused because the slug it was *given* is another record's old
+   * address. The mirror of `isMovedConflict`, which is about the slug in the
+   * path, and the reason the two carry different reasons: one is answered by
+   * repointing, the other by asking the user.
+   *
+   * `?replaceAlias=true` forces it through, so this one is a question rather
+   * than a dead end: taking the address breaks whatever still links to
+   * `conflictingSlug`.
+   */
+  get isAliasConflict() {
+    return this.status === 409 && this.reason === "alias";
   }
 
   get isForbidden() {
@@ -103,6 +147,7 @@ export async function toApiError(response) {
   const detail = problem?.detail || (rawBody && !problem ? rawBody : "") || response.statusText;
 
   const rawReason = /** @type {*} */ (problem)?.reason;
+  const rawConflictingSlug = /** @type {*} */ (problem)?.conflictingSlug;
 
   return new CmsApiError({
     status: response.status,
@@ -111,5 +156,6 @@ export async function toApiError(response) {
     problem,
     conflicts,
     reason: typeof rawReason === "string" ? rawReason : null,
+    conflictingSlug: typeof rawConflictingSlug === "string" ? rawConflictingSlug : null,
   });
 }

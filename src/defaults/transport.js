@@ -267,6 +267,24 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
       return /** @type {*} */ (await res.json());
     },
 
+    // No locale: the slug being left behind already names one row in one
+    // language, and the new slug inherits it. `replaceAlias` rides in the query
+    // string because it qualifies the request (force past an alias) rather than
+    // describing the record being written.
+    async renameCollectionItem(key, slug, payload, opts = {}) {
+      const target = new URL(
+        `${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}/slug`,
+      );
+      if (opts.replaceAlias) target.searchParams.set("replaceAlias", "true");
+      const res = await fetch(target.toString(), {
+        method: "PUT",
+        headers: headers(opts.accessToken),
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw await toApiError(res);
+      return /** @type {*} */ (await res.json());
+    },
+
     async saveCollectionItemDraft(key, slug, payload, opts = {}) {
       const res = await fetch(
         `${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}/draft`,

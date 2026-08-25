@@ -119,6 +119,18 @@ export const ACCENT        = "var(--ins-accent, #c9b896)";
 export const ACCENT_SOFT   = "color-mix(in srgb, var(--ins-accent, #c9b896) 14%, transparent)";
 export const ACCENT_LINE   = "color-mix(in srgb, var(--ins-accent, #c9b896) 30%, transparent)";
 
+// Applied as an `outline`, so it stacks over a control's own inset-shadow border.
+export const FOCUS_RING = "color-mix(in srgb, var(--ins-accent, #c9b896) 65%, transparent)";
+
+// Mid-grey base for surfaces that render on both the dark pane and a light host
+// page, where the white-alpha ramps above would vanish. Its ramp is open-ended
+// (the collection form alone reaches for a dozen steps), so it is a helper
+// rather than a fixed set of constants.
+export const NEUTRAL = "var(--ins-neutral, rgb(127, 127, 127))";
+
+/** @param {number} pct */
+export const neutralTint = (pct) => `color-mix(in srgb, ${NEUTRAL} ${pct}%, transparent)`;
+
 // Outward reach of a block-level EditableRegion's halo, on every side. Painted
 // (outline + shadow spread), never padding, so it costs no layout. A CmsGroup
 // outline must clear it to actually enclose its children.

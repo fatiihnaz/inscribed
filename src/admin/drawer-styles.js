@@ -18,7 +18,7 @@ import {
   SURFACE_1, SURFACE_2, SURFACE_3,
   HAIRLINE, BORDER, BORDER_HI, BORDER_FOCUS,
   TEXT_HI, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT,
-  ACCENT, ACCENT_SOFT, ACCENT_LINE, ACCENT_GLOW,
+  ACCENT, ACCENT_SOFT, ACCENT_LINE, ACCENT_GLOW, FOCUS_RING,
   COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE,
   STATUS_WARN, STATUS_DANGER,
   FONT_SANS, FONT_MONO,
@@ -47,6 +47,15 @@ export const panelStyle = {
   display: "flex",
 };
 
+// Everything the drawer makes `inert` while closed. The handle stays outside
+// it, since it is what reopens the panel.
+export const drawerBodyStyle = {
+  flex: 1,
+  minWidth: 0,
+  height: "100%",
+  display: "flex",
+};
+
 export const paneContainerStyle = {
   flex: 1,
   minWidth: 0,
@@ -54,6 +63,19 @@ export const paneContainerStyle = {
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
+};
+
+export const srOnlyStyle = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  margin: -1,
+  padding: 0,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  clipPath: "inset(50%)",
+  whiteSpace: "nowrap",
+  border: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -380,9 +402,10 @@ export const searchClearStyle = {
 // Group card
 // ---------------------------------------------------------------------------
 
+// No `overflow: hidden`: the collapsing body clips its own height animation,
+// and a clip here would cut the header's focus ring off at the card's edge.
 export const groupCardStyle = {
   background: "transparent",
-  overflow: "hidden",
 };
 
 export const groupHeaderStyle = {
@@ -599,11 +622,10 @@ export const typeChipStyle = {
   alignItems: "center",
   height: 18,
   padding: "0 7px",
-  fontSize: 9.5,
+  fontSize: 10,
   fontWeight: 600,
-  letterSpacing: 0.4,
+  letterSpacing: "-0.005em",
   borderRadius: R_BADGE,
-  textTransform: "uppercase",
   flexShrink: 0,
   background: ACCENT_SOFT,
   color: ACCENT,
@@ -838,6 +860,66 @@ export const panelCss = `
     :root { interpolate-size: allow-keywords; }
   }
 
+  .inscribed-rail-btn:focus-visible,
+  .inscribed-tab:focus-visible,
+  .inscribed-tabbar-chevron:focus-visible,
+  .inscribed-crumb:focus-visible,
+  .inscribed-group-header:focus-visible,
+  .inscribed-disclosure-header:focus-visible,
+  .inscribed-icon-button:focus-visible,
+  .inscribed-text-button:focus-visible,
+  .inscribed-load-more:focus-visible,
+  .inscribed-create-row:focus-visible,
+  .inscribed-create-card:focus-visible,
+  .inscribed-collection-ref:focus-visible,
+  .inscribed-pane-back:focus-visible,
+  .inscribed-logout:focus-visible,
+  .inscribed-search-clear:focus-visible,
+  .inscribed-seg:focus-visible,
+  .inscribed-btn-primary:focus-visible,
+  .inscribed-btn-ghost:focus-visible,
+  .inscribed-btn-collection:focus-visible,
+  .inscribed-btn-collection-solid:focus-visible {
+    outline: 1.5px solid ${FOCUS_RING};
+    outline-offset: 1px;
+  }
+
+  /* Both of these live inside a clipping parent that has to stay clipped (the
+     header path truncates, the tab strip scrolls), so their ring sits inside
+     the control rather than around it. */
+  .inscribed-crumb:focus-visible,
+  .inscribed-tab:focus-visible {
+    outline-offset: -1.5px;
+    border-radius: ${R_SM}px;
+  }
+
+  /* The disclosure header carries no fill of its own, so it has no radius to
+     inherit and the ring would draw square around it. */
+  .inscribed-disclosure-header:focus-visible {
+    border-radius: ${R_SM}px;
+  }
+
+  @keyframes inscribed-skeleton {
+    0%, 100% { opacity: 0.55; }
+    50%      { opacity: 1; }
+  }
+  .inscribed-skeleton {
+    background: ${SURFACE_2};
+    border-radius: ${R_BADGE}px;
+    animation: inscribed-skeleton 1400ms ease-in-out infinite;
+  }
+
+  /* Framer's own animations are stood down by MotionConfig; this covers the
+     CSS transitions and keyframes, and is scoped so no host style is touched. */
+  @media (prefers-reduced-motion: reduce) {
+    [class^="inscribed-"], [class*=" inscribed-"] {
+      transition-duration: 1ms !important;
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   .inscribed-tabbar-scroll {
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -907,7 +989,7 @@ export const panelCss = `
   }
   .inscribed-btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--ins-text, #fff) 78%, transparent); }
   .inscribed-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
+  
   /* Solid collection primary (status-bar "Aç"): soft pink fill derived from
      the collection accent so a rebrand carries through. */
   .inscribed-btn-collection-solid {

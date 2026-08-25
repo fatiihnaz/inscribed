@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
+import { useInert } from "../shared/ui/use-inert.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { useDrawerDraftRole } from "../collections/hooks/use-draft-driver.js";
@@ -123,6 +124,7 @@ function CollectionBlockCard({ block, collection, slug, isActive, readOnly, topL
   };
 
   const record = `${collection} · ${slug}`;
+  const bodyRef = useInert(!isOpen);
 
   return (
     <div
@@ -142,6 +144,7 @@ function CollectionBlockCard({ block, collection, slug, isActive, readOnly, topL
         onReset={editor.undoDraft}
       />
       <div
+        ref={bodyRef}
         className={`inscribed-collapse${isOpen ? " is-open" : ""}`}
         aria-hidden={!isOpen}
         onMouseDown={onFocus}

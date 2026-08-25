@@ -23,6 +23,7 @@ import dynamic from "next/dynamic";
 import { Undo2, Lock } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
+import { useInert } from "../shared/ui/use-inert.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { isBlockDirty, resolveBlockValue } from "../core/resolve.js";
@@ -308,6 +309,8 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
     if (!isOpen) onFocus();
   };
 
+  const bodyRef = useInert(!isOpen);
+
   return (
     <div
       ref={ref}
@@ -326,6 +329,7 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
         onReset={onReset}
       />
       <div
+        ref={bodyRef}
         className={`inscribed-collapse${isOpen ? " is-open" : ""}`}
         aria-hidden={!isOpen}
         onMouseDown={onFocus}

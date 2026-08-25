@@ -25,8 +25,8 @@
  * layout + state only.
  */
 
-import { forwardRef, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { forwardRef, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
@@ -35,6 +35,7 @@ import {
 } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
+import { useInert } from "../shared/ui/use-inert.js";
 import { EMPTY_COLLECTION_STORE, useOptionalCollectionContext } from "../collections/context.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { collectDirtyBlocks, collectDirtyRecords, dirtyCollectionKeys } from "./dirty.js";
@@ -51,7 +52,7 @@ import { PanelArea } from "./PanelArea.jsx";
 import { readOpenTarget, stripOpenParams } from "./deep-link.js";
 
 import { emptyStateStyle } from "../editors/fields/styles.js";
-import { panelStyle, paneContainerStyle, paneStyle, railStyle, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, railIndicatorStyle, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
+import { panelStyle, drawerBodyStyle, srOnlyStyle, paneContainerStyle, paneStyle, railStyle, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, railIndicatorStyle, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
 import { DRILL_TRANSITION, DRILL_PARALLAX, DRILL_PANE_TRANSITION, drillLayerStyle, drillPaneStyle } from "../shared/style/drill-motion.js";
 import { PANEL_WIDTH, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER } from "../shared/style/tokens.js";
 
@@ -638,177 +639,192 @@ export function Drawer({ panels = null }) {
     [globalBlockList, search],
   );
 
+  const bodyRef = useInert(!isDrawerOpen);
+
+  const tabsId = useId();
+  const blockPanelId = `${tabsId}-blocks`;
+
   return (
-    <>
+    <MotionConfig reducedMotion="user">
       <style>{panelCss}</style>
       <motion.aside
         initial={false}
         animate={{ x: isDrawerOpen ? 0 : -PANEL_WIDTH }}
         transition={PANEL_TRANSITION}
         style={panelStyle}
-        aria-hidden={!isDrawerOpen}
       >
-        <ModeRail
-          mode={mode}
-          onChange={setMode}
-          showCollections={collectionCtx !== null}
-          pageDirty={pageDirty || globalDirty}
-          collectionsDirty={collectionDirtyTotal > 0}
-          panels={panels}
-          panelBadges={panelBadges}
-        />
-
-        <div style={paneContainerStyle}>
-          <PanelHeader
+        {/* The handle is deliberately outside: it is what reopens the panel, so
+            it must stay reachable while everything else is inert. */}
+        <div ref={bodyRef} style={drawerBodyStyle} aria-hidden={!isDrawerOpen}>
+          <ModeRail
             mode={mode}
-            panel={activePanel}
-            panelTrail={activePanel ? panelCrumbs.get(activePanel.id) ?? null : null}
-            segments={pathSegments}
-            collectionKey={selectedCollection?.key ?? null}
-            onNavigate={(href) => router.push(href)}
-            onBackToCollections={() => setSelectedCollection(null)}
-            dirty={dirtyCount > 0}
-            draftSyncStatus={draftSyncStatus}
-            isSaving={isSaving}
-            lastSavedAt={lastSavedAt}
-            publishedFlash={publishedFlash}
+            onChange={setMode}
+            showCollections={collectionCtx !== null}
+            pageDirty={pageDirty || globalDirty}
+            collectionsDirty={collectionDirtyTotal > 0}
+            panels={panels}
+            panelBadges={panelBadges}
           />
-
-          {mode === "collections" || activePanel ? (
-            // No bar here: the header path's `collections /` segment is the way
-            // back, so a second one would just repeat it. A custom panel gets
-            // none either, since whatever it needs above its list is its own.
-            null
-          ) : isPreviewOpen ? (
-            <PreviewHeader
-              count={previewableCount + collectionDirtyTotal}
-              onBack={() => setPreviewOpen(false)}
+  
+          <div style={paneContainerStyle}>
+            <PanelHeader
+              mode={mode}
+              panel={activePanel}
+              panelTrail={activePanel ? panelCrumbs.get(activePanel.id) ?? null : null}
+              segments={pathSegments}
+              collectionKey={selectedCollection?.key ?? null}
+              onNavigate={(href) => router.push(href)}
+              onBackToCollections={() => setSelectedCollection(null)}
+              dirty={dirtyCount > 0}
+              draftSyncStatus={draftSyncStatus}
+              isSaving={isSaving}
+              lastSavedAt={lastSavedAt}
+              publishedFlash={publishedFlash}
             />
-          ) : (
-            <TabBar
-              tabs={allTabs}
-              activeTab={activeTab}
-              onChange={setActiveTab}
-            />
-          )}
-
-          {activePanel ? null : mode === "collections" ? (
-            <CollectionsMode
-              selected={selectedCollection}
-              onSelect={selectCollectionFromList}
-              collections={myCollections}
-              dirtyKeys={collectionDirtyByKey}
-            />
-          ) : isPreviewOpen ? (
-            <ChangesPanel
-              blockList={[...pageBlockList, ...globalBlockList]}
-              drafts={drafts}
-              dirtyByPath={dirtyByPath}
-              itemSchemas={itemSchemas}
-              collectionDirtyCounts={collectionDirtyCounts}
-              translationPreviews={translationPreviews}
-              onGoToBlock={(block) => {
-                setPreviewOpen(false);
-                const scope = (block._slug ?? routeSlug) === routeSlug ? "page" : "global";
-                setActiveTabState(scope);
-                setActiveBlock(block.blockPath);
-              }}
-              onGoToCollection={(collectionKey) => {
-                setPreviewOpen(false);
-                setModeState("collections");
-                setSelectedCollection({ key: collectionKey, scope: "global" });
-              }}
-            />
-          ) : (
-            <>
-              <Toolbar value={search} onChange={setSearch} />
-              {activeTab === "page" && pageCollectionRefs.length > 0 && !search ? (
-                <CollectionRefStrip
-                  refs={pageCollectionRefs}
-                  dirtyKeys={collectionDirtyByKey}
-                  onOpen={(key) => {
-                    // Page-scoped: the reference means "the list rendered on
-                    // this page", so keep the page's filters rather than
-                    // dropping the user into the whole collection.
-                    setModeState("collections");
-                    setSelectedCollection({ key, scope: "page" });
-                  }}
-                />
-              ) : null}
-              <GroupedBlockList
-                blockList={activeTab === "page" ? filteredPage : filteredGlobal}
-                activeBlockPath={activeBlock}
-                itemSchemas={itemSchemas}
-                editorVisibility={editorVisibility}
-                closedGroups={closedGroups}
-                onToggleGroup={toggleGroup}
-                emptyHint={
-                  search
-                    ? t("drawer.emptySearch", { query: search })
-                    : activeTab === "page"
-                      ? t("drawer.emptyPage")
-                      : t("drawer.emptyGlobal")
-                }
+  
+            {mode === "collections" || activePanel ? (
+              // No bar here: the header path's `collections /` segment is the way
+              // back, so a second one would just repeat it. A custom panel gets
+              // none either, since whatever it needs above its list is its own.
+              null
+            ) : isPreviewOpen ? (
+              <PreviewHeader
+                count={previewableCount + collectionDirtyTotal}
+                onBack={() => setPreviewOpen(false)}
               />
-            </>
-          )}
-
-          {/* Outside the branch above on purpose: a panel is mounted on first
-              open and then kept, so switching to the page and back must not
-              unmount it. It hides itself while another area is on screen. */}
-          {panels ? (
-            <PanelArea
-              panels={panels}
-              activeId={activePanel?.id ?? null}
-              onBadge={setPanelBadge}
-              onCrumbs={setPanelCrumbs}
+            ) : (
+              <TabBar
+                tabs={allTabs}
+                activeTab={activeTab}
+                onChange={setActiveTab}
+                idPrefix={tabsId}
+                panelId={blockPanelId}
+              />
+            )}
+  
+            {activePanel ? null : mode === "collections" ? (
+              <CollectionsMode
+                selected={selectedCollection}
+                onSelect={selectCollectionFromList}
+                collections={myCollections}
+                dirtyKeys={collectionDirtyByKey}
+              />
+            ) : isPreviewOpen ? (
+              <ChangesPanel
+                blockList={[...pageBlockList, ...globalBlockList]}
+                drafts={drafts}
+                dirtyByPath={dirtyByPath}
+                itemSchemas={itemSchemas}
+                collectionDirtyCounts={collectionDirtyCounts}
+                translationPreviews={translationPreviews}
+                onGoToBlock={(block) => {
+                  setPreviewOpen(false);
+                  const scope = (block._slug ?? routeSlug) === routeSlug ? "page" : "global";
+                  setActiveTabState(scope);
+                  setActiveBlock(block.blockPath);
+                }}
+                onGoToCollection={(collectionKey) => {
+                  setPreviewOpen(false);
+                  setModeState("collections");
+                  setSelectedCollection({ key: collectionKey, scope: "global" });
+                }}
+              />
+            ) : (
+              <>
+                <Toolbar value={search} onChange={setSearch} />
+                {activeTab === "page" && pageCollectionRefs.length > 0 && !search ? (
+                  <CollectionRefStrip
+                    refs={pageCollectionRefs}
+                    dirtyKeys={collectionDirtyByKey}
+                    onOpen={(key) => {
+                      // Page-scoped: the reference means "the list rendered on
+                      // this page", so keep the page's filters rather than
+                      // dropping the user into the whole collection.
+                      setModeState("collections");
+                      setSelectedCollection({ key, scope: "page" });
+                    }}
+                  />
+                ) : null}
+                <GroupedBlockList
+                  panelId={blockPanelId}
+                  labelledBy={`${tabsId}-${activeTab}`}
+                  blockList={activeTab === "page" ? filteredPage : filteredGlobal}
+                  activeBlockPath={activeBlock}
+                  itemSchemas={itemSchemas}
+                  editorVisibility={editorVisibility}
+                  closedGroups={closedGroups}
+                  onToggleGroup={toggleGroup}
+                  emptyHint={
+                    search
+                      ? t("drawer.emptySearch", { query: search })
+                      : activeTab === "page"
+                        ? t("drawer.emptyPage")
+                        : t("drawer.emptyGlobal")
+                  }
+                />
+              </>
+            )}
+  
+            {/* Outside the branch above on purpose: a panel is mounted on first
+                open and then kept, so switching to the page and back must not
+                unmount it. It hides itself while another area is on screen. */}
+            {panels ? (
+              <PanelArea
+                panels={panels}
+                activeId={activePanel?.id ?? null}
+                onBadge={setPanelBadge}
+                onCrumbs={setPanelCrumbs}
+              />
+            ) : null}
+  
+            {/* The banner carries its own height, so the status bar below is
+                pushed down and pulled back by plain reflow. It used to fade while
+                holding full height and leave the travel to a `layout` on the bar:
+                the bar re-measured on every drawer render (which is every
+                keystroke, and every navigation), so it drifted for reasons that
+                had nothing to do with this banner. */}
+            <Collapse show={saveError != null}>
+              <div
+                role="alert"
+                style={saveError?.tone === "conflict" ? conflictStyle : errorStyle}
+              >
+                {saveError?.text}
+              </div>
+            </Collapse>
+  
+            {/* Its own box, so `StatusBar`'s FLIP on the action buttons keeps
+                measuring against something it owns rather than the panel column. */}
+            <div style={{ flexShrink: 0 }}>
+            <StatusBar
+              dirtyCount={dirtyCount}
+              collectionDirtyCount={collectionDirtyTotal}
+              firstDirtyCollectionTarget={firstDirtyCollectionTarget}
+              onGoToCollection={(target) => {
+                setModeState("collections");
+                setSelectedCollection({ key: target.key, scope: "global" });
+                // Signal the panel to open the item's detail pane once it mounts
+                // (it reads `activeCollectionItem` on first paint).
+                setActiveCollectionItem({ key: target.key, slug: target.slug });
+              }}
+              isSaving={isSaving}
+              draftSyncStatus={draftSyncStatus}
+              onDiscardAll={() => {
+                onDiscardAll();
+                // Clear the "Taslak kayıtlı HH:MM" indicator: the server draft is
+                // gone, so the timestamp would point at nothing.
+                setLastSavedAt(null);
+              }}
+              onSaveAll={onSaveAll}
+              previewableCount={previewableCount + collectionDirtyTotal}
+              isPreviewOpen={isPreviewOpen}
+              onTogglePreview={() => setPreviewOpen((v) => !v)}
             />
-          ) : null}
-
-          {/* The banner carries its own height, so the status bar below is
-              pushed down and pulled back by plain reflow. It used to fade while
-              holding full height and leave the travel to a `layout` on the bar:
-              the bar re-measured on every drawer render (which is every
-              keystroke, and every navigation), so it drifted for reasons that
-              had nothing to do with this banner. */}
-          <Collapse show={saveError != null}>
-            <div style={saveError?.tone === "conflict" ? conflictStyle : errorStyle}>
-              {saveError?.text}
             </div>
-          </Collapse>
-
-          {/* Its own box, so `StatusBar`'s FLIP on the action buttons keeps
-              measuring against something it owns rather than the panel column. */}
-          <div style={{ flexShrink: 0 }}>
-          <StatusBar
-            dirtyCount={dirtyCount}
-            collectionDirtyCount={collectionDirtyTotal}
-            firstDirtyCollectionTarget={firstDirtyCollectionTarget}
-            onGoToCollection={(target) => {
-              setModeState("collections");
-              setSelectedCollection({ key: target.key, scope: "global" });
-              // Signal the panel to open the item's detail pane once it mounts
-              // (it reads `activeCollectionItem` on first paint).
-              setActiveCollectionItem({ key: target.key, slug: target.slug });
-            }}
-            isSaving={isSaving}
-            draftSyncStatus={draftSyncStatus}
-            onDiscardAll={() => {
-              onDiscardAll();
-              // Clear the "Taslak kayıtlı HH:MM" indicator: the server draft is
-              // gone, so the timestamp would point at nothing.
-              setLastSavedAt(null);
-            }}
-            onSaveAll={onSaveAll}
-            previewableCount={previewableCount + collectionDirtyTotal}
-            isPreviewOpen={isPreviewOpen}
-            onTogglePreview={() => setPreviewOpen((v) => !v)}
-          />
+  
+            {userInfo ? (
+              <PanelFooter userInfo={userInfo} onSignOut={onSignOut} />
+            ) : null}
           </div>
-
-          {userInfo ? (
-            <PanelFooter userInfo={userInfo} onSignOut={onSignOut} />
-          ) : null}
         </div>
 
         <button
@@ -838,7 +854,7 @@ export function Drawer({ panels = null }) {
           </span>
         </button>
       </motion.aside>
-    </>
+    </MotionConfig>
   );
 }
 
@@ -1040,6 +1056,8 @@ const RAIL_TRANSITION = /** @type {const} */ ({
  */
 function CollectionsMode({ selected, onSelect, collections, dirtyKeys }) {
   const isOpen = selected != null;
+  const tabsId = useId();
+  const panelId = `${tabsId}-collection`;
 
   return (
     <section style={{ ...paneStyle, position: "relative", overflow: "hidden" }}>
@@ -1088,11 +1106,15 @@ function CollectionsMode({ selected, onSelect, collections, dirtyKeys }) {
               // and silently drop a page-scoped arrival's filter.
               onChange={(key) => { if (key !== selected.key) onSelect(key); }}
               accent={COLLECTION_ACCENT}
+              idPrefix={tabsId}
+              panelId={panelId}
             />
             <CollectionRegionPanel
               key={selected.key}
               collectionKey={selected.key}
               scope={selected.scope}
+              panelId={panelId}
+              labelledBy={`${tabsId}-${selected.key}`}
             />
           </motion.div>
         ) : null}
@@ -1650,9 +1672,14 @@ const headerPillTimeStyle = /** @type {React.CSSProperties} */ ({
  *   activeTab: string,
  *   onChange: (tab: string) => void,
  *   accent?: string,
+ *   idPrefix?: string,
+ *   panelId?: string,
  * }} props
+ *   `idPrefix` names each tab `${idPrefix}-${tab.id}` so the body it switches
+ *   can point back at the current one; `panelId` is that body. Both are
+ *   optional, and without them the strip is a tablist with no panel bound.
  */
-function TabBar({ tabs, activeTab, onChange, accent = ACCENT }) {
+function TabBar({ tabs, activeTab, onChange, accent = ACCENT, idPrefix, panelId }) {
   const t = useCmsStrings();
   const scrollRef = useRef(/** @type {HTMLDivElement|null} */ (null));
   const [overflow, setOverflow] = useState({ left: false, right: false });
@@ -1693,6 +1720,23 @@ function TabBar({ tabs, activeTab, onChange, accent = ACCENT }) {
     el.scrollBy({ left: dir * el.clientWidth * 0.7, behavior: "smooth" });
   };
 
+  /** @param {React.KeyboardEvent} e */
+  const onKeyDown = (e) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    const jump = { Home: 0, End: tabs.length - 1 }[e.key];
+    const at = tabs.findIndex((tab) => tab.id === activeTab);
+    let next = -1;
+    if (step != null && at !== -1) next = (at + step + tabs.length) % tabs.length;
+    else if (jump != null) next = jump;
+    if (next === -1 || !tabs[next]) return;
+    e.preventDefault();
+    onChange(tabs[next].id);
+    // Selection follows focus, so the newly current tab has to take it too.
+    scrollRef.current
+      ?.querySelector(`[data-tab-id="${CSS.escape(tabs[next].id)}"]`)
+      ?.focus();
+  };
+
   return (
     <div style={tabBarStyle}>
       {overflow.left ? (
@@ -1712,11 +1756,14 @@ function TabBar({ tabs, activeTab, onChange, accent = ACCENT }) {
         className="inscribed-tabbar-scroll"
         style={{ ...tabBarScrollStyle, position: "relative" }}
         onScroll={measure}
+        onKeyDown={onKeyDown}
       >
         {tabs.map((tab) => (
           <TabButton
             key={tab.id}
             id={tab.id}
+            domId={idPrefix ? `${idPrefix}-${tab.id}` : undefined}
+            panelId={panelId}
             label={tab.label}
             count={tab.count}
             dirty={Boolean(tab.dirty)}
@@ -1728,6 +1775,7 @@ function TabBar({ tabs, activeTab, onChange, accent = ACCENT }) {
         {indicator ? (
           <span
             aria-hidden="true"
+            className="inscribed-tab-indicator"
             style={{
               position: "absolute",
               bottom: -1,
@@ -1759,11 +1807,11 @@ function TabBar({ tabs, activeTab, onChange, accent = ACCENT }) {
 
 /**
  * @param {{
- *   id: string, label: string, count?: number,
+ *   id: string, domId?: string, panelId?: string, label: string, count?: number,
  *   active: boolean, dirty: boolean, accent?: string, onClick: () => void,
  * }} props
  */
-function TabButton({ id, label, count, active, dirty, accent = ACCENT, onClick }) {
+function TabButton({ id, domId, panelId, label, count, active, dirty, accent = ACCENT, onClick }) {
   const t = useCmsStrings();
   const activeStyle = active
     ? { ...tabButtonStyle, ...tabButtonActiveStyle }
@@ -1772,8 +1820,12 @@ function TabButton({ id, label, count, active, dirty, accent = ACCENT, onClick }
     <button
       type="button"
       role="tab"
+      id={domId}
       data-tab-id={id}
       aria-selected={active}
+      aria-controls={panelId}
+      // Roving: the strip is one tab stop, and the arrow keys move within it.
+      tabIndex={active ? 0 : -1}
       onClick={onClick}
       className="inscribed-tab"
       style={activeStyle}
@@ -1852,16 +1904,24 @@ function Toolbar({ value, onChange }) {
  *   closedGroups: Set<string>,
  *   onToggleGroup: (group: string) => void,
  *   emptyHint: string,
+ *   panelId?: string,
+ *   labelledBy?: string,
  * }} props
  */
 const GroupedBlockList = memo(function GroupedBlockList({
   blockList, activeBlockPath,
   itemSchemas, editorVisibility, closedGroups, onToggleGroup, emptyHint,
+  panelId, labelledBy,
 }) {
   const chunks = useMemo(() => chunkBlocksByGroup(blockList), [blockList]);
 
   return (
-    <section style={paneStyle}>
+    <section
+      style={paneStyle}
+      id={panelId}
+      role={panelId ? "tabpanel" : undefined}
+      aria-labelledby={labelledBy}
+    >
       {blockList.length === 0 ? (
         <div style={emptyStateStyle}>{emptyHint}</div>
       ) : (
@@ -2430,8 +2490,21 @@ function StatusBar({
     isOnlyCollectionDirty && Boolean(firstDirtyCollectionTarget),
   ].join("|");
 
+  // Only the coarse transitions, never the dirty count: the count moves on
+  // every keystroke, and a live region tracking it would talk over the editor.
+  const announcement = isSaving
+    ? t("status.publishing")
+    : isDraftSaving
+      ? t("status.draftSaving")
+      : isFailed
+        ? t("status.draftFailed")
+        : draftSyncStatus === "saved"
+          ? t("pill.draftSaved")
+          : "";
+
   return (
     <div style={statusBarStyle}>
+      <span role="status" style={srOnlyStyle}>{announcement}</span>
       <div style={statusSignalStyle}>
         <span
           className={dotPulse ? "inscribed-status-pulse" : undefined}

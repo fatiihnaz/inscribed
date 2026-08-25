@@ -557,11 +557,10 @@ const listFieldStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const listFieldLabelStyle = /** @type {React.CSSProperties} */ ({
-  fontSize: 10,
-  fontWeight: 600,
+  fontSize: 11,
+  fontWeight: 500,
   color: TEXT_MUTED,
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
+  letterSpacing: "-0.005em",
 });
 
 // Border in longhand so hover can override `borderColor` alone, as on the cards.

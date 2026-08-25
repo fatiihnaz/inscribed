@@ -282,10 +282,9 @@ const errorCloseStyle = {
 };
 const subLabelStyle = { display: "flex", flexDirection: "column", gap: 5 };
 const subLabelTextStyle = {
-  fontSize: 10,
-  fontWeight: 600,
-  letterSpacing: "0.01em",
-  textTransform: "uppercase",
+  fontSize: 11,
+  fontWeight: 500,
+  letterSpacing: "-0.005em",
   opacity: 0.65,
 };
 const fieldStyle = {

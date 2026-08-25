@@ -7,7 +7,7 @@
  * hand-rolling their own white-alpha values.
  */
 
-import { BORDER, SURFACE_2, TEXT_HI, TEXT_MUTED, TEXT_FAINT, FS_2XS, FS_MD, R_MD, RADIUS } from "../../shared/style/tokens.js";
+import { BORDER, SURFACE_2, TEXT_HI, TEXT_MUTED, TEXT_FAINT, FS_XS, FS_MD, R_MD, RADIUS } from "../../shared/style/tokens.js";
 
 // Shared input/field geometry. The themeable colour comes from the consumer
 // (warm tokens for the inline editors, neutral grays for the portable
@@ -26,12 +26,14 @@ export const labelStyle = {
   gap: 5,
 };
 
+// Sentence case at the panel's own size: the drawer's section headings and
+// menus all speak this way, and tracked-out micro-caps read as a badge rather
+// than a label.
 export const labelTextStyle = {
-  fontSize: FS_2XS,
+  fontSize: FS_XS,
   color: TEXT_MUTED,
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  fontWeight: 600,
+  letterSpacing: "-0.005em",
+  fontWeight: 500,
 };
 
 export const fieldStyle = {

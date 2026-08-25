@@ -303,10 +303,10 @@ const actionsRowStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const draftBadgeStyle = /** @type {React.CSSProperties} */ ({
-  textTransform: "uppercase",
-  fontSize: 9,
-  letterSpacing: "0.06em",
-  padding: "1px 6px",
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: "-0.005em",
+  padding: "2px 6px",
   color: COLLECTION_ACCENT,
   background: COLLECTION_SOFT,
   border: `1px solid ${COLLECTION_LINE}`,

@@ -28,6 +28,12 @@ export const editors = Object.freeze({
   "editors.upload.noUrl": "The CDN response carried no url",
   "editors.upload.failed": "Upload failed.",
 
+  // Field labels for the single-value block editors.
+  "editors.text.label": "Text",
+  "editors.richText.label": "Rich text",
+  "editors.link.label": "Label",
+  "editors.link.url": "URL",
+
   // List block editor.
   "editors.list.noSchema": "No {schema} found for this list. Is {component} rendered on the page?",
   "editors.list.empty": "This list is empty. Start with the \"+ Add item\" button.",

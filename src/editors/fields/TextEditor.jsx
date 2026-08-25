@@ -8,6 +8,7 @@
 
 import { useLayoutEffect, useRef } from "react";
 
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./styles.js";
 
 /**
@@ -16,10 +17,11 @@ import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./st
  * @param {(value: string) => void} props.onChange
  * @param {boolean} [props.disabled]
  * @param {boolean} [props.multiline]  Render a `<textarea>` instead of `<input>`.
- * @param {boolean} [props.hideLabel]  Drop the built-in "Metin" caption when a
- *   parent already labels the field.
+ * @param {boolean} [props.hideLabel]  Drop the built-in caption when a parent
+ *   already labels the field.
  */
 export function TextEditor({ value, onChange, disabled, multiline, hideLabel }) {
+  const t = useCmsStrings();
   const textareaRef = useRef(/** @type {HTMLTextAreaElement|null} */ (null));
 
   // Grow to fit instead of scrolling inside a fixed box: a nested scroll area
@@ -67,7 +69,7 @@ export function TextEditor({ value, onChange, disabled, multiline, hideLabel }) 
 
   return (
     <label style={labelStyle}>
-      <span style={labelTextStyle}>Metin</span>
+      <span style={labelTextStyle}>{t("editors.text.label")}</span>
       {control}
     </label>
   );

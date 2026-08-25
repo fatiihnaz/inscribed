@@ -25,6 +25,11 @@ export const editors = Object.freeze({
   "editors.upload.noUrl": "CDN cevabında url bulunamadı",
   "editors.upload.failed": "Yükleme başarısız.",
 
+  "editors.text.label": "Metin",
+  "editors.richText.label": "Zengin metin",
+  "editors.link.label": "Etiket",
+  "editors.link.url": "URL",
+
   "editors.list.noSchema": "Bu liste için {schema} bulunamadı. Sayfada {component} render ediliyor mu?",
   "editors.list.empty": "Liste boş. \"+ Öğe ekle\" butonuyla başlayabilirsin.",
   "editors.list.addItem": "Öğe ekle",

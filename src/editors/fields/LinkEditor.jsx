@@ -4,6 +4,7 @@
  * @file Link block editor. Value shape: `{ href: string, label: string }`.
  */
 
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./styles.js";
 
 /**
@@ -19,6 +20,7 @@ import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./st
  * @param {boolean} [props.disabled]
  */
 export function LinkEditor({ value, onChange, disabled }) {
+  const t = useCmsStrings();
   const href = value?.href ?? "";
   const label = value?.label ?? "";
 
@@ -30,7 +32,7 @@ export function LinkEditor({ value, onChange, disabled }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <label style={labelStyle}>
-        <span style={labelTextStyle}>Etiket</span>
+        <span style={labelTextStyle}>{t("editors.link.label")}</span>
         <input
           type="text"
           value={label}
@@ -41,7 +43,7 @@ export function LinkEditor({ value, onChange, disabled }) {
         />
       </label>
       <label style={labelStyle}>
-        <span style={labelTextStyle}>URL</span>
+        <span style={labelTextStyle}>{t("editors.link.url")}</span>
         <input
           type="url"
           value={href}

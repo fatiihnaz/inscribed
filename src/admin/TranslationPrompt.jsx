@@ -28,7 +28,7 @@ import { otherLocales as resolveOtherLocales } from "../shared/route.js";
 import { useCmsRoute } from "../core/hooks/use-cms-route.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useCmsTranslations } from "../core/hooks/use-cms-translations.js";
-import { FieldEditor } from "../editors/fields/FieldEditor.jsx";
+import { FieldEditor } from "../editors/FieldEditor.jsx";
 import { BlockNotice, NoticeButton } from "./BlockNotice.jsx";
 import { isSubstantialChange, TRANSLATION_INLINE_MAX } from "./translation-scope.js";
 import { blockResetStyle } from "./drawer-styles.js";

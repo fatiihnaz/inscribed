@@ -3,14 +3,9 @@ import { describe, it, expect } from "vitest";
 // A real translator, in Turkish, so these assertions keep reading against the
 // wording they were written for while the panel default is English.
 import { createTranslator, resolveStrings } from "../../shared/i18n/translate.js";
-import {
-  seedValues,
-  buildPayload,
-  requiredMissing,
-  humanizeCollectionError,
-  singularize,
-  itemSummary,
-} from "../../collections/CollectionFieldsForm.jsx";
+import { seedValues, buildPayload, requiredMissing } from "../../collections/record-payload.js";
+import { humanizeCollectionError } from "../../collections/record-errors.js";
+import { singularize, itemSummary } from "../../shared/util/text.js";
 
 /**
  * @file Pure-helper coverage for the schema-driven collection form. Focus

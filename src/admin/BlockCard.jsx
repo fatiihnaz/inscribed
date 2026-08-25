@@ -28,8 +28,8 @@ import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { isBlockDirty, resolveBlockValue } from "../core/resolve.js";
 
-import { FieldEditor } from "../editors/fields/FieldEditor.jsx";
-import { ListEditor } from "../editors/fields/ListEditor.jsx";
+import { FieldEditor } from "../editors/FieldEditor.jsx";
+import { ListEditor } from "../editors/ListEditor.jsx";
 import { BlockConflictNotice } from "./BlockConflictNotice.jsx";
 import { TranslationPrompt } from "./TranslationPrompt.jsx";
 import { CardHeader, TypeIcon, disclosureBodyStyle, disclosureRowStyle, fieldPathStyle, rowClassName, rowInsetStyle } from "./block-card-chrome.jsx";

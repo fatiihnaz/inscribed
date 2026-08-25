@@ -24,7 +24,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
-import { ListEditor } from "../../editors/fields/ListEditor.jsx";
+import { ListEditor } from "../../editors/ListEditor.jsx";
 
 const ITEM_SCHEMA = { name: { blockType: "ShortText", defaultValue: "" } };
 const ITEMS = [{ name: "Ada" }, { name: "Bora" }, { name: "Cem" }];

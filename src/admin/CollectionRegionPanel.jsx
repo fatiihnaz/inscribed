@@ -38,9 +38,10 @@ import { stableStringify } from "../shared/util/stable-stringify.js";
 import { useCollectionEditor, useEditorDirty } from "../collections/hooks/use-collection-editor.js";
 import { Menu } from "./Menu.jsx";
 import { CollectionRecordForm, DraftIndicator } from "./CollectionRecordForm.jsx";
-import { CollectionFieldsForm, SlugField } from "../collections/CollectionFieldsForm.jsx";
+import { CollectionFieldsForm } from "../collections/CollectionFieldsForm.jsx";
+import { SlugField } from "../collections/SlugField.jsx";
 import { SkeletonRows } from "./Skeleton.jsx";
-import { emptyStateStyle } from "../editors/fields/styles.js";
+import { emptyStateStyle } from "../editors/styles.js";
 import { buttonBaseStyle, paneStyle, btnGhostStyle, searchWrapStyle, searchInputStyle, searchClearStyle, dirtyDotStyle, rowPathStyle } from "./drawer-styles.js";
 import { BG, BG_RAISED, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, STATUS_DANGER, BORDER, HAIRLINE, SURFACE_1, FONT_MONO, FONT_SANS, PANEL_TRANSITION, R_BADGE, R_MD, R_SM, R_BTN } from "../shared/style/tokens.js";
 

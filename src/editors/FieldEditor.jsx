@@ -9,21 +9,21 @@
 
 import { lazy, Suspense } from "react";
 
-import { TextEditor } from "./TextEditor.jsx";
-import { ImageEditor } from "./ImageEditor.jsx";
-import { LinkEditor } from "./LinkEditor.jsx";
-import { DateEditor } from "./DateEditor.jsx";
-import { TEXT_MUTED } from "../../shared/style/tokens.js";
-import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
+import { TextEditor } from "./fields/TextEditor.jsx";
+import { ImageEditor } from "./fields/ImageEditor.jsx";
+import { LinkEditor } from "./fields/LinkEditor.jsx";
+import { DateEditor } from "./fields/DateEditor.jsx";
+import { TEXT_MUTED } from "../shared/style/tokens.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 
 // Lazy so the heavy TipTap dep stays out of the eager drawer chunk; fetched the
 // first time a RichText field renders. Same pattern as `CollectionFieldsForm`.
 const RichTextEditor = lazy(() =>
-  import("../rich-text/RichTextEditor.jsx").then((m) => ({ default: m.RichTextEditor })),
+  import("./rich-text/RichTextEditor.jsx").then((m) => ({ default: m.RichTextEditor })),
 );
 
 /**
- * @import { BlockType } from "../../shared/contracts/schemas.js"
+ * @import { BlockType } from "../shared/contracts/schemas.js"
  */
 
 /**

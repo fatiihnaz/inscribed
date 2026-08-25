@@ -5,7 +5,7 @@
  */
 
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
-import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./styles.js";
+import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "../styles.js";
 
 /**
  * @typedef {Object} LinkValue

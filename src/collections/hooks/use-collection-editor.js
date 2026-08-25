@@ -24,12 +24,8 @@ import { useCollectionMeta, useMyCollections } from "./use-my-collections.js";
 import { itemDraftKey } from "../../shared/state/draft-keys.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
 import { stableStringify } from "../../shared/util/stable-stringify.js";
-import {
-  seedValues,
-  buildPayload,
-  requiredMissing,
-  humanizeCollectionError,
-} from "../CollectionFieldsForm.jsx";
+import { seedValues, buildPayload, requiredMissing } from "../record-payload.js";
+import { humanizeCollectionError } from "../record-errors.js";
 
 /**
  * Whether a read came back as a claim-derived slug with no record behind it

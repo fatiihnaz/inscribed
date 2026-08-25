@@ -27,7 +27,7 @@ import { stableStringify } from "../shared/util/stable-stringify.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { diffWords, diffLines, stripHtml, lcsIndexPairs } from "./word-diff.js";
 
-import { emptyStateStyle } from "../editors/fields/styles.js";
+import { emptyStateStyle } from "../editors/styles.js";
 import { paneStyle, listStyle, rowContainerStyle, rowHeaderStyle, rowGuideBodyStyle, rowPathStyle, typeIconStyle } from "./drawer-styles.js";
 import { TEXT_MUTED, TEXT_FAINT, TEXT, HAIRLINE, SURFACE_1, RADIUS_SM, R_SM, FONT_MONO, COLLECTION_ACCENT, COLLECTION_LINE, STATUS_OK, STATUS_DANGER, STATUS_WARN, FONT_SANS } from "../shared/style/tokens.js";
 

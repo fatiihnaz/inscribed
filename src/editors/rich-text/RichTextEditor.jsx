@@ -15,7 +15,7 @@ import { EditorContent } from "@tiptap/react";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { useRichTextEditor } from "./use-rich-text-editor.js";
 import { RichTextToolbar } from "./RichTextToolbar.jsx";
-import { labelStyle, labelTextStyle } from "../fields/styles.js";
+import { labelStyle, labelTextStyle } from "../styles.js";
 import { ACCENT, FS_MD, R_MD, neutralTint } from "../../shared/style/tokens.js";
 
 // The editor renders on the dark drawer AND on a light host page

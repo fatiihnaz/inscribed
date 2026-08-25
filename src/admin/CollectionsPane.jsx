@@ -22,7 +22,7 @@ import { collectDirtyRecords, dirtyCollectionKeys } from "./dirty.js";
 import { useMyCollections } from "../collections/hooks/use-my-collections.js";
 
 import { SkeletonRows } from "./Skeleton.jsx";
-import { emptyStateStyle } from "../editors/fields/styles.js";
+import { emptyStateStyle } from "../editors/styles.js";
 import { paneStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, listStyle, dirtyDotStyle, rowPathStyle, typeIconStyle } from "./drawer-styles.js";
 import { TEXT, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, FONT_SANS, R_MD } from "../shared/style/tokens.js";
 

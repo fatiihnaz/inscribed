@@ -51,7 +51,7 @@ import { Collapse } from "./Collapse.jsx";
 import { PanelArea } from "./PanelArea.jsx";
 import { readOpenTarget, stripOpenParams } from "./deep-link.js";
 
-import { emptyStateStyle } from "../editors/fields/styles.js";
+import { emptyStateStyle } from "../editors/styles.js";
 import { panelStyle, drawerBodyStyle, srOnlyStyle, paneContainerStyle, paneStyle, railStyle, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, railIndicatorStyle, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
 import { DRILL_TRANSITION, DRILL_PARALLAX, DRILL_PANE_TRANSITION, drillLayerStyle, drillPaneStyle } from "../shared/style/drill-motion.js";
 import { PANEL_WIDTH, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER } from "../shared/style/tokens.js";

@@ -28,12 +28,8 @@ import { useCollectionLocale } from "./use-collection-locale.js";
 import { useCollectionMeta } from "./use-my-collections.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
 import { stableStringify } from "../../shared/util/stable-stringify.js";
-import {
-  seedValues,
-  buildPayload,
-  requiredMissing,
-  humanizeCollectionError,
-} from "../CollectionFieldsForm.jsx";
+import { seedValues, buildPayload, requiredMissing } from "../record-payload.js";
+import { humanizeCollectionError } from "../record-errors.js";
 
 
 /**

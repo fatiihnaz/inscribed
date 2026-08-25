@@ -16,7 +16,7 @@ import { render, cleanup, act } from "@testing-library/react";
 
 const counters = vi.hoisted(() => ({ fieldEditor: 0 }));
 
-vi.mock("../../editors/fields/FieldEditor.jsx", () => ({
+vi.mock("../../editors/FieldEditor.jsx", () => ({
   FieldEditor: () => {
     counters.fieldEditor += 1;
     return null;

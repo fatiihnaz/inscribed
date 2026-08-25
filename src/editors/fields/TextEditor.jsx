@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * @file Plain-text block editor: a single-line `<input>` by default, or a
- * `<textarea>` when `FieldEditor` passes `multiline` (for `LongText` and the
- * legacy `Text` alias). Use `RichText` when the field needs formatting.
+ * @file Plain-text field editor: a single-line `<input>` by default, or a
+ * `<textarea>` when `multiline` is set (for `LongText` and the legacy `Text`
+ * alias). Use `RichText` when the field needs formatting.
  */
 
 import { useLayoutEffect, useRef } from "react";
 
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
-import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./styles.js";
+import { FieldShell } from "./FieldShell.jsx";
+import { fieldVariant } from "../styles.js";
 
 /**
  * @param {Object} props
@@ -17,22 +18,36 @@ import { fieldStyle, fieldDisabledStyle, labelStyle, labelTextStyle } from "./st
  * @param {(value: string) => void} props.onChange
  * @param {boolean} [props.disabled]
  * @param {boolean} [props.multiline]  Render a `<textarea>` instead of `<input>`.
- * @param {boolean} [props.hideLabel]  Drop the built-in caption when a parent
- *   already labels the field.
+ * @param {boolean} [props.autoGrow]
+ *   Multiline only, on by default: the box grows into its content instead of
+ *   scrolling inside a fixed height, because a nested scroll area inside the
+ *   drawer's own scroll traps the wheel and hides content. Opt out for a
+ *   fixed-height box the editor drags the handle on themselves.
+ * @param {number} [props.rows]        `autoGrow={false}` only.
+ * @param {React.ReactNode} [props.label]  Overrides the built-in caption.
+ * @param {string|null} [props.help]
+ * @param {boolean} [props.hideLabel]  Drop the caption when a parent already
+ *   labels the field.
+ * @param {import("../styles.js").FieldVariantName} [props.variant]
  */
-export function TextEditor({ value, onChange, disabled, multiline, hideLabel }) {
+export function TextEditor({
+  value, onChange, disabled, multiline, autoGrow = true, rows = 4,
+  label, help, hideLabel, variant,
+}) {
   const t = useCmsStrings();
+  const v = fieldVariant(variant);
   const textareaRef = useRef(/** @type {HTMLTextAreaElement|null} */ (null));
 
-  // Grow to fit instead of scrolling inside a fixed box: a nested scroll area
-  // inside the drawer's own scroll traps the wheel and hides content. Reset to
-  // `auto` first so the field can also shrink when text is deleted.
+  // Reset to `auto` first so the field can also shrink when text is deleted.
   useLayoutEffect(() => {
+    if (!multiline || !autoGrow) return;
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [value]);
+  }, [value, multiline, autoGrow]);
+
+  const base = { ...v.field, ...(disabled ? v.disabled : null) };
 
   const control = multiline ? (
     <textarea
@@ -41,18 +56,13 @@ export function TextEditor({ value, onChange, disabled, multiline, hideLabel }) 
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      style={{
-        ...fieldStyle,
+      rows={autoGrow ? undefined : rows}
+      style={autoGrow
         // Auto-grow owns the height, so manual resize would just be undone on
-        // the next keystroke.
-        resize: "none",
-        overflow: "hidden",
-        // Enough to read as a textarea rather than an input, and no more: the
-        // field grows into its content anyway, so anything past that is empty
-        // space on every short field in the drawer.
-        minHeight: 46,
-        ...(disabled ? fieldDisabledStyle : null),
-      }}
+        // the next keystroke. The floor is enough to read as a textarea rather
+        // than an input, and no more: it grows into its content anyway.
+        ? { ...base, resize: "none", overflow: "hidden", minHeight: 46 }
+        : { ...base, resize: "vertical", minHeight: 72, lineHeight: 1.5 }}
     />
   ) : (
     <input
@@ -61,16 +71,15 @@ export function TextEditor({ value, onChange, disabled, multiline, hideLabel }) 
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      style={{ ...fieldStyle, ...(disabled ? fieldDisabledStyle : null) }}
+      style={base}
     />
   );
 
   if (hideLabel) return control;
 
   return (
-    <label style={labelStyle}>
-      <span style={labelTextStyle}>{t("editors.text.label")}</span>
+    <FieldShell label={label ?? t("editors.text.label")} help={help} variant={variant}>
       {control}
-    </label>
+    </FieldShell>
   );
 }

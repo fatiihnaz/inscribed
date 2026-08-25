@@ -11,25 +11,26 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Trash2, ChevronUp, ChevronDown } from "../../shared/style/icons.jsx";
+import { Plus, Trash2, ChevronUp, ChevronDown } from "../shared/style/icons.jsx";
 
-import { addItem, moveItem, moveItemTo, moveItemToIndex, removeItem } from "../../shared/util/list-ops.js";
-import { useCmsContext } from "../../shared/state/cms-context.js";
-import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
+import { addItem, moveItem, moveItemTo, moveItemToIndex, removeItem } from "../shared/util/list-ops.js";
+import { firstNonEmptyText } from "../shared/util/text.js";
+import { useCmsContext } from "../shared/state/cms-context.js";
+import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import {
   useListReorder, LANDING_TRANSFORM, SHIFT_TRANSFORM, SETTLE_MS, SHIFT_MS,
-} from "../../core/hooks/use-list-reorder.js";
-import { useStoreSelector } from "../../shared/state/store.js";
-import { PositionField } from "../../shared/ui/PositionField.jsx";
+} from "../core/hooks/use-list-reorder.js";
+import { useStoreSelector } from "../shared/state/store.js";
+import { PositionField } from "../shared/ui/PositionField.jsx";
 import { emptyStateStyle } from "./styles.js";
 import {
   ACCENT, BG_RAISED, DUR_FAST, EASE, TEXT_MUTED, STATUS_DANGER, R_BADGE, R_SM,
-} from "../../shared/style/tokens.js";
+} from "../shared/style/tokens.js";
 
 import { FieldEditor } from "./FieldEditor.jsx";
 
 /**
- * @import { ItemSchema } from "../../shared/contracts/schemas.js"
+ * @import { ItemSchema } from "../shared/contracts/schemas.js"
  */
 
 /**
@@ -392,10 +393,14 @@ function ListItemCard({
   );
 }
 
+// Only the text types name a row here. A list item's Date holds a string too,
+// but an ISO timestamp in the header reads like a bug, and unlike a collection
+// field a list item always has a text field to fall back on.
+const TEXTY = new Set(["Text", "ShortText", "LongText", "RichText"]);
+
 /**
- * One-line summary for a collapsed list item: the first Text/RichText field
- * holding a non-empty string (RichText stripped of tags), so the header reads
- * like the item instead of a bare index. Returns null when nothing usable.
+ * One-line summary for a collapsed list item, so the header reads like the item
+ * instead of a bare index. Returns null when nothing usable.
  *
  * @param {ItemSchema} itemSchema
  * @param {Record<string, *> | undefined} item
@@ -403,15 +408,11 @@ function ListItemCard({
  */
 function listItemSummary(itemSchema, item) {
   if (!item) return null;
-  const TEXTY = new Set(["Text", "ShortText", "LongText", "RichText"]);
-  for (const [key, field] of Object.entries(itemSchema)) {
-    if (!TEXTY.has(field.blockType)) continue;
-    const raw = item[key];
-    if (typeof raw !== "string") continue;
-    const text = (field.blockType === "RichText" ? raw.replace(/<[^>]*>/g, " ") : raw).trim();
-    if (text) return text;
-  }
-  return null;
+  return firstNonEmptyText(
+    Object.entries(itemSchema)
+      .filter(([, field]) => TEXTY.has(field.blockType))
+      .map(([key, field]) => ({ value: item[key], type: field.blockType })),
+  );
 }
 
 // ---- Styles ---------------------------------------------------------------

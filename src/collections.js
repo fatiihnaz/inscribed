@@ -32,7 +32,9 @@ export { CollectionField } from "./collections/CollectionField.jsx";
 // Chrome-free "add one item" form the host mounts on its own page; renders
 // nothing for visitors without create access.
 export { CollectionComposer } from "./collections/CollectionComposer.jsx";
-export { CollectionFieldsForm, seedValues, buildPayload, requiredMissing, humanizeCollectionError } from "./collections/CollectionFieldsForm.jsx";
+export { CollectionFieldsForm } from "./collections/CollectionFieldsForm.jsx";
+export { seedValues, buildPayload, requiredMissing } from "./collections/record-payload.js";
+export { humanizeCollectionError } from "./collections/record-errors.js";
 
 export { useCollection, useCollectionItem } from "./collections/hooks/use-collection.js";
 // Escape hatch for markup that computes with a record instead of rendering one

@@ -96,6 +96,15 @@
  *   have a draft slot of their own under `saveCollectionItemDraft`.
  * @property {(key: string, opts?: CmsRequestOptions) => Promise<void>} deleteCollectionNewDraft
  * @property {(file: File, opts?: { onProgress?: (progress: number) => void, accessToken?: string | null }) => Promise<{ data: { url: string } }>} uploadImage
+ * @property {(path: string, init?: RequestInit & { accessToken?: string }) => Promise<*>} [request]
+ *   Escape hatch for the endpoints an app puts on the same backend beside the
+ *   CMS API, which is what an admin panel (`createCmsPage({ panels })`) talks
+ *   to. Unlike every method above it names no endpoint of ours: the path
+ *   resolves against `baseUrl` itself, with no `/cms` prefix.
+ *
+ *   Optional for the same reason `renameCollectionItem` is: a transport with
+ *   nothing behind it has nothing to implement, and a panel calling it then
+ *   gets a named error rather than a bare `fetch` quietly bypassing the seam.
  * @property {(manifests: SyncManifestRequest[], opts?: CmsRequestOptions & { locales?: string[] }) => Promise<SyncResultResponse>} syncManifests
  *   `locales` is the site's full language list, not one language: sync is where
  *   the app tells the backend which languages exist, so the list has a single

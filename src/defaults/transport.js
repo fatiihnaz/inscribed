@@ -379,5 +379,27 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
         xhr.send(body);
       });
     },
+
+    async request(path, init = {}) {
+      const { accessToken, headers: extraHeaders, ...rest } = init;
+      // Resolved against `baseUrl` itself, without the `/cms` prefix the other
+      // methods carry: those address the CMS API, while this exists for the
+      // endpoints an app puts on the same backend beside it.
+      const target = ABSOLUTE_URL.test(path)
+        ? path
+        : `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+      const res = await fetch(target, {
+        ...rest,
+        headers: { ...headers(accessToken), ...extraHeaders },
+      });
+      if (!res.ok) throw await toApiError(res);
+      // A 204 and an empty 200 both mean "nothing came back", and `res.json()`
+      // throws on either: the caller asked for a result, not a parse error.
+      if (res.status === 204) return null;
+      const body = await res.text();
+      return body ? JSON.parse(body) : null;
+    },
   };
 }
+
+const ABSOLUTE_URL = /^https?:\/\//i;

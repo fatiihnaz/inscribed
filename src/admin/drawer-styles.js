@@ -106,6 +106,38 @@ export const railDirtyDotStyle = {
   boxShadow: `0 0 0 2px ${BG_RAIL}`,
 };
 
+// A custom panel's own count, in the dot's corner. A number needs a pill rather
+// than a dot, and the ring is what keeps it legible over the glyph behind it.
+// The fill is the panel's accent, which is expected to read against the dark
+// rail the way the built-in accents do.
+export const railBadgeStyle = {
+  position: "absolute",
+  top: 3,
+  right: 2,
+  minWidth: 14,
+  height: 14,
+  padding: "0 4px",
+  boxSizing: "border-box",
+  borderRadius: 99,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  font: `600 9px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
+  color: BG_RAIL,
+  boxShadow: `0 0 0 2px ${BG_RAIL}`,
+};
+
+// A panel's icon is the host's own node, drawn into a box we size. The rule in
+// `panelCss` is what makes an SVG fill it regardless of the width/height its
+// author baked in, so one icon serves both the 17px rail and the 12px header.
+export const panelIconStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+};
+
 // Active-mode bar on the rail's outer edge. Rendered by the active button and
 // animated between buttons with a framer `layoutId`, so switching modes slides
 // it instead of snapping.
@@ -1132,7 +1164,11 @@ export const panelCss = `
   }
   .inscribed-rail-btn:hover { color: ${TEXT}; background: ${SURFACE_1}; }
   .inscribed-rail-btn.is-active { color: ${TEXT_HI}; background: ${SURFACE_2}; }
-  .inscribed-rail-btn-collection.is-active { color: ${COLLECTION_ACCENT}; }
+
+  /* A custom panel's icon is the host's own node, and its author cannot know
+     which box we will draw it into. Overriding the width/height attributes here
+     lets one icon serve the 17px rail and the 12px header badge alike. */
+  .inscribed-panel-icon > svg { width: 100%; height: 100%; }
 
   /* Header path: ancestors are real navigation, so they get a hover chip. The
      current segment is inert and deliberately has no hover. */

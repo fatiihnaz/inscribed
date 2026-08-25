@@ -31,7 +31,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   ChevronsLeft, ChevronDown, ChevronLeft, ChevronRight,
-  Check, Undo2, LogOut, Search, Eye, Pencil, FileText, Layers, Folder,
+  Check, Undo2, LogOut, Search, Eye, Pencil, FileText, Layers, Folder, TypeUnknown,
 } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
@@ -47,10 +47,13 @@ import { describeSaveError } from "./save-error.js";
 import { BlockCard } from "./BlockCard.jsx";
 import { ChangesPanel } from "./ChangesPanel.jsx";
 import { Collapse } from "./Collapse.jsx";
+import { PanelArea } from "./PanelArea.jsx";
+import { readOpenTarget, stripOpenParams } from "./deep-link.js";
 
 import { emptyStateStyle } from "../editors/fields/styles.js";
-import { panelStyle, paneContainerStyle, paneStyle, railStyle, railButtonStyle, railDirtyDotStyle, railIndicatorStyle, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
-import { PANEL_WIDTH, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, BG, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER } from "../shared/style/tokens.js";
+import { panelStyle, paneContainerStyle, paneStyle, railStyle, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, railIndicatorStyle, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
+import { DRILL_TRANSITION, DRILL_PARALLAX, DRILL_PANE_TRANSITION, drillLayerStyle, drillPaneStyle } from "../shared/style/drill-motion.js";
+import { PANEL_WIDTH, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER } from "../shared/style/tokens.js";
 
 // The two collections-mode panes carry the whole collections layer behind them
 // (record cache, schema form, /me). Lazy so the drawer costs the same on a site
@@ -71,17 +74,22 @@ const CollectionRegionPanel = dynamic(
 /** @type {Map<string, BlockResponse>} */
 const EMPTY_BLOCKS = new Map();
 
+
 // Module scope so it stays identity-stable across renders: it stands in for
 // `setActiveCollectionItem` in an effect's dependency list.
 function noop() {}
 
-export function Drawer() {
+/**
+ * @param {{ panels?: readonly import("../shared/panels.js").CmsPanel[] | null }} props
+ */
+export function Drawer({ panels = null }) {
   const t = useCmsStrings();
   // `pathname` reads the blocks cache and labels the breadcrumb; `routeSlug` is
   // what `_slug` stamps carry, so it (not the pathname) decides page vs global.
   const { pathname, slug: routeSlug } = useCmsRoute();
   const {
     setActiveBlock,
+    setPendingBlock,
     setDrawerOpen,
     blocksStore,
     contentDraftsStore,
@@ -96,6 +104,7 @@ export function Drawer() {
   const blocks = useStoreSelector(blocksStore, (s) => s.get(pathname) ?? EMPTY_BLOCKS);
   const drafts = useStoreSelector(contentDraftsStore, (m) => m);
   const activeBlock = useStoreSelector(uiStore, (s) => s.activeBlock);
+  const pendingBlock = useStoreSelector(uiStore, (s) => s.pendingBlock);
   const isDrawerOpen = useStoreSelector(uiStore, (s) => s.isDrawerOpen);
   const draftSyncStatus = useStoreSelector(uiStore, (s) => s.draftSyncStatus);
   // Size, not the set: the banner only counts, and selecting the set itself
@@ -307,7 +316,11 @@ export function Drawer() {
   // not just what this page binds), so it carries its own selection instead of
   // living in the page's tab bar. `scope` decides whether the opened panel
   // shows the whole collection or only this page's bound sections.
-  const [mode, setModeState] = useState(/** @type {"page"|"collections"} */ ("page"));
+  //
+  // An open string rather than a union: a custom panel's mode is its own `id`,
+  // which is why `normalizePanels` refuses "page" and "collections".
+  const [mode, setModeState] = useState(/** @type {string} */ ("page"));
+  const activePanel = panels?.find((panel) => panel.id === mode) ?? null;
   const [selectedCollection, setSelectedCollection] = useState(
     /** @type {{ key: string, scope: "page"|"global" } | null} */ (null),
   );
@@ -325,11 +338,118 @@ export function Drawer() {
     setActiveTabState(tab);
   };
 
-  /** @param {"page"|"collections"} next */
+  /** @param {string} next */
   const setMode = (next) => {
     if (isPreviewOpen) setPreviewOpen(false);
     setModeState(next);
   };
+
+  // Per-panel rail marks. Deliberately not folded into the dirty counts: a
+  // panel's pending work is its own, and the Save button below speaks only for
+  // versioned content blocks.
+  const [panelBadges, setPanelBadges] = useState(
+    /** @type {Map<string, number|boolean|null>} */ (new Map()),
+  );
+  const setPanelBadge = useCallback(
+    /** @param {string} panelId @param {number|boolean|null} value */
+    (panelId, value) => {
+      setPanelBadges((prev) => {
+        if ((prev.get(panelId) ?? null) === (value ?? null)) return prev;
+        const next = new Map(prev);
+        if (value == null || value === false) next.delete(panelId);
+        else next.set(panelId, value);
+        return next;
+      });
+    },
+    [],
+  );
+
+  // Where each panel says it currently is. The trail is the panel's own view
+  // stack reported upward, which is why it replaces the header path rather than
+  // extending it: inside a panel, the route is not what the user navigated.
+  const [panelCrumbs, setPanelCrumbsState] = useState(
+    /** @type {Map<string, { label: string, onClick?: () => void }[]>} */ (new Map()),
+  );
+  const setPanelCrumbs = useCallback(
+    /** @param {string} panelId @param {{ label: string, onClick?: () => void }[] | null} trail */
+    (panelId, trail) => {
+      setPanelCrumbsState((prev) => {
+        if (trail == null || trail.length === 0) {
+          if (!prev.has(panelId)) return prev;
+          const next = new Map(prev);
+          next.delete(panelId);
+          return next;
+        }
+        const next = new Map(prev);
+        next.set(panelId, trail);
+        return next;
+      });
+    },
+    [],
+  );
+
+  // A link into the admin surface (see `deep-link.js`). Read once on mount:
+  // everything it can address is known by then, and in the built-in auth flow
+  // the drawer only mounts once the session has resolved, so a marker that
+  // rode through a sign-in is still here waiting.
+  const openedFromUrlRef = useRef(false);
+  useEffect(() => {
+    if (openedFromUrlRef.current) return;
+    openedFromUrlRef.current = true;
+
+    const { target, warning } = readOpenTarget(window.location.search);
+    const reject = (text) => {
+      if (process.env.NODE_ENV === "production") return;
+      // eslint-disable-next-line no-console
+      console.warn(`[inscribed] ${text}`);
+    };
+    if (warning && process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.warn(warning);
+    }
+    if (!target) {
+      if (warning) stripOpenParams();
+      return;
+    }
+
+    switch (target.kind) {
+      case "block":
+        // Through the pending signal rather than straight to `activeBlock`: on
+        // arrival the route's content may still be settling, and this waits for
+        // the block instead of selecting nothing.
+        setPendingBlock(target.blockPath);
+        break;
+      case "record":
+      case "collection":
+        if (!collectionCtx) {
+          reject(`?cms-${target.kind}= needs the collections provider, which this app has not opted into.`);
+          break;
+        }
+        setModeState("collections");
+        setSelectedCollection({ key: target.collectionKey, scope: "global" });
+        if (target.kind === "record") {
+          setActiveCollectionItem({ key: target.collectionKey, slug: target.slug });
+        }
+        break;
+      default:
+        if (!panels?.some((panel) => panel.id === target.panelId)) {
+          reject(`?cms-panel=${target.panelId} names no registered panel.`);
+          break;
+        }
+        setModeState(target.panelId);
+    }
+
+    setDrawerOpen(true);
+    stripOpenParams();
+  }, [panels, collectionCtx, setDrawerOpen, setPendingBlock, setActiveCollectionItem]);
+
+  // The host's panel list can change between renders (a route that offers one
+  // area, a session that loses it). Same failsafe as the tab effect below.
+  useEffect(() => {
+    if (mode === "page" || mode === "collections") return;
+    if (panels?.some((panel) => panel.id === mode)) return;
+    setModeState("page");
+  }, [mode, panels]);
 
   // Stable identity so the memoised collections list isn't re-rendered by every
   // drawer re-render: the drawer subscribes to the whole drafts map, so it
@@ -425,6 +545,32 @@ export function Drawer() {
     });
   }, [activeBlock, rowsByPath, routeSlug, isDrawerOpen, setDrawerOpen]);
 
+  // A `?cms-block=` link asked for a block that is not on screen yet. Promote
+  // it the moment it turns up and the effect above takes it from there: on
+  // arrival the route's content may still be settling, and a link that selected
+  // nothing would look broken to whoever was sent it.
+  //
+  // The failsafe is the other half: a path that never arrives must not sit
+  // waiting to fire on some unrelated page later. Once we are somewhere other
+  // than where the request was made and that route's rows have loaded without
+  // it, the jump has missed and the signal is dropped.
+  const pendingBornAtRef = useRef(/** @type {string|null} */ (null));
+  useEffect(() => {
+    if (!pendingBlock) {
+      pendingBornAtRef.current = null;
+      return;
+    }
+    pendingBornAtRef.current ??= pathname;
+    if (rowsByPath.has(pendingBlock)) {
+      setPendingBlock(null);
+      setActiveBlock(pendingBlock);
+      return;
+    }
+    if (pathname !== pendingBornAtRef.current && rowsByPath.size > 0) {
+      setPendingBlock(null);
+    }
+  }, [pendingBlock, rowsByPath, pathname, setPendingBlock, setActiveBlock]);
+
   // Wall-clock time of the last successful autosave, echoed as "Taslak kayıtlı
   // HH:MM" once dirty drains.
   const [lastSavedAt, setLastSavedAt] = useState(/** @type {string | null} */ (null));
@@ -508,11 +654,15 @@ export function Drawer() {
           showCollections={collectionCtx !== null}
           pageDirty={pageDirty || globalDirty}
           collectionsDirty={collectionDirtyTotal > 0}
+          panels={panels}
+          panelBadges={panelBadges}
         />
 
         <div style={paneContainerStyle}>
           <PanelHeader
             mode={mode}
+            panel={activePanel}
+            panelTrail={activePanel ? panelCrumbs.get(activePanel.id) ?? null : null}
             segments={pathSegments}
             collectionKey={selectedCollection?.key ?? null}
             onNavigate={(href) => router.push(href)}
@@ -524,9 +674,10 @@ export function Drawer() {
             publishedFlash={publishedFlash}
           />
 
-          {mode === "collections" ? (
+          {mode === "collections" || activePanel ? (
             // No bar here: the header path's `collections /` segment is the way
-            // back, so a second one would just repeat it.
+            // back, so a second one would just repeat it. A custom panel gets
+            // none either, since whatever it needs above its list is its own.
             null
           ) : isPreviewOpen ? (
             <PreviewHeader
@@ -541,7 +692,7 @@ export function Drawer() {
             />
           )}
 
-          {mode === "collections" ? (
+          {activePanel ? null : mode === "collections" ? (
             <CollectionsMode
               selected={selectedCollection}
               onSelect={selectCollectionFromList}
@@ -601,6 +752,18 @@ export function Drawer() {
               />
             </>
           )}
+
+          {/* Outside the branch above on purpose: a panel is mounted on first
+              open and then kept, so switching to the page and back must not
+              unmount it. It hides itself while another area is on screen. */}
+          {panels ? (
+            <PanelArea
+              panels={panels}
+              activeId={activePanel?.id ?? null}
+              onBadge={setPanelBadge}
+              onCrumbs={setPanelCrumbs}
+            />
+          ) : null}
 
           {/* The banner carries its own height, so the status bar below is
               pushed down and pulled back by plain reflow. It used to fade while
@@ -688,20 +851,28 @@ export function Drawer() {
  * tooltip) so the rail costs the pane as little width as possible; the dot marks
  * unsaved work waiting in an area the user isn't currently looking at.
  *
+ * Custom panels sit below the built-in areas, in the order the app registered
+ * them, and carry a badge of their own rather than a dirty dot: what is pending
+ * in one is the panel's business, not this drawer's Save.
+ *
  * @param {{
- *   mode: "page"|"collections",
- *   onChange: (mode: "page"|"collections") => void,
+ *   mode: string,
+ *   onChange: (mode: string) => void,
  *   showCollections: boolean,
  *   pageDirty: boolean,
  *   collectionsDirty: boolean,
+ *   panels: readonly import("../shared/panels.js").CmsPanel[] | null,
+ *   panelBadges: Map<string, number|boolean|null>,
  * }} props
  */
-function ModeRail({ mode, onChange, showCollections, pageDirty, collectionsDirty }) {
+function ModeRail({
+  mode, onChange, showCollections, pageDirty, collectionsDirty, panels, panelBadges,
+}) {
   const t = useCmsStrings();
   return (
     <nav style={railStyle} aria-label={t("drawer.sections")}>
       <RailButton
-        icon={FileText}
+        icon={<FileText size={17} />}
         label={t("drawer.page")}
         active={mode === "page"}
         dirty={pageDirty}
@@ -712,44 +883,61 @@ function ModeRail({ mode, onChange, showCollections, pageDirty, collectionsDirty
           opted in keeps it even while /me is empty. */}
       {showCollections ? (
         <RailButton
-          icon={Layers}
+          icon={<Layers size={17} />}
           label={t("drawer.collections")}
           active={mode === "collections"}
           dirty={collectionsDirty}
           accent={COLLECTION_ACCENT}
-          isCollection
+          tintIcon
           onClick={() => onChange("collections")}
         />
       ) : null}
+      {panels?.map((panel) => (
+        <RailButton
+          key={panel.id}
+          icon={<PanelIcon icon={panel.icon} size={17} />}
+          label={panelLabel(panel, t)}
+          active={mode === panel.id}
+          dirty={false}
+          badge={panelBadges.get(panel.id) ?? null}
+          accent={panel.accent ?? ACCENT}
+          // A panel that named no colour reads like the page area rather than
+          // borrowing an emphasis it did not ask for.
+          tintIcon={Boolean(panel.accent)}
+          onClick={() => onChange(panel.id)}
+        />
+      ))}
     </nav>
   );
 }
 
 /**
  * @param {{
- *   icon: (props: { size?: number }) => React.ReactNode,
+ *   icon: React.ReactNode,
  *   label: string,
  *   active: boolean,
  *   dirty: boolean,
+ *   badge?: number|boolean|null,
  *   accent: string,
- *   isCollection?: boolean,
+ *   tintIcon?: boolean,
  *   onClick: () => void,
  * }} props
  */
-function RailButton({ icon: Icon, label, active, dirty, accent, isCollection, onClick }) {
+function RailButton({ icon, label, active, dirty, badge = null, accent, tintIcon, onClick }) {
   const t = useCmsStrings();
-  const className = [
-    "inscribed-rail-btn",
-    isCollection ? "inscribed-rail-btn-collection" : null,
-    active ? "is-active" : null,
-  ].filter(Boolean).join(" ");
+  const className = ["inscribed-rail-btn", active ? "is-active" : null]
+    .filter(Boolean).join(" ");
 
   return (
     <button
       type="button"
       onClick={onClick}
       className={className}
-      style={railButtonStyle}
+      // Inline rather than a per-area CSS class: a panel's accent is an
+      // arbitrary colour from the app, so there is no rule to write ahead of
+      // time. Inline wins over `.is-active`, which is what leaves the untinted
+      // areas on the stylesheet's neutral.
+      style={active && tintIcon ? { ...railButtonStyle, color: accent } : railButtonStyle}
       aria-label={label}
       aria-current={active ? "true" : undefined}
       title={label}
@@ -770,16 +958,49 @@ function RailButton({ icon: Icon, label, active, dirty, accent, isCollection, on
         transition={RAIL_TRANSITION}
         style={{ display: "inline-flex" }}
       >
-        <Icon size={17} />
+        {icon}
       </motion.span>
-      {dirty ? (
+      {typeof badge === "number" && badge > 0 ? (
+        <span style={{ ...railBadgeStyle, background: accent }}>
+          {badge > 99 ? "99+" : badge}
+        </span>
+      ) : badge || dirty ? (
         <span
           style={{ ...railDirtyDotStyle, background: accent }}
-          aria-label={t("drawer.unsavedDot")}
+          aria-label={dirty ? t("drawer.unsavedDot") : t("drawer.pendingDot")}
         />
       ) : null}
     </button>
   );
+}
+
+/**
+ * A panel's glyph, drawn into a box we size. The host's node is arbitrary JSX,
+ * so the sizing is done on the wrapper (plus the `> svg` rule in `panelCss`)
+ * rather than by handing it a `size` prop it may not take.
+ *
+ * @param {{ icon: React.ReactNode, size: number }} props
+ */
+function PanelIcon({ icon, size }) {
+  if (icon == null) return <TypeUnknown size={size} />;
+  return (
+    <span className="inscribed-panel-icon" style={{ ...panelIconStyle, width: size, height: size }}>
+      {icon}
+    </span>
+  );
+}
+
+/**
+ * The area's name: written as given, or looked up when the app chose to put it
+ * in `adminStrings` instead. `label` is deliberately not passed through `t`,
+ * since a plain word is not a key and would warn on every render.
+ *
+ * @param {import("../shared/panels.js").CmsPanel} panel
+ * @param {import("../shared/i18n/translate.js").Translate} t
+ * @returns {string}
+ */
+function panelLabel(panel, t) {
+  return panel.labelKey ? t(panel.labelKey) : /** @type {string} */ (panel.label);
 }
 
 // Rail motion: a short spring so the indicator slide and the icon settle feel
@@ -797,18 +1018,9 @@ const RAIL_TRANSITION = /** @type {const} */ ({
 
 // Mirrors the region panel's own list/detail choreography one level up, so
 // drilling from the collections list into a collection reads as the same
-// gesture as drilling from a collection into an item.
-const COLLECTIONS_TRANSITION = { duration: 0.3, ease: [0.32, 0.72, 0.18, 1] };
-const COLLECTIONS_PARALLAX = "28%";
-
-// The pane's cast shadow reaches ~52px past its own right edge, so at x=-100%
-// the slide looks finished while the shadow still sits over the list; unmount
-// then snaps it away. Fading only the tail of the exit clears the shadow with
-// the pane instead, and keeps it fully opaque for the part you actually watch.
-const COLLECTIONS_PANE_TRANSITION = {
-  ...COLLECTIONS_TRANSITION,
-  opacity: { duration: 0.12, delay: 0.18, ease: "linear" },
-};
+// gesture as drilling from a collection into an item. The values live in
+// `shared/style/drill-motion.js`: a custom panel's view stack drills the same
+// way, and the two must not drift apart.
 
 /**
  * Body slot for Collections mode: the list layer recedes while the chosen
@@ -834,11 +1046,11 @@ function CollectionsMode({ selected, onSelect, collections, dirtyKeys }) {
       <motion.div
         initial={false}
         animate={isOpen
-          ? { x: COLLECTIONS_PARALLAX, opacity: 0.4 }
+          ? { x: DRILL_PARALLAX, opacity: 0.4 }
           : { x: "0%", opacity: 1 }}
-        transition={COLLECTIONS_TRANSITION}
+        transition={DRILL_TRANSITION}
         style={{
-          ...collectionsLayerStyle,
+          ...drillLayerStyle,
           // The opaque pane covers the layer at rest; this only guards clicks
           // and tab focus during the transition frames.
           pointerEvents: isOpen ? "none" : "auto",
@@ -862,8 +1074,8 @@ function CollectionsMode({ selected, onSelect, collections, dirtyKeys }) {
             initial={{ x: "-100%" }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: "-100%", opacity: 0 }}
-            transition={COLLECTIONS_PANE_TRANSITION}
-            style={collectionsPaneStyle}
+            transition={DRILL_PANE_TRANSITION}
+            style={drillPaneStyle}
           >
             <TabBar
               tabs={collections.map((c) => ({
@@ -889,39 +1101,15 @@ function CollectionsMode({ selected, onSelect, collections, dirtyKeys }) {
   );
 }
 
-const collectionsLayerStyle = /** @type {React.CSSProperties} */ ({
-  flex: 1,
-  minHeight: 0,
-  display: "flex",
-  flexDirection: "column",
-  // Framer drives these transitions by writing inline transform/opacity each
-  // frame, which does not promote the element on its own. Without a layer the
-  // whole list repaints per frame instead of being composited.
-  willChange: "transform, opacity",
-});
-
-const collectionsPaneStyle = /** @type {React.CSSProperties} */ ({
-  position: "absolute",
-  inset: 0,
-  display: "flex",
-  flexDirection: "column",
-  background: BG,
-  // Matches the item detail pane: right-edge hairline plus a soft cast shadow
-  // so the entering pane separates from the receding list.
-  boxShadow: `1px 0 0 ${HAIRLINE}, 16px 0 36px rgba(0, 0, 0, 0.35)`,
-  // The 36px blur above is the expensive part: promoted, it is rasterised once
-  // and only moved afterwards. This pane is mounted solely while open, so the
-  // layer's cost is scoped to the transition.
-  willChange: "transform",
-});
-
 // ---------------------------------------------------------------------------
 // Header
 // ---------------------------------------------------------------------------
 
 /**
  * @param {{
- *   mode: "page"|"collections",
+ *   mode: string,
+ *   panel: import("../shared/panels.js").CmsPanel | null,
+ *   panelTrail: { label: string, onClick?: () => void }[] | null,
  *   segments: { label: string, href: string }[],
  *   collectionKey: string | null,
  *   onNavigate: (href: string) => void,
@@ -934,14 +1122,14 @@ const collectionsPaneStyle = /** @type {React.CSSProperties} */ ({
  * }} props
  */
 function PanelHeader({
-  mode, segments, collectionKey, onNavigate, onBackToCollections,
+  mode, panel, panelTrail, segments, collectionKey, onNavigate, onBackToCollections,
   dirty, draftSyncStatus, isSaving, lastSavedAt, publishedFlash,
 }) {
   const t = useCmsStrings();
   const isCollections = mode === "collections";
 
   const crumbs = buildCrumbs({
-    isCollections, segments, collectionKey, t, onNavigate, onBackToCollections,
+    isCollections, panel, panelTrail, segments, collectionKey, t, onNavigate, onBackToCollections,
   });
 
   // Leading crumbs that survived the move keep their key, so only the tail past
@@ -961,9 +1149,7 @@ function PanelHeader({
   return (
     <header style={headerStyle}>
       <span
-        style={isCollections
-          ? { ...headerBadgeStyle, ...headerBadgeRollStyle, ...headerBadgeCollectionStyle }
-          : { ...headerBadgeStyle, ...headerBadgeRollStyle }}
+        style={headerBadgeStyleFor(isCollections, panel)}
         aria-hidden="true"
       >
         <AnimatePresence mode="popLayout" initial={false}>
@@ -976,7 +1162,9 @@ function PanelHeader({
             transition={ROLL_TRANSITION}
             style={rollLayerStyle}
           >
-            {isCollections ? <Layers size={12} /> : <FileText size={12} />}
+            {panel
+              ? <PanelIcon icon={panel.icon} size={12} />
+              : isCollections ? <Layers size={12} /> : <FileText size={12} />}
           </motion.span>
         </AnimatePresence>
       </span>
@@ -1045,6 +1233,29 @@ const headerBadgeRollStyle = /** @type {React.CSSProperties} */ ({
   overflow: "hidden",
   perspective: 220,
 });
+
+/**
+ * The badge's fill for the current area. A custom panel's accent is arbitrary,
+ * so its soft tint is mixed here rather than read off a token, using the same
+ * 14% the built-in `*_SOFT` tokens are built with.
+ *
+ * @param {boolean} isCollections
+ * @param {import("../shared/panels.js").CmsPanel | null} panel
+ * @returns {React.CSSProperties}
+ */
+function headerBadgeStyleFor(isCollections, panel) {
+  const base = { ...headerBadgeStyle, ...headerBadgeRollStyle };
+  if (panel) {
+    return panel.accent
+      ? {
+          ...base,
+          background: `color-mix(in srgb, ${panel.accent} 14%, transparent)`,
+          color: panel.accent,
+        }
+      : base;
+  }
+  return isCollections ? { ...base, ...headerBadgeCollectionStyle } : base;
+}
 
 const headerPathRollStyle = /** @type {React.CSSProperties} */ ({
   ...headerPathStyle,
@@ -1137,6 +1348,8 @@ const MAX_VISIBLE_SEGMENTS = 2;
  *
  * @param {{
  *   isCollections: boolean,
+ *   panel: import("../shared/panels.js").CmsPanel | null,
+ *   panelTrail: { label: string, onClick?: () => void }[] | null,
  *   segments: { label: string, href: string }[],
  *   collectionKey: string | null,
  *   t: (key: string, vars?: Record<string, *>) => string,
@@ -1145,7 +1358,30 @@ const MAX_VISIBLE_SEGMENTS = 2;
  * }} args
  * @returns {{ key: string, label: string, title?: string, current?: boolean, onClick?: () => void }[]}
  */
-function buildCrumbs({ isCollections, segments, collectionKey, t, onNavigate, onBackToCollections }) {
+function buildCrumbs({ isCollections, panel, panelTrail, segments, collectionKey, t, onNavigate, onBackToCollections }) {
+  // Inside a panel the path is not the route: the panel owns its own views, so
+  // what the header shows is the trail it reported (via `<PanelStack>` or
+  // `setCrumbs`). With none reported it is one level deep, and its name is the
+  // whole path.
+  if (panel) {
+    if (!panelTrail || panelTrail.length === 0) {
+      const label = panelLabel(panel, t);
+      return [{ key: `panel:${panel.id}`, label, title: label, current: true }];
+    }
+    return panelTrail.map((crumb, i) => {
+      const isLast = i === panelTrail.length - 1;
+      return {
+        // Position and text both, so re-labelling one level animates just that
+        // crumb while its ancestors stay put.
+        key: `panel:${panel.id}:${i}:${crumb.label}`,
+        label: crumb.label,
+        title: crumb.label,
+        current: isLast,
+        onClick: isLast ? undefined : crumb.onClick,
+      };
+    });
+  }
+
   if (isCollections) {
     // The area's own landing page reads like the site root on `/`: a crumb, not
     // an emphasised current segment, and with nowhere to navigate from.

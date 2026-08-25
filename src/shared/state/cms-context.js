@@ -35,6 +35,12 @@ import { createContext, useContext } from "react";
  *   `activeCollectionItem`). Set when a page-side `<EditableList>` item is
  *   clicked; the matching `ListItemCard` auto-expands and scrolls into view,
  *   then clears it so it fires once.
+ * @property {string|null} pendingBlock
+ *   A block to open *once it exists*, which is what makes a jump across a
+ *   route possible. `activeBlock` cannot carry that: navigation clears it, and
+ *   rightly so, since a block selected on the page you left means nothing on
+ *   the one you arrived at. So the request survives here instead, and the
+ *   drawer promotes it to `activeBlock` when the block turns up.
  * @property {boolean} isDrawerOpen
  * @property {"idle"|"saving"|"saved"|"failed"} draftSyncStatus
  *   Background `PUT /cms/draft` autosave state. `saved`/`failed` are transient
@@ -121,6 +127,9 @@ import { createContext, useContext } from "react";
  * @property {(blockPath: string) => void} clearBlockConflict
  *   Drop one block once the user has picked a side.
  * @property {(blockPath: string|null) => void} setActiveBlock
+ * @property {(blockPath: string|null) => void} setPendingBlock
+ *   Ask for a block to be opened once it exists; survives the navigation on the
+ *   way there. See `CmsUiState.pendingBlock`.
  * @property {(target: { path: string, index: number } | null) => void} setActiveListItem
  * @property {(open: boolean) => void} setDrawerOpen
  * @property {() => void} triggerRefetch

@@ -23,6 +23,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { CmsContext, useCmsContext } from "../shared/state/cms-context.js";
 import { ensureCmsConfig } from "../shared/config.js";
+import { normalizePanels } from "../shared/panels.js";
 import { resolveCmsRoute } from "../shared/route.js";
 import { buildThemeCss } from "../shared/style/theme.js";
 import { createRestTransport } from "../defaults/transport.js";
@@ -78,6 +79,7 @@ function useConstant(create) {
  * @param {{ name: string|null, email: string|null, image: string|null } | null} [props.userInfo]   Identity for the admin panel footer. Null in public mode.
  * @param {(key: string, slug?: string) => void | Promise<void>} [props.onAfterCollectionSave]   Server Action run after a collection record is published, typically `revalidateCmsCollection` from `inscribed/actions`.
  * @param {React.ComponentType<{ children: React.ReactNode }>} [props.collections]   Opt in to collections by passing `CollectionProvider` from `inscribed/collections`. Handed in rather than imported here so an app without collections never pulls the layer into its bundle. `createCmsPage({ collections })` passes it for you.
+ * @param {import("../shared/panels.js").CmsPanel[]} [props.panels]   Admin areas of your own, added to the drawer's rail beside Page and Collections; each body reads its API from `useCmsPanel()` (`inscribed/panels`). `createCmsPage({ panels })` passes them for you.
  * @param {() => void} [props.onSignOut]   Invoked by the admin panel's logout button.
  * @param {React.ReactNode} props.children
  */
@@ -93,9 +95,13 @@ export function CmsProvider({
   transport,
   userInfo: userInfoProp = null,
   collections: CollectionsRoot,
+  panels,
   onSignOut,
   children,
 }) {
+  // Validated here as well as in `createCmsPage`: an app can wire this provider
+  // directly, and that is the other place the list gets written.
+  const normalizedPanels = useMemo(() => normalizePanels(panels), [panels]);
   // `config` arrives serializable across the RSC boundary. The transport holds
   // functions, so we build it here on the client and augment it onto the config
   // the tree reads through context. A custom `transport` prop overrides it.
@@ -294,6 +300,7 @@ export function CmsProvider({
   const uiStore = useConstant(() =>
     createStore(/** @type {import("../shared/state/cms-context.js").CmsUiState} */ ({
       activeBlock: null,
+      pendingBlock: null,
       activeListItem: null,
       isDrawerOpen: false,
       draftSyncStatus: "idle",
@@ -496,7 +503,9 @@ export function CmsProvider({
     } else if (pathChanged) {
       carryLocaleSwitch(previousPathname, pathname);
     }
-    // Conflicts go with the drafts they were raised against.
+    // Conflicts go with the drafts they were raised against. `pendingBlock` is
+    // deliberately left alone: it names a block on the route being navigated
+    // *to*, so clearing it here would cancel the very jump this navigation is.
     patchUi({ activeBlock: null, conflictBlocks: new Set() });
     setDraftsState(new Map());
     // Staged translations go with the page they were typed against, same as
@@ -646,6 +655,12 @@ export function CmsProvider({
   const setActiveListItem = useCallback(
     /** @param {{ path: string, index: number } | null} target */
     (target) => patchUi({ activeListItem: target }),
+    [patchUi],
+  );
+
+  const setPendingBlock = useCallback(
+    /** @param {string|null} blockPath */
+    (blockPath) => patchUi({ pendingBlock: blockPath }),
     [patchUi],
   );
 
@@ -1102,6 +1117,7 @@ export function CmsProvider({
       setBlockConflicts,
       clearBlockConflict,
       setActiveBlock,
+      setPendingBlock,
       setActiveListItem,
       setDrawerOpen,
       triggerRefetch,
@@ -1142,6 +1158,7 @@ export function CmsProvider({
       setBlockConflicts,
       clearBlockConflict,
       setActiveBlock,
+      setPendingBlock,
       setActiveListItem,
       setDrawerOpen,
       triggerRefetch,
@@ -1163,7 +1180,10 @@ export function CmsProvider({
           Public visitors refresh via `router.refresh()` above instead. */}
       {isAdmin ? <ContentLoader /> : null}
       <PageShell isAdmin={isAdmin}>{children}</PageShell>
-      {isAdmin ? <AdminDrawer /> : null}
+      {/* A prop rather than context: the drawer is the only reader, and an
+          inline array literal on the context value would wake every consumer
+          on each host render. */}
+      {isAdmin ? <AdminDrawer panels={normalizedPanels} /> : null}
       {sessionExpired && browserAuth ? (
         <SessionExpiredNotice
           onSignIn={() => browserAuth.login()}

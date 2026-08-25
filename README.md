@@ -37,6 +37,8 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
   - [Theming](#theming)
   - [Panel language](#panel-language)
   - [Access control](#access-control)
+  - [Custom panels](#custom-panels)
+  - [Linking into the admin surface](#linking-into-the-admin-surface)
   - [Caching & revalidation](#caching--revalidation)
 - [Architecture: the seams](#architecture-the-seams)
 - [Bring your own backend](#bring-your-own-backend)
@@ -1190,6 +1192,181 @@ a hidden one it leaves the drawer entirely. Fields the record's own `canEdit`
 already denies stay read-only regardless: the group can tighten access, never
 widen it.
 
+### Custom panels
+
+The drawer's left rail is a list of top-level areas, and your app can add to it.
+A panel is one rail button and one pane whose body is **your own component**:
+the CMS supplies the surface, the area's chrome and a way to reach the backend,
+and nothing else about it is ours. Reach for one when a site's admin controls
+(orders, a maintenance switch, a sync trigger) belong beside its content rather
+than on a separate `/admin` page.
+
+Register panels where you build your page factory:
+
+```jsx
+// app/lib/cms.jsx
+import { createCmsPage } from "inscribed/page";
+import { CmsProvider } from "inscribed";
+import { OrdersPanel } from "../admin/OrdersPanel.jsx";
+import { CartIcon } from "../admin/icons.jsx";
+
+export const { CmsPage } = createCmsPage({
+  config,
+  Provider: CmsProvider,
+  panels: [
+    { id: "orders", label: "Orders", icon: <CartIcon />, accent: "#8fd3c8", Component: OrdersPanel },
+  ],
+});
+```
+
+| Field | | |
+| ----- | --- | --- |
+| `id` | required | Unique, and also the drawer's mode value, so `"page"` and `"collections"` are taken. |
+| `label` | one of | The area's name, printed as written. |
+| `labelKey` | these two | An [`adminStrings`](#rewording-and-adding-a-language) key instead, so the name follows the panel's language. |
+| `Component` | required | The pane's body. Rendered only inside the drawer. |
+| `icon` | optional | Rail glyph, drawn into a 17px box (and a 12px one in the header). An SVG is scaled to fit whatever size it was authored at. |
+| `accent` | optional | Colour for the rail's active state and badge. Expected to read against the dark panel, like the built-in accents. Omit it and the area looks like the page area. |
+
+`Component` and `icon` must come from your own `"use client"` module: **functions
+can't cross the Server → Client boundary**, and only a module's own exports
+become client references, which is the same reason the `collections` bag is
+assembled by you rather than inside the SDK.
+
+The body reads what it needs from `useCmsPanel()`. It is a hook rather than
+props so a panel's nested markup reaches the API without drilling it down:
+
+```jsx
+// app/admin/OrdersPanel.jsx
+"use client";
+import { useEffect, useState } from "react";
+import { useCmsPanel } from "inscribed/panels";
+
+export function OrdersPanel() {
+  const { request, setBadge } = useCmsPanel();
+  const [rows, setRows] = useState([]);
+
+  useEffect(() => {
+    request("/admin/orders").then((r) => { setRows(r); setBadge(r.length); });
+  }, [request, setBadge]);
+
+  return <ul>{rows.map((r) => <li key={r.id}>{r.customer}</li>)}</ul>;
+}
+```
+
+| | |
+| --- | --- |
+| `request(path, init?)` | Authenticated call **to the CMS backend** through the configured [transport](#bring-your-own-backend), resolved against `config.baseUrl` with **no `/cms` prefix**. The editor's credential is attached inside, never handed out. |
+| `setBadge(value)` | Marks this panel's rail icon: a number, `true` for a plain dot, `null` to clear. |
+| `setCrumbs(trail)` | Reports where inside the panel the user is. Usually left to [`<PanelStack>`](#views-and-the-header-path). |
+| `isActive` | Whether this panel is the area on screen. Panels stay mounted once opened, so a panel that polls reads this to stand that work down, or to refresh on the way back in. |
+| `t(key, params?)` | The drawer's own translator, fed by [`adminStrings`](#panel-language). Ignore it if your panel speaks one language. |
+
+`request` exists for the routes your app puts on the same backend beside the CMS
+API, and it **addresses that backend only**: an absolute URL on another origin is
+refused, not quietly sent unauthenticated. That is what lets the credential ride
+on every call without a rule about when, and it costs nothing, because a call to
+somewhere else gains nothing from this seam anyway. Reach a third party with
+`fetch` and the absence of a CMS credential stays visible in your own code.
+
+A panel calling your Next.js routes needs nothing from us either: those already
+carry your app's session. And a transport that implements no `request` throws a
+named error rather than falling back to a bare `fetch`, which would bypass the
+seam.
+
+> **A panel's pending work is its own.** The drawer's Save button publishes
+> versioned content blocks, and its conflict and revalidation rules cannot speak
+> for code it doesn't know; a panel draws its own save affordance, and `setBadge`
+> is deliberately unrelated to the unsaved-changes count beside it.
+
+> **Panels are mounted on first open and then kept**, hidden while another area
+> is on screen, so a half-filled form survives a trip to the page tab and a badge
+> keeps updating off screen. Two things follow: a panel never opened has not run
+> yet, so it cannot show a badge before its first visit; and a mount effect fires
+> once for the life of the session, so "refresh when the editor comes back" is
+> `isActive`, not `useEffect(…, [])`.
+
+A panel's body sits inside `CmsProvider`, so it reads the page the editor is on
+with the same hooks the page does: `useCmsRoute()` for the route,
+`useCmsBlock(path)` for a block's current value and version (it reads the shared
+blocks map rather than fetching), and the collection hooks when that layer is
+wired. A panel can therefore be about *this* page rather than the site in
+general.
+
+A panel can also be [linked to](#linking-into-the-admin-surface), like any other
+part of the drawer.
+
+A panel with a heavy body should be wrapped in `next/dynamic` **inside your own
+client module**: the descriptor is a prop on a client component, so its reference
+travels in every page's RSC payload, and the lazy boundary is what keeps the code
+behind it out of the way until someone opens the area.
+
+#### Views and the header path
+
+A panel that is more than one screen declares its open views, and the drawer's
+header path follows them. **The stack and the breadcrumb are the same fact**, so
+there is nothing to keep in sync: push a view and a crumb appears, pop it and the
+crumb goes with it, with the same slide the collections area uses.
+
+```jsx
+import { PanelStack, useCmsPanel } from "inscribed/panels";
+
+<PanelStack
+  onBack={() => setOpenId(null)}
+  views={[
+    { key: "list", label: "Orders", node: <OrderList onOpen={setOpenId} /> },
+    // Falsy entries are skipped, so a conditional view can be written inline.
+    open && { key: `order-${open.id}`, label: `#${open.id}`, node: <OrderDetail order={open} /> },
+  ]}
+/>
+```
+
+The panel keeps its own state: `PanelStack` renders what it is given and reports
+the user's intent through `onBack(toIndex)`, where `0` is the root view. A
+two-level panel can ignore the argument. Clicking an ancestor crumb calls the
+same handler, which is why the trail includes the panel's own name: only the
+panel knows how to get back to its root.
+
+> Drawing your own transitions instead? `useCmsPanel().setCrumbs(trail)` is the
+> primitive `PanelStack` is built on, and takes `{ label, onClick? }` entries.
+
+
+### Linking into the admin surface
+
+**A query marker on any page opens the drawer on the thing it names**, so an
+editor can be sent to a piece of work the way they would be sent to a page:
+
+| Marker | Opens |
+| ------ | ----- |
+| `?cms-block=hero.title` | That block's card, on the page in the URL. |
+| `?cms-record=news/congress-2026` | That record, in the Collections area. |
+| `?cms-collection=news` | The collection itself. |
+| `?cms-panel=orders` | A [custom panel](#custom-panels). |
+
+```
+https://example.com/news/congress?cms-login&cms-block=hero.title
+```
+
+**The marker survives the sign-in**, which is what makes a link like the one
+above shareable: the login round trip rewrites only its own markers, so a
+recipient who is signed out lands on the block anyway, after authenticating.
+
+Only one marker is acted on, in the order of the table; a link carrying two is a
+mistake rather than a request to open two things, and development says which one
+it ignored. The marker is then taken back out of the address bar with
+`replaceState` (no navigation, so no re-render and no scroll reset), the same
+treatment `?cms-login` gets. That happens even when the target was ignored,
+since a marker left in place would re-fire on every later visit.
+
+> **A block link waits for its block.** Someone opening a shared URL cold
+> arrives before the route's content has settled, so the request is held until
+> the block turns up rather than selecting nothing. If it never does (a path
+> that route has no block for), it is dropped rather than left armed to fire on
+> a later page.
+
+`?cms-collection=` and `?cms-record=` need the [collections](#collections) layer
+to be wired; without it they are ignored with a warning in development.
+
 ### Caching & revalidation
 
 Server reads are ISR-cacheable and tagged, so each publish drops exactly what it
@@ -1412,6 +1589,7 @@ bundle:
 | ------ | ---- | ---------- |
 | `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCmsRoute`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
 | `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `CollectionComposer`, `useCollection`, `useCollectionItem`, `useCollectionRecord`, `useMyCollections`, `useCollectionCreate`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
+| `inscribed/panels` | client | `useCmsPanel`, `PanelStack` (what a [custom panel](#custom-panels)'s own component reads and renders) |
 | `inscribed/server` | server only | `getCmsContent`, `getCmsPageBlocks`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
 | `inscribed/page` | server only | `createCmsPage` (returns `CmsPage`, `localePath`, `getCmsRoute`, and the server collection bindings), `createCmsConfig` |
 | `inscribed/actions` | Server Action | `revalidateCmsSlug`, `revalidateCmsCollection` |

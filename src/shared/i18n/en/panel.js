@@ -44,6 +44,7 @@ export const panel = Object.freeze({
   "drawer.home": "Home",
   "drawer.collectionList": "Collection list",
   "drawer.unsavedDot": "Has unsaved changes",
+  "drawer.pendingDot": "Has something pending",
   "drawer.openPanel": "Open the panel",
   "drawer.closePanel": "Close the panel",
   "pill.dirty": "Editing",

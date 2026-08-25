@@ -40,6 +40,7 @@ export const panel = Object.freeze({
   "drawer.home": "Anasayfa",
   "drawer.collectionList": "Koleksiyon listesi",
   "drawer.unsavedDot": "kaydedilmemiş değişiklik var",
+  "drawer.pendingDot": "bekleyen bir şey var",
   "drawer.openPanel": "Paneli aç",
   "drawer.closePanel": "Paneli kapat",
   "pill.dirty": "Düzenleniyor",

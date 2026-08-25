@@ -50,6 +50,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 
 import { getCmsCollection, getCmsCollectionItem, getCmsPageBlocks } from "./get-content.js";
 import { ensureCmsConfig } from "../shared/config.js";
+import { normalizePanels } from "../shared/panels.js";
 import { localizePath, resolveCmsRoute } from "../shared/route.js";
 import { buildListParams } from "../collections/params.js";
 import { publicAuth } from "../defaults/auth.js";
@@ -112,6 +113,14 @@ const PATHNAME_HEADER = "x-pathname";
  *   exists too. Pass `{ CollectionProvider, CollectionRecord, CollectionRows }`
  *   imported from `inscribed/collections`; omit it and an app that doesn't use
  *   collections pulls none of that in.
+ * @property {import("../shared/panels.js").CmsPanel[]} [panels]
+ *   Admin areas of your own, added to the drawer's rail beside Page and
+ *   Collections: `{ id, label | labelKey, Component, icon?, accent? }`. The body
+ *   is your JSX and reads the CMS through `useCmsPanel()` from
+ *   `inscribed/panels`; nothing else about it is ours.
+ *
+ *   `Component` and `icon` must come from your own `"use client"` module, for
+ *   the same reason the `collections` bag is assembled by you rather than here.
  * @property {(key: string, slug?: string) => void | Promise<void>} [onAfterCollectionSave]
  *   Server Action run after a collection record is published, typically
  *   `revalidateCmsCollection` from `inscribed/actions`. Needed whenever
@@ -176,6 +185,7 @@ export function createCmsPage(options) {
     onAfterCollectionSave,
     onSsrError,
     collections,
+    panels,
   } = options;
 
   if (!Provider) {
@@ -194,6 +204,11 @@ export function createCmsPage(options) {
         "collections: { CollectionProvider, CollectionRecord, CollectionRows }",
     );
   }
+
+  // Same timing as the `collections` check above, and for the same reason: this
+  // runs at module scope, so a mistyped descriptor is named where it was
+  // written rather than surfacing as a rail button that opens nothing.
+  const normalizedPanels = normalizePanels(panels);
 
   // Normalized once at module scope, so every request reuses one object.
   const normalizedConfig = ensureCmsConfig(config);
@@ -243,6 +258,7 @@ export function createCmsPage(options) {
         onAfterSave={onAfterSave}
         onAfterCollectionSave={onAfterCollectionSave}
         collections={collections?.CollectionProvider}
+        panels={normalizedPanels ?? undefined}
         session={sessionForClient ? sessionForClient(session) : undefined}
       >
         {children}

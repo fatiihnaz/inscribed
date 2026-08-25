@@ -21,6 +21,7 @@ import { useStoreSelector } from "../shared/state/store.js";
 import { collectDirtyRecords, dirtyCollectionKeys } from "./dirty.js";
 import { useMyCollections } from "../collections/hooks/use-my-collections.js";
 
+import { SkeletonRows } from "./Skeleton.jsx";
 import { emptyStateStyle } from "../editors/fields/styles.js";
 import { paneStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, listStyle, dirtyDotStyle, rowPathStyle, typeIconStyle } from "./drawer-styles.js";
 import { TEXT, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, FONT_SANS, R_MD } from "../shared/style/tokens.js";
@@ -111,13 +112,13 @@ export const CollectionsPane = memo(function CollectionsPane({ onSelect }) {
         </div>
       ) : null}
 
-      {visible.length === 0 ? (
+      {isLoading && visible.length === 0 ? (
+        <SkeletonRows count={5} lines={2} height={44} />
+      ) : visible.length === 0 ? (
         <div style={emptyStateStyle}>
-          {isLoading
-            ? t("collections.loadingList")
-            : search
-              ? t("collections.noSearchResults", { query: search })
-              : t("collections.noneAccessible")}
+          {search
+            ? t("collections.noSearchResults", { query: search })
+            : t("collections.noneAccessible")}
         </div>
       ) : (
         <ul style={collectionListStyle} data-cms-list>

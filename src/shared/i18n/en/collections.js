@@ -15,9 +15,9 @@ export const collections = Object.freeze({
   "collections.error": "Error",
   "collections.clear": "Clear",
   "collections.retry": "Try again",
-  "collections.draftBadge": "draft",
+  "collections.draftBadge": "Draft",
   "collections.newBadge": "new",
-  "collections.archivedBadge": "archived",
+  "collections.archivedBadge": "Archived",
   "collections.create": "Create",
   "collections.creating": "Creating…",
 
@@ -44,7 +44,6 @@ export const collections = Object.freeze({
 
   // The collections list (rail landing surface).
   "collections.searchCollections": "Search collections",
-  "collections.loadingList": "Loading collections…",
   "collections.noSearchResults": "Nothing matched \"{query}\".",
   "collections.noneAccessible": "You can't reach any collection.",
   "collections.fieldCount_one": "{count} field",
@@ -94,7 +93,7 @@ export const collections = Object.freeze({
   // Schema-driven fields.
   "collections.emptySchema": "The schema is empty.",
   "collections.requiredField": "required",
-  "collections.computedField": "computed",
+  "collections.computedField": "Computed",
   "collections.selectOption": "— select —",
   "collections.editorLoading": "Loading the editor…",
   "collections.itemFallback": "item",

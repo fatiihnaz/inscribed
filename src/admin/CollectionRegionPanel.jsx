@@ -39,6 +39,7 @@ import { useCollectionEditor, useEditorDirty } from "../collections/hooks/use-co
 import { Menu } from "./Menu.jsx";
 import { CollectionRecordForm, DraftIndicator } from "./CollectionRecordForm.jsx";
 import { CollectionFieldsForm, SlugField } from "../collections/CollectionFieldsForm.jsx";
+import { SkeletonRows } from "./Skeleton.jsx";
 import { emptyStateStyle } from "../editors/fields/styles.js";
 import { buttonBaseStyle, paneStyle, btnGhostStyle, searchWrapStyle, searchInputStyle, searchClearStyle, dirtyDotStyle, rowPathStyle } from "./drawer-styles.js";
 import { BG, BG_RAISED, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, STATUS_DANGER, BORDER, HAIRLINE, SURFACE_1, FONT_MONO, FONT_SANS, PANEL_TRANSITION, R_BADGE, R_MD, R_SM, R_BTN } from "../shared/style/tokens.js";
@@ -158,9 +159,16 @@ function itemTitle(item, field) {
 }
 
 /**
- * @param {{ collectionKey: string, scope?: "page" | "global" }} props
+ * @param {{
+ *   collectionKey: string,
+ *   scope?: "page" | "global",
+ *   panelId?: string,
+ *   labelledBy?: string,
+ * }} props
+ *   `panelId` / `labelledBy` bind the pane to the collection switcher above it
+ *   when one is present.
  */
-export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
+export function CollectionRegionPanel({ collectionKey, scope = "page", panelId, labelledBy }) {
   const t = useCmsStrings();
   const { collectionStore, setActiveCollectionItem } = useCollectionContext();
   const collectionBindings = useStoreSelector(collectionStore, (s) => s.bindings);
@@ -255,7 +263,12 @@ export function CollectionRegionPanel({ collectionKey, scope = "page" }) {
   return (
     // `position: relative` + `overflow: hidden` make the section the frame the
     // detail panes slide inside of.
-    <section style={{ ...paneStyle, position: "relative", overflow: "hidden" }}>
+    <section
+      style={{ ...paneStyle, position: "relative", overflow: "hidden" }}
+      id={panelId}
+      role={panelId ? "tabpanel" : undefined}
+      aria-labelledby={labelledBy}
+    >
       <motion.div
         initial={false}
         animate={isPaneOpen
@@ -713,7 +726,7 @@ function RegionSection({
           </button>
         </div>
       ) : isLoading && accumulated.length === 0 ? (
-        <div style={emptyStateStyle}>{t("collections.loading")}</div>
+        <SkeletonRows count={6} />
       ) : accumulated.length === 0 ? (
         <div style={emptyStateStyle}>
           {archived ? t("collections.archiveEmpty") : t("collections.noRecordsForFilter")}
@@ -1603,7 +1616,8 @@ const filterChipValueStyle = /** @type {React.CSSProperties} */ ({
 
 const regionCountStyle = /** @type {React.CSSProperties} */ ({
   marginLeft: "auto",
-  font: `500 10.5px/1 ${FONT_MONO}`,
+  font: `500 10.5px/1 ${FONT_SANS}`,
+  fontVariantNumeric: "tabular-nums",
   color: TEXT_FAINT,
 });
 
@@ -1777,10 +1791,9 @@ const rowChevronStyle = /** @type {React.CSSProperties} */ ({
 // two hand-rolled boxes at a radius (3) that exists nowhere else in the scale.
 const stateChipStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
-  font: `600 9px/1 ${FONT_SANS}`,
-  letterSpacing: "0.045em",
-  textTransform: "uppercase",
-  padding: "3px 5px",
+  font: `600 10px/1 ${FONT_SANS}`,
+  letterSpacing: "-0.005em",
+  padding: "3px 6px",
   borderRadius: R_BADGE,
 });
 
@@ -2050,9 +2063,8 @@ const createButtonStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const draftBadgeStyle = /** @type {React.CSSProperties} */ ({
-  font: `600 9px/1 ${FONT_SANS}`,
-  letterSpacing: "0.045em",
-  textTransform: "uppercase",
+  font: `600 10px/1 ${FONT_SANS}`,
+  letterSpacing: "-0.005em",
   padding: "3px 6px",
   borderRadius: R_BADGE,
   background: COLLECTION_SOFT,

@@ -14,9 +14,9 @@ export const collections = Object.freeze({
   "collections.error": "Hata",
   "collections.clear": "Temizle",
   "collections.retry": "Yeniden dene",
-  "collections.draftBadge": "taslak",
+  "collections.draftBadge": "Taslak",
   "collections.newBadge": "yeni",
-  "collections.archivedBadge": "arşivde",
+  "collections.archivedBadge": "Arşivde",
   "collections.create": "Oluştur",
   "collections.creating": "Oluşturuluyor…",
 
@@ -40,7 +40,6 @@ export const collections = Object.freeze({
   "collections.recordMoved": "Bu kayıt \"{slug}\" adresine taşınmış. Güncel hâli yüklendi; yazdıkların duruyor, kontrol edip tekrar kaydet.",
 
   "collections.searchCollections": "Koleksiyon ara",
-  "collections.loadingList": "Koleksiyonlar yükleniyor…",
   "collections.noSearchResults": "\"{query}\" araması için sonuç yok.",
   "collections.noneAccessible": "Erişebildiğin bir koleksiyon yok.",
   "collections.fieldCount_other": "{count} alan",
@@ -86,7 +85,7 @@ export const collections = Object.freeze({
 
   "collections.emptySchema": "Schema boş.",
   "collections.requiredField": "zorunlu",
-  "collections.computedField": "hesaplanan",
+  "collections.computedField": "Hesaplanan",
   "collections.selectOption": "— seç —",
   "collections.editorLoading": "Editör yükleniyor…",
   "collections.itemFallback": "öğe",

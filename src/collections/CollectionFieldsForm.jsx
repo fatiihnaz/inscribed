@@ -6,6 +6,11 @@ import { moveItem, removeItem } from "../shared/util/list-ops.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { ImageEditor } from "../editors/fields/ImageEditor.jsx";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "../shared/style/icons.jsx";
+import { inertRef } from "../shared/ui/use-inert.js";
+import {
+  neutralTint as neutral, COLLECTION_ACCENT, FS_XS, FS_SM, FONT_MONO,
+  R_BADGE, R_SM, R_BTN, R_MD, R_PILL,
+} from "../shared/style/tokens.js";
 
 // Lazy so the heavy TipTap dep stays out of the main bundle: a consumer using
 // only page-side pieces shouldn't pay ~50KB for an editor they never open. A
@@ -462,7 +467,7 @@ function ObjectArrayEditor({ field, value, onChange, disabled }) {
                     transition: "grid-template-rows 240ms cubic-bezier(0.32, 0.72, 0.18, 1)",
                   }}
                 >
-                  <div style={objectArrayBodyClipStyle} aria-hidden={!isOpen}>
+                  <div ref={inertRef(!isOpen)} style={objectArrayBodyClipStyle} aria-hidden={!isOpen}>
                     <div style={objectArrayBodyStyle}>
                       <CollectionFieldsForm
                         fields={itemFields}
@@ -851,42 +856,38 @@ function fromDatetimeLocal(local) {
 
 // ---- Styles ---------------------------------------------------------------
 
-const labelStyle = { display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "inherit" };
+const labelStyle = { display: "flex", flexDirection: "column", gap: 6, fontSize: FS_SM, color: "inherit" };
 const labelRowStyle = { display: "inline-flex", alignItems: "baseline", gap: 6 };
 const labelTextStyle = {
-  fontSize: 11,
-  fontWeight: 600,
-  letterSpacing: "0.01em",
-  textTransform: "uppercase",
+  fontSize: FS_XS,
+  fontWeight: 500,
+  letterSpacing: "-0.005em",
   opacity: 0.65,
 };
 const requiredMarkStyle = {
-  // Themeable `--ins-collection` (stock purple fallback) so a rebrand flows
-  // through, while the form's neutral chrome stays portable.
-  color: "var(--ins-collection, rgb(220, 195, 225))",
-  fontSize: 11,
+  color: COLLECTION_ACCENT,
+  fontSize: FS_XS,
   fontWeight: 700,
   lineHeight: 1,
 };
 const readonlyTagStyle = {
-  fontSize: 9,
+  fontSize: 10,
   fontWeight: 600,
-  letterSpacing: "0.05em",
-  textTransform: "uppercase",
-  padding: "1px 6px",
-  borderRadius: 3,
-  background: "rgba(127,127,127,0.10)",
+  letterSpacing: "-0.005em",
+  padding: "2px 6px",
+  borderRadius: R_BADGE,
+  background: neutral(10),
   opacity: 0.6,
 };
-const helpStyle = { color: "currentColor", opacity: 0.5, fontSize: 11, lineHeight: 1.45 };
+const helpStyle = { color: "currentColor", opacity: 0.5, fontSize: FS_XS, lineHeight: 1.45 };
 const inputStyle = {
   padding: "8px 10px",
-  border: "1px solid rgba(127,127,127,0.22)",
-  borderRadius: 6,
-  fontSize: 12,
+  border: `1px solid ${neutral(22)}`,
+  borderRadius: R_SM,
+  fontSize: FS_SM,
   lineHeight: 1.4,
   fontFamily: "inherit",
-  background: "rgba(127,127,127,0.04)",
+  background: neutral(4),
   color: "inherit",
   outline: "none",
 };
@@ -894,7 +895,7 @@ const checkboxLabelStyle = {
   display: "inline-flex",
   alignItems: "center",
   gap: 8,
-  fontSize: 12,
+  fontSize: FS_SM,
   color: "inherit",
   padding: "2px 0",
 };
@@ -912,12 +913,12 @@ const switchTrackStyle = {
   flexShrink: 0,
   width: 32,
   height: 18,
-  borderRadius: 9,
-  background: "rgba(127,127,127,0.25)",
+  borderRadius: R_PILL,
+  background: neutral(25),
   transition: "background 160ms ease",
 };
 const switchTrackCheckedStyle = {
-  background: "color-mix(in srgb, var(--ins-collection, rgb(220,195,225)) 80%, transparent)",
+  background: `color-mix(in srgb, ${COLLECTION_ACCENT} 80%, transparent)`,
 };
 const switchThumbStyle = {
   position: "absolute",
@@ -934,7 +935,7 @@ const switchThumbCheckedStyle = {
   left: 16,
 };
 const switchHiddenInputStyle = { position: "absolute", opacity: 0, width: 0, height: 0 };
-const emptyHintStyle = { color: "currentColor", opacity: 0.6, fontSize: 12 };
+const emptyHintStyle = { color: "currentColor", opacity: 0.6, fontSize: FS_SM };
 
 const stringArrayShellStyle = { display: "flex", flexDirection: "column", gap: 8 };
 const stringArrayListStyle = { display: "flex", flexWrap: "wrap", gap: 6 };
@@ -943,10 +944,10 @@ const stringArrayChipStyle = {
   alignItems: "center",
   gap: 4,
   padding: "3px 5px 3px 10px",
-  borderRadius: 6,
-  border: "1px solid rgba(127,127,127,0.25)",
-  background: "rgba(127,127,127,0.08)",
-  fontSize: 12,
+  borderRadius: R_SM,
+  border: `1px solid ${neutral(25)}`,
+  background: neutral(8),
+  fontSize: FS_SM,
   lineHeight: 1.4,
   marginTop: -1,
 };
@@ -962,28 +963,28 @@ const stringArrayRemoveStyle = {
   fontFamily: "inherit",
 };
 const stringArrayAddRowStyle = { display: "flex", gap: 6 };
-const stringArrayInputStyle = { ...inputStyle, flex: 1, fontSize: 12 };
+const stringArrayInputStyle = { ...inputStyle, flex: 1, fontSize: FS_SM };
 const stringArrayAddBtnStyle = {
   display: "inline-flex",
   alignItems: "center",
   gap: 5,
   padding: "6px 12px",
-  border: "1px solid rgba(127,127,127,0.25)",
-  borderRadius: 6,
-  background: "rgba(127,127,127,0.08)",
+  border: `1px solid ${neutral(25)}`,
+  borderRadius: R_SM,
+  background: neutral(8),
   color: "inherit",
-  fontSize: 12,
+  fontSize: FS_SM,
   cursor: "pointer",
   fontFamily: "inherit",
   whiteSpace: "nowrap",
 };
 
 const listEmptyStyle = {
-  fontSize: 12,
+  fontSize: FS_SM,
   opacity: 0.5,
   padding: "9px 10px",
-  border: "1px dashed rgba(127,127,127,0.25)",
-  borderRadius: 7,
+  border: `1px dashed ${neutral(25)}`,
+  borderRadius: R_BTN,
   textAlign: "center",
 };
 
@@ -993,15 +994,15 @@ const objectArrayListStyle = { display: "flex", flexDirection: "column", gap: 6 
 const objectArrayItemStyle = {
   borderWidth: 1,
   borderStyle: "solid",
-  borderColor: "rgba(127,127,127,0.32)",
-  borderRadius: 8,
-  background: "rgba(127,127,127,0.03)",
+  borderColor: neutral(32),
+  borderRadius: R_MD,
+  background: neutral(3),
   overflow: "hidden",
   transition: "background-color 140ms ease, border-color 140ms ease",
 };
 const objectArrayItemHoverStyle = {
-  background: "rgba(127,127,127,0.06)",
-  borderColor: "rgba(127,127,127,0.5)",
+  background: neutral(6),
+  borderColor: neutral(50),
 };
 const objectArrayHeaderStyle = {
   display: "flex",
@@ -1023,17 +1024,17 @@ const objectArrayIndexStyle = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  borderRadius: 6,
-  fontSize: 11,
+  borderRadius: R_SM,
+  fontSize: FS_XS,
   fontWeight: 600,
-  fontFamily: "ui-monospace, 'SF Mono', monospace",
-  background: "rgba(127,127,127,0.12)",
+  fontFamily: FONT_MONO,
+  background: neutral(12),
   opacity: 0.85,
 };
 const objectArraySummaryStyle = {
   flex: 1,
   minWidth: 0,
-  fontSize: 12,
+  fontSize: FS_SM,
   fontWeight: 450,
   marginTop: -1,
   whiteSpace: "nowrap",
@@ -1053,7 +1054,7 @@ const rowControlStyle = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  borderRadius: 6,
+  borderRadius: R_SM,
   color: "inherit",
   opacity: 0.55,
   cursor: "pointer",
@@ -1071,7 +1072,7 @@ const objectArrayChevronStyle = {
 const objectArrayBodyClipStyle = { overflow: "hidden", minHeight: 0 };
 const objectArrayBodyStyle = {
   padding: "10px 12px 12px",
-  borderTop: "1px solid rgba(127,127,127,0.18)",
+  borderTop: `1px solid ${neutral(18)}`,
 };
 const objectArrayAddBtnStyle = {
   display: "flex",
@@ -1080,11 +1081,11 @@ const objectArrayAddBtnStyle = {
   gap: 6,
   width: "100%",
   padding: "9px 12px",
-  border: "1px dashed rgba(127,127,127,0.4)",
-  borderRadius: 7,
+  border: `1px dashed ${neutral(40)}`,
+  borderRadius: R_BTN,
   background: "transparent",
   color: "inherit",
-  fontSize: 12,
+  fontSize: FS_SM,
   fontWeight: 500,
   cursor: "pointer",
   fontFamily: "inherit",

@@ -12,37 +12,38 @@
 
 import { EditorContent } from "@tiptap/react";
 
+import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { useRichTextEditor } from "./use-rich-text-editor.js";
 import { RichTextToolbar } from "./RichTextToolbar.jsx";
 import { labelStyle, labelTextStyle } from "../fields/styles.js";
-import { ACCENT, FS_MD, R_MD } from "../../shared/style/tokens.js";
+import { ACCENT, FS_MD, R_MD, neutralTint } from "../../shared/style/tokens.js";
 
-// Theme-portable palette: the editor renders on the dark drawer AND on a light
-// host page (CollectionComposer), so text inherits (`currentColor`) and
-// surfaces/borders use mid-gray alphas that read on any background. Only the
-// accent stays themeable.
+// The editor renders on the dark drawer AND on a light host page
+// (CollectionComposer), so text inherits and surfaces mix from the neutral
+// base rather than the white-alpha ramps. Only the accent stays themeable.
 const TEXT_PRIMARY  = "currentColor";
 const TEXT          = "color-mix(in srgb, currentColor 78%, transparent)";
-const SURFACE       = "rgba(127,127,127,0.05)";
-const SURFACE_1     = "rgba(127,127,127,0.03)";
-const SURFACE_3     = "rgba(127,127,127,0.16)";
-const BORDER        = "rgba(127,127,127,0.24)";
-const BORDER_FOCUS  = "rgba(127,127,127,0.5)";
+const SURFACE       = neutralTint(5);
+const SURFACE_1     = neutralTint(3);
+const SURFACE_3     = neutralTint(16);
+const BORDER        = neutralTint(24);
+const BORDER_FOCUS  = neutralTint(50);
 
 /**
  * @param {Object} props
  * @param {string} props.value
  * @param {(value: string) => void} props.onChange
  * @param {boolean} [props.disabled]
- * @param {boolean} [props.hideLabel]  Drop the built-in "Zengin Metin" caption
- *   when a parent (e.g. `ListEditor`) already labels the field.
+ * @param {boolean} [props.hideLabel]  Drop the built-in caption when a parent
+ *   (e.g. `ListEditor`) already labels the field.
  */
 export function RichTextEditor({ value, onChange, disabled, hideLabel }) {
+  const t = useCmsStrings();
   const editor = useRichTextEditor({ value, onChange, disabled });
 
   return (
     <label style={labelStyle}>
-      {hideLabel ? null : <span style={labelTextStyle}>Zengin Metin</span>}
+      {hideLabel ? null : <span style={labelTextStyle}>{t("editors.richText.label")}</span>}
       <style>{rteContentCss}</style>
       <div className="inscribed-rte-shell" style={shellStyle}>
         <RichTextToolbar

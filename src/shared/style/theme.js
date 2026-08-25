@@ -32,6 +32,7 @@ const THEME_VARS = {
   bg:               "--ins-bg",
   surface:          "--ins-surface",
   text:             "--ins-text",
+  neutral:          "--ins-neutral",
   // Shape + type.
   radius:           "--ins-radius",
   fontSans:         "--ins-font-sans",
@@ -49,6 +50,7 @@ const PX_KEYS = new Set(["radius"]);
  * @property {string} [bg]                Warm-dark panel base (default `#1c1815`); raised/sunken shades derive from it.
  * @property {string} [surface]           Elevation-overlay base (default `#ffffff`); surface/border alphas mix from it.
  * @property {string} [text]              Foreground base (default `#ffffff`); the text ramp mixes from it.
+ * @property {string} [neutral]           Mid-grey base (default `rgb(127,127,127)`) for the schema-driven collection form, which renders on the dark drawer and on a light page alike.
  * @property {number|string} [radius]     Corner radius for cards/panels. Number is treated as `px` (default `10`).
  * @property {string} [fontSans]          Sans font stack for UI text.
  * @property {string} [fontMono]          Mono font stack for labels/metadata.

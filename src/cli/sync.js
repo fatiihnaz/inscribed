@@ -25,7 +25,10 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { syncAll } from "../server/get-content.js";
+// Straight from the sync module, not through `server/get-content.js`: that file
+// reaches `next/cache`, which resolves inside a Next build but not under the
+// plain Node this CLI runs on.
+import { syncAll } from "../server/sync-manifest.js";
 import { discoverManifests } from "../server/discover.js";
 
 const args = parseArgs(process.argv.slice(2));

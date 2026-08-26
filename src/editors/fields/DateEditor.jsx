@@ -5,7 +5,7 @@
  */
 
 import { FieldShell } from "./FieldShell.jsx";
-import { fieldVariant } from "../styles.js";
+import { DatePicker } from "./DatePicker.jsx";
 import { ACCENT, TEXT_MUTED } from "../../shared/style/tokens.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 
@@ -28,18 +28,10 @@ export function DateEditor({
   value, onChange, disabled, countdown = true, label, help, hideLabel, variant,
 }) {
   const t = useCmsStrings();
-  const v = fieldVariant(variant);
   const remaining = countdown && value ? calcRemaining(value) : null;
 
   const input = (
-    <input
-      type="datetime-local"
-      value={isoToLocal(value)}
-      onChange={(e) => onChange(localToIso(e.target.value))}
-      className="inscribed-field"
-      disabled={disabled}
-      style={{ ...v.field, colorScheme: v.colorScheme, ...(disabled ? v.disabled : null) }}
-    />
+    <DatePicker value={value} onChange={onChange} disabled={disabled} variant={variant} />
   );
 
   const field = hideLabel ? input : (
@@ -79,22 +71,6 @@ export function DateEditor({
       </div>
     </div>
   );
-}
-
-/** @param {string|null|undefined} iso */
-function isoToLocal(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (/** @type {number} */ n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/** @param {string} local */
-function localToIso(local) {
-  if (!local) return "";
-  const d = new Date(local);
-  return Number.isNaN(d.getTime()) ? "" : d.toISOString();
 }
 
 /** @param {string} iso */

@@ -33,6 +33,7 @@ export const editors = Object.freeze({
   "editors.richText.label": "Rich text",
   "editors.link.label": "Label",
   "editors.link.url": "URL",
+  "editors.url.suspect": "This does not look like a link. It will still be saved.",
 
   // List block editor.
   "editors.list.noSchema": "No {schema} found for this list. Is {component} rendered on the page?",
@@ -67,8 +68,35 @@ export const editors = Object.freeze({
 
   // Date block editor, including the countdown's unit captions.
   "editors.date.label": "Date and time",
+  // Month and weekday names come from Intl; only the surrounding controls are
+  // catalog strings.
+  "editors.date.pick": "Pick a date",
+  "editors.date.prevMonth": "Previous month",
+  "editors.date.nextMonth": "Next month",
+  "editors.date.prevYear": "Previous year",
+  "editors.date.nextYear": "Next year",
+  "editors.date.hour": "Hour",
+  "editors.date.minute": "Minute",
+  "editors.date.today": "Today",
+  "editors.date.clear": "Clear",
   "editors.date.past": "This date has passed.",
   "editors.date.days": "days",
   "editors.date.hours": "hours",
   "editors.date.minutes": "mins",
+
+  // Picking from a list: the same box serves a fixed vocabulary and the records
+  // of another collection.
+  "editors.combobox.choose": "Choose an option",
+  "editors.combobox.add": "Add",
+  "editors.combobox.search": "Search…",
+  "editors.combobox.loading": "Searching…",
+  "editors.combobox.empty": "Nothing matches",
+  // The descriptive one names the trigger's icon button, where nothing else
+  // says what it clears; the short one is the panel footer's visible label.
+  "editors.combobox.clear": "Clear the selection",
+  "editors.combobox.clearAction": "Clear",
+  "editors.combobox.prevPage": "Previous page",
+  "editors.combobox.nextPage": "Next page",
+  "editors.combobox.noSource": "This field has no choice source. Is it declared on the page?",
+  "editors.combobox.create": "Add \"{text}\"",
 });

@@ -32,3 +32,16 @@ export function useCmsStrings() {
     [adminLocale, adminStrings],
   );
 }
+
+/**
+ * The panel's own language, for the things `Intl` formats rather than the
+ * catalog: month names, weekday names, dates, numbers. Lives beside
+ * `useCmsStrings` so an editor that needs wording and formatting reaches for
+ * one module rather than the raw context.
+ *
+ * @returns {string | undefined}  Undefined falls back to the runtime's locale.
+ */
+export function useCmsLocale() {
+  const { config } = useCmsContext();
+  return config.adminLocale || undefined;
+}

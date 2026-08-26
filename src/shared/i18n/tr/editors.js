@@ -29,6 +29,7 @@ export const editors = Object.freeze({
   "editors.richText.label": "Zengin metin",
   "editors.link.label": "Etiket",
   "editors.link.url": "URL",
+  "editors.url.suspect": "Bu adres bir bağlantıya benzemiyor. Yine de kaydedilir.",
 
   "editors.list.noSchema": "Bu liste için {schema} bulunamadı. Sayfada {component} render ediliyor mu?",
   "editors.list.empty": "Liste boş. \"+ Öğe ekle\" butonuyla başlayabilirsin.",
@@ -59,8 +60,33 @@ export const editors = Object.freeze({
   "editors.richText.redoTitle": "İleri al (Ctrl+Shift+Z)",
 
   "editors.date.label": "Tarih ve Saat",
+  // Takvimdeki ay ve gün adları Intl'den geliyor, burada sadece çevresindeki
+  // kontroller var.
+  "editors.date.pick": "Tarih seçin",
+  "editors.date.prevMonth": "Önceki ay",
+  "editors.date.nextMonth": "Sonraki ay",
+  "editors.date.prevYear": "Önceki yıl",
+  "editors.date.nextYear": "Sonraki yıl",
+  "editors.date.hour": "Saat",
+  "editors.date.minute": "Dakika",
+  "editors.date.today": "Bugün",
+  "editors.date.clear": "Temizle",
   "editors.date.past": "Bu tarih geçmiş.",
   "editors.date.days": "gün",
   "editors.date.hours": "saat",
   "editors.date.minutes": "dk",
+
+  // Listeden seçme: sabit sözlükte de, başka bir koleksiyonun kayıtlarında da
+  // aynı kutu kullanılıyor.
+  "editors.combobox.choose": "Bir seçenek seçin",
+  "editors.combobox.add": "Ekle",
+  "editors.combobox.search": "Ara…",
+  "editors.combobox.loading": "Aranıyor…",
+  "editors.combobox.empty": "Eşleşen bir şey yok",
+  "editors.combobox.clear": "Seçimi kaldır",
+  "editors.combobox.clearAction": "Temizle",
+  "editors.combobox.prevPage": "Önceki sayfa",
+  "editors.combobox.nextPage": "Sonraki sayfa",
+  "editors.combobox.noSource": "Bu alanın seçenek kaynağı yok. Sayfada bildirildi mi?",
+  "editors.combobox.create": "\"{text}\" olarak ekle",
 });

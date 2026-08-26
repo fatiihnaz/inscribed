@@ -26,9 +26,12 @@ export function NumberEditor({ value, onChange, disabled, label, help, variant }
         type="number"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+        onWheel={(e) => {
+          if (document.activeElement === e.currentTarget) e.currentTarget.blur();
+        }}
         disabled={disabled}
         className="inscribed-field"
-        style={{ ...v.field, ...(disabled ? v.disabled : null) }}
+        style={{ ...v.field, ...(disabled ? v.disabled : null), fontVariantNumeric: "tabular-nums" }}
       />
     </FieldShell>
   );

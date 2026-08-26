@@ -42,6 +42,7 @@ import { useCmsStrings } from "./hooks/use-cms-strings.js";
 /**
  * @import { CmsConfig } from "../shared/config.js"
  * @import { BlockResponse, ItemSchema } from "../shared/contracts/schemas.js"
+ * @import { ChoiceSourceEntry } from "../shared/state/cms-context.js"
  */
 
 const AdminDrawer = dynamic(
@@ -317,6 +318,7 @@ export function CmsProvider({
   const registryStore = useConstant(() =>
     createStore(/** @type {import("../shared/state/cms-context.js").CmsRegistryState} */ ({
       itemSchemas: new Map(),
+      choiceSources: new Map(),
       editorVisibility: new Map(),
     })),
   );
@@ -393,6 +395,35 @@ export function CmsProvider({
         const itemSchemas = new Map(s.itemSchemas);
         itemSchemas.delete(blockPath);
         return { ...s, itemSchemas };
+      });
+    },
+    [registryStore],
+  );
+
+  // Where a Select or StringArray block gets its choices. Same shape as the row
+  // schema above and for the same reason: the list lives with the page that
+  // declares the block, and the drawer has no other way to learn it.
+  const registerChoiceSource = useCallback(
+    /** @param {string} blockPath @param {ChoiceSourceEntry} entry */
+    (blockPath, entry) => {
+      registryStore.set((s) => {
+        if (s.choiceSources.get(blockPath) === entry) return s;
+        const choiceSources = new Map(s.choiceSources);
+        choiceSources.set(blockPath, entry);
+        return { ...s, choiceSources };
+      });
+    },
+    [registryStore],
+  );
+
+  const unregisterChoiceSource = useCallback(
+    /** @param {string} blockPath */
+    (blockPath) => {
+      registryStore.set((s) => {
+        if (!s.choiceSources.has(blockPath)) return s;
+        const choiceSources = new Map(s.choiceSources);
+        choiceSources.delete(blockPath);
+        return { ...s, choiceSources };
       });
     },
     [registryStore],
@@ -1126,6 +1157,8 @@ export function CmsProvider({
       registryStore,
       registerItemSchema,
       unregisterItemSchema,
+      registerChoiceSource,
+      unregisterChoiceSource,
       registerEditorVisibility,
       unregisterEditorVisibility,
 
@@ -1166,6 +1199,8 @@ export function CmsProvider({
       registryStore,
       registerItemSchema,
       unregisterItemSchema,
+      registerChoiceSource,
+      unregisterChoiceSource,
       registerEditorVisibility,
       unregisterEditorVisibility,
       stableOnAfterSave,

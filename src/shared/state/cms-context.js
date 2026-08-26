@@ -18,7 +18,7 @@ import { createContext, useContext } from "react";
 
 /**
  * @import { CmsConfig } from "../config.js"
- * @import { BlockResponse, ItemSchema } from "../contracts/schemas.js"
+ * @import { BlockResponse, ItemSchema, ChoiceSource } from "../contracts/schemas.js"
  * @import { Store } from "./store.js"
  */
 
@@ -55,6 +55,16 @@ import { createContext, useContext } from "react";
  */
 
 /**
+ * A Select or StringArray block's choices, as the page declared them.
+ * `allowCustom` travels with the source because it is a property of the
+ * vocabulary (open or closed), not of the editor drawing it.
+ *
+ * @typedef {Object} ChoiceSourceEntry
+ * @property {ChoiceSource} source
+ * @property {boolean} [allowCustom]
+ */
+
+/**
  * Runtime declarations the page makes and the drawer consumes. Registered from
  * child effects, which is why this is a store: a `setState` during another
  * component's commit would warn, and the drawer is the only reader anyway.
@@ -63,6 +73,11 @@ import { createContext, useContext } from "react";
  * @property {Map<string, ItemSchema>} itemSchemas
  *   Populated by `<EditableList>` on mount so the drawer knows how to render
  *   each List editor. Key is the list's blockPath; unregistered on unmount.
+ * @property {Map<string, ChoiceSourceEntry>} choiceSources
+ *   The same idea for the two types that offer choices: populated from
+ *   `useCmsBlock(path, { source })` metadata, because a Select or StringArray
+ *   block has no region on the page to declare it. Without an entry the drawer
+ *   says the field has no source rather than offering an empty list.
  * @property {Map<string, "hidden"|"readonly">} editorVisibility
  *   Populated by regions whose `visible` / `editable` prop overrides the
  *   default admin gate. These props are runtime-only (not in the manifest), so
@@ -136,6 +151,8 @@ import { createContext, useContext } from "react";
  * @property {Store<CmsRegistryState>} registryStore
  * @property {(blockPath: string, schema: ItemSchema) => void} registerItemSchema
  * @property {(blockPath: string) => void} unregisterItemSchema
+ * @property {(blockPath: string, entry: ChoiceSourceEntry) => void} registerChoiceSource
+ * @property {(blockPath: string) => void} unregisterChoiceSource
  * @property {(blockPath: string, mode: "hidden"|"readonly") => void} registerEditorVisibility
  * @property {(blockPath: string) => void} unregisterEditorVisibility
  *

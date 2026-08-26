@@ -42,6 +42,17 @@
  */
 
 /**
+ * The types a page actually declares. `Collection` is the whole of the
+ * difference and it is not one of them: a Collection row is never written down
+ * by an author and never emitted by discovery. `<CollectionRegion>` /
+ * `<CollectionItem>` register a binding into a runtime registry on mount and the
+ * drawer synthesises the row from it, so `blockType: "Collection"` in a region
+ * prop or in `useCmsBlock` metadata describes something the SDK will not build.
+ *
+ * @typedef {Exclude<BlockType, "Collection">} DeclarableBlockType
+ */
+
+/**
  * Per-field metadata for a List's item shape: a leaf block type plus the seed
  * value for new items. Nested lists aren't supported.
  *
@@ -419,7 +430,7 @@
  *
  * @typedef {Object} ManifestBlockItem
  * @property {string} blockPath
- * @property {BlockType} blockType
+ * @property {DeclarableBlockType} blockType
  * @property {*} defaultValue
  * @property {number} sortOrder
  * @property {ItemSchema} [itemSchema]   List blocks only - shape of one item.

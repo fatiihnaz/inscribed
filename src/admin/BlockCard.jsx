@@ -104,6 +104,20 @@ function useBlockDraft(block) {
 }
 
 /**
+ * The choices a Select or StringArray block was declared with, or null. These
+ * two types draw nothing on the page, so the declaration arrives from
+ * `useCmsBlock` metadata rather than from a mounted region; a block whose
+ * declaring component is not on this route has none, and the editor says so
+ * instead of offering an empty list.
+ *
+ * @param {string} blockPath
+ */
+function useChoiceEntry(blockPath) {
+  const { registryStore } = useCmsContext();
+  return useStoreSelector(registryStore, (s) => s.choiceSources.get(blockPath) ?? null);
+}
+
+/**
  * @param {{
  *   block: BlockResponse,
  *   isActive: boolean,
@@ -155,6 +169,7 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
   const effective = resolveBlockValue(block);
   const value = resolveBlockValue(block, hasDraft, draft);
   const isDirty = !readOnly && isBlockDirty(block, hasDraft, draft);
+  const choices = useChoiceEntry(block.blockPath);
 
   useEffect(() => {
     if (isActive && ref.current) {
@@ -217,6 +232,8 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
             value={value}
             onChange={onChange}
             disabled={readOnly}
+            source={choices?.source ?? null}
+            allowCustom={choices?.allowCustom}
             hideLabel
           />
           <TranslationPrompt block={block} value={value} readOnly={readOnly} />
@@ -286,6 +303,7 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
   // dot/reset/rail and let it read as a passive, locked view.
   const isDirty = !readOnly && isBlockDirty(block, hasDraft, draft);
 
+  const choices = useChoiceEntry(block.blockPath);
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
@@ -347,7 +365,7 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
             onKeepMine={onKeepMine}
           />
           <div style={editorSlotStyle}>
-            {renderEditor(block, value, onChange, itemSchema, readOnly, t)}
+            {renderEditor(block, value, onChange, itemSchema, readOnly, t, choices)}
             <TranslationPrompt block={block} value={value} readOnly={readOnly} />
           </div>
         </div>
@@ -413,12 +431,20 @@ function resetBlock(block, setDraft) {
  * @param {(value: *) => void} onChange
  * @param {ItemSchema | null} itemSchema
  * @param {boolean} [readOnly]
+ * @param {import("../shared/state/cms-context.js").ChoiceSourceEntry | null} [choices]
  */
-function renderEditor(block, value, onChange, itemSchema, readOnly, t) {
+function renderEditor(block, value, onChange, itemSchema, readOnly, t, choices) {
   if (block.blockType === "ObjectArray") {
     return <ListEditor blockPath={block.blockPath} value={value} onChange={onChange} itemSchema={itemSchema} disabled={readOnly} />;
   }
-  const primitive = FieldEditor({ blockType: block.blockType, value, onChange, disabled: readOnly });
+  const primitive = FieldEditor({
+    blockType: block.blockType,
+    value,
+    onChange,
+    disabled: readOnly,
+    source: choices?.source ?? null,
+    allowCustom: choices?.allowCustom,
+  });
   if (primitive) return primitive;
   return (
     <div style={{ color: TEXT_MUTED, fontSize: 12 }}>

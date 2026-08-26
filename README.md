@@ -267,8 +267,29 @@ static discovery step turns those declarations into a backend manifest.
 Because discovery reads the JSX statically, `blockType` and `defaultValue` must
 be **plain literals**, the scanner can't evaluate variables or imports.
 
-You can also register a read-only block that has no `<EditableRegion>` on the
-page by passing discovery metadata to `useCmsBlock(path, { blockType, defaultValue })`.
+You can also register a block that has no `<EditableRegion>` on the page by
+passing discovery metadata to `useCmsBlock(path, { blockType, defaultValue })`.
+This is how the types that draw nothing get declared.
+
+`Select` and `StringArray` take one more key, because a vocabulary is the page's
+business rather than the backend's: `source` never enters the manifest, it is
+registered at runtime for the drawer to read.
+
+```jsx
+const { value: tags } = useCmsBlock("post.tags", {
+  blockType: "StringArray",
+  defaultValue: [],
+  source: { kind: "static", values: ["news", "release", "guide"] },
+  allowCustom: true,   // off by default, which makes the source a closed list
+});
+```
+
+`{ kind: "collection", collection: "authors" }` sources the list from another
+collection's records instead, searched as you type; the stored value is the
+target record's slug, which is how a reference between the two is expressed.
+Declare it on a component that is mounted on the route you want to edit it
+from: with nothing registered the drawer says the field has no source rather
+than offering an empty list.
 
 ### Slugs
 
@@ -383,8 +404,18 @@ A **block** is a single editable value addressed by a dot-notation `blockPath`
 | `Image`      | `{ src, alt }` | on-image replace / drop-zone + alt |
 | `Link`       | `{ href, label }` | URL + label |
 | `Date`       | ISO 8601 `string` | date picker / countdown |
-| `List`       | array of objects shaped by `itemSchema` | repeatable items |
-| `Collection` | `{ collection, slug? }` binding (read-only) | n/a (see [Collections](#collections)) |
+| `Number`     | `number \| null` | number input |
+| `Bool`       | `boolean` | switch |
+| `Url`        | `string` | URL input |
+| `Select`     | `string` | picker over a `source` |
+| `StringArray` | `string[]` | tag input over a `source` |
+| `ObjectArray` | array of objects shaped by `itemSchema` | repeatable items |
+
+**Not every type draws itself.** `Number`, `Bool`, `Select`, `StringArray` and
+`Date` are data: the drawer edits them, and you read them with `useCmsBlock` and
+decide how they look. A boolean has no visual form, a `Select` usually stores a
+key rather than display text, and how a date reads is a language and design
+choice. `<EditableRegion>` renders the rest.
 
 `LongText` **keeps its line breaks**. The region renders with
 `white-space: pre-wrap`, and Enter in the in-place editor inserts a real newline

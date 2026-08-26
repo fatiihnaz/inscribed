@@ -43,10 +43,11 @@ const RichTextEditor = lazy(() =>
  *   source?: ChoiceSource | null,
  *   allowCustom?: boolean,
  * }} props
- *   `source` is only read by `Select` and `StringArray`. A page block carries it the
- *   way a `ObjectArray` carries its row schema: declared on the region and picked up
- *   from the runtime registry, so a block whose region is not mounted has none
- *   and says so rather than offering an empty list.
+ *   `source` is only read by `Select` and `StringArray`. A page block carries it
+ *   the way an `ObjectArray` carries its row schema: declared by the page (in
+ *   `useCmsBlock` metadata, since neither type has a region to hang it on) and
+ *   picked up from the runtime registry, so a block whose declaring component is
+ *   not mounted has none and says so rather than offering an empty list.
  */
 export function FieldEditor({ blockType, value, onChange, disabled, hideLabel, source, allowCustom }) {
   switch (blockType) {

@@ -52,7 +52,7 @@ import path from "node:path";
 import { parseSync } from "oxc-parser";
 
 /**
- * @import { SyncManifestRequest, ManifestBlockItem, BlockType } from "../lib/schemas.js"
+ * @import { SyncManifestRequest, ManifestBlockItem, BlockType, DeclarableBlockType } from "../shared/contracts/schemas.js"
  */
 
 const SOURCE_EXTENSIONS = [".jsx", ".js", ".tsx", ".ts"];
@@ -75,9 +75,9 @@ const UNRESOLVED = Symbol("unresolved");
 /**
  * @typedef {Object} DiscoveredRegion
  * @property {string} blockPath
- * @property {BlockType} blockType
+ * @property {DeclarableBlockType} blockType
  * @property {*} defaultValue
- * @property {import("../lib/schemas.js").ItemSchema} [itemSchema]  List blocks only.
+ * @property {import("../shared/contracts/schemas.js").ItemSchema} [itemSchema]  List blocks only.
  * @property {string} [scope]
  *   Discovery scope marker. When `"global"`, the region is written to the
  *   `globalSlug` manifest entry instead of any page slug, so a header/footer

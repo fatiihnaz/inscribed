@@ -41,7 +41,6 @@ export function LinkEditor({ value, onChange, disabled, label, help, variant }) 
   /** @param {Partial<LinkValue>} p */
   const patch = (p) => onChange({ href, label: text, ...p });
 
-  const inputStyle = { ...v.field, ...(disabled ? v.disabled : null) };
   const suspect = href.trim().length > 0 && !looksLikeAddress(href);
 
   return (
@@ -52,9 +51,8 @@ export function LinkEditor({ value, onChange, disabled, label, help, variant }) 
             type="text"
             value={text}
             onChange={(e) => patch({ label: e.target.value })}
-            className="inscribed-field"
+            className={`inscribed-field ${v.className}`.trim()}
             disabled={disabled}
-            style={inputStyle}
           />
         </FieldShell>
 
@@ -65,9 +63,8 @@ export function LinkEditor({ value, onChange, disabled, label, help, variant }) 
             onChange={(e) => patch({ href: e.target.value })}
             placeholder="https://…"
             spellCheck={false}
-            className="inscribed-field"
+            className={`inscribed-field ${v.className}`.trim()}
             disabled={disabled}
-            style={inputStyle}
           />
           {suspect ? <span style={warnStyle}>{t("editors.url.suspect")}</span> : null}
         </FieldShell>

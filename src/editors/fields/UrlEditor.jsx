@@ -41,8 +41,7 @@ export function UrlEditor({ value, onChange, disabled, label, help, variant }) {
         disabled={disabled}
         placeholder="https://…"
         spellCheck={false}
-        className="inscribed-field"
-        style={{ ...v.field, ...(disabled ? v.disabled : null) }}
+        className={`inscribed-field ${v.className}`.trim()}
       />
       {suspect ? (
         <span style={warnStyle}>{t("editors.url.suspect")}</span>

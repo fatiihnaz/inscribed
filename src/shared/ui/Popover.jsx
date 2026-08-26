@@ -24,6 +24,17 @@ import { panelVariants } from "./panel-motion.js";
 // Above the drawer, which already sits near the top of the stack.
 const Z = 2147483000;
 
+// The context a portalled panel has to be told about, since it cannot inherit
+// it. Kept as a list rather than copying every property: only these carry
+// meaning outside the subtree that set them.
+const CARRIED_VARS = ["--ins-f-accent", "--ins-f-hover", "--ins-f-line"];
+
+/** @param {Record<string, string>} a @param {Record<string, string>} b */
+function sameVars(a, b) {
+  const ka = Object.keys(a);
+  return ka.length === Object.keys(b).length && ka.every((k) => a[k] === b[k]);
+}
+
 /** @param {*} a @param {*} b */
 function samePos(a, b) {
   return a.top === b.top && a.left === b.left && a.width === b.width && a.flipped === b.flipped;
@@ -44,6 +55,25 @@ function samePos(a, b) {
 export function Popover({ anchorRef, open, onClose, matchWidth, maxHeight = 300, children }) {
   const panelRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const [pos, setPos] = useState(/** @type {{top: number, left: number, width: number, flipped: boolean} | null} */ (null));
+  const [inherited, setInherited] = useState(/** @type {Record<string, string>} */ ({}));
+
+  // The panel renders at `document.body`, so it sits outside whatever set the
+  // context it belongs to: a collection form's accent, a neutral region's
+  // palette. Custom properties reach it by being read off the trigger and
+  // re-declared here, which keeps a portalled panel looking like the field it
+  // came out of without every caller threading the context down by hand.
+  useLayoutEffect(() => {
+    const anchor = anchorRef?.current;
+    if (!open || !anchor || typeof getComputedStyle === "undefined") return;
+    const style = getComputedStyle(anchor);
+    /** @type {Record<string, string>} */
+    const next = {};
+    for (const name of CARRIED_VARS) {
+      const value = style.getPropertyValue(name).trim();
+      if (value) next[name] = value;
+    }
+    setInherited((prev) => (sameVars(prev, next) ? prev : next));
+  }, [open, anchorRef]);
 
   // Measured rather than CSS-anchored so the panel can flip above the trigger
   // when the viewport has no room below it.
@@ -141,6 +171,7 @@ export function Popover({ anchorRef, open, onClose, matchWidth, maxHeight = 300,
             maxHeight,
             visibility: pos ? "visible" : "hidden",
             zIndex: Z,
+            ...inherited,
             overflow: "hidden",
             display: "flex",
             flexDirection: "column",

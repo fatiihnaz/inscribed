@@ -1054,17 +1054,6 @@ export const panelCss = `
   }
   .inscribed-logout:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* Form inputs (used by editors + CollectionFieldsForm) */
-  input.inscribed-field, textarea.inscribed-field, select.inscribed-field {
-    transition: box-shadow 140ms ease, background-color 140ms ease;
-  }
-  input.inscribed-field:focus, textarea.inscribed-field:focus, select.inscribed-field:focus {
-    background-color: ${SURFACE_2};
-    box-shadow: inset 0 0 0 1px ${BORDER_FOCUS};
-  }
-  input.inscribed-field::placeholder, textarea.inscribed-field::placeholder {
-    color: ${TEXT_FAINT};
-  }
 
   .inscribed-slug-edit { transition: color 140ms ease; }
   .inscribed-slug-edit:focus-visible { outline: none; }

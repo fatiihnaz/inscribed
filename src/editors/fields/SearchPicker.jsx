@@ -20,10 +20,16 @@ import { AnimatePresence, motion } from "framer-motion";
 
 import { Check, ChevronLeft, ChevronRight, Plus, Search } from "../../shared/style/icons.jsx";
 import { slideVariants, staggerItem } from "../../shared/ui/panel-motion.js";
-import { useInteractive } from "../../shared/ui/use-interactive.js";
-import { ACCENT, DUR_FAST, EASE, FS_MICRO, FS_SM, FS_XS, R_SM } from "../../shared/style/tokens.js";
+import { PanelButton } from "../../shared/ui/PanelButton.jsx";
+import { panelFootStyle } from "../styles.js";
+import { DUR_FAST, EASE, FS_MICRO, FS_SM, FS_XS, R_SM } from "../../shared/style/tokens.js";
 
 export const PER_PAGE = 6;
+
+/** @param {boolean} active @param {boolean|undefined} selected */
+const rowClass = (active, selected) =>
+  `inscribed-picker-row${active ? " is-active" : ""}${selected ? " is-selected" : ""}`;
+
 
 // One row's height, so a short last page does not shrink the box the pages
 // slide through. Without it the list resizes mid-transition and the footer
@@ -104,7 +110,7 @@ export function SearchPicker({
 
   return (
     <>
-      <motion.div variants={staggerItem} style={{ ...searchRowStyle, background: v.hoverBg, borderColor: v.border }}>
+      <motion.div variants={staggerItem} className="inscribed-inset" style={searchRowStyle}>
         <Search size={13} aria-hidden="true" style={{ flexShrink: 0, opacity: 0.4 }} />
         <input
           ref={inputRef}
@@ -123,8 +129,6 @@ export function SearchPicker({
         role="listbox"
         style={{
           ...listStyle,
-          background: v.hoverBg,
-          borderColor: v.border,
           opacity: loading ? 0.6 : 1,
           // Only once there is more than one page: a two-entry vocabulary
           // should not sit in six rows of empty box.
@@ -154,16 +158,13 @@ export function SearchPicker({
                     aria-selected={Boolean(row.selected)}
                     onMouseEnter={() => onActiveChange(index)}
                     onClick={() => onCommit(row)}
-                    style={{
-                      ...rowStyle,
-                      ...(index === active && !row.selected ? { background: v.hoverBg } : null),
-                      ...(row.selected ? v.selected : null),
-                    }}
+                    className={rowClass(index === active, row.selected)}
+                    style={rowStyle}
                   >
-                    {row.create ? <Plus size={12} style={{ flexShrink: 0, color: ACCENT }} /> : null}
+                    {row.create ? <Plus size={12} className="inscribed-accent" style={{ flexShrink: 0 }} /> : null}
                     <span style={rowLabelStyle}>{row.display ?? row.label}</span>
                     {row.hint ? <span style={hintStyle}>{row.hint}</span> : null}
-                    {row.selected ? <Check size={12} style={{ flexShrink: 0, color: ACCENT }} /> : null}
+                    {row.selected ? <Check size={12} className="inscribed-accent" style={{ flexShrink: 0 }} /> : null}
                   </button>
                 );
               })}
@@ -173,74 +174,28 @@ export function SearchPicker({
       </motion.div>
 
       {showFooter ? (
-        <motion.div variants={staggerItem} style={footRowStyle}>
+        <motion.div variants={staggerItem} style={panelFootStyle}>
           {/* Clearing lives here rather than as a row in the list: as a row it
               took a slot from the options, and picking it shortened the list by
               one on the way out. */}
           {onClear && clearActive && clearLabel ? (
-            <TextButton onClick={onClear} hoverBg={v.hoverBg}>{clearLabel}</TextButton>
+            <PanelButton onClick={onClear}>{clearLabel}</PanelButton>
           ) : <span />}
 
           {pageable ? (
             <div style={pagerStyle}>
-              <PagerButton onClick={() => turnTo(page - 1)} disabled={page <= 1} label={prevPageLabel} palette={v}>
+              <PanelButton shape="icon" bordered onClick={() => turnTo(page - 1)} disabled={page <= 1} label={prevPageLabel}>
                 <ChevronLeft size={14} />
-              </PagerButton>
+              </PanelButton>
               <span style={pageCountStyle}>{page} / {totalPages}</span>
-              <PagerButton onClick={() => turnTo(page + 1)} disabled={page >= totalPages} label={nextPageLabel} palette={v}>
+              <PanelButton shape="icon" bordered onClick={() => turnTo(page + 1)} disabled={page >= totalPages} label={nextPageLabel}>
                 <ChevronRight size={14} />
-              </PagerButton>
+              </PanelButton>
             </div>
           ) : null}
         </motion.div>
       ) : null}
     </>
-  );
-}
-
-/** @param {{ onClick: () => void, hoverBg: string, children: React.ReactNode }} props */
-function TextButton({ onClick, hoverBg, children }) {
-  const { hovered, focused, handlers } = useInteractive();
-  const lit = hovered || focused;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      {...handlers}
-      style={{ ...textBtnStyle, background: lit ? hoverBg : "transparent", opacity: lit ? 1 : 0.6 }}
-    >
-      {children}
-    </button>
-  );
-}
-
-/**
- * @param {{
- *   onClick: () => void, disabled: boolean, label: string,
- *   palette: *, children: React.ReactNode,
- * }} props
- */
-function PagerButton({ onClick, disabled, label, palette: v, children }) {
-  const { hovered, focused, handlers } = useInteractive();
-  const lit = (hovered || focused) && !disabled;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      title={label}
-      {...handlers}
-      style={{
-        ...pagerBtnStyle,
-        borderColor: v.border,
-        background: lit ? v.hoverBg : "transparent",
-        opacity: disabled ? 0.35 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -302,41 +257,9 @@ const rowStyle = {
 const rowLabelStyle = { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const noteStyle = { padding: "12px 8px", fontSize: FS_SM, opacity: 0.45, textAlign: "center" };
 const hintStyle = { flexShrink: 0, fontSize: FS_XS, opacity: 0.45 };
-const footRowStyle = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 8,
-  // Holds the row open when neither slot has anything in it, so clearing a
-  // value does not take a strip of panel with it.
-  minHeight: 26,
-};
+
 const pagerStyle = { display: "flex", alignItems: "center", gap: 8 };
-const textBtnStyle = {
-  padding: "5px 9px",
-  border: "none",
-  borderRadius: R_SM - 2,
-  color: "inherit",
-  font: "inherit",
-  fontSize: FS_MICRO,
-  fontWeight: 500,
-  letterSpacing: "0.02em",
-  cursor: "pointer",
-  transition: `background-color ${DUR_FAST} ${EASE}, opacity ${DUR_FAST} ${EASE}`,
-};
-const pagerBtnStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: 26,
-  height: 26,
-  borderRadius: R_SM - 2,
-  borderWidth: 1,
-  borderStyle: "solid",
-  color: "inherit",
-  padding: 0,
-  transition: `background-color ${DUR_FAST} ${EASE}, opacity ${DUR_FAST} ${EASE}`,
-};
+
 const pageCountStyle = {
   fontSize: FS_MICRO,
   letterSpacing: "0.16em",

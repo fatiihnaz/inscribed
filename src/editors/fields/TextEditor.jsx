@@ -47,12 +47,11 @@ export function TextEditor({
     el.style.height = `${el.scrollHeight}px`;
   }, [value, multiline, autoGrow]);
 
-  const base = { ...v.field, ...(disabled ? v.disabled : null) };
 
   const control = multiline ? (
     <textarea
       ref={textareaRef}
-      className="inscribed-field"
+      className={`inscribed-field ${v.className}`.trim()}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
@@ -61,17 +60,16 @@ export function TextEditor({
         // Auto-grow owns the height, so manual resize would just be undone on
         // the next keystroke. The floor is enough to read as a textarea rather
         // than an input, and no more: it grows into its content anyway.
-        ? { ...base, resize: "none", overflow: "hidden", minHeight: 46 }
-        : { ...base, resize: "vertical", minHeight: 72, lineHeight: 1.5 }}
+        ? { resize: "none", overflow: "hidden", minHeight: 46 }
+        : { resize: "vertical", minHeight: 72, lineHeight: 1.5 }}
     />
   ) : (
     <input
       type="text"
-      className="inscribed-field"
+      className={`inscribed-field ${v.className}`.trim()}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      style={base}
     />
   );
 

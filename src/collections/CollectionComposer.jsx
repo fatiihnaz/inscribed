@@ -261,17 +261,9 @@ const successStyle = /** @type {React.CSSProperties} */ ({
   borderRadius: 7,
 });
 
-// Neutral hover/focus: the shared admin CSS isn't on composer-only pages, and
-// its white-alpha focus ring would vanish on light hosts anyway. Two-class
-// specificity so these win when the drawer's stylesheet is also present.
+// Composer-only chrome. The field states themselves are not here: they live in
+// editors/field-css.js, which CmsProvider injects above every surface.
 const composerCss = `
-  .inscribed-composer .inscribed-field {
-    transition: border-color 140ms ease, background-color 140ms ease;
-  }
-  .inscribed-composer .inscribed-field:focus {
-    border-color: rgba(127,127,127,0.55);
-    background: rgba(127,127,127,0.08);
-  }
   .inscribed-composer .inscribed-composer-submit {
     transition: background 140ms ease, border-color 140ms ease;
   }

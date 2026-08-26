@@ -30,8 +30,8 @@ export function NumberEditor({ value, onChange, disabled, label, help, variant }
           if (document.activeElement === e.currentTarget) e.currentTarget.blur();
         }}
         disabled={disabled}
-        className="inscribed-field"
-        style={{ ...v.field, ...(disabled ? v.disabled : null), fontVariantNumeric: "tabular-nums" }}
+        className={`inscribed-field ${v.className}`.trim()}
+        style={{ fontVariantNumeric: "tabular-nums" }}
       />
     </FieldShell>
   );

@@ -6,7 +6,7 @@
 
 import { FieldShell } from "./FieldShell.jsx";
 import { DatePicker } from "./DatePicker.jsx";
-import { ACCENT, TEXT_MUTED } from "../../shared/style/tokens.js";
+import { TEXT_MUTED } from "../../shared/style/tokens.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 
 /**
@@ -45,13 +45,11 @@ export function DateEditor({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {field}
-      <div style={{
+      <div className="inscribed-accent-box" style={{
         display: "flex",
         alignItems: "center",
         gap: 12,
         padding: "8px 10px",
-        background: `color-mix(in srgb, ${ACCENT} 5%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${ACCENT} 10%, transparent)`,
         borderRadius: 8,
       }}>
         {remaining.past ? (
@@ -63,7 +61,7 @@ export function DateEditor({
             { n: remaining.minutes, l: t("editors.date.minutes") },
           ].map(({ n, l }) => (
             <div key={l} style={{ textAlign: "center", minWidth: 32 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: ACCENT, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{n}</div>
+              <div className="inscribed-accent" style={{ fontSize: 15, fontWeight: 600, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{n}</div>
               <div style={{ fontSize: 9, color: TEXT_MUTED, marginTop: 2, letterSpacing: "0.04em" }}>{l}</div>
             </div>
           ))

@@ -20,11 +20,16 @@ import { useCmsStrings, useCmsLocale } from "../../core/hooks/use-cms-strings.js
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TypeDate } from "../../shared/style/icons.jsx";
 import { Popover } from "../../shared/ui/Popover.jsx";
 import { faceVariants, slideVariants, staggerGroup, staggerItem } from "../../shared/ui/panel-motion.js";
-import { useInteractive } from "../../shared/ui/use-interactive.js";
-import { fieldVariant } from "../styles.js";
-import { DUR_FAST, EASE, FS_MICRO, FS_XS, FS_SM, R_SM, R_MD } from "../../shared/style/tokens.js";
+import { PanelButton, headingButtonStyle } from "../../shared/ui/PanelButton.jsx";
+import { fieldVariant, panelBodyStyle, panelFootStyle } from "../styles.js";
+import { DUR_FAST, EASE, FS_MICRO, FS_XS, R_SM } from "../../shared/style/tokens.js";
 
 const BODY_HEIGHT = 192;
+
+/** @param {boolean} selected @param {boolean} today */
+const dayClass = (selected, today) =>
+  `inscribed-day${selected ? " is-selected" : ""}${today ? " is-today" : ""}`;
+
 const GRID_SPRING = { type: "spring", stiffness: 300, damping: 30 };
 
 /**
@@ -45,11 +50,9 @@ export function DatePicker({ value, onChange, time = true, disabled, variant }) 
 
   const triggerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const [open, setOpen] = useState(false);
-  const [hovered, setHovered] = useState(/** @type {number | null} */ (null));
   // Which way the month grid slides, so stepping back animates back.
   const [direction, setDirection] = useState(0);
   const [pickingMonth, setPickingMonth] = useState(false);
-  const trigger = useInteractive();
 
   const selected = useMemo(() => parseIso(value), [value]);
   const [view, setView] = useState(() => firstOfMonth(selected ?? new Date()));
@@ -105,7 +108,6 @@ export function DatePicker({ value, onChange, time = true, disabled, variant }) 
   };
 
   const today = new Date();
-  const lit = open || trigger.focused;
 
   return (
     <>
@@ -124,12 +126,8 @@ export function DatePicker({ value, onChange, time = true, disabled, variant }) 
             setView(firstOfMonth(selected ?? new Date()));
             setOpen((o) => !o);
           }}
-          {...trigger.handlers}
+          className={`inscribed-field ${v.className} ${open ? "is-open" : ""}`.trim()}
           style={{
-            ...v.field,
-            ...(disabled ? v.disabled : null),
-            ...(trigger.hovered && !disabled ? { background: v.hoverBg } : null),
-            ...(lit ? { borderColor: v.focusBorder, boxShadow: v.focusShadow } : null),
             display: "flex",
             alignItems: "center",
             width: "100%",
@@ -146,27 +144,27 @@ export function DatePicker({ value, onChange, time = true, disabled, variant }) 
       </div>
 
       <Popover anchorRef={triggerRef} open={open} onClose={() => setOpen(false)} matchWidth maxHeight={400}>
-        <motion.div variants={staggerGroup} style={{ ...v.panel, ...panelStyle }}>
-          <motion.div variants={staggerItem} style={{ ...headBarStyle, background: v.hoverBg, borderColor: v.border }}>
-            <IconButton
+        <motion.div variants={staggerGroup} className={v.className} style={{ ...v.panel, ...panelBodyStyle }}>
+          <motion.div variants={staggerItem} className="inscribed-inset" style={headBarStyle}>
+            <PanelButton
+              shape="icon"
               onClick={() => (pickingMonth ? stepYear(-1) : stepMonth(-1))}
               label={pickingMonth ? t("editors.date.prevYear") : t("editors.date.prevMonth")}
-              hoverBg={v.hoverBg}
             >
               {pickingMonth ? <ChevronsLeft size={15} /> : <ChevronLeft size={15} />}
-            </IconButton>
+            </PanelButton>
 
-            <HeadButton onClick={() => setPickingMonth((s) => !s)} hoverBg={v.hoverBg}>
+            <PanelButton style={headingButtonStyle} onClick={() => setPickingMonth((m) => !m)}>
               {pickingMonth ? view.getFullYear() : monthLabel}
-            </HeadButton>
+            </PanelButton>
 
-            <IconButton
+            <PanelButton
+              shape="icon"
               onClick={() => (pickingMonth ? stepYear(1) : stepMonth(1))}
               label={pickingMonth ? t("editors.date.nextYear") : t("editors.date.nextMonth")}
-              hoverBg={v.hoverBg}
             >
               {pickingMonth ? <ChevronsRight size={15} /> : <ChevronRight size={15} />}
-            </IconButton>
+            </PanelButton>
           </motion.div>
 
           <motion.div variants={staggerItem} style={{ position: "relative", height: BODY_HEIGHT, overflow: "hidden" }}>
@@ -182,10 +180,10 @@ export function DatePicker({ value, onChange, time = true, disabled, variant }) 
                   style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, alignContent: "start" }}
                 >
                   {monthNames.map((name, idx) => (
-                    <MonthButton
+                    <PanelButton
                       key={name}
-                      current={idx === view.getMonth()}
-                      variant={v}
+                      shape="cell"
+                      selected={idx === view.getMonth()}
                       onClick={() => {
                         setDirection(idx > view.getMonth() ? 1 : -1);
                         setView(new Date(view.getFullYear(), idx, 1));
@@ -193,7 +191,7 @@ export function DatePicker({ value, onChange, time = true, disabled, variant }) 
                       }}
                     >
                       {name}
-                    </MonthButton>
+                    </PanelButton>
                   ))}
                 </motion.div>
               ) : (
@@ -227,22 +225,14 @@ export function DatePicker({ value, onChange, time = true, disabled, variant }) 
                         {cells.map(({ date, inMonth }) => {
                           const isSel = selected != null && sameDay(date, selected);
                           const isToday = sameDay(date, today);
-                          const key = date.getTime();
                           return (
                             <button
-                              key={key}
+                              key={date.getTime()}
                               type="button"
                               onClick={() => pickDay(date)}
-                              onMouseEnter={() => setHovered(key)}
-                              onMouseLeave={() => setHovered(null)}
                               aria-pressed={isSel}
-                              style={{
-                                ...dayStyle,
-                                opacity: inMonth ? 1 : 0.35,
-                                ...(isToday && !isSel ? { background: v.hoverBg, boxShadow: `inset 0 0 0 1px ${v.rowRing}` } : null),
-                                ...(hovered === key && !isSel ? { background: v.hoverBg } : null),
-                                ...(isSel ? v.selected : null),
-                              }}
+                              className={dayClass(isSel, isToday)}
+                              style={{ ...dayStyle, opacity: inMonth ? 1 : 0.35 }}
                             >
                               {date.getDate()}
                             </button>
@@ -259,7 +249,7 @@ export function DatePicker({ value, onChange, time = true, disabled, variant }) 
           {/* The clock shares the footer instead of taking a band of its own:
               two digits do not need a full row, and the panel was taller than
               the calendar it exists to show. */}
-          <motion.div variants={staggerItem} style={{ ...footRowStyle, borderColor: v.border }}>
+          <motion.div variants={staggerItem} className="inscribed-divider" style={{ ...panelFootStyle, ...footDividerStyle }}>
             {time ? (
               <Clock
                 hour={selected ? selected.getHours() : 0}
@@ -273,82 +263,13 @@ export function DatePicker({ value, onChange, time = true, disabled, variant }) 
             ) : <span />}
 
             <div style={{ display: "flex", gap: 4 }}>
-              <FootButton onClick={() => emit(new Date())} hoverBg={v.hoverBg}>{t("editors.date.today")}</FootButton>
-              <FootButton onClick={() => { onChange(""); setOpen(false); }} hoverBg={v.hoverBg}>{t("editors.date.clear")}</FootButton>
+              <PanelButton onClick={() => emit(new Date())}>{t("editors.date.today")}</PanelButton>
+              <PanelButton onClick={() => { onChange(""); setOpen(false); }}>{t("editors.date.clear")}</PanelButton>
             </div>
           </motion.div>
         </motion.div>
       </Popover>
     </>
-  );
-}
-
-/** @param {{ onClick: () => void, label: string, hoverBg: string, children: React.ReactNode }} props */
-function IconButton({ onClick, label, hoverBg, children }) {
-  const { hovered, focused, handlers } = useInteractive();
-  const lit = hovered || focused;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      {...handlers}
-      style={{ ...iconBtnStyle, background: lit ? hoverBg : "transparent", opacity: lit ? 1 : 0.55 }}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** @param {{ onClick: () => void, hoverBg: string, children: React.ReactNode }} props */
-function HeadButton({ onClick, hoverBg, children }) {
-  const { hovered, focused, handlers } = useInteractive();
-  const lit = hovered || focused;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      {...handlers}
-      style={{ ...headBtnStyle, background: lit ? hoverBg : "transparent" }}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** @param {{ onClick: () => void, current: boolean, variant: *, children: React.ReactNode }} props */
-function MonthButton({ onClick, current, variant, children }) {
-  const { hovered, focused, handlers } = useInteractive();
-  const lit = hovered || focused;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      {...handlers}
-      style={{
-        ...monthBtnStyle,
-        ...(current ? variant.selected : { background: lit ? variant.hoverBg : "transparent", color: "inherit" }),
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** @param {{ onClick: () => void, hoverBg: string, children: React.ReactNode }} props */
-function FootButton({ onClick, hoverBg, children }) {
-  const { hovered, focused, handlers } = useInteractive();
-  const lit = hovered || focused;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      {...handlers}
-      style={{ ...footBtnStyle, background: lit ? hoverBg : "transparent", opacity: lit ? 1 : 0.6 }}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -363,10 +284,9 @@ function FootButton({ onClick, hoverBg, children }) {
  * }} props
  */
 function Clock({ hour, minute, onHour, onMinute, hourLabel, minuteLabel, variant }) {
-  const { hovered, focused, handlers } = useInteractive();
   return (
     <div
-      {...handlers}
+      className="inscribed-clock inscribed-divider"
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -375,9 +295,7 @@ function Clock({ hour, minute, onHour, onMinute, hourLabel, minuteLabel, variant
         borderRadius: R_SM,
         borderWidth: 1,
         borderStyle: "solid",
-        borderColor: focused ? variant.focusBorder : variant.border,
-        background: hovered || focused ? variant.hoverBg : "transparent",
-        boxShadow: focused ? variant.focusShadow : "none",
+        background: "transparent",
         transition: `box-shadow ${DUR_FAST} ${EASE}, border-color ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE}`,
       }}
     >
@@ -502,14 +420,6 @@ function monthCells(view, weekStart) {
 
 // ---- Styles ---------------------------------------------------------------
 
-const panelStyle = {
-  width: "100%",
-  borderRadius: R_MD + 4,
-  padding: 10,
-  display: "flex",
-  flexDirection: "column",
-  gap: 8,
-};
 const headBarStyle = {
   display: "flex",
   alignItems: "center",
@@ -519,31 +429,7 @@ const headBarStyle = {
   borderStyle: "solid",
   padding: 4,
 };
-const headBtnStyle = {
-  border: "none",
-  borderRadius: R_SM - 2,
-  padding: "4px 8px",
-  color: "inherit",
-  font: "inherit",
-  fontSize: FS_SM,
-  fontWeight: 600,
-  textTransform: "capitalize",
-  cursor: "pointer",
-  transition: `background-color ${DUR_FAST} ${EASE}`,
-};
-const iconBtnStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: 26,
-  height: 26,
-  border: "none",
-  borderRadius: R_SM - 2,
-  color: "inherit",
-  cursor: "pointer",
-  padding: 0,
-  transition: `background-color ${DUR_FAST} ${EASE}, opacity ${DUR_FAST} ${EASE}`,
-};
+
 const weekdayRowStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(7, 1fr)",
@@ -585,17 +471,7 @@ const dayStyle = {
   padding: 0,
   transition: `background-color ${DUR_FAST} ${EASE}`,
 };
-const monthBtnStyle = {
-  border: "none",
-  borderRadius: R_SM,
-  padding: "9px 4px",
-  font: "inherit",
-  fontSize: FS_XS,
-  fontWeight: 500,
-  textTransform: "capitalize",
-  cursor: "pointer",
-  transition: `background-color ${DUR_FAST} ${EASE}`,
-};
+
 const digitsStyle = {
   width: 20,
   padding: 0,
@@ -608,24 +484,9 @@ const digitsStyle = {
   fontVariantNumeric: "tabular-nums",
   outline: "none",
 };
-const footRowStyle = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 6,
+const footDividerStyle = {
   paddingTop: 8,
   borderTopWidth: 1,
   borderTopStyle: "solid",
 };
-const footBtnStyle = {
-  padding: "5px 9px",
-  border: "none",
-  borderRadius: R_SM - 2,
-  color: "inherit",
-  font: "inherit",
-  fontSize: FS_MICRO,
-  fontWeight: 500,
-  letterSpacing: "0.02em",
-  cursor: "pointer",
-  transition: `background-color ${DUR_FAST} ${EASE}, opacity ${DUR_FAST} ${EASE}`,
-};
+

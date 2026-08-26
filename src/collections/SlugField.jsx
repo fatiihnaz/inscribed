@@ -37,8 +37,7 @@ export function SlugField({ value, onChange, disabled }) {
         disabled={disabled}
         spellCheck={false}
         placeholder={t("collections.slugPlaceholder")}
-        className="inscribed-field"
-        style={palette.field}
+        className={`inscribed-field ${palette.className}`.trim()}
       />
     </label>
   );

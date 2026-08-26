@@ -68,7 +68,10 @@ export function CollectionFieldsForm({ fields, values, onChange, disabled }) {
     return <div style={emptyHintStyle}>{t("collections.emptySchema")}</div>;
   }
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    // Marks the whole record form as a collection surface, which is what turns
+    // every focus ring, checkmark and chosen cell inside it to the collection
+    // accent. See `field-css.js`.
+    <div className="inscribed-collection" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {fields.map((field) => (
         <FieldInput
           key={field.name}

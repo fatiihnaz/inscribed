@@ -25,12 +25,10 @@ import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { ChevronDown, Plus, X } from "../../shared/style/icons.jsx";
 import { Popover } from "../../shared/ui/Popover.jsx";
 import { staggerGroup } from "../../shared/ui/panel-motion.js";
-import { useInteractive } from "../../shared/ui/use-interactive.js";
-import { fieldVariant } from "../styles.js";
+import { PanelButton } from "../../shared/ui/PanelButton.jsx";
+import { fieldVariant, panelBodyStyle } from "../styles.js";
 import { SearchPicker } from "./SearchPicker.jsx";
-import {
-  DUR_BASE, DUR_FAST, EASE, R_SM, R_MD,
-} from "../../shared/style/tokens.js";
+import { DUR_BASE, DUR_FAST, EASE } from "../../shared/style/tokens.js";
 
 const SEARCH_DEBOUNCE_MS = 200;
 
@@ -73,7 +71,6 @@ export function Combobox({
   const wrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const btnRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
   const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-  const trigger = useInteractive();
 
   const remote = Boolean(onSearch);
   const trimmed = query.trim();
@@ -171,7 +168,6 @@ export function Combobox({
     : (selected?.label ?? value ?? placeholder ?? t("editors.combobox.choose"));
   const isPlaceholder = adding || (!selected?.label && !value);
   const showClear = !adding && Boolean(value) && Boolean(onClear) && !disabled;
-  const lit = open || trigger.focused;
   const note = loading
     ? t("editors.combobox.loading")
     : rows.length === 0 ? t("editors.combobox.empty") : null;
@@ -193,12 +189,8 @@ export function Combobox({
           aria-haspopup="listbox"
           aria-expanded={open}
           onClick={() => setOpen((o) => !o)}
-          {...trigger.handlers}
+          className={`inscribed-field ${v.className} ${open ? "is-open" : ""}`.trim()}
           style={{
-            ...v.field,
-            ...(disabled ? v.disabled : null),
-            ...(trigger.hovered && !disabled ? { background: v.hoverBg } : null),
-            ...(lit ? { borderColor: v.focusBorder, boxShadow: v.focusShadow } : null),
             display: "flex",
             alignItems: "center",
             gap: 8,
@@ -235,12 +227,19 @@ export function Combobox({
         )}
 
         {showClear ? (
-          <ClearButton label={t("editors.combobox.clear")} hoverBg={v.hoverBg} onClick={() => onClear?.()} />
+          <PanelButton
+            shape="icon"
+            label={t("editors.combobox.clear")}
+            onClick={() => onClear?.()}
+            style={clearButtonStyle}
+          >
+            <X size={12} />
+          </PanelButton>
         ) : null}
       </div>
 
       <Popover anchorRef={wrapRef} open={open} onClose={() => setOpen(false)} matchWidth maxHeight={400}>
-        <motion.div variants={staggerGroup} style={{ ...v.panel, ...panelStyle }}>
+        <motion.div variants={staggerGroup} className={v.className} style={{ ...v.panel, ...panelBodyStyle }}>
           <SearchPicker
             rows={pickerRows}
             active={active}
@@ -267,49 +266,16 @@ export function Combobox({
   );
 }
 
-/** @param {{ label: string, hoverBg: string, onClick: () => void }} props */
-function ClearButton({ label, hoverBg, onClick }) {
-  const { hovered, focused, handlers } = useInteractive();
-  const lit = hovered || focused;
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      {...handlers}
-      style={{
-        position: "absolute",
-        right: 29,
-        top: "50%",
-        marginTop: -9,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: 18,
-        height: 18,
-        padding: 0,
-        border: "none",
-        borderRadius: R_SM - 2,
-        background: lit ? hoverBg : "transparent",
-        color: "inherit",
-        opacity: lit ? 0.9 : 0.4,
-        cursor: "pointer",
-        transition: `opacity ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE}`,
-      }}
-    >
-      <X size={12} />
-    </button>
-  );
-}
-
 // ---- Styles ---------------------------------------------------------------
 
-const panelStyle = {
-  borderRadius: R_MD + 4,
-  padding: 10,
-  display: "flex",
-  flexDirection: "column",
-  gap: 8,
-  minHeight: 0,
+// Sits over the trigger, left of the chevron, so the two stay separate
+// controls: a button nested inside a button is invalid markup.
+const clearButtonStyle = {
+  position: "absolute",
+  right: 29,
+  top: "50%",
+  marginTop: -9,
+  width: 18,
+  height: 18,
 };
+

@@ -25,6 +25,7 @@ import { CmsContext, useCmsContext } from "../shared/state/cms-context.js";
 import { ensureCmsConfig } from "../shared/config.js";
 import { normalizePanels } from "../shared/panels.js";
 import { resolveCmsRoute } from "../shared/route.js";
+import { fieldCss } from "../editors/field-css.js";
 import { buildThemeCss } from "../shared/style/theme.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
@@ -1196,6 +1197,11 @@ export function CmsProvider({
   return (
     <CmsContext.Provider value={value}>
       {themeCss ? <style>{themeCss}</style> : null}
+      {/* Above every surface that renders a field: the drawer, the page-side
+          inline editors, and a standalone composer on a host page. Gated on
+          `isAdmin` because all three are, so a visitor's page carries neither
+          the rules nor the editors they would style. */}
+      {isAdmin ? <style>{fieldCss}</style> : null}
       {/* A prop rather than something the app nests itself, because it must
           wrap the drawer too, and the drawer is a sibling of `children`. It
           reads `config`/`isAdmin`/`getAccessToken`, so it sits inside here. */}

@@ -4,21 +4,41 @@
  */
 
 /**
- * Allowed values for `BlockResponse.blockType`.
+ * Allowed values for `BlockResponse.blockType`. One vocabulary with
+ * `CollectionFieldType`: a type means the same thing on a page block and on a
+ * collection field, and only `ObjectArray`'s schema source and `Collection` differ
+ * between the two sides.
  *
  * Value shapes per type:
- *   - ShortText / LongText / RichText: string. ShortText is a single-line
- *     `<input>`, LongText a `<textarea>`, RichText a formatting editor.
+ *   - ShortText / LongText / RichText: string. ShortText holds no line breaks,
+ *     LongText treats them as content, RichText carries markup.
+ *   - Number: number, or null when unset. An empty numeric field means "not
+ *     set", never zero.
+ *   - Bool: boolean.
+ *   - Url: string. An address on its own; `Link` is the one that also carries
+ *     the text it shows as.
+ *   - Date: ISO 8601 string, empty string when unset.
  *   - Image: { src, alt }
  *   - Link: { href, label }
- *   - Date: ISO 8601 string, empty string when unset.
- *   - List: array of objects shaped by the manifest's `itemSchema`. The whole
- *     list shares one `version`, so reorder/add/remove/edit save atomically.
- *   - Collection: read-only binding carrying `{ collection, slug? }`. The SDK
- *     resolves items separately and hands them to render-props; writes happen
- *     in the collection's own admin surface, not here.
+ *   - Select: string, chosen from the field's `source`. A collection-backed
+ *     source stores the target record's slug, which is what makes a reference a
+ *     `Select` rather than a type of its own.
+ *   - StringArray: string[], each entry chosen from or created against the `source`.
+ *   - ObjectArray: array of objects. The row shape comes from the manifest's
+ *     `itemSchema` on a page block and from the field's `itemFields` on a
+ *     collection field: one type, two schema sources. A page block's whole list
+ *     shares one `version`, so reorder/add/remove/edit save atomically.
+ *   - Collection: read-only binding carrying `{ collection, slug? }`, page side
+ *     only. The SDK resolves items separately and hands them to render-props;
+ *     writes happen in the collection's own admin surface, not here.
  *
- * @typedef {"ShortText" | "LongText" | "RichText" | "Image" | "Link" | "Date" | "List" | "Collection"} BlockType
+ * Not every type draws itself on the page. `Bool`, `StringArray`, `Select` and `Date`
+ * are data: the drawer edits them, and the consumer reads them with
+ * `useCmsBlock` and decides how they look. A boolean has no visual form, a
+ * `Select` usually stores a key rather than display text, and how a date reads
+ * is a language and design choice.
+ *
+ * @typedef {"ShortText" | "LongText" | "RichText" | "Number" | "Bool" | "Url" | "Date" | "Image" | "Link" | "Select" | "StringArray" | "ObjectArray" | "Collection"} BlockType
  */
 
 /**
@@ -26,7 +46,7 @@
  * value for new items. Nested lists aren't supported.
  *
  * @typedef {Object} ItemSchemaField
- * @property {Exclude<BlockType, "List" | "Collection">} blockType
+ * @property {Exclude<BlockType, "ObjectArray" | "Collection">} blockType
  * @property {*} defaultValue
  */
 
@@ -87,19 +107,35 @@
  */
 
 /**
+ * Where a `Select` or `StringArray` field's choices come from. Nothing else carries
+ * one: a type that offers choices says so by being one of those two, which is
+ * what replaced `options` hanging off any field at all.
+ *
+ *   - `static` — the list is in the schema, and the stored value is the entry
+ *     itself.
+ *   - `collection` — the list is another collection's records, searched through
+ *     `GET /cms/collections/{key}/lookup`, and the stored value is the target
+ *     record's slug. This is how a reference between collections is expressed;
+ *     there is no separate reference type.
+ *
+ * @typedef {{ kind: "static", values: string[] }
+ *   | { kind: "collection", collection: string }} ChoiceSource
+ */
+
+/**
  * Per-collection field metadata from `/cms/collections/{key}/schema` and the
  * `/cms/collections/me` envelope. Drives the schema-driven drawer form.
  *
- * Scalar types map to the obvious inputs. `ObjectArray` is the only
- * non-scalar: its value is an array of
- * objects shaped by `itemFields`, rendered as a repeatable sub-form.
+ * Types are the same vocabulary page blocks use, minus `Collection`, which
+ * binds a page to records rather than living inside one. `ObjectArray` is the only
+ * non-scalar: its value is an array of objects shaped by `itemFields`, rendered
+ * as a repeatable sub-form.
  *
- * `Image` is a fixed-shape `{ src, alt }` object (like the CMS Image block):
- * `src` a Url, `alt` a ShortText, both required once the field has a value. It
- * renders an upload dropzone (`config.transport.uploadImage`) instead of a bare
- * text box.
+ * `Image` is a fixed-shape `{ src, alt }` object: `src` a Url, `alt` a
+ * ShortText, both required once the field has a value. It renders an upload
+ * dropzone (`config.transport.uploadImage`) instead of a bare text box.
  *
- * @typedef {"ShortText" | "LongText" | "RichText" | "Image" | "Bool" | "Url" | "StringArray" | "Date" | "Number" | "ObjectArray"} CollectionFieldType
+ * @typedef {Exclude<BlockType, "Collection">} CollectionFieldType
  *
  * @typedef {Object} CollectionFieldDescriptor
  * @property {string} name
@@ -120,11 +156,16 @@
  *   When true, `?sort={name}` accepts this field. Only `ShortText`, `Number`
  *   and `Date` can be sortable. Build sort pickers from this rather than a
  *   hardcoded list, since it is per collection.
- * @property {string[] | null} options   When non-empty, render as a select regardless of `type`.
+ * @property {ChoiceSource | null} source
+ *   Non-null only on `Select` and `StringArray`: where the choices come from. `null`
+ *   everywhere else, and ignored if a backend sends one anyway.
+ * @property {boolean} [allowCustom]
+ *   `Select` and `StringArray` only: whether the editor may enter something the source
+ *   does not offer. Off by default, which makes a source a closed vocabulary.
  * @property {CollectionFieldDescriptor[] | null} itemFields
- *   Non-null only for `ObjectArray` fields: the schema for one element of the
- *   repeatable sub-form. Each entry is itself a descriptor, so nesting recurses
- *   through the same machinery. `null` on scalar fields, like `options`.
+ *   Non-null only for `ObjectArray` fields: the schema for one row of the repeatable
+ *   sub-form. Each entry is itself a descriptor, so nesting recurses through the
+ *   same machinery. `null` on scalar fields, like `source`.
  * @property {string | null} help
  *
  * @typedef {Object} CollectionSchema
@@ -252,6 +293,32 @@
  *   than the site's: a collection is shared, so its coverage can be narrower
  *   than the sites reading it. Empty or absent means it is not localized.
  *   First entry is the default.
+ * @property {string} [displayField]
+ *   Which field names a record for a human. Belongs to the collection rather
+ *   than to each field pointing at it, so five references to the same
+ *   collection cannot disagree about what a record is called. Absent means the
+ *   slug is the best there is.
+ */
+
+/**
+ * `GET /cms/collections/{key}/lookup`: the picker's view of a collection, which
+ * is deliberately not `CollectionItemResponse`. A chooser needs a name and
+ * something to store, not the record; keeping it a separate shape is also what
+ * keeps drafts, archives and `virtualItems` out of a list nobody is editing.
+ *
+ * Answers two questions through one endpoint. `?q=` searches `displayField` and
+ * returns matches; `?slugs=` resolves specific records, which is how a field
+ * shows the name of what is already selected without it having to turn up in a
+ * search. A slug that comes back missing from a `?slugs=` answer is a reference
+ * whose target is gone.
+ *
+ * @typedef {Object} CollectionLookupItem
+ * @property {string} slug
+ * @property {string} label   Read off the collection's `displayField`.
+ *
+ * @typedef {Object} CollectionLookupResponse
+ * @property {CollectionLookupItem[]} items
+ * @property {number} total   Matches in all, so a picker can say there are more.
  */
 
 /**

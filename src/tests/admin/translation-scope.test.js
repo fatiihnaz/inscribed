@@ -20,7 +20,7 @@ describe("isSubstantialChange", () => {
     expect(isSubstantialChange("Link", { href: "/a" }, { href: "/bambaşka-bir-yer" })).toBe(false);
     // A List's fields would each need their own answer, so the block-level
     // question has none.
-    expect(isSubstantialChange("List", [{ t: "a" }], [{ t: "bir iki üç dört beş" }])).toBe(false);
+    expect(isSubstantialChange("ObjectArray", [{ t: "a" }], [{ t: "bir iki üç dört beş" }])).toBe(false);
   });
 
   it("stays quiet on a typo fix", () => {

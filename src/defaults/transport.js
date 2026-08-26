@@ -151,6 +151,29 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
       return /** @type {CollectionListResponse} */ (body);
     },
 
+    async lookupCollection(key, params, opts = {}) {
+      const u = new URL(`${base}/cms/collections/${encodeURIComponent(key)}/lookup`);
+      // `q` searches, `slugs` resolves. Sending both is meaningless, and the
+      // caller only ever wants one of the two answers.
+      if (params?.slugs?.length) u.searchParams.set("slugs", params.slugs.join(","));
+      else if (params?.q) u.searchParams.set("q", params.q);
+      if (params?.locale) u.searchParams.set("locale", params.locale);
+      if (typeof params?.limit === "number") u.searchParams.set("limit", String(params.limit));
+
+      const res = await fetch(u.toString(), {
+        method: "GET",
+        headers: headers(opts.accessToken),
+        signal: opts.signal,
+        ...cacheInit(opts.cache),
+      });
+      if (!res.ok) throw await toApiError(res);
+      const body = await res.json();
+      // Same coercion the list read does, for a backend that answers with a
+      // bare array.
+      if (Array.isArray(body)) return { items: body, total: body.length };
+      return /** @type {*} */ (body);
+    },
+
     async getCollectionItem(key, slug, opts = {}) {
       const res = await fetch(
         `${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}`,

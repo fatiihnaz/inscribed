@@ -356,7 +356,6 @@ function liftMargin(style) {
 function isValueEmpty(blockType, value) {
   if (value == null) return true;
   switch (blockType) {
-    case "Text":
     case "ShortText":
     case "LongText":
     case "RichText":
@@ -387,7 +386,6 @@ function renderBlock(blockType, value, props) {
       const Tag = as ?? "span";
       return <Tag {...rest}>{value}</Tag>;
     }
-    case "Text":
     case "LongText": {
       const Tag = as ?? "span";
       // Multi-line is the whole point of the type, and the default `normal`

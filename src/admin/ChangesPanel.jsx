@@ -293,7 +293,7 @@ export function DiffContent({ blockType, prev, next, itemSchema, sharedOps }) {
       return <ArrowDiff prev={prev} next={next} />;
     case "Image":
       return <ImageDiff prev={prev} next={next} />;
-    case "List":
+    case "ObjectArray":
       return (
         <ListDiff
           oldItems={Array.isArray(prev) ? prev : []}

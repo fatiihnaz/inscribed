@@ -40,7 +40,7 @@ export function firstNonEmptyText(entries) {
 }
 
 /**
- * One-line summary for a collapsed ObjectArray card, so the header reads like
+ * One-line summary for a collapsed ObjectArray row, so the header reads like
  * the item instead of a bare index. Every field is eligible: whatever holds a
  * string can name the row, including a Url or a Date.
  *

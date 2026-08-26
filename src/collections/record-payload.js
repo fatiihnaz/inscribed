@@ -46,6 +46,7 @@ function defaultFor(type) {
     case "StringArray": return [];
     case "ObjectArray": return [];
     case "Image":       return { src: "", alt: "" };
+    case "Link":        return { href: "", label: "" };
     default:            return "";
   }
 }
@@ -80,9 +81,16 @@ export function buildPayload(fields, values) {
       out[field.name] = items.map((item) => buildPayload(field.itemFields ?? [], item ?? {}));
       continue;
     }
+    // Both compound scalars go on the wire whole or not at all: a half-filled
+    // one is neither a value nor an absence, and the backend rejects it.
     if (field.type === "Image") {
       const image = values[field.name];
       out[field.name] = image?.src ? image : null;
+      continue;
+    }
+    if (field.type === "Link") {
+      const link = values[field.name];
+      out[field.name] = link?.href ? link : null;
       continue;
     }
     const value = values[field.name];

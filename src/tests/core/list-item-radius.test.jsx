@@ -33,7 +33,7 @@ const ITEM_SCHEMA = { text: { blockType: "ShortText", defaultValue: "" } };
 
 const listBlock = () => ({
   blockPath: PATH,
-  blockType: "List",
+  blockType: "ObjectArray",
   value: [{ text: "Bir" }, { text: "İki" }],
   draftValue: null,
   version: 1,

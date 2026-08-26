@@ -90,6 +90,11 @@ export const ChevronsLeft = createIcon("chevrons-left", [
   ["path", { d: "m18 17-5-5 5-5", key: "h8a8et" }],
 ]);
 
+export const ChevronsRight = createIcon("chevrons-right", [
+  ["path", { d: "m6 17 5-5-5-5", key: "xnjwq" }],
+  ["path", { d: "m13 17 5-5-5-5", key: "17xmmf" }],
+]);
+
 export const Check = createIcon("check", [
   ["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }],
 ]);
@@ -327,7 +332,7 @@ export const TypeDate = createIcon("type-date", [
   ["path", { d: "M4 12h16", key: "date-rule" }],
 ]);
 
-export const TypeList = createIcon("type-list", [
+export const TypeObjectArray = createIcon("type-object-array", [
   ["path", { d: "M8 6h12", key: "list-1" }],
   ["path", { d: "M8 12h12", key: "list-2" }],
   ["path", { d: "M8 18h12", key: "list-3" }],
@@ -339,6 +344,33 @@ export const TypeList = createIcon("type-list", [
 export const TypeCollection = createIcon("type-collection", [
   ["path", { d: "M8 4h10a2 2 0 0 1 2 2v10", key: "collection-back" }],
   ["rect", { width: "12", height: "12", x: "4", y: "8", rx: "2", key: "collection-front" }],
+]);
+
+// A hash: the one mark that reads as "a number" without spelling a digit, which
+// at 12px would be unreadable anyway.
+export const TypeNumber = createIcon("type-number", [
+  ["path", { d: "M10 5 8 19", key: "number-slash-1" }],
+  ["path", { d: "M16 5l-2 14", key: "number-slash-2" }],
+  ["path", { d: "M5 9h14", key: "number-bar-1" }],
+  ["path", { d: "M5 15h14", key: "number-bar-2" }],
+]);
+
+// The switch the editor actually sees, drawn at rest.
+export const TypeBool = createIcon("type-bool", [
+  ["rect", { width: "18", height: "10", x: "3", y: "7", rx: "5", key: "bool-track" }],
+  ["circle", { cx: "8", cy: "12", r: "2", key: "bool-thumb" }],
+]);
+
+// A closed box with the chevron that opens it.
+export const TypeSelect = createIcon("type-select", [
+  ["rect", { width: "16", height: "14", x: "4", y: "5", rx: "2", key: "select-frame" }],
+  ["path", { d: "m9 10 3 3 3-3", key: "select-chevron" }],
+]);
+
+// Two chips, offset: the shape a list of tags makes on the page.
+export const TypeStringArray = createIcon("type-string-array", [
+  ["rect", { width: "13", height: "5", x: "3", y: "6", rx: "2.5", key: "tags-one" }],
+  ["rect", { width: "13", height: "5", x: "8", y: "13", rx: "2.5", key: "tags-two" }],
 ]);
 
 export const TypeGroup = createIcon("type-group", [
@@ -356,13 +388,17 @@ export const TypeUnknown = createIcon("type-unknown", [
 /** @type {Record<string, typeof TypeShortText>} */
 const TYPE_ICONS = {
   ShortText: TypeShortText,
-  Text: TypeLongText,
   LongText: TypeLongText,
   RichText: TypeRichText,
+  Number: TypeNumber,
+  Bool: TypeBool,
+  Url: TypeLink,
+  Date: TypeDate,
   Image,
   Link: TypeLink,
-  Date: TypeDate,
-  List: TypeList,
+  Select: TypeSelect,
+  StringArray: TypeStringArray,
+  ObjectArray: TypeObjectArray,
   Collection: TypeCollection,
 };
 

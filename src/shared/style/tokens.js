@@ -176,14 +176,22 @@ export const TEXT_PRIMARY  = TEXT_HI;
 export const TYPE_META_FALLBACK = { color: "rgb(186, 204, 230)", label: "Unknown" };
 
 /** @type {Record<string, { color: string, label: string }>} */
+// Hue groups the family rather than the individual type: text shades of blue,
+// choices of violet, addresses of sand, the two repeatables of amber. A badge
+// then reads as "one of the text ones" before it is read at all.
 export const TYPE_META = {
   ShortText:  { color: "rgb(186, 204, 230)", label: "Short" },
   LongText:   { color: "rgb(186, 204, 230)", label: "Long" },
   RichText:   { color: "rgb(208, 192, 230)", label: "Rich" },
+  Number:     { color: "rgb(196, 214, 200)", label: "Number" },
+  Bool:       { color: "rgb(196, 214, 200)", label: "Yes/No" },
+  Url:        { color: "rgb(228, 204, 164)", label: "URL" },
+  Date:       { color: "rgb(184, 222, 214)", label: "Date" },
   Image:      { color: "rgb(174, 218, 184)", label: "Image" },
   Link:       { color: "rgb(228, 204, 164)", label: "Link" },
-  Date:       { color: "rgb(184, 222, 214)", label: "Date" },
-  List:       { color: "rgb(222, 204, 174)", label: "List" },
+  Select:     { color: "rgb(212, 196, 232)", label: "Select" },
+  StringArray:       { color: "rgb(212, 196, 232)", label: "Strings" },
+  ObjectArray:     { color: "rgb(222, 204, 174)", label: "Objects" },
   Collection: { color: COLLECTION_ACCENT, label: "Item" },
 };
 

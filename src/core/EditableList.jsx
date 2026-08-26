@@ -11,7 +11,7 @@
  * Public mode maps each item through the render-prop in a key'd Fragment.
  *
  *   <EditableList blockPath="team.members" itemSchema={{
- *     name:  { blockType: "Text",  defaultValue: "" },
+ *     name:  { blockType: "ShortText", defaultValue: "" },
  *     photo: { blockType: "Image", defaultValue: { src: "", alt: "" } },
  *   }}>
  *     {(item, i) => (
@@ -34,7 +34,7 @@
 
 import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  Plus, Trash2, GripVertical, TypeList,
+  Plus, Trash2, GripVertical, TypeObjectArray,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
 } from "../shared/style/icons.jsx";
 
@@ -362,7 +362,7 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
           className={INK_CHIP_CLASS}
           style={regionChipStyle({ roomy, highlight: isActive, accent: ACCENT })}
         >
-          <TypeList size={CHROME_ICON} style={{ flexShrink: 0, opacity: 0.8 }} />
+          <TypeObjectArray size={CHROME_ICON} style={{ flexShrink: 0, opacity: 0.8 }} />
           {fullPath}
           {dirty && <span aria-label={t("block.unsavedDot")} style={chipDirtyDotStyle} />}
         </button>

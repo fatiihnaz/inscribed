@@ -18,6 +18,7 @@
  *   SyncResultResponse,
  *   CollectionListParams,
  *   CollectionListResponse,
+ *   CollectionLookupResponse,
  *   CollectionItemResponse,
  *   MyCollectionResponse,
  * } from "./schemas.js"
@@ -53,6 +54,11 @@
  * @property {(slug: string, opts?: CmsRequestOptions) => Promise<ContentResponse>} getContent
  * @property {(key: string, params?: CollectionListParams, opts?: CmsRequestOptions) => Promise<CollectionListResponse>} getCollection
  * @property {(key: string, slug: string, opts?: CmsRequestOptions) => Promise<CollectionItemResponse>} getCollectionItem
+ * @property {(key: string, params: { q?: string, slugs?: string[], locale?: string | null, limit?: number }, opts?: CmsRequestOptions) => Promise<CollectionLookupResponse>} [lookupCollection]
+ *   Names and slugs for a picker, without the records behind them. Optional on
+ *   the seam: a transport that has not implemented it makes collection-backed
+ *   choices unavailable rather than breaking, and a field with a static source
+ *   never needs it.
  * @property {(opts?: CmsRequestOptions) => Promise<MyCollectionResponse[]>} getMyCollections
  * @property {(request: UpdatePageRequest, opts?: CmsRequestOptions) => Promise<UpdatePageResponse>} updateContent
  * @property {(request: UpdatePageRequest, opts?: CmsRequestOptions) => Promise<void>} updateDraft

@@ -31,7 +31,7 @@ exports[`discoverManifests > discovers blocks, scopes, groups and DFS order acro
       },
       {
         "blockPath": "hero.cards",
-        "blockType": "List",
+        "blockType": "ObjectArray",
         "defaultValue": [],
         "itemSchema": {
           "count": {

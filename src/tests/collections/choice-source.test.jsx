@@ -1,21 +1,28 @@
 // @vitest-environment jsdom
 /**
- * @file What `options` means per field type.
+ * @file How a field's `source` decides what the picker offers and writes back.
  *
- * `options` used to win over `type` outright, which turned a `StringArray` into
- * a single-value `<select>` and wrote a bare string into a field the payload
- * builder and the validator both read as an array. These pin the rule that
- * replaced it: a vocabulary on an array field, one choice on a scalar, ignored
- * where a select cannot express the value.
+ * `options` used to hang off any field at all and win over its type, which
+ * turned an array field into a single-value select and wrote a bare string into
+ * something the payload builder and the validator both read as a list. Only
+ * `Select` and `StringArray` carry a source now, so the type answers the question
+ * before anything has to decide.
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import React from "react";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
-// The form only reaches context for its wording; the keys are enough to assert
-// structure, and this keeps the provider stack out of the test.
+// The form only reaches context for its wording, and the keys are enough to
+// assert structure, so this keeps the provider stack out of the test.
 vi.mock("../../core/hooks/use-cms-strings.js", () => ({
   useCmsStrings: () => (key) => key,
+}));
+
+// A static source needs nothing from the provider, but the hook that reads it
+// cannot know that before it runs. Everything else in the module stays real.
+vi.mock("../../shared/state/cms-context.js", async (importOriginal) => ({
+  .../** @type {*} */ (await importOriginal()),
+  useCmsContext: () => ({ config: { transport: {} }, getAccessToken: async () => null }),
 }));
 
 import { CollectionFieldsForm } from "../../collections/CollectionFieldsForm.jsx";
@@ -35,11 +42,14 @@ const field = (type, extra = {}) => ({
   computed: false,
   filterable: false,
   sortable: false,
-  options: null,
+  source: null,
   itemFields: null,
   help: null,
   ...extra,
 });
+
+/** @param {string[]} values */
+const staticSource = (values) => ({ kind: "static", values });
 
 /**
  * Renders one field and reports what the form handed back on change.
@@ -50,75 +60,125 @@ const field = (type, extra = {}) => ({
 function mountField(f, value) {
   const onChange = vi.fn();
   render(
-    <CollectionFieldsForm
-      fields={[f]}
-      values={{ f: value }}
-      onChange={onChange}
-      disabled={false}
-    />,
+    <CollectionFieldsForm fields={[f]} values={{ f: value }} onChange={onChange} disabled={false} />,
   );
   return { onChange, lastValue: () => onChange.mock.calls.at(-1)?.[0]?.f };
 }
 
-describe("options on a StringArray", () => {
-  const tagField = field("StringArray", { options: ["cms", "next", "editör"] });
+const trigger = () => screen.getByRole("button", { expanded: false });
+const openPicker = () => fireEvent.click(trigger());
+const optionLabels = () => screen.getAllByRole("option").map((o) => o.textContent.trim());
+const search = () => screen.getByPlaceholderText("editors.combobox.search");
 
-  it("offers the vocabulary as a picker rather than a single-value select", () => {
+describe("StringArray on a closed vocabulary", () => {
+  const tagField = field("StringArray", { source: staticSource(["cms", "next", "editör"]) });
+
+  it("offers the vocabulary rather than a single-value select", () => {
     mountField(tagField, []);
-    const select = screen.getByRole("combobox");
-    // Every option plus the placeholder row.
-    expect(select.querySelectorAll("option")).toHaveLength(4);
+    openPicker();
+    expect(optionLabels()).toEqual(["cms", "next", "editör"]);
   });
 
   it("appends to the array instead of replacing it with a string", () => {
     const { lastValue } = mountField(tagField, ["cms"]);
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "next" } });
+    openPicker();
+    fireEvent.click(screen.getByRole("option", { name: "next" }));
     expect(lastValue()).toEqual(["cms", "next"]);
   });
 
   it("lists only what is not already picked", () => {
     mountField(tagField, ["cms"]);
-    const labels = [...screen.getByRole("combobox").querySelectorAll("option")].map((o) => o.value);
-    expect(labels).not.toContain("cms");
-    expect(labels).toEqual(expect.arrayContaining(["next", "editör"]));
+    openPicker();
+    expect(optionLabels()).toEqual(["next", "editör"]);
   });
 
-  it("drops the picker once everything is picked", () => {
+  it("drops the adder once everything is picked", () => {
     mountField(tagField, ["cms", "next", "editör"]);
-    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("button", { expanded: false })).toBeNull();
   });
-});
 
-describe("options on a free-text StringArray", () => {
-  it("ignores a duplicate rather than adding it twice", () => {
-    const { onChange } = mountField(field("StringArray"), ["cms"]);
-    const input = screen.getByRole("textbox");
-    fireEvent.change(input, { target: { value: "cms" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+  it("refuses an entry the vocabulary does not offer", () => {
+    const { onChange } = mountField(tagField, []);
+    openPicker();
+    fireEvent.change(search(), { target: { value: "uydurma" } });
+    fireEvent.keyDown(search(), { key: "Enter" });
     expect(onChange).not.toHaveBeenCalled();
   });
 });
 
-describe("options on other types", () => {
-  it("narrows a scalar to one choice", () => {
-    const { lastValue } = mountField(field("ShortText", { options: ["a", "b"] }), "");
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "b" } });
+describe("StringArray with allowCustom", () => {
+  const openField = field("StringArray", { source: staticSource(["cms"]), allowCustom: true });
+
+  it("takes an entry from outside the vocabulary", () => {
+    const { lastValue } = mountField(openField, []);
+    openPicker();
+    fireEvent.change(search(), { target: { value: "uydurma" } });
+    fireEvent.keyDown(search(), { key: "Enter" });
+    expect(lastValue()).toEqual(["uydurma"]);
+  });
+});
+
+describe("StringArray with no source at all", () => {
+  const freeField = field("StringArray");
+
+  it("creates the typed entry", () => {
+    const { lastValue } = mountField(freeField, ["cms"]);
+    openPicker();
+    fireEvent.change(search(), { target: { value: "yeni" } });
+    fireEvent.keyDown(search(), { key: "Enter" });
+    expect(lastValue()).toEqual(["cms", "yeni"]);
+  });
+
+  it("ignores a duplicate rather than adding it twice", () => {
+    const { onChange } = mountField(freeField, ["cms"]);
+    openPicker();
+    fireEvent.change(search(), { target: { value: "cms" } });
+    fireEvent.keyDown(search(), { key: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("splits a multi-line paste into one entry per line", () => {
+    const { onChange } = mountField(freeField, []);
+    openPicker();
+    fireEvent.paste(search(), { clipboardData: { getData: () => "bir\niki\n\nüç" } });
+    // Each line is added against the same starting value, so the calls carry one
+    // entry each; the form is what accumulates them in real use.
+    expect(onChange.mock.calls.map((c) => c[0].f)).toEqual([["bir"], ["iki"], ["üç"]]);
+  });
+});
+
+describe("Select", () => {
+  const selectField = field("Select", { source: staticSource(["a", "b"]) });
+
+  it("stores the chosen entry as a plain string", () => {
+    const { lastValue } = mountField(selectField, "");
+    openPicker();
+    fireEvent.click(screen.getByRole("option", { name: "b" }));
     expect(lastValue()).toBe("b");
   });
 
-  it("is ignored on a Bool, which keeps its switch", () => {
-    mountField(field("Bool", { options: ["evet", "hayır"] }), false);
-    expect(screen.queryByRole("combobox")).toBeNull();
+  it("lets an optional field go back to unset", () => {
+    const { lastValue } = mountField(selectField, "b");
+    openPicker();
+    // The panel's footer, not a row in the list: as a row it took a slot from
+    // the options and shortened the list on its way out.
+    fireEvent.click(screen.getByRole("button", { name: "editors.combobox.clearAction" }));
+    expect(lastValue()).toBe("");
+  });
+});
+
+describe("types with no choice source", () => {
+  it("leaves Bool as its switch", () => {
+    mountField(field("Bool"), false);
+    expect(screen.queryByRole("button", { expanded: false })).toBeNull();
     expect(screen.getByRole("checkbox")).toBeTruthy();
   });
 
-  it("is ignored on an ObjectArray, which keeps its repeat editor", () => {
+  it("leaves ObjectArray as its own repeat editor", () => {
     const f = field("ObjectArray", {
-      options: ["a", "b"],
       itemFields: [field("ShortText", { name: "title", label: "Başlık" })],
     });
     mountField(f, []);
-    expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.getByText("collections.noItems")).toBeTruthy();
   });
 });

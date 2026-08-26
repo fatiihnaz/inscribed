@@ -936,7 +936,7 @@ function handleEditableList(openingNode, filePath, analysis, warnings, groupPref
   /** @type {DiscoveredRegion} */
   const region = {
     blockPath,
-    blockType: /** @type {BlockType} */ ("List"),
+    blockType: /** @type {BlockType} */ ("ObjectArray"),
     defaultValue,
     itemSchema,
   };

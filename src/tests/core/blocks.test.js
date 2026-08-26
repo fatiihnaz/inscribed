@@ -58,15 +58,10 @@ describe("groupBlocksByPrefix", () => {
   });
 });
 
-describe("indexBlocksByPath legacy types", () => {
-  it("folds the pre-4.0 `Text` alias into LongText", () => {
-    const map = indexBlocksByPath([
-      { blockPath: "a", blockType: "Text", value: "x", sortOrder: 0, version: 1 },
-    ]);
-    expect(map.get("a").blockType).toBe("LongText");
-  });
-
-  it("hands back the same object when nothing needs rewriting", () => {
+describe("indexBlocksByPath identity", () => {
+  // Nothing is rewritten on the way in any more: the type vocabulary is one set
+  // and the backend answers in it, so a block reaches the store as it arrived.
+  it("hands back the very same object", () => {
     const block = { blockPath: "a", blockType: "LongText", value: "x", sortOrder: 0, version: 1 };
     expect(indexBlocksByPath([block]).get("a")).toBe(block);
   });

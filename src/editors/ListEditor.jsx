@@ -15,6 +15,7 @@ import { Plus, Trash2, ChevronUp, ChevronDown } from "../shared/style/icons.jsx"
 
 import { addItem, moveItem, moveItemTo, moveItemToIndex, removeItem } from "../shared/util/list-ops.js";
 import { firstNonEmptyText } from "../shared/util/text.js";
+import { useOpenRows } from "../core/hooks/use-open-rows.js";
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import {
@@ -47,12 +48,21 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
   /** @type {Record<string, *>[]} */
   const items = Array.isArray(value) ? value : [];
 
+  // Which cards are expanded, held here rather than by each card: React reuses
+  // rows by key, so a card that owned the flag would keep it while the item
+  // underneath moved away on a reorder.
+  const { isOpen, toggle, open: openRow, afterRemove, afterMove } = useOpenRows();
+
   // Same engine as the page-side list, so the two cannot drift apart on what a
   // drop means.
   const { drag, flip, suppress, registerNode, beginDrag, animateMove } = useListReorder({
     onReorder: (from, to) => {
       const next = moveItemTo(items, from, to);
-      if (next !== items) onChange(next);
+      if (next === items) return;
+      onChange(next);
+      // `to` names the gap; the item lands one earlier when it was pulled out
+      // from above, exactly as `moveItemTo` computes it.
+      afterMove(from, to > from ? to - 1 : to);
     },
   });
 
@@ -70,7 +80,10 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
   const onAdd = () => setItems(addItem(items, itemSchema));
 
   /** @param {number} i */
-  const onRemove = (i) => setItems(removeItem(items, i));
+  const onRemove = (i) => {
+    setItems(removeItem(items, i));
+    afterRemove(i);
+  };
 
   /** @param {number} i @param {-1|1} dir */
   const onMove = (i, dir) => {
@@ -79,6 +92,7 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
     // Before the commit: the boxes have to be measured as they still are.
     animateMove(i, i + dir);
     setItems(next);
+    afterMove(i, i + dir);
   };
 
   /** @param {number} i @param {number} seat */
@@ -88,6 +102,7 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
     if (next === items) return;
     animateMove(i, target);
     setItems(next);
+    afterMove(i, target);
   };
 
   /** @param {number} i @param {string} fieldKey @param {*} fieldValue */
@@ -121,6 +136,9 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
           shifting={drag != null}
           flipOffset={flip?.get(i) ?? null}
           suppressSlide={suppress}
+          isOpen={isOpen(i)}
+          onToggle={() => toggle(i)}
+          onOpen={() => openRow(i)}
           onFieldChange={(k, v) => onFieldChange(i, k, v)}
           onRemove={() => onRemove(i)}
           onMoveTo={(seat) => onMoveTo(i, seat)}
@@ -174,6 +192,9 @@ function AddItemButton({ onAdd, label }) {
  *   shifting: boolean,
  *   flipOffset: { dx: number, dy: number } | null,
  *   suppressSlide: boolean,
+ *   isOpen: boolean,
+ *   onToggle: () => void,
+ *   onOpen: () => void,
  *   onFieldChange: (fieldKey: string, value: *) => void,
  *   onRemove: () => void,
  *   onMoveTo: (seat: number) => void,
@@ -184,6 +205,7 @@ function AddItemButton({ onAdd, label }) {
 function ListItemCard({
   blockPath, index, total, item, itemSchema, disabled,
   registerNode, onGrab, dragging, settling, shifting, flipOffset, suppressSlide,
+  isOpen, onToggle, onOpen,
   onFieldChange, onRemove, onMoveTo, onMoveUp, onMoveDown,
 }) {
   // Selects a boolean, not the signal itself: a row click elsewhere in the list
@@ -194,7 +216,6 @@ function ListItemCard({
     uiStore,
     (s) => s.activeListItem?.path === blockPath && s.activeListItem?.index === index,
   );
-  const [isOpen, setIsOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
   // A press that turned into a drag still fires a click on release, which would
@@ -207,7 +228,7 @@ function ListItemCard({
   // into view, and clear the signal so it fires once. Matches RegionItemCard.
   useEffect(() => {
     if (!isTarget) return;
-    setIsOpen(true);
+    onOpen();
     setActiveListItem(null);
     // Wait a frame so the parent collapse has begun laying out before we
     // scroll, else the target's position is stale.
@@ -284,7 +305,7 @@ function ListItemCard({
             draggedRef.current = false;
             return;
           }
-          setIsOpen((v) => !v);
+          onToggle();
         }}
       >
         <span data-no-drag>
@@ -396,7 +417,7 @@ function ListItemCard({
 // Only the text types name a row here. A list item's Date holds a string too,
 // but an ISO timestamp in the header reads like a bug, and unlike a collection
 // field a list item always has a text field to fall back on.
-const TEXTY = new Set(["Text", "ShortText", "LongText", "RichText"]);
+const TEXTY = new Set(["ShortText", "LongText", "RichText"]);
 
 /**
  * One-line summary for a collapsed list item, so the header reads like the item

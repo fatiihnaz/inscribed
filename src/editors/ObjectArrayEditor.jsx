@@ -23,6 +23,7 @@
 import { useState } from "react";
 
 import { moveItem, removeItem } from "../shared/util/list-ops.js";
+import { useOpenRows } from "../core/hooks/use-open-rows.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "../shared/style/icons.jsx";
 import { inertRef } from "../shared/ui/use-inert.js";
@@ -43,39 +44,31 @@ import {
  * }} props
  *   `addLabel` names one entry, already singular ("Çalışma"), for the add button.
  */
-export function RepeatEditor({ value, onChange, disabled, addLabel, seedItem, summarize, renderItem }) {
+export function ObjectArrayEditor({ value, onChange, disabled, addLabel, seedItem, summarize, renderItem }) {
   const t = useCmsStrings();
   const items = Array.isArray(value) ? value : [];
 
-  const [open, setOpen] = useState(/** @type {Set<number>} */ (() => new Set()));
+  const { isOpen, toggle, open: openRow, afterRemove, afterMove } = useOpenRows();
   const [hovered, setHovered] = useState(/** @type {number | null} */ (null));
-
-  const toggle = (/** @type {number} */ i) =>
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(i)) next.delete(i);
-      else next.add(i);
-      return next;
-    });
 
   const updateItem = (/** @type {number} */ i, /** @type {Record<string, *>} */ nextItem) =>
     onChange(items.map((it, j) => (j === i ? nextItem : it)));
 
   const addNew = () => {
     onChange([...items, seedItem()]);
-    setOpen((prev) => new Set(prev).add(items.length)); // auto-expand the new tail item
+    openRow(items.length); // auto-expand the new tail item
   };
 
   const remove = (/** @type {number} */ i) => {
     onChange(removeItem(items, i));
-    setOpen((prev) => shiftOpenAfterRemove(prev, i));
+    afterRemove(i);
   };
 
   const move = (/** @type {number} */ i, /** @type {-1|1} */ dir) => {
     const next = moveItem(items, i, dir);
     if (next === items) return;
     onChange(next);
-    setOpen((prev) => swapOpen(prev, i, i + dir));
+    afterMove(i, i + dir);
   };
 
   return (
@@ -85,7 +78,7 @@ export function RepeatEditor({ value, onChange, disabled, addLabel, seedItem, su
       ) : (
         <div style={listStyle}>
           {items.map((item, i) => {
-            const isOpen = open.has(i);
+            const rowOpen = isOpen(i);
             const summary = summarize(item);
             return (
               <div
@@ -94,7 +87,7 @@ export function RepeatEditor({ value, onChange, disabled, addLabel, seedItem, su
                 onMouseEnter={() => setHovered(i)}
                 onMouseLeave={() => setHovered((h) => (h === i ? null : h))}
               >
-                <button type="button" onClick={() => toggle(i)} aria-expanded={isOpen} style={headerStyle}>
+                <button type="button" onClick={() => toggle(i)} aria-expanded={rowOpen} style={headerStyle}>
                   <span style={indexStyle}>{i + 1}</span>
                   <span style={summary ? summaryStyle : summaryEmptyStyle}>
                     {summary || t("collections.emptyItem")}
@@ -112,7 +105,7 @@ export function RepeatEditor({ value, onChange, disabled, addLabel, seedItem, su
                       </RowControl>
                     </span>
                   )}
-                  <span style={{ ...chevronStyle, transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+                  <span style={{ ...chevronStyle, transform: rowOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
                     <ChevronDown size={14} />
                   </span>
                 </button>
@@ -122,11 +115,11 @@ export function RepeatEditor({ value, onChange, disabled, addLabel, seedItem, su
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateRows: isOpen ? "1fr" : "0fr",
+                    gridTemplateRows: rowOpen ? "1fr" : "0fr",
                     transition: "grid-template-rows 240ms cubic-bezier(0.32, 0.72, 0.18, 1)",
                   }}
                 >
-                  <div ref={inertRef(!isOpen)} style={bodyClipStyle} aria-hidden={!isOpen}>
+                  <div ref={inertRef(!rowOpen)} style={bodyClipStyle} aria-hidden={!rowOpen}>
                     <div style={bodyStyle}>
                       {renderItem(item ?? {}, (next) => updateItem(i, next))}
                     </div>
@@ -180,45 +173,6 @@ function RowControl({ onClick, disabled, label, children }) {
       {children}
     </span>
   );
-}
-
-/**
- * Remap an open-index set after element `removed` is dropped: forget that
- * index and slide every higher index down by one so the surviving cards
- * keep their open/closed state.
- *
- * @param {Set<number>} set
- * @param {number} removed
- * @returns {Set<number>}
- */
-function shiftOpenAfterRemove(set, removed) {
-  /** @type {Set<number>} */
-  const next = new Set();
-  for (const idx of set) {
-    if (idx === removed) continue;
-    next.add(idx > removed ? idx - 1 : idx);
-  }
-  return next;
-}
-
-/**
- * Swap the open/closed membership of two indices after a reorder, so a
- * moved card carries its expanded state to its new position.
- *
- * @param {Set<number>} set
- * @param {number} a
- * @param {number} b
- * @returns {Set<number>}
- */
-function swapOpen(set, a, b) {
-  const hasA = set.has(a);
-  const hasB = set.has(b);
-  const next = new Set(set);
-  next.delete(a);
-  next.delete(b);
-  if (hasB) next.add(a);
-  if (hasA) next.add(b);
-  return next;
 }
 
 // ---- Styles ---------------------------------------------------------------

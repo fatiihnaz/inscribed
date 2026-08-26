@@ -112,3 +112,54 @@ export function removeItem(items, index) {
 export function addItem(items, itemSchema) {
   return [...items, makeDefaultItem(itemSchema)];
 }
+// ---------------------------------------------------------------------------
+// Index sets
+//
+// A repeatable editor keeps per-row UI state (which rows are expanded) as a set
+// of indices. Every structural op above moves rows around, so the set has to be
+// remapped in step or the state ends up on the wrong row. These are the
+// counterparts of the moves, and they are pure so the arithmetic can be tested
+// on its own.
+// ---------------------------------------------------------------------------
+
+/**
+ * Remap an index set after the row at `removed` is dropped: forget that index
+ * and slide every higher one down by one.
+ *
+ * @param {Set<number>} set
+ * @param {number} removed
+ * @returns {Set<number>}
+ */
+export function dropIndex(set, removed) {
+  /** @type {Set<number>} */
+  const next = new Set();
+  for (const i of set) {
+    if (i === removed) continue;
+    next.add(i > removed ? i - 1 : i);
+  }
+  return next;
+}
+
+/**
+ * Remap an index set the way `moveItemToIndex` remaps the rows themselves: the
+ * moved row follows its index, and everything it passes shifts one seat the
+ * other way. Reduces to a swap for a neighbouring move, and stays correct for a
+ * drag across several rows, which a swap would get wrong.
+ *
+ * @param {Set<number>} set
+ * @param {number} from
+ * @param {number} to
+ * @returns {Set<number>}
+ */
+export function moveIndex(set, from, to) {
+  if (from === to) return set;
+  /** @type {Set<number>} */
+  const next = new Set();
+  for (const i of set) {
+    if (i === from) next.add(to);
+    else if (from < to && i > from && i <= to) next.add(i - 1);
+    else if (from > to && i >= to && i < from) next.add(i + 1);
+    else next.add(i);
+  }
+  return next;
+}

@@ -1,41 +1,60 @@
 "use client";
 
 /**
- * @file Free-text list editor, drawn as removable chips with an add box under
- * them. Value is a plain `string[]`; the draft box holds what is being typed
- * and is not part of the value until it is committed.
+ * @file Tag list editor: removable chips, plus one adder underneath.
+ *
+ * The adder is the shared `Combobox` in `add` mode, which covers every shape
+ * this field takes. With a vocabulary it lists what has not been picked yet;
+ * with `allowCustom` it also creates what was typed; pointing at a collection it
+ * searches records and stores their slugs. Multi-line paste splits into one
+ * entry per line throughout.
  *
  * Wording still comes from the `collections.*` catalog, which is where this
  * editor grew up; the keys move when the two catalogs are reorganised.
  */
 
-import { useState } from "react";
+import { useMemo } from "react";
 
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
-import { Plus } from "../../shared/style/icons.jsx";
 import { FS_SM, R_SM, neutralTint as neutral } from "../../shared/style/tokens.js";
-import { fieldVariant, noItemsStyle } from "../styles.js";
+import { noItemsStyle } from "../styles.js";
+import { Combobox } from "./Combobox.jsx";
+import { useChoiceSource } from "./use-choice-source.js";
+
+/**
+ * @import { ChoiceSource } from "../../shared/contracts/schemas.js"
+ */
 
 /**
  * @param {{
  *   value: string[] | null | undefined,
  *   onChange: (value: string[]) => void,
  *   itemLabel: string,
- *   options?: string[] | null,
+ *   source?: ChoiceSource | null,
+ *   allowCustom?: boolean,
+ *   locale?: string | null,
  *   disabled?: boolean,
  *   variant?: import("../styles.js").FieldVariantName,
  * }} props
- *   `itemLabel` names one entry ("Etiket"), for the add box's placeholder.
- *   `options`, when non-empty, turns the field into a fixed vocabulary: entries
- *   are picked from the list instead of typed.
+ *   `itemLabel` names one entry ("Etiket"), for the adder's caption. With no
+ *   `source` at all the field is free text, which is the plain tag case.
  */
-export function StringArrayEditor({ value, onChange, itemLabel, options, disabled, variant }) {
+export function StringArrayEditor({ value, onChange, itemLabel, source, allowCustom, locale, disabled, variant }) {
   const t = useCmsStrings();
-  const v = fieldVariant(variant);
-  const [draft, setDraft] = useState("");
   const items = Array.isArray(value) ? value : [];
-  const vocabulary = options && options.length > 0 ? options : null;
-  const unused = vocabulary ? vocabulary.filter((o) => !items.includes(o)) : [];
+  const { items: choices, search, loading } = useChoiceSource(source, { locale });
+
+  // Free text whenever nothing constrains it: no source, or a source the field
+  // is explicitly allowed to go outside of.
+  const free = !source || allowCustom;
+
+  // Only what is not already on: re-offering a picked entry just invites the
+  // duplicate `add` would drop anyway. A remote source is filtered server-side,
+  // so this only trims what came back.
+  const unused = useMemo(
+    () => choices.filter((c) => !items.includes(c.value)),
+    [choices, items],
+  );
 
   /**
    * Adding the same entry twice is never what the editor meant, so a duplicate
@@ -50,10 +69,10 @@ export function StringArrayEditor({ value, onChange, itemLabel, options, disable
     onChange([...items, trimmed]);
   };
 
-  const commit = () => {
-    add(draft);
-    setDraft("");
-  };
+  // A closed vocabulary that has run out has nothing left to offer, so the adder
+  // stands down rather than sitting there empty. A searched source always keeps
+  // it: the next query may return something new.
+  const showAdder = !disabled && (free || search || unused.length > 0);
 
   return (
     <div style={shellStyle}>
@@ -79,44 +98,20 @@ export function StringArrayEditor({ value, onChange, itemLabel, options, disable
           ))}
         </div>
       )}
-      {/* A fixed vocabulary picks instead of typing, and the picker only lists
-          what is not already on. Once everything is picked it disappears rather
-          than sitting there empty. */}
-      {!disabled && vocabulary && unused.length > 0 && (
-        <select
-          value=""
-          onChange={(e) => add(e.target.value)}
-          className="inscribed-field"
-          style={{ ...v.field, fontSize: FS_SM }}
-        >
-          <option value="">{t("collections.addNamedPlaceholder", { name: itemLabel })}</option>
-          {unused.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
-      )}
 
-      {!disabled && !vocabulary && (
-        <div style={addRowStyle}>
-          <input
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-            placeholder={t("collections.addNamedPlaceholder", { name: itemLabel })}
-            className="inscribed-field"
-            style={{ ...v.field, flex: 1, fontSize: FS_SM }}
-          />
-          <button
-            type="button"
-            onClick={commit}
-            disabled={!draft.trim()}
-            style={addBtnStyle}
-          >
-            <Plus size={13} />
-            {t("collections.add")}
-          </button>
-        </div>
+      {showAdder && (
+        <Combobox
+          mode="add"
+          items={unused}
+          onPick={add}
+          onCreate={free ? add : undefined}
+          onSearch={search}
+          loading={loading}
+          placeholder={itemLabel
+            ? t("collections.addNamedPlaceholder", { name: itemLabel })
+            : t("editors.combobox.add")}
+          variant={variant}
+        />
       )}
     </div>
   );
@@ -148,19 +143,4 @@ const chipRemoveStyle = {
   color: "inherit",
   opacity: 0.5,
   fontFamily: "inherit",
-};
-const addRowStyle = { display: "flex", gap: 6 };
-const addBtnStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  padding: "6px 12px",
-  border: `1px solid ${neutral(25)}`,
-  borderRadius: R_SM,
-  background: neutral(8),
-  color: "inherit",
-  fontSize: FS_SM,
-  cursor: "pointer",
-  fontFamily: "inherit",
-  whiteSpace: "nowrap",
 };

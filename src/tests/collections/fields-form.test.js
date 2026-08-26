@@ -21,19 +21,19 @@ const works = {
   required: false,
   readOnly: false,
   filterable: false,
-  options: null,
+  source: null,
   help: null,
   itemFields: [
-    { name: "title", type: "LongText", label: "Başlık", required: true, readOnly: false, filterable: false, options: null, help: null, itemFields: null },
-    { name: "image", type: "Url", label: "Görsel", required: false, readOnly: false, filterable: false, options: null, help: null, itemFields: null },
-    { name: "tags", type: "StringArray", label: "Etiketler", required: false, readOnly: false, filterable: false, options: null, help: null, itemFields: null },
-    { name: "internal", type: "LongText", label: "İç", required: false, readOnly: true, filterable: false, options: null, help: null, itemFields: null },
+    { name: "title", type: "LongText", label: "Başlık", required: true, readOnly: false, filterable: false, source: null, help: null, itemFields: null },
+    { name: "image", type: "Url", label: "Görsel", required: false, readOnly: false, filterable: false, source: null, help: null, itemFields: null },
+    { name: "tags", type: "StringArray", label: "Etiketler", required: false, readOnly: false, filterable: false, source: null, help: null, itemFields: null },
+    { name: "internal", type: "LongText", label: "İç", required: false, readOnly: true, filterable: false, source: null, help: null, itemFields: null },
   ],
 };
 
 const scalarTitle = {
   name: "name", type: "LongText", label: "Ad", required: true,
-  readOnly: false, filterable: false, options: null, help: null, itemFields: null,
+  readOnly: false, filterable: false, source: null, help: null, itemFields: null,
 };
 
 describe("seedValues - ObjectArray", () => {
@@ -48,7 +48,7 @@ describe("seedValues - ObjectArray", () => {
     ]);
   });
 
-  it("ignores itemFields on scalar fields (treated like options: null)", () => {
+  it("ignores itemFields on scalar fields (treated like source: null)", () => {
     expect(seedValues([scalarTitle], {})).toEqual({ name: "" });
   });
 });
@@ -71,7 +71,7 @@ describe("buildPayload - ObjectArray", () => {
 describe("buildPayload - empty values", () => {
   const field = (name, type, extra = {}) => ({
     name, type, label: name, required: false, readOnly: false, computed: false,
-    filterable: false, sortable: false, options: null, help: null, itemFields: null, ...extra,
+    filterable: false, sortable: false, source: null, help: null, itemFields: null, ...extra,
   });
 
   it("sends null for anything the editor left blank", () => {
@@ -80,7 +80,7 @@ describe("buildPayload - empty values", () => {
     // option.
     const fields = [
       field("eventDate", "Date"),
-      field("status", "ShortText", { options: ["draft", "done"] }),
+      field("status", "ShortText", { source: { kind: "static", values: ["draft", "done"] } }),
       field("summary", "LongText"),
       field("ticketUrl", "Url"),
     ];
@@ -114,7 +114,7 @@ describe("computed fields", () => {
   const stars = {
     name: "stars", type: "ShortText", label: "Yıldız", required: false,
     readOnly: true, computed: true, filterable: false, sortable: false,
-    options: null, help: null, itemFields: null,
+    source: null, help: null, itemFields: null,
   };
 
   it("keeps them out of the save payload", () => {
@@ -158,7 +158,7 @@ describe("requiredMissing - ObjectArray", () => {
 describe("Image field ({ src, alt } object)", () => {
   const hero = {
     name: "hero", type: "Image", label: "Kapak", required: false,
-    readOnly: false, filterable: false, options: null, help: null, itemFields: null,
+    readOnly: false, filterable: false, source: null, help: null, itemFields: null,
   };
   const img = (src, alt) => ({ src, alt });
 
@@ -223,8 +223,8 @@ describe("humanizeCollectionError", () => {
 
 describe("ShortText / LongText scalars", () => {
   const fields = [
-    { name: "title", type: "ShortText", label: "Başlık", required: true, readOnly: false, filterable: false, options: null, help: null, itemFields: null },
-    { name: "body", type: "LongText", label: "Gövde", required: false, readOnly: false, filterable: false, options: null, help: null, itemFields: null },
+    { name: "title", type: "ShortText", label: "Başlık", required: true, readOnly: false, filterable: false, source: null, help: null, itemFields: null },
+    { name: "body", type: "LongText", label: "Gövde", required: false, readOnly: false, filterable: false, source: null, help: null, itemFields: null },
   ];
 
   it("seeds both to an empty string, like Text", () => {

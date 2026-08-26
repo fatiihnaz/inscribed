@@ -6,7 +6,7 @@ import { itemSummary, singularize } from "../shared/util/text.js";
 import { seedValues } from "./record-payload.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { fieldVariant } from "../editors/styles.js";
-import { RepeatEditor } from "../editors/RepeatEditor.jsx";
+import { ObjectArrayEditor } from "../editors/ObjectArrayEditor.jsx";
 import { FieldShell } from "../editors/fields/FieldShell.jsx";
 import { TextEditor } from "../editors/fields/TextEditor.jsx";
 import { NumberEditor } from "../editors/fields/NumberEditor.jsx";
@@ -15,6 +15,7 @@ import { UrlEditor } from "../editors/fields/UrlEditor.jsx";
 import { DateEditor } from "../editors/fields/DateEditor.jsx";
 import { SelectEditor } from "../editors/fields/SelectEditor.jsx";
 import { StringArrayEditor } from "../editors/fields/StringArrayEditor.jsx";
+import { LinkEditor } from "../editors/fields/LinkEditor.jsx";
 import { ImageEditor } from "../editors/fields/ImageEditor.jsx";
 import { neutralTint as neutral, COLLECTION_ACCENT, FS_XS, FS_SM, R_BADGE } from "../shared/style/tokens.js";
 
@@ -24,9 +25,6 @@ import { neutralTint as neutral, COLLECTION_ACCENT, FS_XS, FS_SM, R_BADGE } from
 const VARIANT = "neutral";
 const palette = fieldVariant(VARIANT);
 
-// Types a select cannot express: a boolean, a structured value, a formatted
-// document, and `StringArray`, which reads `options` as a vocabulary instead.
-const NOT_A_SELECT = new Set(["Bool", "Image", "ObjectArray", "RichText", "StringArray"]);
 
 // Lazy so the heavy TipTap dep stays out of the main bundle: a consumer using
 // only page-side pieces shouldn't pay ~50KB for an editor they never open. A
@@ -39,8 +37,8 @@ const RichTextEditor = lazy(() =>
 /**
  * @file `CollectionFieldsForm`: schema-driven form renderer for collection
  * items. Takes `CollectionFieldDescriptor`s plus a values map and renders one
- * input per field. `options` switches a field to a select regardless of `type`;
- * `ObjectArray` renders a repeatable accordion sub-form through this same
+ * input per field. `Select` and `StringArray` read their choices from the field's
+ * `source`; `ObjectArray` renders a repeatable accordion sub-form through this same
  * renderer, so nested scalars (and further nesting) come for free.
  *
  * Pure rendering; the parent owns state. Seeding, request shaping and
@@ -114,20 +112,17 @@ function FieldInput({ field, value, onChange, disabled }) {
   const shell = { label: labelNode, help: field.help, variant: VARIANT };
   const common = { ...shell, value, onChange, disabled };
 
-  // `options` constrains the type; it is not a type of its own. On a scalar it
-  // narrows the field to one choice. `StringArray` takes it as the vocabulary
-  // its entries come from (its own case below), and the rest ignore it: a select
-  // writes a plain string, which is the wrong shape for a boolean, an image or a
-  // sub-form, so honouring it there corrupted the record.
-  const options = field.options && field.options.length > 0 ? field.options : null;
-  if (options && !NOT_A_SELECT.has(field.type)) {
-    return <SelectEditor {...common} options={options} placeholder={t("collections.selectOption")} />;
-  }
+  // Only `Select` and `StringArray` carry a source, so nothing here has to decide
+  // whether a choice list makes sense for the type: the type already said.
+  const choice = { source: field.source, allowCustom: field.allowCustom };
 
   switch (field.type) {
     case "Bool":     return <BoolEditor {...common} />;
     case "Number":   return <NumberEditor {...common} />;
     case "Url":      return <UrlEditor {...common} />;
+    case "Link":     return <LinkEditor {...common} />;
+    case "Select":
+      return <SelectEditor {...common} {...choice} placeholder={t("collections.selectOption")} />;
     // A record's date is a value, not a deadline someone is watching, so the
     // block editor's countdown would be noise here.
     case "Date":     return <DateEditor {...common} countdown={false} />;
@@ -151,7 +146,7 @@ function FieldInput({ field, value, onChange, disabled }) {
             onChange={onChange}
             disabled={disabled}
             variant={VARIANT}
-            options={options}
+            {...choice}
             itemLabel={singularize(field.label || field.name || t("collections.itemFallback"))}
           />
         </FieldShell>
@@ -164,7 +159,7 @@ function FieldInput({ field, value, onChange, disabled }) {
       const itemFields = field.itemFields ?? [];
       return (
         <FieldShell {...shell} as="div">
-          <RepeatEditor
+          <ObjectArrayEditor
             value={value}
             onChange={onChange}
             disabled={disabled}

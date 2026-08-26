@@ -5,7 +5,7 @@
  *
  * Field-weight types (ShortText/LongText/Date/Link) render as
  * `FieldRow` — an always-open labeled form field (mono path label + editor),
- * no collapse chrome. Heavy types (RichText/Image/List/Collection/unknown)
+ * no collapse chrome. Heavy types (RichText/Image/ObjectArray/Collection/unknown)
  * stay collapsible cards whose closed header shows a value preview.
  *
  * Card header (left to right): TypeIcon badge, mono blockPath, value preview
@@ -42,7 +42,7 @@ const CollectionLane = dynamic(
 );
 
 // Field-weight types: a single light editor, rendered always-open as a form
-// field. Everything else (RichText/Image/List/Collection/unknown) keeps the
+// field. Everything else (RichText/Image/ObjectArray/Collection/unknown) keeps the
 // collapsible card surface.
 const INLINE_TYPES = new Set(["ShortText", "LongText", "Date", "Link"]);
 
@@ -380,7 +380,7 @@ function blockPreview(blockType, value, t) {
       }
       return null;
     }
-    case "List":
+    case "ObjectArray":
       return Array.isArray(value) ? t("block.items", { count: value.length }) : null;
     default:
       return null;
@@ -415,7 +415,7 @@ function resetBlock(block, setDraft) {
  * @param {boolean} [readOnly]
  */
 function renderEditor(block, value, onChange, itemSchema, readOnly, t) {
-  if (block.blockType === "List") {
+  if (block.blockType === "ObjectArray") {
     return <ListEditor blockPath={block.blockPath} value={value} onChange={onChange} itemSchema={itemSchema} disabled={readOnly} />;
   }
   const primitive = FieldEditor({ blockType: block.blockType, value, onChange, disabled: readOnly });

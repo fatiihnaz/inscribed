@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   makeDefaultItem, moveItem, moveItemTo, moveItemToIndex, removeItem, addItem,
+  dropIndex, moveIndex,
 } from "../../shared/util/list-ops.js";
 
 describe("makeDefaultItem", () => {
@@ -148,5 +149,54 @@ describe("addItem", () => {
     const items = [];
     addItem(items, { title: { blockType: "LongText", defaultValue: "" } });
     expect(items).toEqual([]);
+  });
+});
+/**
+ * The index-set counterparts. A repeatable editor tracks which rows are open by
+ * index, so every move above has to be mirrored here or the expanded card ends
+ * up on the wrong row. `moveIndex` in particular has to survive a drag across
+ * several rows, which a plain swap gets wrong.
+ */
+describe("dropIndex", () => {
+  it("forgets the removed row and slides the ones after it down", () => {
+    expect([...dropIndex(new Set([0, 2, 4]), 2)]).toEqual([0, 3]);
+  });
+
+  it("leaves earlier rows alone", () => {
+    expect([...dropIndex(new Set([0, 1]), 3)]).toEqual([0, 1]);
+  });
+
+  it("survives an empty set", () => {
+    expect([...dropIndex(new Set(), 1)]).toEqual([]);
+  });
+});
+
+describe("moveIndex", () => {
+  it("carries the moved row to its new index", () => {
+    expect(moveIndex(new Set([0]), 0, 3).has(3)).toBe(true);
+  });
+
+  it("behaves like a swap for a neighbouring move", () => {
+    expect([...moveIndex(new Set([0, 1]), 0, 1)].sort()).toEqual([0, 1]);
+    expect([...moveIndex(new Set([1]), 1, 0)]).toEqual([0]);
+  });
+
+  it("shifts everything the moved row passes on the way down", () => {
+    // 0 -> 3 pulls 1, 2 and 3 back one seat each.
+    expect([...moveIndex(new Set([1, 2, 3]), 0, 3)].sort()).toEqual([0, 1, 2]);
+  });
+
+  it("shifts everything the moved row passes on the way up", () => {
+    // 3 -> 0 pushes 0, 1 and 2 forward one seat each.
+    expect([...moveIndex(new Set([0, 1, 2]), 3, 0)].sort()).toEqual([1, 2, 3]);
+  });
+
+  it("leaves rows outside the travelled range alone", () => {
+    expect([...moveIndex(new Set([5]), 0, 2)]).toEqual([5]);
+  });
+
+  it("is a no-op when nothing moves", () => {
+    const set = new Set([1]);
+    expect(moveIndex(set, 2, 2)).toBe(set);
   });
 });

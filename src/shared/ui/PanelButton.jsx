@@ -27,7 +27,6 @@
  *   label?: string,
  *   selected?: boolean,
  *   disabled?: boolean,
- *   bordered?: boolean,
  *   style?: React.CSSProperties,
  *   children: React.ReactNode,
  * }} props
@@ -35,13 +34,12 @@
  *   leave it off where the children already read as the name.
  */
 export function PanelButton({
-  onClick, shape = "text", label, selected, disabled, bordered, style, children,
+  onClick, shape = "text", label, selected, disabled, style, children,
 }) {
   const className = [
     "inscribed-panel-btn",
     `inscribed-panel-btn--${shape}`,
     selected ? "is-selected" : "",
-    bordered ? "is-bordered" : "",
   ].filter(Boolean).join(" ");
 
   return (

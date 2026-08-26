@@ -23,7 +23,7 @@
 
 import {
   ACCENT, COLLECTION_ACCENT, BORDER, BORDER_HI, SURFACE_2, SURFACE_3,
-  DUR_FAST, EASE, FS_MICRO, FS_MD, FS_XS, R_SM, R_MD,
+  DUR_BASE, DUR_FAST, EASE, FS_MICRO, FS_MD, FS_SM, FS_XS, R_SM, R_MD,
   neutralTint as neutral,
 } from "../shared/style/tokens.js";
 
@@ -65,10 +65,14 @@ export const fieldCss = `
      record form and a block editor never quite lined up. Only colour varies now,
      and it varies through the variables above. */
   .inscribed-field {
+    /* Nothing resets box-sizing for the SDK's own markup. Under content-box a
+       field asked to fill its row lands wider than the row by its own padding
+       and border, and spills sideways. */
+    box-sizing: border-box;
     font-family: inherit;
     font-size: ${FS_MD}px;
     line-height: 1.4;
-    padding: 9px 12px;
+    padding: 7px 11px;
     border: 1px solid ${STROKE};
     border-radius: ${R_MD}px;
     background: ${BG};
@@ -106,6 +110,75 @@ export const fieldCss = `
     opacity: 0.45;
   }
 
+  /* Two inputs that are halves of one value (a link's text and its address)
+     framed as one control. Same edge and fill as a field, and like the clock
+     pill it lights from whichever half holds the focus. */
+  .inscribed-field-group {
+    box-sizing: border-box;
+    border: 1px solid ${STROKE};
+    border-radius: ${R_MD}px;
+    background: ${BG};
+    transition: background-color ${DUR_FAST} ${EASE}, border-color ${DUR_FAST} ${EASE}, box-shadow ${DUR_FAST} ${EASE};
+  }
+  .inscribed-field-group:hover:not(:focus-within) {
+    background-color: ${HOVER};
+  }
+  .inscribed-field-group:focus-within {
+    border-color: ${EDGE};
+    box-shadow: ${RING};
+  }
+  /* The halves give up their own frame: the group carries it, and two nested
+     borders lighting at once reads as two controls again. Listed at three
+     classes so these beat the element-qualified field rules above. */
+  /* The group owns its rows: each is the frame for one half, and the glyph in
+     the gutter is placed against it. */
+  .inscribed-field-group > * {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  /* The rule between two halves stops short of the frame, by the field's own
+     text inset. Run edge to edge it meets the border on both sides and the one
+     control reads as two stacked ones again, which is what the frame undoes. */
+  .inscribed-field-group > * + *::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 11px;
+    right: 11px;
+    border-top: 1px solid ${LINE};
+  }
+  .inscribed-field-group .inscribed-field {
+    width: 100%;
+    border-radius: 0;
+  }
+  .inscribed-field-group .inscribed-field,
+  .inscribed-field-group .inscribed-field:hover:not(:disabled):not(:focus),
+  .inscribed-field-group .inscribed-field:focus {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  /* Panel controls. The browser's own focus ring is replaced rather than just
+     removed: these are buttons, so dropping the outline without putting
+     something back would leave a keyboard user with no idea where they are.
+     Ours is an outline too, not a shadow, so it does not fight the inset one a
+     selected row already carries. */
+  .inscribed-panel-btn,
+  .inscribed-picker-row,
+  .inscribed-day,
+  .inscribed-chip-remove {
+    outline: none;
+  }
+  .inscribed-panel-btn:focus-visible,
+  .inscribed-picker-row:focus-visible,
+  .inscribed-day:focus-visible,
+  .inscribed-chip-remove:focus-visible {
+    outline: 1px solid ${EDGE};
+    outline-offset: -1px;
+  }
+
   /* Panel controls */
   .inscribed-panel-btn {
     border: none;
@@ -127,9 +200,6 @@ export const fieldCss = `
   .inscribed-panel-btn:disabled {
     opacity: 0.35;
     cursor: not-allowed;
-  }
-  .inscribed-panel-btn.is-bordered {
-    border: 1px solid ${LINE};
   }
 
   .inscribed-panel-btn--icon {
@@ -183,6 +253,20 @@ export const fieldCss = `
   /* One result row. Active is the keyboard cursor, which the pointer also
      moves, so there is no separate :hover rule to disagree with it. */
   .inscribed-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 7px 9px;
+    border: none;
+    border-radius: ${R_SM - 2}px;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: ${FS_SM}px;
+    font-weight: 400;
+    text-align: left;
+    cursor: pointer;
     transition: background-color ${DUR_FAST} ${EASE};
   }
   .inscribed-picker-row.is-active:not(.is-selected) {
@@ -191,6 +275,24 @@ export const fieldCss = `
 
   /* One calendar day. Hover here rather than in React state: the grid is 42
      cells and tracking which one the pointer is over re-rendered all of them. */
+  .inscribed-day {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: ${R_SM}px;
+    /* A button with no background of its own falls back to the UA's grey
+       buttonface, so the resting state has to be stated. */
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: ${FS_XS}px;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: background-color ${DUR_FAST} ${EASE};
+  }
   .inscribed-day:hover:not(.is-selected) {
     background-color: ${HOVER};
   }
@@ -204,12 +306,222 @@ export const fieldCss = `
   .inscribed-accent {
     color: ${A};
   }
-  .inscribed-accent-box {
-    background: color-mix(in srgb, ${A} 5%, transparent);
-    border: 1px solid color-mix(in srgb, ${A} 12%, transparent);
+
+  /* The number field's own stepper. The browser's spinners cannot be styled,
+     only removed, so they are removed and replaced with buttons that match
+     every other control here. */
+  .inscribed-field[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  .inscribed-field[type="number"]::-webkit-outer-spin-button,
+  .inscribed-field[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
+  }
+  .inscribed-stepper {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    right: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .inscribed-stepper > button {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    padding: 0;
+    border: none;
+    border-radius: ${R_SM - 3}px;
+    background: transparent;
+    color: inherit;
+    opacity: 0.4;
+    cursor: pointer;
+    outline: none;
+    transition: opacity ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE};
+  }
+  .inscribed-stepper > button:hover,
+  .inscribed-stepper > button:focus-visible {
+    opacity: 1;
+    background: ${HOVER};
+  }
+  .inscribed-stepper > button:disabled {
+    opacity: 0.2;
+    cursor: not-allowed;
+  }
+
+  /* The image dropzone. Dragging is a real event the browser reports to us, so
+     it arrives as a class rather than a pseudo-class, but it lands in the same
+     place as every other state. */
+  .inscribed-dropzone {
+    border: 1.5px dashed ${LINE};
+    border-radius: ${R_MD}px;
+    background: ${BG};
+    color: inherit;
+    font-family: inherit;
+    transition: border-color ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE};
+  }
+  .inscribed-dropzone:hover,
+  .inscribed-dropzone:focus-visible {
+    background: ${HOVER};
+  }
+  .inscribed-dropzone.is-dragging {
+    border-color: color-mix(in srgb, ${A} 55%, transparent);
+    background: color-mix(in srgb, ${A} 8%, transparent);
+  }
+
+  /* One entry in a repeatable editor. Both repeatables drew this themselves and
+     disagreed: one tinted the resting card with the accent, the other kept it
+     neutral. Neutral wins, because a resting surface is not somewhere the
+     accent is spent; the add row below is, since that one is a create action. */
+  .inscribed-repeat-item {
+    border: 1px solid ${LINE};
+    border-radius: ${R_MD}px;
+    background: ${BG};
+    overflow: hidden;
+    transition: background-color ${DUR_FAST} ${EASE}, border-color ${DUR_FAST} ${EASE};
+  }
+  .inscribed-repeat-item:hover {
+    background: ${HOVER};
+  }
+  /* A repeatable row in the drawer's own language. The drawer shows hierarchy
+     with a hairline guide, not with boxes, so a list of bordered cards nested
+     inside a guide-indented body read as a foreign idiom three levels deep.
+     There is no card here: a header line, and when the row is open a body hung
+     off a hairline under the header's badge.
+
+     The border is declared and transparent rather than absent, so the lifted
+     look a dragged row takes shifts nothing on the rows it travels past. */
+  .inscribed-repeat-row {
+    border: 1px solid transparent;
+    border-radius: ${R_MD}px;
+    transition: border-color ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE};
+  }
+  /* A row that holds a sub-form is a container, and the drawer fills a
+     container's header on hover rather than only lifting its text. */
+  .inscribed-repeat-row-header {
+    border-radius: ${R_SM}px;
+    background: transparent;
+    transition: background-color ${DUR_FAST} ${EASE};
+  }
+  .inscribed-repeat-row-header:hover {
+    background: ${HOVER};
+  }
+
+  .inscribed-repeat-add {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 11px;
+    border: 1px dashed color-mix(in srgb, ${A} 35%, transparent);
+    border-radius: ${R_MD}px;
+    background: color-mix(in srgb, ${A} 4%, transparent);
+    color: color-mix(in srgb, ${A} 75%, transparent);
+    font-family: inherit;
+    font-size: ${FS_SM}px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color ${DUR_FAST} ${EASE}, border-color ${DUR_FAST} ${EASE}, color ${DUR_FAST} ${EASE};
+  }
+  .inscribed-repeat-add:hover,
+  .inscribed-repeat-add:focus-visible {
+    background: color-mix(in srgb, ${A} 10%, transparent);
+    border-color: color-mix(in srgb, ${A} 70%, transparent);
+    color: ${A};
+  }
+
+  /* The Yes/No switch. The checkbox stays in the tree, visually hidden, so the
+     control keeps its native keyboard and screen-reader behaviour; checked and
+     focus are read off it here rather than mirrored into React state. */
+  .inscribed-switch {
+    position: relative;
+    flex-shrink: 0;
+    width: 32px;
+    height: 18px;
+    border-radius: 99px;
+    background: ${LINE};
+    transition: background-color ${DUR_FAST} ${EASE}, box-shadow ${DUR_FAST} ${EASE};
+  }
+  .inscribed-switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: left ${DUR_BASE} ${EASE};
+  }
+  .inscribed-switch-input:checked + .inscribed-switch {
+    background: color-mix(in srgb, ${A} 80%, transparent);
+  }
+  .inscribed-switch-input:checked + .inscribed-switch::after {
+    left: 16px;
+  }
+  .inscribed-switch-input:focus-visible + .inscribed-switch {
+    box-shadow: ${RING};
+  }
+  .inscribed-switch-input:disabled + .inscribed-switch {
+    opacity: 0.5;
+  }
+
+  /* One picked entry in a tag list. */
+  .inscribed-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px 4px 3px 10px;
+    border-radius: ${R_SM}px;
+    border: 1px solid ${LINE};
+    background: ${BG};
+    font-size: ${FS_SM}px;
+    line-height: 1.4;
+    transition: background-color ${DUR_FAST} ${EASE};
+  }
+  .inscribed-chip:hover {
+    background: ${HOVER};
+  }
+  .inscribed-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: ${R_SM - 3}px;
+    background: transparent;
+    color: inherit;
+    opacity: 0.45;
+    cursor: pointer;
+    transition: opacity ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE};
+  }
+  .inscribed-chip-remove:hover,
+  .inscribed-chip-remove:focus-visible {
+    opacity: 1;
+    background: ${HOVER};
   }
 
   /* The clock pill wraps two inputs, so it lights from whichever has focus. */
+  .inscribed-clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    padding: 3px 7px;
+    border: 1px solid ${LINE};
+    border-radius: ${R_SM}px;
+    background: transparent;
+    transition: background-color ${DUR_FAST} ${EASE}, border-color ${DUR_FAST} ${EASE}, box-shadow ${DUR_FAST} ${EASE};
+  }
   .inscribed-clock:hover {
     background-color: ${HOVER};
   }

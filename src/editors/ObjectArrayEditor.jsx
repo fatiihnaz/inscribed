@@ -20,7 +20,6 @@
  * up; the keys move when the two catalogs are reorganised.
  */
 
-import { useState } from "react";
 
 import { moveItem, removeItem } from "../shared/util/list-ops.js";
 import { useOpenRows } from "../core/hooks/use-open-rows.js";
@@ -29,7 +28,7 @@ import { ChevronDown, ChevronUp, Plus, Trash2 } from "../shared/style/icons.jsx"
 import { inertRef } from "../shared/ui/use-inert.js";
 import { noItemsStyle } from "./styles.js";
 import {
-  neutralTint as neutral, FS_XS, FS_SM, FONT_MONO, R_SM, R_BTN, R_MD,
+  neutralTint as neutral, FS_XS, FS_SM, FONT_MONO, R_SM,
 } from "../shared/style/tokens.js";
 
 /**
@@ -49,7 +48,6 @@ export function ObjectArrayEditor({ value, onChange, disabled, addLabel, seedIte
   const items = Array.isArray(value) ? value : [];
 
   const { isOpen, toggle, open: openRow, afterRemove, afterMove } = useOpenRows();
-  const [hovered, setHovered] = useState(/** @type {number | null} */ (null));
 
   const updateItem = (/** @type {number} */ i, /** @type {Record<string, *>} */ nextItem) =>
     onChange(items.map((it, j) => (j === i ? nextItem : it)));
@@ -83,9 +81,7 @@ export function ObjectArrayEditor({ value, onChange, disabled, addLabel, seedIte
             return (
               <div
                 key={i}
-                style={{ ...itemStyle, ...(hovered === i ? itemHoverStyle : null) }}
-                onMouseEnter={() => setHovered(i)}
-                onMouseLeave={() => setHovered((h) => (h === i ? null : h))}
+                className="inscribed-repeat-item"
               >
                 <button type="button" onClick={() => toggle(i)} aria-expanded={rowOpen} style={headerStyle}>
                   <span style={indexStyle}>{i + 1}</span>
@@ -131,7 +127,7 @@ export function ObjectArrayEditor({ value, onChange, disabled, addLabel, seedIte
         </div>
       )}
       {!disabled && (
-        <button type="button" onClick={addNew} style={addBtnStyle}>
+        <button type="button" onClick={addNew} className="inscribed-repeat-add">
           <Plus size={14} />
           {t("collections.addNamed", { name: addLabel })}
         </button>
@@ -180,19 +176,8 @@ function RowControl({ onClick, disabled, label, children }) {
 const shellStyle = { display: "flex", flexDirection: "column", gap: 8 };
 const listStyle = { display: "flex", flexDirection: "column", gap: 6 };
 
-const itemStyle = {
-  borderWidth: 1,
-  borderStyle: "solid",
-  borderColor: neutral(32),
-  borderRadius: R_MD,
-  background: neutral(3),
-  overflow: "hidden",
-  transition: "background-color 140ms ease, border-color 140ms ease",
-};
-const itemHoverStyle = {
-  background: neutral(6),
-  borderColor: neutral(50),
-};
+
+
 const headerStyle = {
   display: "flex",
   alignItems: "center",
@@ -263,19 +248,4 @@ const bodyStyle = {
   padding: "10px 12px 12px",
   borderTop: `1px solid ${neutral(18)}`,
 };
-const addBtnStyle = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-  width: "100%",
-  padding: "9px 12px",
-  border: `1px dashed ${neutral(40)}`,
-  borderRadius: R_BTN,
-  background: "transparent",
-  color: "inherit",
-  fontSize: FS_SM,
-  fontWeight: 500,
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
+

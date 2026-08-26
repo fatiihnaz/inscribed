@@ -33,6 +33,8 @@ export const editors = Object.freeze({
   "editors.richText.label": "Rich text",
   "editors.link.label": "Label",
   "editors.link.url": "URL",
+  "editors.number.increment": "Increase",
+  "editors.number.decrement": "Decrease",
   "editors.url.suspect": "This does not look like a link. It will still be saved.",
 
   // List block editor.
@@ -80,6 +82,9 @@ export const editors = Object.freeze({
   "editors.date.today": "Today",
   "editors.date.clear": "Clear",
   "editors.date.past": "This date has passed.",
+  // The whole countdown is one sentence rather than a figure with a word bolted
+  // on, so a language that puts "left" first has somewhere to put it.
+  "editors.date.remaining": "{time} left",
   "editors.date.days": "days",
   "editors.date.hours": "hours",
   "editors.date.minutes": "mins",

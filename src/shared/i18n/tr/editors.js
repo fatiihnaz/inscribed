@@ -29,6 +29,8 @@ export const editors = Object.freeze({
   "editors.richText.label": "Zengin metin",
   "editors.link.label": "Etiket",
   "editors.link.url": "URL",
+  "editors.number.increment": "Artır",
+  "editors.number.decrement": "Azalt",
   "editors.url.suspect": "Bu adres bir bağlantıya benzemiyor. Yine de kaydedilir.",
 
   "editors.list.noSchema": "Bu liste için {schema} bulunamadı. Sayfada {component} render ediliyor mu?",
@@ -72,6 +74,7 @@ export const editors = Object.freeze({
   "editors.date.today": "Bugün",
   "editors.date.clear": "Temizle",
   "editors.date.past": "Bu tarih geçmiş.",
+  "editors.date.remaining": "{time} kaldı",
   "editors.date.days": "gün",
   "editors.date.hours": "saat",
   "editors.date.minutes": "dk",

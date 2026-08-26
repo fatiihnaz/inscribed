@@ -16,10 +16,11 @@
 import { useMemo } from "react";
 
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
-import { FS_SM, R_SM, neutralTint as neutral } from "../../shared/style/tokens.js";
-import { noItemsStyle } from "../styles.js";
+import { fieldVariant, noItemsStyle } from "../styles.js";
+import { X } from "../../shared/style/icons.jsx";
 import { Combobox } from "./Combobox.jsx";
 import { useChoiceSource } from "./use-choice-source.js";
+import { choiceLabel, choiceSlug } from "../../shared/util/choice-value.js";
 
 /**
  * @import { ChoiceSource } from "../../shared/contracts/schemas.js"
@@ -41,7 +42,12 @@ import { useChoiceSource } from "./use-choice-source.js";
  */
 export function StringArrayEditor({ value, onChange, itemLabel, source, allowCustom, locale, disabled, variant }) {
   const t = useCmsStrings();
-  const items = Array.isArray(value) ? value : [];
+  const v = fieldVariant(variant);
+  // Entries arrive as slugs or as { slug, label } pairs; only slugs are ever
+  // written back, so the list is normalised once here and the labels are read
+  // off the original for display.
+  const entries = Array.isArray(value) ? value : [];
+  const items = entries.map(choiceSlug);
   const { items: choices, search, loading } = useChoiceSource(source, { locale });
 
   // Free text whenever nothing constrains it: no source, or a source the field
@@ -80,18 +86,18 @@ export function StringArrayEditor({ value, onChange, itemLabel, source, allowCus
         <div style={noItemsStyle}>{t("collections.noItems")}</div>
       ) : (
         <div style={chipRowStyle}>
-          {items.map((item, i) => (
-            <span key={i} style={chipStyle}>
-              {item}
+          {entries.map((entry, i) => (
+            <span key={i} className={`inscribed-chip ${v.className}`.trim()}>
+              {choiceLabel(entry)}
               {!disabled && (
                 <button
                   type="button"
+                  className="inscribed-chip-remove"
                   onClick={() => onChange(items.filter((_, j) => j !== i))}
-                  style={chipRemoveStyle}
-                  aria-label={t("collections.removeNamed", { item })}
+                  aria-label={t("collections.removeNamed", { item: choiceLabel(entry) })}
                   title={t("collections.remove")}
                 >
-                  ×
+                  <X size={12} />
                 </button>
               )}
             </span>
@@ -121,26 +127,5 @@ export function StringArrayEditor({ value, onChange, itemLabel, source, allowCus
 
 const shellStyle = { display: "flex", flexDirection: "column", gap: 8 };
 const chipRowStyle = { display: "flex", flexWrap: "wrap", gap: 6 };
-const chipStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 4,
-  padding: "3px 5px 3px 10px",
-  borderRadius: R_SM,
-  border: `1px solid ${neutral(25)}`,
-  background: neutral(8),
-  fontSize: FS_SM,
-  lineHeight: 1.4,
-  marginTop: -1,
-};
-const chipRemoveStyle = {
-  background: "none",
-  border: "none",
-  padding: "0 1px",
-  cursor: "pointer",
-  fontSize: 14,
-  lineHeight: 1,
-  color: "inherit",
-  opacity: 0.5,
-  fontFamily: "inherit",
-};
+
+

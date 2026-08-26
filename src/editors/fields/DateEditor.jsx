@@ -6,7 +6,7 @@
 
 import { FieldShell } from "./FieldShell.jsx";
 import { DatePicker } from "./DatePicker.jsx";
-import { TEXT_MUTED } from "../../shared/style/tokens.js";
+import { fieldVariant } from "../styles.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 
 /**
@@ -28,6 +28,7 @@ export function DateEditor({
   value, onChange, disabled, countdown = true, label, help, hideLabel, variant,
 }) {
   const t = useCmsStrings();
+  const v = fieldVariant(variant);
   const remaining = countdown && value ? calcRemaining(value) : null;
 
   const input = (
@@ -42,40 +43,42 @@ export function DateEditor({
 
   if (!remaining) return field;
 
+  // The countdown is the field's own help line, not a panel beside it: it is
+  // read at a glance, and a bordered box around three figures outweighed the
+  // date it describes. `v.label` puts it at the rhythm a real help line sits at,
+  // flush with the field, where every other line under a field starts.
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={v.label}>
       {field}
-      <div className="inscribed-accent-box" style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "8px 10px",
-        borderRadius: 8,
-      }}>
-        {remaining.past ? (
-          <span style={{ fontSize: 11, color: TEXT_MUTED }}>{t("editors.date.past")}</span>
-        ) : (
-          [
-            { n: remaining.days,    l: t("editors.date.days") },
-            { n: remaining.hours,   l: t("editors.date.hours") },
-            { n: remaining.minutes, l: t("editors.date.minutes") },
-          ].map(({ n, l }) => (
-            <div key={l} style={{ textAlign: "center", minWidth: 32 }}>
-              <div className="inscribed-accent" style={{ fontSize: 15, fontWeight: 600, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{n}</div>
-              <div style={{ fontSize: 9, color: TEXT_MUTED, marginTop: 2, letterSpacing: "0.04em" }}>{l}</div>
-            </div>
-          ))
-        )}
-      </div>
+      <span style={{ ...v.help, fontVariantNumeric: "tabular-nums" }}>
+        {remaining.past
+          ? t("editors.date.past")
+          : t("editors.date.remaining", { time: spellOut(remaining, t) })}
+      </span>
     </div>
   );
+}
+
+/**
+ * The figures, largest first. Leading zeroes are dropped: "37 mins" says what
+ * "0 days 0 hours 37 mins" says, in a third of the line.
+ *
+ * @param {{ days: number, hours: number, minutes: number }} remaining
+ * @param {import("../../shared/i18n/translate.js").Translate} t
+ */
+function spellOut({ days, hours, minutes }, t) {
+  const parts = [];
+  if (days > 0) parts.push(`${days} ${t("editors.date.days")}`);
+  if (days > 0 || hours > 0) parts.push(`${hours} ${t("editors.date.hours")}`);
+  parts.push(`${minutes} ${t("editors.date.minutes")}`);
+  return parts.join(" ");
 }
 
 /** @param {string} iso */
 function calcRemaining(iso) {
   const diff = new Date(iso).getTime() - Date.now();
   if (Number.isNaN(diff)) return null;
-  if (diff <= 0) return { past: true };
+  if (diff <= 0) return { past: true, days: 0, hours: 0, minutes: 0 };
   const totalSeconds = Math.floor(diff / 1000);
   return {
     past: false,

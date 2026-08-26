@@ -137,7 +137,7 @@ function FieldInput({ field, value, onChange, disabled }) {
     case "Image":
       return (
         <FieldShell {...shell} as="div">
-          <ImageEditor value={value} onChange={onChange} disabled={disabled} />
+          <ImageEditor value={value} onChange={onChange} disabled={disabled} variant={VARIANT} />
         </FieldShell>
       );
 

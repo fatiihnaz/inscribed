@@ -127,6 +127,7 @@ export function SearchPicker({
       <motion.div
         variants={staggerItem}
         role="listbox"
+        className="inscribed-inset"
         style={{
           ...listStyle,
           opacity: loading ? 0.6 : 1,
@@ -159,7 +160,6 @@ export function SearchPicker({
                     onMouseEnter={() => onActiveChange(index)}
                     onClick={() => onCommit(row)}
                     className={rowClass(index === active, row.selected)}
-                    style={rowStyle}
                   >
                     {row.create ? <Plus size={12} className="inscribed-accent" style={{ flexShrink: 0 }} /> : null}
                     <span style={rowLabelStyle}>{row.display ?? row.label}</span>
@@ -184,11 +184,11 @@ export function SearchPicker({
 
           {pageable ? (
             <div style={pagerStyle}>
-              <PanelButton shape="icon" bordered onClick={() => turnTo(page - 1)} disabled={page <= 1} label={prevPageLabel}>
+              <PanelButton shape="icon" onClick={() => turnTo(page - 1)} disabled={page <= 1} label={prevPageLabel}>
                 <ChevronLeft size={14} />
               </PanelButton>
               <span style={pageCountStyle}>{page} / {totalPages}</span>
-              <PanelButton shape="icon" bordered onClick={() => turnTo(page + 1)} disabled={page >= totalPages} label={nextPageLabel}>
+              <PanelButton shape="icon" onClick={() => turnTo(page + 1)} disabled={page >= totalPages} label={nextPageLabel}>
                 <ChevronRight size={14} />
               </PanelButton>
             </div>
@@ -207,8 +207,6 @@ const searchRowStyle = {
   gap: 8,
   padding: "0 10px",
   borderRadius: R_SM,
-  borderWidth: 1,
-  borderStyle: "solid",
   flexShrink: 0,
 };
 const searchInputStyle = {
@@ -217,7 +215,7 @@ const searchInputStyle = {
   font: "inherit",
   fontSize: FS_SM,
   fontWeight: 400,
-  padding: "8px 0",
+  padding: "6px 0",
   border: "none",
   background: "transparent",
   color: "inherit",
@@ -225,8 +223,6 @@ const searchInputStyle = {
 };
 const listStyle = {
   borderRadius: R_SM,
-  borderWidth: 1,
-  borderStyle: "solid",
   padding: 4,
   minWidth: 0,
   // `popLayout` takes the outgoing page out of flow, so this has to be the box
@@ -235,25 +231,7 @@ const listStyle = {
   overflow: "hidden",
   transition: `opacity ${DUR_FAST} ${EASE}`,
 };
-const rowStyle = {
-  display: "flex",
-  alignItems: "center",
-  gap: 9,
-  width: "100%",
-  padding: "7px 9px",
-  border: "none",
-  borderRadius: R_SM - 2,
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-  fontSize: FS_SM,
-  // Stated so the selected row's own weight is a swap, not an addition; see
-  // `selected` in editors/styles.js.
-  fontWeight: 400,
-  textAlign: "left",
-  cursor: "pointer",
-  transition: `background-color ${DUR_FAST} ${EASE}`,
-};
+
 const rowLabelStyle = { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const noteStyle = { padding: "12px 8px", fontSize: FS_SM, opacity: 0.45, textAlign: "center" };
 const hintStyle = { flexShrink: 0, fontSize: FS_XS, opacity: 0.45 };

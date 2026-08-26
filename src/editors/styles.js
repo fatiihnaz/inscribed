@@ -13,17 +13,25 @@
 
 import {
   BORDER, BG_RAISED, TEXT_HI, TEXT_MUTED, TEXT_FAINT,
-  FS_XS, FS_SM, R_MD, R_BTN, RADIUS, neutralTint as neutral,
+  FS_XS, FS_SM, R_MD, RADIUS,
 } from "../shared/style/tokens.js";
 
-// The dashed "nothing added yet" box the repeatable editors share.
+/**
+ * "Nothing added yet", for the repeatable editors.
+ *
+ * No frame: a dashed box drawn around nothing is a second empty object stacked
+ * on the empty one, and every repeatable puts the control that fills it
+ * directly below wearing the same dashes. A quiet line standing where the first
+ * entry would says it without competing with the thing to click. The inset
+ * matches a row's, so the line sits where a row sits.
+ *
+ * `opacity` rather than a text token, since these editors also render on a
+ * light host page where the white-alpha ramp is invisible.
+ */
 export const noItemsStyle = {
   fontSize: FS_SM,
   opacity: 0.5,
-  padding: "9px 10px",
-  border: `1px dashed ${neutral(25)}`,
-  borderRadius: R_BTN,
-  textAlign: "center",
+  padding: "5px 6px",
 };
 
 

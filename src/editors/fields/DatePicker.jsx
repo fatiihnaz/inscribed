@@ -232,7 +232,7 @@ export function DatePicker({ value, onChange, time = true, disabled, variant }) 
                               onClick={() => pickDay(date)}
                               aria-pressed={isSel}
                               className={dayClass(isSel, isToday)}
-                              style={{ ...dayStyle, opacity: inMonth ? 1 : 0.35 }}
+                              style={{ opacity: inMonth ? 1 : 0.35 }}
                             >
                               {date.getDate()}
                             </button>
@@ -285,20 +285,7 @@ export function DatePicker({ value, onChange, time = true, disabled, variant }) 
  */
 function Clock({ hour, minute, onHour, onMinute, hourLabel, minuteLabel, variant }) {
   return (
-    <div
-      className="inscribed-clock inscribed-divider"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 1,
-        padding: "3px 7px",
-        borderRadius: R_SM,
-        borderWidth: 1,
-        borderStyle: "solid",
-        background: "transparent",
-        transition: `box-shadow ${DUR_FAST} ${EASE}, border-color ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE}`,
-      }}
-    >
+    <div className="inscribed-clock">
       <Digits value={hour} max={23} onChange={onHour} label={hourLabel} />
       <span style={{ opacity: 0.35 }}>:</span>
       <Digits value={minute} max={59} onChange={onMinute} label={minuteLabel} />
@@ -425,8 +412,6 @@ const headBarStyle = {
   alignItems: "center",
   justifyContent: "space-between",
   borderRadius: R_SM,
-  borderWidth: 1,
-  borderStyle: "solid",
   padding: 4,
 };
 
@@ -455,22 +440,7 @@ const gridStyle = {
   gridAutoRows: "1fr",
   gap: 3,
 };
-const dayStyle = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  border: "none",
-  borderRadius: R_SM,
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-  fontSize: FS_XS,
-  fontWeight: 400,
-  fontVariantNumeric: "tabular-nums",
-  cursor: "pointer",
-  padding: 0,
-  transition: `background-color ${DUR_FAST} ${EASE}`,
-};
+
 
 const digitsStyle = {
   width: 20,

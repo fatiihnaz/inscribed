@@ -9,7 +9,7 @@
  * `<EditableList>` mounts. Without it we render a hint instead of editors.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Trash2, ChevronUp, ChevronDown } from "../shared/style/icons.jsx";
 
@@ -23,9 +23,9 @@ import {
 } from "../core/hooks/use-list-reorder.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { PositionField } from "../shared/ui/PositionField.jsx";
-import { emptyStateStyle } from "./styles.js";
+import { noItemsStyle } from "./styles.js";
 import {
-  ACCENT, BG_RAISED, DUR_FAST, EASE, TEXT_MUTED, STATUS_DANGER, R_BADGE, R_SM,
+  ACCENT, BG_RAISED, EASE, HAIRLINE, TEXT_MUTED, STATUS_DANGER, R_BADGE, R_SM,
 } from "../shared/style/tokens.js";
 
 import { FieldEditor } from "./FieldEditor.jsx";
@@ -113,9 +113,9 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {items.length === 0 ? (
-        <div style={emptyStateStyle}>
+        <div style={noItemsStyle}>
           {t("editors.list.empty")}
         </div>
       ) : null}
@@ -157,19 +157,18 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
  * Lights up like the page-side add slot: the dashed edge is the affordance, so
  * hover strengthens it rather than swapping in a different surface.
  *
+ * The margin is its own: the rows sit 4px apart now that they are lines rather
+ * than cards, and the add row is a different kind of thing from a row.
+ *
  * @param {{ onAdd: () => void, label: string }} props
  */
 function AddItemButton({ onAdd, label }) {
-  const [hovered, setHovered] = useState(false);
   return (
     <button
       type="button"
       onClick={onAdd}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocus={() => setHovered(true)}
-      onBlur={() => setHovered(false)}
-      style={{ ...listAddButtonStyle, ...(hovered ? listAddButtonHoverStyle : null) }}
+      className="inscribed-repeat-add"
+      style={addButtonStyle}
     >
       <Plus size={13} />
       <span>{label}</span>
@@ -216,7 +215,6 @@ function ListItemCard({
     uiStore,
     (s) => s.activeListItem?.path === blockPath && s.activeListItem?.index === index,
   );
-  const [hovered, setHovered] = useState(false);
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
   // A press that turned into a drag still fires a click on release, which would
   // toggle the card open every time it is dropped. Latched while the drag runs,
@@ -278,15 +276,11 @@ function ListItemCard({
         />
       ) : null}
       <div
-        style={{
-          ...listItemCardStyle,
-          ...(hovered && !dragging ? listItemCardHoverStyle : null),
-          ...(dragging ? listItemCardLiftStyle : null),
-        }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        className="inscribed-repeat-row"
+        style={dragging ? listItemCardLiftStyle : undefined}
       >
       <div
+        className="inscribed-repeat-row-header"
         style={{
           ...listItemHeaderStyle,
           cursor: disabled ? "pointer" : dragging ? "grabbing" : "grab",
@@ -366,7 +360,7 @@ function ListItemCard({
         <motion.span
           initial={false}
           animate={{ rotate: isOpen ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.24, ease: EASE_POINTS }}
           style={{ display: "inline-flex", color: TEXT_MUTED, marginLeft: disabled ? "auto" : 4 }}
         >
           <ChevronDown size={13} />
@@ -377,13 +371,13 @@ function ListItemCard({
         {isOpen ? (
           <motion.div
             key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.32, 0.72, 0.18, 1] }}
+            variants={bodyVariants}
+            initial="closed"
+            animate="open"
+            exit="closed"
             style={{ overflow: "hidden" }}
           >
-            <div style={listItemBodyStyle}>
+            <motion.div variants={fieldGroupVariants} style={listItemBodyStyle}>
               {Object.entries(itemSchema).map(([key, field]) => {
                 const editor = FieldEditor({
                   blockType: field.blockType,
@@ -395,17 +389,17 @@ function ListItemCard({
                   hideLabel: true,
                 });
                 return (
-                  <div key={key} style={listFieldStyle}>
+                  <motion.div key={key} variants={fieldVariants} style={listFieldStyle}>
                     <div style={listFieldLabelStyle}>{key}</div>
                     {editor ?? (
                       <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
                         {t("editors.list.unsupportedField", { type: field.blockType })}
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 );
               })}
-            </div>
+            </motion.div>
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -413,6 +407,32 @@ function ListItemCard({
     </div>
   );
 }
+
+// ---- Open/close motion ----------------------------------------------------
+
+// Framer wants the curve as points; the token is the CSS spelling of the same
+// one, and everything in the drawer opens on it.
+const EASE_POINTS = [0.32, 0.72, 0.18, 1];
+
+// Opening makes room first and lets the fields arrive into it, which is why the
+// box and its contents are two animations rather than one fade over both.
+// Closing is quicker and unstaggered: a row folding shut is not something
+// anyone needs to watch, and the clip hides most of it anyway.
+const bodyVariants = {
+  closed: { height: 0, transition: { duration: 0.18, ease: EASE_POINTS } },
+  open: { height: "auto", transition: { duration: 0.26, ease: EASE_POINTS } },
+};
+
+const fieldGroupVariants = {
+  closed: { transition: { staggerChildren: 0.02, staggerDirection: -1 } },
+  open: { transition: { delayChildren: 0.07, staggerChildren: 0.045 } },
+};
+
+// Drifting up into the gap the box just opened, rather than fading in place.
+const fieldVariants = {
+  closed: { opacity: 0, y: 6, transition: { duration: 0.1 } },
+  open: { opacity: 1, y: 0, transition: { duration: 0.22, ease: "easeOut" } },
+};
 
 // Only the text types name a row here. A list item's Date holds a string too,
 // but an ISO timestamp in the header reads like a bug, and unlike a collection
@@ -441,20 +461,11 @@ function listItemSummary(itemSchema, item) {
 // Border in longhand props so hover can override `borderColor` alone without
 // React's shorthand/longhand-mix warning (which would stick the border after
 // un-hover). Gold/cream tones keep it distinct from the Collection editor.
-const listItemCardStyle = /** @type {React.CSSProperties} */ ({
-  borderWidth: 1,
-  borderStyle: "solid",
-  borderColor: `color-mix(in srgb, ${ACCENT} 16%, transparent)`,
-  borderRadius: R_SM,
-  background: `color-mix(in srgb, ${ACCENT} 3%, transparent)`,
-  overflow: "hidden",
-  transition: "background-color 140ms ease, border-color 140ms ease",
-});
 
-const listItemCardHoverStyle = /** @type {React.CSSProperties} */ ({
-  borderColor: `color-mix(in srgb, ${ACCENT} 34%, transparent)`,
-  background: `color-mix(in srgb, ${ACCENT} 6%, transparent)`,
-});
+
+
+
+const addButtonStyle = /** @type {React.CSSProperties} */ ({ marginTop: 4 });
 
 // Held card: opaque, so it reads as lifted over the ones it passes rather than
 // blended into them.
@@ -479,7 +490,7 @@ const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   alignItems: "center",
   gap: 8,
-  padding: "7px 8px 7px 9px",
+  padding: "5px 6px",
   fontSize: 12,
   color: TEXT_MUTED,
 });
@@ -564,12 +575,16 @@ const listItemDangerStyle = /** @type {React.CSSProperties} */ ({
   color: STATUS_DANGER,
 });
 
+// Hung off a hairline under the badge column rather than closed in by a rule
+// above it: the badge sits at 6px with a 20px box, so the line lands at 15.5px
+// and reads as running down out of the number.
 const listItemBodyStyle = /** @type {React.CSSProperties} */ ({
-  padding: "8px 10px 12px",
+  margin: "2px 0 6px 15px",
+  padding: "2px 0 4px 14px",
+  borderLeft: `1px solid ${HAIRLINE}`,
   display: "flex",
   flexDirection: "column",
   gap: 10,
-  borderTop: `1px solid color-mix(in srgb, ${ACCENT} 8%, transparent)`,
 });
 
 const listFieldStyle = /** @type {React.CSSProperties} */ ({
@@ -586,28 +601,5 @@ const listFieldLabelStyle = /** @type {React.CSSProperties} */ ({
 });
 
 // Border in longhand so hover can override `borderColor` alone, as on the cards.
-const listAddButtonStyle = /** @type {React.CSSProperties} */ ({
-  display: "flex",
-  width: "100%",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-  padding: "9px 12px",
-  background: `color-mix(in srgb, ${ACCENT} 4%, transparent)`,
-  borderWidth: 1,
-  borderStyle: "dashed",
-  borderColor: `color-mix(in srgb, ${ACCENT} 35%, transparent)`,
-  borderRadius: R_SM,
-  color: `color-mix(in srgb, ${ACCENT} 75%, transparent)`,
-  fontSize: 12,
-  fontWeight: 500,
-  fontFamily: "inherit",
-  cursor: "pointer",
-  transition: `background-color ${DUR_FAST} ${EASE}, border-color ${DUR_FAST} ${EASE}, color ${DUR_FAST} ${EASE}`,
-});
 
-const listAddButtonHoverStyle = /** @type {React.CSSProperties} */ ({
-  background: `color-mix(in srgb, ${ACCENT} 10%, transparent)`,
-  borderColor: `color-mix(in srgb, ${ACCENT} 70%, transparent)`,
-  color: ACCENT,
-});
+

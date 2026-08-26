@@ -50,6 +50,7 @@ const SEARCH_DEBOUNCE_MS = 200;
  *   loading?: boolean,
  *   onCreate?: (text: string) => void,
  *   onClear?: () => void,
+ *   valueLabel?: string,
  *   disabled?: boolean,
  *   variant?: import("../styles.js").FieldVariantName,
  * }} props
@@ -58,7 +59,7 @@ const SEARCH_DEBOUNCE_MS = 200;
  */
 export function Combobox({
   items, value, onPick, mode = "select", placeholder,
-  onSearch, loading, onCreate, onClear, disabled, variant,
+  onSearch, loading, onCreate, onClear, valueLabel, disabled, variant,
 }) {
   const t = useCmsStrings();
   const v = fieldVariant(variant);
@@ -165,8 +166,8 @@ export function Combobox({
   const adding = mode === "add";
   const triggerLabel = adding
     ? (placeholder ?? t("editors.combobox.add"))
-    : (selected?.label ?? value ?? placeholder ?? t("editors.combobox.choose"));
-  const isPlaceholder = adding || (!selected?.label && !value);
+    : (selected?.label ?? valueLabel ?? value ?? placeholder ?? t("editors.combobox.choose"));
+  const isPlaceholder = adding || (!selected?.label && !valueLabel && !value);
   const showClear = !adding && Boolean(value) && Boolean(onClear) && !disabled;
   const note = loading
     ? t("editors.combobox.loading")

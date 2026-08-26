@@ -16,6 +16,7 @@ import { useCallback, useRef, useState } from "react";
 
 import { useImageUpload } from "../use-image-upload.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
+import { fieldVariant } from "../styles.js";
 
 /**
  * @typedef {Object} ImageValue
@@ -28,9 +29,11 @@ import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
  * @param {ImageValue|null|undefined} props.value
  * @param {(value: { src: string, alt: string }) => void} props.onChange
  * @param {boolean} [props.disabled]
+ * @param {import("../styles.js").FieldVariantName} [props.variant]
  */
-export function ImageEditor({ value, onChange, disabled }) {
+export function ImageEditor({ value, onChange, disabled, variant }) {
   const t = useCmsStrings();
+  const v = fieldVariant(variant);
   const obj = value && typeof value === "object" ? value : {};
   const src = typeof obj.src === "string" ? obj.src : "";
   const alt = typeof obj.alt === "string" ? obj.alt : "";
@@ -86,11 +89,8 @@ export function ImageEditor({ value, onChange, disabled }) {
           <button
             type="button"
             onClick={() => !isUploading && inputRef.current?.click()}
-            style={{
-              ...dropzoneStyle,
-              ...(isDragging ? dropzoneActiveStyle : null),
-              cursor: isUploading ? "default" : "pointer",
-            }}
+            className={`inscribed-dropzone ${v.className} ${isDragging ? "is-dragging" : ""}`.trim()}
+            style={{ ...dropzoneStyle, cursor: isUploading ? "default" : "pointer" }}
           >
             {isUploading ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, width: "100%" }}>
@@ -140,8 +140,7 @@ export function ImageEditor({ value, onChange, disabled }) {
           onChange={(e) => patch({ src: e.target.value })}
           placeholder="https://…"
           disabled={disabled}
-          className="inscribed-field"
-          style={fieldStyle}
+          className={`inscribed-field ${v.className}`.trim()}
         />
       </label>
       <label style={subLabelStyle}>
@@ -152,8 +151,7 @@ export function ImageEditor({ value, onChange, disabled }) {
           onChange={(e) => patch({ alt: e.target.value })}
           placeholder={t("editors.image.altPlaceholder")}
           disabled={disabled}
-          className="inscribed-field"
-          style={fieldStyle}
+          className={`inscribed-field ${v.className}`.trim()}
         />
       </label>
 
@@ -196,17 +194,8 @@ const dropzoneStyle = {
   justifyContent: "center",
   gap: 6,
   padding: "16px 14px",
-  border: "1.5px dashed rgba(127,127,127,0.3)",
-  borderRadius: 8,
-  background: "rgba(127,127,127,0.04)",
-  color: "inherit",
-  fontFamily: "inherit",
-  transition: "border-color 140ms ease, background-color 140ms ease",
 };
-const dropzoneActiveStyle = {
-  borderColor: "color-mix(in srgb, currentColor 45%, transparent)",
-  background: "rgba(127,127,127,0.09)",
-};
+
 const hintStrongStyle = { fontSize: 12, fontWeight: 500, opacity: 0.85 };
 const hintStyle = { fontSize: 11, opacity: 0.5 };
 const placeholderStyle = {
@@ -287,14 +276,4 @@ const subLabelTextStyle = {
   letterSpacing: "-0.005em",
   opacity: 0.65,
 };
-const fieldStyle = {
-  padding: "8px 10px",
-  border: "1px solid rgba(127,127,127,0.22)",
-  borderRadius: 6,
-  fontSize: 12,
-  lineHeight: 1.4,
-  fontFamily: "inherit",
-  background: "rgba(127,127,127,0.04)",
-  color: "inherit",
-  outline: "none",
-};
+

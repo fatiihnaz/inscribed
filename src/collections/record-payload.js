@@ -8,6 +8,8 @@
  * @import { CollectionFieldDescriptor } from "../shared/contracts/schemas.js"
  */
 
+import { choiceSlug } from "../shared/util/choice-value.js";
+
 /**
  * Build the initial values map for a form, falling back to per-type
  * defaults for fields missing from `data`. Use on mount to seed form
@@ -93,7 +95,12 @@ export function buildPayload(fields, values) {
       out[field.name] = link?.href ? link : null;
       continue;
     }
-    const value = values[field.name];
+    // A reference field may arrive as a { slug, label } pair; the slug is the
+    // half that is ours to store.
+    const raw = values[field.name];
+    const value = field.type === "Select" ? choiceSlug(raw)
+      : field.type === "StringArray" && Array.isArray(raw) ? raw.map(choiceSlug)
+      : raw;
     out[field.name] = value === "" ? null : value;
   }
   return out;
@@ -145,13 +152,17 @@ export function requiredMissing(fields, values) {
     if (!field.required) continue;
 
     if (field.type === "StringArray") {
-      if (!Array.isArray(value) || value.length === 0) return field.label || field.name;
+      const slugs = Array.isArray(value) ? value.map(choiceSlug).filter(Boolean) : [];
+      if (slugs.length === 0) return field.label || field.name;
     } else if (field.type === "Bool") {
       // `required` is semantically odd for booleans; `false` is a valid value.
       continue;
     } else if (field.type === "Number") {
       if (value === null || value === undefined || Number.isNaN(value)) return field.label || field.name;
-    } else if (value === null || value === undefined || String(value).trim() === "") {
+    } else if (
+      value === null || value === undefined
+      || String(field.type === "Select" ? choiceSlug(value) : value).trim() === ""
+    ) {
       return field.label || field.name;
     }
   }

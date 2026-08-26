@@ -12,6 +12,7 @@
 import { FieldShell } from "./FieldShell.jsx";
 import { Combobox } from "./Combobox.jsx";
 import { useChoiceSource } from "./use-choice-source.js";
+import { choiceLabel, choiceSlug } from "../../shared/util/choice-value.js";
 
 /**
  * @import { ChoiceSource } from "../../shared/contracts/schemas.js"
@@ -41,7 +42,8 @@ export function SelectEditor({
   const control = (
     <Combobox
       items={items}
-      value={value ?? ""}
+      value={choiceSlug(value)}
+      valueLabel={choiceLabel(value)}
       onPick={onChange}
       onClear={() => onChange("")}
       onCreate={allowCustom ? onChange : undefined}

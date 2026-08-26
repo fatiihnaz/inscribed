@@ -58,7 +58,7 @@ export function useChoiceSource(source, { locale } = {}) {
           { accessToken: token },
         );
         if (seq !== seqRef.current) return;
-        setRemote((res?.items ?? []).map((i) => ({ value: i.slug, label: i.label })));
+        setRemote((res?.items ?? []).map((i) => ({ value: i.slug, label: i.label || i.slug })));
       } catch {
         // A failed lookup shows an empty list, which the combobox already words
         // as "nothing matches". Louder would be wrong for a keystroke.

@@ -42,9 +42,20 @@ const CollectionLane = dynamic(
 );
 
 // Field-weight types: a single light editor, rendered always-open as a form
-// field. Everything else (RichText/Image/ObjectArray/Collection/unknown) keeps the
-// collapsible card surface.
-const INLINE_TYPES = new Set(["ShortText", "LongText", "Date", "Link"]);
+// field. Everything else (RichText/Image/ObjectArray/Collection/unknown) keeps
+// the collapsible card surface.
+//
+// Listed rather than derived by exclusion so a type this build has never heard
+// of still lands on the card lane, where there is a message for it. The scalars
+// added since (Number, Bool, Url, Select) were never added here, which left a
+// boolean wearing a disclosure card and a chevron to reach one switch.
+const INLINE_TYPES = new Set([
+  "ShortText", "LongText", "Number", "Bool", "Url", "Date", "Link", "Select", "StringArray",
+]);
+
+// A switch is the whole control and it is small, so it rides the label row the
+// way a setting does instead of opening a line of its own under the caption.
+const INLINE_CONTROL_TYPES = new Set(["Bool"]);
 
 /**
  * @import { BlockResponse, ItemSchema } from "../shared/contracts/schemas.js"
@@ -170,12 +181,25 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
   const value = resolveBlockValue(block, hasDraft, draft);
   const isDirty = !readOnly && isBlockDirty(block, hasDraft, draft);
   const choices = useChoiceEntry(block.blockPath);
+  const onRow = INLINE_CONTROL_TYPES.has(block.blockType);
 
   useEffect(() => {
     if (isActive && ref.current) {
       ref.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [isActive]);
+
+  const editor = (
+    <FieldEditor
+      blockType={block.blockType}
+      value={value}
+      onChange={onChange}
+      disabled={readOnly}
+      source={choices?.source ?? null}
+      allowCustom={choices?.allowCustom}
+      hideLabel
+    />
+  );
 
   return (
     <div
@@ -211,6 +235,7 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
             <Lock size={12} />
           </span>
         ) : null}
+        {onRow ? editor : null}
       </div>
       {/* Plain boxes. The notices animate their own height, so the editor
           between them travels by ordinary reflow. A `layout` projection here
@@ -218,27 +243,23 @@ function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
           what made these cards drift up and down on a route change: global
           blocks keep their identity across pages, so the projection measured
           the previous page's position and slid them to the new one. */}
-      <div style={fieldEditorWrapStyle}>
-        <BlockConflictNotice
-          show={hasConflict}
-          block={block}
-          draft={value}
-          onTakeTheirs={onTakeTheirs}
-          onKeepMine={onKeepMine}
-        />
-        <div style={editorSlotStyle}>
-          <FieldEditor
-            blockType={block.blockType}
-            value={value}
-            onChange={onChange}
-            disabled={readOnly}
-            source={choices?.source ?? null}
-            allowCustom={choices?.allowCustom}
-            hideLabel
+      {/* With the control on the label row the guide body has nothing to hold,
+          so it only appears when a conflict needs somewhere to go. */}
+      {onRow && !hasConflict ? null : (
+        <div style={fieldEditorWrapStyle}>
+          <BlockConflictNotice
+            show={hasConflict}
+            block={block}
+            draft={value}
+            onTakeTheirs={onTakeTheirs}
+            onKeepMine={onKeepMine}
           />
-          <TranslationPrompt block={block} value={value} readOnly={readOnly} />
+          <div style={editorSlotStyle}>
+            {onRow ? null : editor}
+            <TranslationPrompt block={block} value={value} readOnly={readOnly} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

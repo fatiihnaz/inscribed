@@ -267,29 +267,95 @@ static discovery step turns those declarations into a backend manifest.
 Because discovery reads the JSX statically, `blockType` and `defaultValue` must
 be **plain literals**, the scanner can't evaluate variables or imports.
 
-You can also register a block that has no `<EditableRegion>` on the page by
-passing discovery metadata to `useCmsBlock(path, { blockType, defaultValue })`.
-This is how the types that draw nothing get declared.
-
-`Select` and `StringArray` take one more key, because a vocabulary is the page's
-business rather than the backend's: `source` never enters the manifest, it is
-registered at runtime for the drawer to read.
+**Rendering it yourself.** Pass a function as `<EditableRegion>`'s children and
+the markup is yours; it receives the block's value. This is how the types that
+draw nothing on their own get onto a page:
 
 ```jsx
-const { value: tags } = useCmsBlock("post.tags", {
-  blockType: "StringArray",
-  defaultValue: [],
-  source: { kind: "static", values: ["news", "release", "guide"] },
-  allowCustom: true,   // off by default, which makes the source a closed list
-});
+<EditableRegion blockPath="stats.count" blockType="Number" defaultValue={0} as="p">
+  {(value) => <strong>{value} people</strong>}
+</EditableRegion>
 ```
 
-`{ kind: "collection", collection: "authors" }` sources the list from another
-collection's records instead, searched as you type; the stored value is the
-target record's slug, which is how a reference between the two is expressed.
-Declare it on a component that is mounted on the route you want to edit it
-from: with nothing registered the drawer says the field has no source rather
-than offering an empty list.
+`as` still names the tag the region lays out as. Visitors get the children and
+nothing else, no wrapper element and no listeners; admins get the same hover
+ring and drawer chip every region has. The chip is the only way in: the children
+are yours, links and buttons included, so the region takes no click of its own.
+
+The cost is in-place editing. A caret needs a node the SDK produced, so a text
+or rich-text region handed over this way is edited in the drawer instead, and an
+image loses its on-image overlay. Every other type loses nothing, since none of
+them had page-side editing to begin with.
+
+**Choosing from a vocabulary.** A `Select` stores a key, and the key means
+nothing without the list it came from, so it has its own declaration site the
+way `ObjectArray` has `<EditableList>`:
+
+```jsx
+<EditableChoice
+  blockPath="post.status"
+  defaultValue="draft"
+  source={{ kind: "static", values: ["draft", "published", "archived"] }}
+/>
+```
+
+It is a region in every other way: same chrome, same group and visibility rules,
+and a function child renders the value your own way. `source` is the one prop
+that never enters the manifest, since a vocabulary is the page's business and the
+drawer is its only reader.
+
+A `block` source names another block on the page as the list, which makes the
+vocabulary content rather than code: an editor adds an option by editing that
+block instead of opening the repo.
+
+```jsx
+<EditableRegion blockPath="tags" blockType="StringArray" defaultValue={["news"]}>
+  {(tags) => tags.map((t) => <li key={t}>{t}</li>)}
+</EditableRegion>
+
+<EditableChoice blockPath="featured.tag" defaultValue=""
+                source={{ kind: "block", blockPath: "tags" }} />
+```
+
+A `StringArray` block offers its entries; an `ObjectArray` offers one field of
+each row, named by `labelField`. What gets stored is that field's value, never a
+row index, so reordering the source list cannot repoint a reference and deleting
+a row leaves the stored text standing. Blocks on this page and `scope="global"`
+ones are both in reach, since the two are fetched together.
+
+A `Select` inside a list row declares its vocabulary on the column instead,
+where the rest of the row's shape is:
+
+```jsx
+<EditableList
+  blockPath="features"
+  itemSchema={{
+    name:  { blockType: "ShortText", defaultValue: "" },
+    state: {
+      blockType: "Select",
+      defaultValue: "draft",
+      source: { kind: "static", values: ["draft", "live"] },
+    },
+  }}
+>
+  {(item) => <li>{item.name}</li>}
+</EditableList>
+```
+
+`source` is dropped on the way to the manifest there too. A row column takes a
+`static` source only: a `block` one has to be resolved against the page, which
+the list does not do.
+
+**A block with nothing on the page.** For a value with no presence on screen at
+all (a document title, a meta tag, a setting that only reaches an API call),
+declare it from the hook instead, which has no element to wrap:
+
+```jsx
+const { value: apiKey } = useCmsBlock("settings.key", {
+  blockType: "ShortText",
+  defaultValue: "",
+});
+```
 
 ### Slugs
 
@@ -426,9 +492,11 @@ never sees. Set `white-space` in your own `style` and yours wins.
 > arrive typed `Text` are folded to `LongText` as they enter the runtime, so
 > older rows and custom transports keep working.
 
-For full control over rendering, read a block directly from a Client Component
-with `useCmsBlock(blockPath)`, it returns the raw `value`, `version`, and an
-`update()` callback.
+For full control over rendering, pass a function as the region's children (see
+[Discovery & sync](#discovery--sync)): it declares and wraps the block exactly
+the same way, but the markup is yours. `useCmsBlock(blockPath)` is the same value
+without any chrome, returning the raw `value`, `version` and an `update()`
+callback.
 
 ### Groups
 
@@ -1618,7 +1686,7 @@ bundle:
 
 | Import | Side | Highlights |
 | ------ | ---- | ---------- |
-| `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCmsRoute`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
+| `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `EditableChoice`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCmsRoute`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
 | `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `CollectionComposer`, `useCollection`, `useCollectionItem`, `useCollectionRecord`, `useMyCollections`, `useCollectionCreate`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
 | `inscribed/panels` | client | `useCmsPanel`, `PanelStack` (what a [custom panel](#custom-panels)'s own component reads and renders) |
 | `inscribed/server` | server only | `getCmsContent`, `getCmsPageBlocks`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
@@ -1631,7 +1699,7 @@ handlers, or build scripts, never from a Client Component.
 
 ## CLI: `cms-sync`
 
-Discovers `<EditableRegion>` (and `useCmsBlock` metadata) declarations under
+Discovers `<EditableRegion>` / `<EditableChoice>` / `<EditableList>` (and `useCmsBlock` metadata) declarations under
 `app/`, rooted at each `page.{js,jsx,ts,tsx}` file, and pushes the manifest to
 the backend. When discovery finds no regions at all it exits with an error
 instead of pushing, since reconciling against an empty manifest soft-deletes

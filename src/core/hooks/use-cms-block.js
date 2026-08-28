@@ -6,11 +6,11 @@
  * handles the version bookkeeping for editors.
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
-import { stableStringify } from "../../shared/util/stable-stringify.js";
+import { useDeclaredChoiceSource } from "./use-declared-choice-source.js";
 import { resolveBlockValue } from "../resolve.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
 import { useCmsRoute } from "./use-cms-route.js";
@@ -30,7 +30,13 @@ import { useCmsRoute } from "./use-cms-route.js";
  */
 
 /**
- * Metadata for a block declared here rather than by a region on the page.
+ * Metadata for a block that has nothing on the page to declare it.
+ *
+ * A region wraps an element and can therefore carry the hover ring and the chip
+ * that opens the drawer; a hook has no element, so this is the path for a value
+ * with no presence on screen at all: a document title, a meta tag, a setting
+ * that only ever reaches an API call. Anything you actually render belongs on
+ * `<EditableRegion>`, whose function-children mode takes any type.
  *
  * `blockType` and `defaultValue` are what the manifest scanner reads to seed the
  * row. `source` is not in the manifest and never goes to the backend: the
@@ -53,34 +59,19 @@ import { useCmsRoute } from "./use-cms-route.js";
 
 /**
  * @param {string} blockPath
- * @param {UseCmsBlockMeta} [meta]
+ * @param {UseCmsBlockMeta} [meta]  Declares a block with nothing on the page.
  * @returns {UseCmsBlockResult}
  */
 export function useCmsBlock(blockPath, meta) {
-  const { blocksStore, isAdmin, registerChoiceSource, unregisterChoiceSource } = useCmsContext();
+  const { blocksStore } = useCmsContext();
   const { save } = useCmsAdmin();
   const { pathname } = useCmsRoute();
+
+  useDeclaredChoiceSource(blockPath, meta?.source, meta?.allowCustom);
 
   // Just this block's entry on this route, so another block's save doesn't
   // re-render us and a navigation resolves against the new page at once.
   const block = useStoreSelector(blocksStore, (s) => s.get(pathname)?.get(blockPath) ?? null);
-
-  // Keyed on the source's shape, not its identity: callers write it inline, so
-  // an unchanged literal would otherwise unregister and re-register on every
-  // render of the component holding it. Same reasoning as `<EditableList>`.
-  const source = meta?.source;
-  const allowCustom = meta?.allowCustom;
-  const sourceKey = source ? stableStringify(source) : null;
-  const entryRef = useRef(/** @type {*} */ (null));
-  entryRef.current = source ? { source, allowCustom } : null;
-  useEffect(() => {
-    // Nothing reads the registry outside the drawer, so a public visitor pays
-    // nothing for a declaration meant for editors.
-    if (!isAdmin || !entryRef.current) return undefined;
-    registerChoiceSource(blockPath, entryRef.current);
-    return () => unregisterChoiceSource(blockPath);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, blockPath, sourceKey, allowCustom, registerChoiceSource, unregisterChoiceSource]);
 
   const update = useCallback(
     /**
@@ -110,3 +101,4 @@ export function useCmsBlock(blockPath, meta) {
     exists: Boolean(block),
   };
 }
+

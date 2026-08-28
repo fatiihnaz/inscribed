@@ -18,6 +18,13 @@ export default function Bad() {
       {/* list without itemSchema */}
       <EditableList blockPath="a.d" />
 
+      {/* a Select a region cannot give options to -> warns, still syncs */}
+      <EditableRegion blockPath="a.j" blockType="Select" defaultValue="x" />
+      {/* choice without blockPath */}
+      <EditableChoice source={{ kind: "static", values: ["x"] }} />
+      {/* choice without defaultValue -> warns but still syncs, seeded with "" */}
+      <EditableChoice blockPath="a.k" source={{ kind: "static", values: ["x"] }} />
+
       {/* unsupported scope -> warning, treated page-scoped */}
       <EditableRegion blockPath="a.e" blockType="LongText" defaultValue="x" scope="weird" />
 

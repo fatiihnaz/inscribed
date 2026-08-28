@@ -13,6 +13,7 @@
 export { CmsProvider } from "./core/CmsProvider.jsx";
 export { EditableRegion } from "./core/EditableRegion.jsx";
 export { EditableList } from "./core/EditableList.jsx";
+export { EditableChoice } from "./core/EditableChoice.jsx";
 export { CmsGroup } from "./core/CmsGroup.jsx";
 
 export { useCmsContent } from "./core/hooks/use-cms-content.js";

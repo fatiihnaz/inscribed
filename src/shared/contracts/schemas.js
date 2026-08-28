@@ -59,6 +59,15 @@
  * @typedef {Object} ItemSchemaField
  * @property {Exclude<BlockType, "ObjectArray" | "Collection">} blockType
  * @property {*} defaultValue
+ * @property {ChoiceSource} [source]
+ *   `Select` rows only: the vocabulary the column picks from, without which the
+ *   editor has no options to offer. Declared here rather than on the list, since
+ *   it belongs to one column and not to the row.
+ *
+ *   Stripped before the schema is synced, the same rule a page block follows: a
+ *   vocabulary is the page's business and the drawer is its only reader. Only
+ *   `static` for now; a `block` source has to be resolved against the page, and
+ *   the list does not do that yet.
  */
 
 /**
@@ -128,6 +137,10 @@
  *     `GET /cms/collections/{key}/lookup`, and the stored value is the target
  *     record's slug. This is how a reference between collections is expressed;
  *     there is no separate reference type.
+ * `<EditableChoice>` accepts a third spelling, `block`, which names another
+ * block on the page as the vocabulary. It is resolved to a `static` source
+ * before it is registered, so nothing downstream has to know about it and this
+ * union stays the one the backend also speaks.
  *
  * @typedef {{ kind: "static", values: string[] }
  *   | { kind: "collection", collection: string }} ChoiceSource

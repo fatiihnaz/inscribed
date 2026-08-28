@@ -384,6 +384,9 @@ function ListItemCard({
                   value: item[key],
                   onChange: (v) => onFieldChange(key, v),
                   disabled,
+                  // Straight off the row schema rather than the registry a page
+                  // block uses: a column's vocabulary is declared with the column.
+                  source: field.source ?? null,
                   // The field key is already printed above, so drop the editor's
                   // own caption to avoid a double label.
                   hideLabel: true,

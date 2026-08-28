@@ -1,6 +1,7 @@
 /**
  * @file Manifest discovery: AST-walk a Next.js app/ tree and build a
- * `SyncManifestRequest[]` from `<EditableRegion>` JSX and `useCmsBlock` calls.
+ * `SyncManifestRequest[]` from `<EditableRegion>` / `<EditableChoice>` /
+ * `<EditableList>` JSX and `useCmsBlock` calls.
  *
  * Server-only, consumed by the `cms-sync` CLI (not exported from any package
  * entry); pulls in the native `oxc-parser`, so never import it from a client
@@ -788,6 +789,8 @@ async function analyzeFile(filePath, aliases) {
           if (name.type !== "JSXIdentifier") return;
           if (name.name === "EditableRegion") {
             handleEditableRegion(node, filePath, analysis, warnings, currentPrefix(), locator);
+          } else if (name.name === "EditableChoice") {
+            handleEditableChoice(node, filePath, analysis, warnings, currentPrefix(), locator);
           } else if (name.name === "EditableList") {
             handleEditableList(node, filePath, analysis, warnings, currentPrefix(), locator);
           } else if (/^[A-Z]/.test(name.name) && name.name !== "CmsGroup") {
@@ -862,6 +865,15 @@ function handleEditableRegion(openingNode, filePath, analysis, warnings, groupPr
     });
     return;
   }
+  // A Select is nothing without the list it was chosen from, and a region has
+  // nowhere to declare one. Still synced, so the row survives the move.
+  if (blockType === "Select") {
+    warnings.push({
+      file: filePath,
+      loc: locOf(openingNode, locator),
+      message: `<EditableRegion blockPath="${blockPath}" blockType="Select"> has no way to declare its options, so the drawer will say the field has no source. Use <EditableChoice blockPath="${blockPath}" source={...}> instead.`,
+    });
+  }
   if (!hasDefault) {
     warnings.push({
       file: filePath,
@@ -882,12 +894,61 @@ function handleEditableRegion(openingNode, filePath, analysis, warnings, groupPr
 }
 
 /**
+ * Pull a static `<EditableChoice>` declaration into the file analysis. Same as a
+ * region except the type is implied: this component exists to declare a Select,
+ * so the prop would only be a way to get it wrong.
+ *
+ * `source` is deliberately not read. The vocabulary never reaches the backend,
+ * so the manifest has no field for it and the runtime registry carries it.
+ *
+ * @param {*} openingNode
+ * @param {string} filePath
+ * @param {FileAnalysis} analysis
+ * @param {DiscoveryWarning[]} warnings
+ * @param {string} groupPrefix
+ * @param {Locator} locator
+ */
+function handleEditableChoice(openingNode, filePath, analysis, warnings, groupPrefix, locator) {
+  const props = readJsxProps(openingNode);
+  const rawBlockPath = props.blockPath;
+
+  if (typeof rawBlockPath !== "string") {
+    warnings.push({
+      file: filePath,
+      loc: locOf(openingNode, locator),
+      message: "<EditableChoice> needs a static blockPath string. Skipping discovery for this block.",
+    });
+    return;
+  }
+  const blockPath = groupPrefix ? `${groupPrefix}.${rawBlockPath}` : rawBlockPath;
+  const hasDefault = Object.prototype.hasOwnProperty.call(props, "defaultValue");
+  if (!hasDefault) {
+    warnings.push({
+      file: filePath,
+      loc: locOf(openingNode, locator),
+      message: `<EditableChoice blockPath="${blockPath}"> has no static defaultValue prop. Syncing with an empty string (""); set a static defaultValue to seed the initial choice.`,
+    });
+  }
+
+  /** @type {DiscoveredRegion} */
+  const region = {
+    blockPath,
+    blockType: /** @type {DeclarableBlockType} */ ("Select"),
+    defaultValue: hasDefault ? props.defaultValue : "",
+  };
+  const scope = readScopeProp(props, openingNode, blockPath, filePath, warnings, locator);
+  if (scope) region.scope = scope;
+  analysis.regions.push(region);
+}
+
+/**
  * Pull a static `<EditableList>` declaration into the file analysis.
  * blockPath and itemSchema are required; `defaultValue` defaults to `[]`.
  * `groupPrefix` applies the same prefix rule as EditableRegion.
  *
  * itemSchema must be an object literal whose values are `{ blockType,
- * defaultValue }` pairs (the manifest's `ItemSchema` shape).
+ * defaultValue }` pairs (the manifest's `ItemSchema` shape). A `Select` column
+ * may also carry `source`, which is dropped on the way to the manifest.
  *
  * @param {*} openingNode
  * @param {string} filePath
@@ -938,7 +999,7 @@ function handleEditableList(openingNode, filePath, analysis, warnings, groupPref
     blockPath,
     blockType: /** @type {BlockType} */ ("ObjectArray"),
     defaultValue,
-    itemSchema,
+    itemSchema: manifestItemSchema(itemSchema),
   };
   const scope = readScopeProp(props, openingNode, blockPath, filePath, warnings, locator);
   if (scope) region.scope = scope;
@@ -975,6 +1036,23 @@ function readScopeProp(props, openingNode, blockPath, filePath, warnings, locato
  *
  * @param {*} value
  */
+/**
+ * The row schema as the backend should see it: without the vocabularies. Those
+ * are read from the JSX at runtime, by the drawer, and a list that syncs them
+ * would be posting the page's business to a service that has no use for it.
+ *
+ * @param {Record<string, *>} itemSchema
+ * @returns {Record<string, *>}
+ */
+function manifestItemSchema(itemSchema) {
+  return Object.fromEntries(
+    Object.entries(itemSchema).map(([key, field]) => {
+      const { source: _source, ...rest } = field;
+      return [key, rest];
+    }),
+  );
+}
+
 function isValidItemSchema(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return false;
   for (const field of Object.values(value)) {

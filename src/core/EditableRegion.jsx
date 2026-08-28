@@ -11,7 +11,8 @@
  * collapse and admins keep a click target. Public mode is a transparent
  * passthrough; admin mode adds a click handler and hover/active outline.
  *
- * For full control over rendering, use `useCmsBlock(blockPath)` instead.
+ * For full control over rendering, pass a function as children: the region
+ * declares and wraps the block exactly the same way, but the markup is yours.
  */
 
 import { cloneElement, lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
@@ -55,7 +56,16 @@ const InlineRichText = lazy(() =>
  * @typedef {Object} EditableRegionProps
  * @property {string} blockPath
  * @property {string} [as]   Wrapper tag for Text / RichText (default: "span" / "div"). Ignored for Image and Link when the block has a value.
- * @property {import("../shared/contracts/schemas.js").BlockType} [blockType]
+ * @property {(value: *) => React.ReactNode} [children]
+ *   Pass a function and the rendering is yours: it receives the block's
+ *   effective value and whatever it returns is what the region wraps. The types
+ *   that draw nothing on their own (Number, Bool, StringArray) need this, and so
+ *   does any value you want laid out your own way.
+ *
+ *   The cost is in-place editing: a caret needs a node we produced, so a text or
+ *   rich-text region handed over this way is edited in the drawer instead, and
+ *   an image loses its on-image overlay. Ring, chip and drawer are unchanged.
+ * @property {import("../shared/contracts/schemas.js").DeclarableBlockType} [blockType]
  *   Discovery-only metadata (read by the manifest scanner, not runtime). The
  *   scanner needs `blockType` + `defaultValue` to emit a block; omit it and the
  *   region is skipped with a warning, so it has no DB row and stays empty.
@@ -94,7 +104,7 @@ const INLINE_TEXT_TYPES = new Set(["ShortText", "LongText"]);
 // `blockType` / `defaultValue` / `scope` are discovery-only; aliased here so
 // they don't leak into ...rest (onto DOM nodes) or shadow the local `blockType`.
 // eslint-disable-next-line no-unused-vars
-export function EditableRegion({ blockPath, as, hidden, readOnly, editable, visible, blockType: _bt, defaultValue: _dv, scope: _scope, ...rest }) {
+export function EditableRegion({ blockPath, as, children, hidden, readOnly, editable, visible, blockType: _bt, defaultValue: _dv, scope: _scope, ...rest }) {
   const {
     isAdmin, blocksStore, contentDraftsStore, uiStore, setActiveBlock, setDraft,
     registerEditorVisibility, unregisterEditorVisibility,
@@ -138,19 +148,26 @@ export function EditableRegion({ blockPath, as, hidden, readOnly, editable, visi
   const value = resolveBlockValue(block, hasLocalDraft, localDraft);
   const empty = isValueEmpty(blockType, value);
 
-  const rendered = empty
-    ? renderPlaceholder(as, rest, isAdmin)
-    : renderBlock(blockType, value, { as, ...rest });
+  // A function child is the caller taking the rendering: the switch below knows
+  // how a ShortText or an Image looks, and has no answer for a Number, a Bool or
+  // a value someone wants laid out their own way. React never renders a bare
+  // function child, so nothing legitimate is being reinterpreted here.
+  const custom = typeof children === "function";
+  const rendered = custom
+    ? children(value)
+    : empty
+      ? renderPlaceholder(as, rest, isAdmin)
+      : renderBlock(blockType, value, { as, ...rest });
 
   // Stand the on-image overlay down when the picture is too small to hold the
-  // scrim buttons. Admin + Image only.
-  const imageOverlayFits = useImageOverlayFits(wrapperRef, isAdmin && blockType === "Image");
+  // scrim buttons. Admin + Image only, and never over markup we did not draw.
+  const imageOverlayFits = useImageOverlayFits(wrapperRef, isAdmin && !custom && blockType === "Image");
 
   // Images are a box the visitor can see, so the ring has to take their shape:
   // a boxy ring around a circular avatar, or a rounded one cutting across a
   // square photo's corners, both read as a mistake. Text has no visible box, so
   // it keeps the house radius.
-  const contentRadius = useContentRadius(wrapperRef, isAdmin && blockType === "Image");
+  const contentRadius = useContentRadius(wrapperRef, isAdmin && !custom && blockType === "Image");
 
   if (!isAdmin || visibilityMode) return rendered;
 
@@ -158,8 +175,10 @@ export function EditableRegion({ blockPath, as, hidden, readOnly, editable, visi
   // block highlights the region but does NOT open the drawer. Both drive the
   // "active" ring/tint; only the label chip opens the drawer.
   const highlight = isActive || isFocused;
-  const canInlineEdit = INLINE_TEXT_TYPES.has(/** @type {string} */ (blockType));
-  const isImageType = blockType === "Image";
+  // Everything the type switch offers is off once the caller renders: there is
+  // no node we can put a caret in, and no image to hang an overlay on.
+  const canInlineEdit = !custom && INLINE_TEXT_TYPES.has(/** @type {string} */ (blockType));
+  const isImageType = !custom && blockType === "Image";
 
   const dirty = isBlockDirty(block, hasLocalDraft, localDraft);
   const TypeBadge = typeIconFor(blockType);
@@ -169,7 +188,12 @@ export function EditableRegion({ blockPath, as, hidden, readOnly, editable, visi
   // Lift an Image's consumer margin onto the wrapper so the overlay anchors to
   // the picture, not the margin box (else its buttons float above the image).
   let wrapperMargin = null;
-  if (canInlineEdit) {
+  if (custom) {
+    // The children are the caller's, links and buttons included, so the region
+    // takes no click of its own: the chip is the way into the drawer.
+    inner = rendered;
+    innerTag = as ?? "div";
+  } else if (canInlineEdit) {
     innerTag = as ?? "span";
     inner = (
       <InlineTextEditor

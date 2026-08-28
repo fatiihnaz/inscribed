@@ -38,6 +38,10 @@ exports[`discoverManifests > discovers blocks, scopes, groups and DFS order acro
             "blockType": "Number",
             "defaultValue": 0,
           },
+          "state": {
+            "blockType": "Select",
+            "defaultValue": "draft",
+          },
           "title": {
             "blockType": "LongText",
             "defaultValue": "",
@@ -64,10 +68,22 @@ exports[`discoverManifests > discovers blocks, scopes, groups and DFS order acro
         "sortOrder": 6,
       },
       {
+        "blockPath": "shared.tags",
+        "blockType": "StringArray",
+        "defaultValue": [],
+        "sortOrder": 7,
+      },
+      {
+        "blockPath": "shared.durum",
+        "blockType": "Select",
+        "defaultValue": "taslak",
+        "sortOrder": 8,
+      },
+      {
         "blockPath": "deep.note",
         "blockType": "LongText",
         "defaultValue": "",
-        "sortOrder": 7,
+        "sortOrder": 9,
       },
     ],
     "slug": "/",
@@ -91,6 +107,18 @@ exports[`discoverManifests > discovers blocks, scopes, groups and DFS order acro
         "blockType": "LongText",
         "defaultValue": "x",
         "sortOrder": 3,
+      },
+      {
+        "blockPath": "shared.tags",
+        "blockType": "StringArray",
+        "defaultValue": [],
+        "sortOrder": 4,
+      },
+      {
+        "blockPath": "shared.durum",
+        "blockType": "Select",
+        "defaultValue": "taslak",
+        "sortOrder": 5,
       },
     ],
     "slug": "/about",
@@ -117,16 +145,28 @@ exports[`discoverManifests > emits warnings for non-static / malformed declarati
         "sortOrder": 2,
       },
       {
+        "blockPath": "a.j",
+        "blockType": "Select",
+        "defaultValue": "x",
+        "sortOrder": 3,
+      },
+      {
+        "blockPath": "a.k",
+        "blockType": "Select",
+        "defaultValue": "",
+        "sortOrder": 4,
+      },
+      {
         "blockPath": "a.e",
         "blockType": "LongText",
         "defaultValue": "x",
-        "sortOrder": 3,
+        "sortOrder": 5,
       },
       {
         "blockPath": "a.g",
         "blockType": "LongText",
         "defaultValue": "x",
-        "sortOrder": 4,
+        "sortOrder": 6,
       },
     ],
     "slug": "/",
@@ -182,13 +222,37 @@ exports[`discoverManifests > emits warnings for non-static / malformed declarati
       "column": 6,
       "line": 22,
     },
+    "message": "<EditableRegion blockPath="a.j" blockType="Select"> has no way to declare its options, so the drawer will say the field has no source. Use <EditableChoice blockPath="a.j" source={...}> instead.",
+  },
+  {
+    "file": "page.jsx",
+    "loc": {
+      "column": 6,
+      "line": 24,
+    },
+    "message": "<EditableChoice> needs a static blockPath string. Skipping discovery for this block.",
+  },
+  {
+    "file": "page.jsx",
+    "loc": {
+      "column": 6,
+      "line": 26,
+    },
+    "message": "<EditableChoice blockPath="a.k"> has no static defaultValue prop. Syncing with an empty string (""); set a static defaultValue to seed the initial choice.",
+  },
+  {
+    "file": "page.jsx",
+    "loc": {
+      "column": 6,
+      "line": 29,
+    },
     "message": "<EditableRegion blockPath="a.e"> has unsupported scope="weird". Treating as page-scoped. Only "global" is recognized today.",
   },
   {
     "file": "page.jsx",
     "loc": {
       "column": 6,
-      "line": 25,
+      "line": 32,
     },
     "message": "<CmsGroup> needs a static string \`name\` prop. Treating as a transparent wrapper - blockPaths inside won't be prefixed.",
   },
@@ -196,7 +260,7 @@ exports[`discoverManifests > emits warnings for non-static / malformed declarati
     "file": "page.jsx",
     "loc": {
       "column": 7,
-      "line": 30,
+      "line": 37,
     },
     "message": "useCmsBlock("a.h", ...) metadata must be a static object literal. Skipping.",
   },
@@ -204,7 +268,7 @@ exports[`discoverManifests > emits warnings for non-static / malformed declarati
     "file": "page.jsx",
     "loc": {
       "column": 7,
-      "line": 32,
+      "line": 39,
     },
     "message": "useCmsBlock("a.i", ...) metadata is missing blockType or defaultValue. Skipping.",
   },

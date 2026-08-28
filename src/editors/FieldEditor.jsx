@@ -43,11 +43,15 @@ const RichTextEditor = lazy(() =>
  *   source?: ChoiceSource | null,
  *   allowCustom?: boolean,
  * }} props
- *   `source` is only read by `Select` and `StringArray`. A page block carries it
- *   the way an `ObjectArray` carries its row schema: declared by the page (in
- *   `useCmsBlock` metadata, since neither type has a region to hang it on) and
- *   picked up from the runtime registry, so a block whose declaring component is
- *   not mounted has none and says so rather than offering an empty list.
+ *   `source` is only read by `Select` and `StringArray`, and the two want it
+ *   differently. A Select without one is nothing: a picker offering no options,
+ *   so it says the source is missing instead. A StringArray without one is the
+ *   ordinary tag field, free text, which is the commoner of its two shapes.
+ *
+ *   A page block carries it the way an `ObjectArray` carries its row schema:
+ *   declared by the page and picked up from the runtime registry, so a Select
+ *   whose declaring component is not mounted has none and says so rather than
+ *   offering an empty list.
  */
 export function FieldEditor({ blockType, value, onChange, disabled, hideLabel, source, allowCustom }) {
   switch (blockType) {
@@ -67,9 +71,7 @@ export function FieldEditor({ blockType, value, onChange, disabled, hideLabel, s
     case "Select":    return source
       ? <SelectEditor value={value} onChange={onChange} disabled={disabled} source={source} allowCustom={allowCustom} hideLabel={hideLabel} />
       : <MissingSource />;
-    case "StringArray":      return source
-      ? <StringArrayEditor value={value} onChange={onChange} disabled={disabled} source={source} allowCustom={allowCustom} itemLabel="" />
-      : <MissingSource />;
+    case "StringArray": return <StringArrayEditor value={value} onChange={onChange} disabled={disabled} source={source} allowCustom={allowCustom} itemLabel="" />;
     default:          return null;
   }
 }

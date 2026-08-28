@@ -23,7 +23,8 @@
  *   - Select: string, chosen from the field's `source`. A collection-backed
  *     source stores the target record's slug, which is what makes a reference a
  *     `Select` rather than a type of its own.
- *   - StringArray: string[], each entry chosen from or created against the `source`.
+ *   - StringArray: string[], typed freely. No vocabulary: a constrained list is
+ *     a multi-select, which is what `Select` is.
  *   - ObjectArray: array of objects. The row shape comes from the manifest's
  *     `itemSchema` on a page block and from the field's `itemFields` on a
  *     collection field: one type, two schema sources. A page block's whole list
@@ -127,9 +128,13 @@
  */
 
 /**
- * Where a `Select` or `StringArray` field's choices come from. Nothing else carries
- * one: a type that offers choices says so by being one of those two, which is
- * what replaced `options` hanging off any field at all.
+ * Where a `Select` field's choices come from. Nothing else carries one: a type
+ * that offers choices says so by being a Select, which is what replaced
+ * `options` hanging off any field at all.
+ *
+ * A `StringArray` deliberately has none. It is a free list of strings, and
+ * constraining it to a set of options makes it a multi-select, which is the
+ * same field as a Select and wants the same control.
  *
  *   - `static` — the list is in the schema, and the stored value is the entry
  *     itself.
@@ -181,11 +186,11 @@
  *   and `Date` can be sortable. Build sort pickers from this rather than a
  *   hardcoded list, since it is per collection.
  * @property {ChoiceSource | null} source
- *   Non-null only on `Select` and `StringArray`: where the choices come from. `null`
- *   everywhere else, and ignored if a backend sends one anyway.
+ *   Non-null only on `Select`: where the choices come from. `null` everywhere
+ *   else, and ignored if a backend sends one anyway.
  * @property {boolean} [allowCustom]
- *   `Select` and `StringArray` only: whether the editor may enter something the source
- *   does not offer. Off by default, which makes a source a closed vocabulary.
+ *   `Select` only: whether the editor may enter something the source does not
+ *   offer. Off by default, which makes a source a closed vocabulary.
  * @property {CollectionFieldDescriptor[] | null} itemFields
  *   Non-null only for `ObjectArray` fields: the schema for one row of the repeatable
  *   sub-form. Each entry is itself a descriptor, so nesting recurses through the

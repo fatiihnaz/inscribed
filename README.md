@@ -474,7 +474,7 @@ A **block** is a single editable value addressed by a dot-notation `blockPath`
 | `Bool`       | `boolean` | switch |
 | `Url`        | `string` | URL input |
 | `Select`     | `string` | picker over a `source` |
-| `StringArray` | `string[]` | tag input over a `source` |
+| `StringArray` | `string[]` | tag input, typed freely |
 | `ObjectArray` | array of objects shaped by `itemSchema` | repeatable items |
 
 **Not every type draws itself.** `Number`, `Bool`, `Select`, `StringArray` and
@@ -804,7 +804,7 @@ per type:
 | `Url` | `string` | URL input |
 | `Date` | ISO 8601 `string` | date-time input |
 | `Image` | `{ src, alt }` | upload dropzone + alt |
-| `StringArray` | `string[]` | tag input |
+| `StringArray` | `string[]` | tag input, typed freely |
 | `ObjectArray` | array of objects shaped by `itemFields` | repeatable sub-form |
 
 An `Image`

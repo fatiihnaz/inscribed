@@ -37,8 +37,8 @@ const RichTextEditor = lazy(() =>
 /**
  * @file `CollectionFieldsForm`: schema-driven form renderer for collection
  * items. Takes `CollectionFieldDescriptor`s plus a values map and renders one
- * input per field. `Select` and `StringArray` read their choices from the field's
- * `source`; `ObjectArray` renders a repeatable accordion sub-form through this same
+ * input per field. `Select` reads its choices from the field's `source`;
+ * `ObjectArray` renders a repeatable accordion sub-form through this same
  * renderer, so nested scalars (and further nesting) come for free.
  *
  * Pure rendering; the parent owns state. Seeding, request shaping and
@@ -115,8 +115,8 @@ function FieldInput({ field, value, onChange, disabled }) {
   const shell = { label: labelNode, help: field.help, variant: VARIANT };
   const common = { ...shell, value, onChange, disabled };
 
-  // Only `Select` and `StringArray` carry a source, so nothing here has to decide
-  // whether a choice list makes sense for the type: the type already said.
+  // Only `Select` carries a source, so nothing here has to decide whether a
+  // choice list makes sense for the type: the type already said.
   const choice = { source: field.source, allowCustom: field.allowCustom };
 
   switch (field.type) {
@@ -149,7 +149,6 @@ function FieldInput({ field, value, onChange, disabled }) {
             onChange={onChange}
             disabled={disabled}
             variant={VARIANT}
-            {...choice}
             itemLabel={singularize(field.label || field.name || t("collections.itemFallback"))}
           />
         </FieldShell>

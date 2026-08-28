@@ -5,8 +5,8 @@
  * `options` used to hang off any field at all and win over its type, which
  * turned an array field into a single-value select and wrote a bare string into
  * something the payload builder and the validator both read as a list. Only
- * `Select` and `StringArray` carry a source now, so the type answers the question
- * before anything has to decide.
+ * `Select` carries a source now, so the type answers the question before
+ * anything has to decide.
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import React from "react";
@@ -70,77 +70,45 @@ const openPicker = () => fireEvent.click(trigger());
 const optionLabels = () => screen.getAllByRole("option").map((o) => o.textContent.trim());
 const search = () => screen.getByPlaceholderText("editors.combobox.search");
 
-describe("StringArray on a closed vocabulary", () => {
-  const tagField = field("StringArray", { source: staticSource(["cms", "next", "editör"]) });
-
-  it("offers the vocabulary rather than a single-value select", () => {
-    mountField(tagField, []);
-    openPicker();
-    expect(optionLabels()).toEqual(["cms", "next", "editör"]);
-  });
-
-  it("appends to the array instead of replacing it with a string", () => {
-    const { lastValue } = mountField(tagField, ["cms"]);
-    openPicker();
-    fireEvent.click(screen.getByRole("option", { name: "next" }));
-    expect(lastValue()).toEqual(["cms", "next"]);
-  });
-
-  it("lists only what is not already picked", () => {
-    mountField(tagField, ["cms"]);
-    openPicker();
-    expect(optionLabels()).toEqual(["next", "editör"]);
-  });
-
-  it("drops the adder once everything is picked", () => {
-    mountField(tagField, ["cms", "next", "editör"]);
-    expect(screen.queryByRole("button", { expanded: false })).toBeNull();
-  });
-
-  it("refuses an entry the vocabulary does not offer", () => {
-    const { onChange } = mountField(tagField, []);
-    openPicker();
-    fireEvent.change(search(), { target: { value: "uydurma" } });
-    fireEvent.keyDown(search(), { key: "Enter" });
-    expect(onChange).not.toHaveBeenCalled();
-  });
-});
-
-describe("StringArray with allowCustom", () => {
-  const openField = field("StringArray", { source: staticSource(["cms"]), allowCustom: true });
-
-  it("takes an entry from outside the vocabulary", () => {
-    const { lastValue } = mountField(openField, []);
-    openPicker();
-    fireEvent.change(search(), { target: { value: "uydurma" } });
-    fireEvent.keyDown(search(), { key: "Enter" });
-    expect(lastValue()).toEqual(["uydurma"]);
-  });
-});
-
-describe("StringArray with no source at all", () => {
+describe("StringArray", () => {
+  // No vocabulary to test against: a StringArray takes none. A constrained list
+  // of strings is a multi-select, which is the Select field below.
   const freeField = field("StringArray");
+
+  // No trigger and no panel: with nothing to pick from, the adder is the box
+  // itself. Everything here drives it the way an editor would.
+  const box = () => screen.getByRole("textbox");
+
+  it("has no picker to open, just somewhere to type", () => {
+    mountField(freeField, ["cms"]);
+    expect(box()).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /combobox/ })).toBeNull();
+  });
 
   it("creates the typed entry", () => {
     const { lastValue } = mountField(freeField, ["cms"]);
-    openPicker();
-    fireEvent.change(search(), { target: { value: "yeni" } });
-    fireEvent.keyDown(search(), { key: "Enter" });
+    fireEvent.change(box(), { target: { value: "yeni" } });
+    fireEvent.keyDown(box(), { key: "Enter" });
     expect(lastValue()).toEqual(["cms", "yeni"]);
   });
 
   it("ignores a duplicate rather than adding it twice", () => {
     const { onChange } = mountField(freeField, ["cms"]);
-    openPicker();
-    fireEvent.change(search(), { target: { value: "cms" } });
-    fireEvent.keyDown(search(), { key: "Enter" });
+    fireEvent.change(box(), { target: { value: "cms" } });
+    fireEvent.keyDown(box(), { key: "Enter" });
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("takes a tag that was typed and then clicked away from", () => {
+    const { lastValue } = mountField(freeField, []);
+    fireEvent.change(box(), { target: { value: "yeni" } });
+    fireEvent.blur(box());
+    expect(lastValue()).toEqual(["yeni"]);
   });
 
   it("splits a multi-line paste into one entry per line", () => {
     const { onChange } = mountField(freeField, []);
-    openPicker();
-    fireEvent.paste(search(), { clipboardData: { getData: () => "bir\niki\n\nüç" } });
+    fireEvent.paste(box(), { clipboardData: { getData: () => "bir\niki\n\nüç" } });
     // Each line is added against the same starting value, so the calls carry one
     // entry each; the form is what accumulates them in real use.
     expect(onChange.mock.calls.map((c) => c[0].f)).toEqual([["bir"], ["iki"], ["üç"]]);

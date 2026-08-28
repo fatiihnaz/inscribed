@@ -43,10 +43,10 @@ const RichTextEditor = lazy(() =>
  *   source?: ChoiceSource | null,
  *   allowCustom?: boolean,
  * }} props
- *   `source` is only read by `Select` and `StringArray`, and the two want it
- *   differently. A Select without one is nothing: a picker offering no options,
- *   so it says the source is missing instead. A StringArray without one is the
- *   ordinary tag field, free text, which is the commoner of its two shapes.
+ *   `source` is read by `Select` and nothing else. A Select without one is a
+ *   picker offering no options, so it says the source is missing instead. A
+ *   `StringArray` never takes one: constraining a list of strings to a set of
+ *   options makes it a multi-select, which is what `Select` is for.
  *
  *   A page block carries it the way an `ObjectArray` carries its row schema:
  *   declared by the page and picked up from the runtime registry, so a Select
@@ -71,7 +71,7 @@ export function FieldEditor({ blockType, value, onChange, disabled, hideLabel, s
     case "Select":    return source
       ? <SelectEditor value={value} onChange={onChange} disabled={disabled} source={source} allowCustom={allowCustom} hideLabel={hideLabel} />
       : <MissingSource />;
-    case "StringArray": return <StringArrayEditor value={value} onChange={onChange} disabled={disabled} source={source} allowCustom={allowCustom} itemLabel="" />;
+    case "StringArray": return <StringArrayEditor value={value} onChange={onChange} disabled={disabled} itemLabel="" />;
     default:          return null;
   }
 }

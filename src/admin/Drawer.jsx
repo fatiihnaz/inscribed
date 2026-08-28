@@ -649,6 +649,9 @@ export function Drawer({ panels = null }) {
       <style>{panelCss}</style>
       <motion.aside
         initial={false}
+        // Stays a number, not `--ins-panel-w`: framer cannot tween a `calc()`
+        // off a custom property. Moving that variable means passing the offset
+        // in from state instead.
         animate={{ x: isDrawerOpen ? 0 : -PANEL_WIDTH }}
         transition={PANEL_TRANSITION}
         style={panelStyle}

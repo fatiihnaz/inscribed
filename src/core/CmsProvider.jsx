@@ -27,6 +27,7 @@ import { normalizePanels } from "../shared/panels.js";
 import { resolveCmsRoute } from "../shared/route.js";
 import { fieldCss } from "../editors/field-css.js";
 import { buildThemeCss } from "../shared/style/theme.js";
+import { layoutCss, PAGE_SHELL_CLASS } from "../shared/style/layout-css.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
 import { indexBlocksByPath } from "./blocks.js";
@@ -1237,6 +1238,7 @@ export function CmsProvider({
           `isAdmin` because all three are, so a visitor's page carries neither
           the rules nor the editors they would style. */}
       {isAdmin ? <style>{fieldCss}</style> : null}
+      {isAdmin ? <style>{layoutCss}</style> : null}
       {/* A prop rather than something the app nests itself, because it must
           wrap the drawer too, and the drawer is a sibling of `children`. It
           reads `config`/`isAdmin`/`getAccessToken`, so it sits inside here. */}
@@ -1246,11 +1248,13 @@ export function CmsProvider({
 }
 
 /**
- * Pushes the page right while the drawer is open, so the panel doesn't overlap
- * content. Its own component subscribing to the store, rather than a value read
- * in the provider: a panel toggle then re-renders this wrapper alone, and
- * `children` (a stable element) is reused untouched. The plain CSS transition
- * keeps `framer-motion` in the lazy admin chunk, off the public bundle.
+ * Moves the page out of the drawer's way while it is open. Its own component
+ * subscribing to the store, rather than a value read in the provider: a panel
+ * toggle then re-renders this wrapper alone, and `children` (a stable element)
+ * is reused untouched.
+ *
+ * Which way it moves and by how much is `layoutCss`'s business; this only
+ * reports whether the drawer is open.
  *
  * @param {{ isAdmin: boolean, children: React.ReactNode }} props
  */
@@ -1259,20 +1263,13 @@ function PageShell({ isAdmin, children }) {
   const isDrawerOpen = useStoreSelector(uiStore, (s) => s.isDrawerOpen);
   return (
     <div
-      style={{
-        marginLeft: isAdmin && isDrawerOpen ? ADMIN_PANEL_WIDTH : 0,
-        transition: "margin-left 350ms cubic-bezier(0.32, 0.72, 0.18, 1)",
-      }}
+      className={isAdmin ? PAGE_SHELL_CLASS : undefined}
+      data-drawer-open={isDrawerOpen ? "true" : undefined}
     >
       {children}
     </div>
   );
 }
-
-// Must match PANEL_WIDTH in shared/style/tokens.js. Hardcoded, not imported,
-// so the token module stays out of the public bundle (the drawer that uses it
-// is admin-only and lazy-loaded).
-const ADMIN_PANEL_WIDTH = 460;
 
 // Drop the auth marker params via history.replaceState (no Next.js navigation,
 // so no re-render or scroll reset); other query params survive.

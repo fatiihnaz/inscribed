@@ -10,7 +10,7 @@
  */
 
 import {
-  PANEL_WIDTH, HANDLE_WIDTH, HANDLE_OVERLAP, RAIL_WIDTH, RAIL_EDGE_RADIUS,
+  PANEL_W, HANDLE_WIDTH, HANDLE_OVERLAP, RAIL_WIDTH, RAIL_EDGE_RADIUS,
   R_BADGE, R_SM, R_BTN, R_MD, R_PILL,
   FS_SM,
   DUR_BASE, EASE,
@@ -34,7 +34,7 @@ export const panelStyle = {
   top: 0,
   left: 0,
   bottom: 0,
-  width: PANEL_WIDTH,
+  width: PANEL_W,
   background: BG,
   color: TEXT_HI,
   zIndex: 9998,

@@ -35,10 +35,22 @@ export const RAIL_WIDTH = 48;
 // area wraps around.
 export const RAIL_EDGE_RADIUS = 14;
 
+// CSS-side read of the width above; the number stays for the JS that has to
+// compute with it (the drawer's slide-out offset).
+export const PANEL_W = `var(--ins-panel-w, ${PANEL_WIDTH}px)`;
+
+// Framer wants the control points, CSS wants the function; `EASE` below builds
+// the string from these.
+const CURVE = [0.32, 0.72, 0.18, 1];
+
+// Shared with the page shell that moves out of the panel's way: drift between
+// the two reads as the page lagging the drawer.
+const PANEL_MS = 350;
+export const DUR_PANEL = `${PANEL_MS}ms`;
 export const PANEL_TRANSITION = {
   type: "tween",
-  duration: 0.35,
-  ease: [0.32, 0.72, 0.18, 1],
+  duration: PANEL_MS / 1000,
+  ease: CURVE,
 };
 
 // Corner radius of the page-side edit rings (EditableRegion + CollectionItem),
@@ -74,7 +86,7 @@ export const FS_MD    = 12;  // field input text
 // Motion. One fast step for hovers/color swaps, one base step for layout.
 export const DUR_FAST = "140ms";
 export const DUR_BASE = "200ms";
-export const EASE = "cubic-bezier(0.32, 0.72, 0.18, 1)";
+export const EASE = `cubic-bezier(${CURVE.join(", ")})`;
 
 // ---------------------------------------------------------------------------
 // Tokens

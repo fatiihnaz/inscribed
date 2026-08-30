@@ -39,6 +39,7 @@ import { contentDraftKey } from "../shared/state/draft-keys.js";
 import { resolveBlockValue } from "./resolve.js";
 import { useCmsContent } from "./hooks/use-cms-content.js";
 import { useCmsStrings } from "./hooks/use-cms-strings.js";
+import { dynamicSize } from "../shared/style/tokens.js";
 
 /**
  * @import { CmsConfig } from "../shared/config.js"
@@ -1301,7 +1302,7 @@ function SessionExpiredNotice({ onSignIn, onDismiss }) {
         color: "var(--ins-text, #fff)",
         borderRadius: "var(--ins-radius, 10px)",
         fontFamily: "var(--ins-font-sans, system-ui, sans-serif)",
-        fontSize: 13,
+        fontSize: dynamicSize(13),
         boxShadow: "0 8px 24px rgba(0, 0, 0, 0.35)",
       }}
     >
@@ -1315,7 +1316,7 @@ function SessionExpiredNotice({ onSignIn, onDismiss }) {
           border: "none",
           background: "var(--ins-accent, #c9b896)",
           color: "#1c1815",
-          fontSize: 13,
+          fontSize: dynamicSize(13),
           fontWeight: 600,
           cursor: "pointer",
         }}
@@ -1332,7 +1333,7 @@ function SessionExpiredNotice({ onSignIn, onDismiss }) {
           color: "inherit",
           opacity: 0.6,
           cursor: "pointer",
-          fontSize: 16,
+          fontSize: dynamicSize(16),
           lineHeight: 1,
           padding: 2,
         }}

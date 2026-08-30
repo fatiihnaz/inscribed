@@ -21,6 +21,7 @@ import { useCollectionMeta, useMyCollections } from "./hooks/use-my-collections.
 import { useCollectionCreate } from "./hooks/use-collection-create.js";
 import { useCreateDraftRole } from "./hooks/use-draft-driver.js";
 import { CollectionFieldsForm } from "./CollectionFieldsForm.jsx";
+import { dynamicSize } from "../shared/style/tokens.js";
 
 /**
  * @param {Object} props
@@ -220,7 +221,7 @@ const buttonBase = /** @type {React.CSSProperties} */ ({
   gap: 6,
   padding: "8px 16px",
   borderRadius: 7,
-  fontSize: 13,
+  fontSize: dynamicSize(13),
   fontWeight: 500,
   fontFamily: "inherit",
   cursor: "pointer",
@@ -243,7 +244,7 @@ const ghostButtonStyle = /** @type {React.CSSProperties} */ ({
 
 const errorStyle = /** @type {React.CSSProperties} */ ({
   padding: "9px 12px",
-  fontSize: 13,
+  fontSize: dynamicSize(13),
   lineHeight: 1.5,
   color: "inherit",
   background: "rgba(220, 60, 80, 0.08)",
@@ -253,7 +254,7 @@ const errorStyle = /** @type {React.CSSProperties} */ ({
 
 const successStyle = /** @type {React.CSSProperties} */ ({
   padding: "9px 12px",
-  fontSize: 13,
+  fontSize: dynamicSize(13),
   lineHeight: 1.5,
   color: "inherit",
   background: "rgba(80, 180, 110, 0.10)",

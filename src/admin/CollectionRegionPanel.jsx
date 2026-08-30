@@ -43,7 +43,7 @@ import { SlugField } from "../collections/SlugField.jsx";
 import { SkeletonRows } from "./Skeleton.jsx";
 import { emptyStateStyle } from "../editors/styles.js";
 import { buttonBaseStyle, paneStyle, btnGhostStyle, searchWrapStyle, searchInputStyle, searchClearStyle, dirtyDotStyle, rowPathStyle } from "./drawer-styles.js";
-import { BG, BG_RAISED, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, STATUS_DANGER, BORDER, HAIRLINE, SURFACE_1, FONT_MONO, FONT_SANS, PANEL_TRANSITION, R_BADGE, R_MD, R_SM, R_BTN } from "../shared/style/tokens.js";
+import { BG, BG_RAISED, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, STATUS_DANGER, BORDER, HAIRLINE, SURFACE_1, FONT_MONO, FONT_SANS, PANEL_TRANSITION, R_BADGE, R_MD, R_SM, R_BTN, dynamicSize } from "../shared/style/tokens.js";
 
 const DEFAULT_DRAWER_PAGE_SIZE = 50;
 
@@ -1029,7 +1029,10 @@ const localeSwitchStyle = /** @type {React.CSSProperties} */ ({
 // `background`: the hover fill is a class rule, and an inline background (even
 // `transparent`) outranks it.
 const localeSegStyle = /** @type {React.CSSProperties} */ ({
-  font: `600 9px/1 ${FONT_SANS}`,
+  fontWeight: 600,
+  fontSize: dynamicSize(9),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   letterSpacing: "0.05em",
   padding: "4px 7px",
   borderRadius: R_BADGE,
@@ -1039,7 +1042,10 @@ const localeSegStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const localeChipBase = /** @type {React.CSSProperties} */ ({
-  font: `600 9px/1 ${FONT_SANS}`,
+  fontWeight: 600,
+  fontSize: dynamicSize(9),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   letterSpacing: "0.05em",
   padding: "4px 7px",
   borderRadius: R_BADGE,
@@ -1591,7 +1597,10 @@ const regionHeaderStyle = /** @type {React.CSSProperties} */ ({
 // has one voice for labelling a group of rows, and it isn't tracked-out
 // micro-caps.
 const regionAllLabelStyle = /** @type {React.CSSProperties} */ ({
-  font: `500 11px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(11),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   letterSpacing: "-0.005em",
   color: TEXT_MUTED,
 });
@@ -1604,7 +1613,10 @@ const filterChipStyle = /** @type {React.CSSProperties} */ ({
   borderRadius: R_BADGE,
   background: SURFACE_1,
   boxShadow: `inset 0 0 0 1px ${HAIRLINE}`,
-  font: `500 10.5px/1 ${FONT_MONO}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(10.5),
+  lineHeight: 1,
+  fontFamily: FONT_MONO,
 });
 
 const filterChipKeyStyle = /** @type {React.CSSProperties} */ ({
@@ -1617,7 +1629,10 @@ const filterChipValueStyle = /** @type {React.CSSProperties} */ ({
 
 const regionCountStyle = /** @type {React.CSSProperties} */ ({
   marginLeft: "auto",
-  font: `500 10.5px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(10.5),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
   color: TEXT_FAINT,
 });
@@ -1682,7 +1697,10 @@ const rowLeadStyle = /** @type {React.CSSProperties} */ ({
 const rowTitleStyle = /** @type {React.CSSProperties} */ ({
   flex: "0 1 auto",
   minWidth: 0,
-  font: `500 11px/1.2 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(11),
+  lineHeight: 1.2,
+  fontFamily: FONT_SANS,
   color: TEXT,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -1703,7 +1721,9 @@ const rowSlugStyle = /** @type {React.CSSProperties} */ ({
   flex: "0 1 auto",
   minWidth: 0,
   maxWidth: "45%",
-  font: `11px/1.2 ${FONT_MONO}`,
+  fontSize: dynamicSize(11),
+  lineHeight: 1.2,
+  fontFamily: FONT_MONO,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -1717,7 +1737,10 @@ const rowAgeStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
   minWidth: 30,
   textAlign: "right",
-  font: `500 10px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(10),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap",
 });
@@ -1777,7 +1800,9 @@ const toolbarButtonOnStyle = /** @type {React.CSSProperties} */ ({
 
 const searchScopeNoteStyle = /** @type {React.CSSProperties} */ ({
   padding: "2px 16px 0",
-  font: `10.5px/1.4 ${FONT_SANS}`,
+  fontSize: dynamicSize(10.5),
+  lineHeight: 1.4,
+  fontFamily: FONT_SANS,
   color: TEXT_MUTED,
 });
 
@@ -1792,7 +1817,10 @@ const rowChevronStyle = /** @type {React.CSSProperties} */ ({
 // two hand-rolled boxes at a radius (3) that exists nowhere else in the scale.
 const stateChipStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
-  font: `600 10px/1 ${FONT_SANS}`,
+  fontWeight: 600,
+  fontSize: dynamicSize(10),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   letterSpacing: "-0.005em",
   padding: "3px 6px",
   borderRadius: R_BADGE,
@@ -1819,7 +1847,7 @@ const errorBoxStyle = /** @type {React.CSSProperties} */ ({
   alignItems: "center",
   gap: 8,
   color: `color-mix(in srgb, ${STATUS_DANGER} 55%, var(--ins-text, #fff))`,
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   padding: "8px 10px",
   background: `color-mix(in srgb, ${STATUS_DANGER} 8%, transparent)`,
   border: `1px solid color-mix(in srgb, ${STATUS_DANGER} 25%, transparent)`,
@@ -1833,7 +1861,7 @@ const retryTextStyle = /** @type {React.CSSProperties} */ ({
   borderRadius: R_BADGE,
   padding: "4px 8px",
   cursor: "pointer",
-  fontSize: 11,
+  fontSize: dynamicSize(11),
   fontFamily: FONT_SANS,
 });
 
@@ -1846,7 +1874,8 @@ const loadMoreStyle = /** @type {React.CSSProperties} */ ({
   border: `1px solid ${BORDER}`,
   borderRadius: R_BTN,
   cursor: "pointer",
-  font: `12px ${FONT_SANS}`,
+  fontSize: dynamicSize(12),
+  fontFamily: FONT_SANS,
   fontFamily: FONT_SANS,
 });
 
@@ -1893,7 +1922,10 @@ const paneBackStyle = /** @type {React.CSSProperties} */ ({
 const detailTitleStyle = /** @type {React.CSSProperties} */ ({
   flex: 1,
   minWidth: 0,
-  font: `500 12.5px/1.2 ${FONT_MONO}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(12.5),
+  lineHeight: 1.2,
+  fontFamily: FONT_MONO,
   color: TEXT,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -1901,13 +1933,18 @@ const detailTitleStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const detailVersionStyle = /** @type {React.CSSProperties} */ ({
-  font: `500 11px/1 ${FONT_MONO}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(11),
+  lineHeight: 1,
+  fontFamily: FONT_MONO,
   color: TEXT_MUTED,
   flexShrink: 0,
 });
 
 const archiveNoticeStyle = /** @type {React.CSSProperties} */ ({
-  font: `11px/1.4 ${FONT_SANS}`,
+  fontSize: dynamicSize(11),
+  lineHeight: 1.4,
+  fontFamily: FONT_SANS,
   color: TEXT_MUTED,
 });
 
@@ -1949,7 +1986,10 @@ const slugButtonStyle = /** @type {React.CSSProperties} */ ({
 // against the end of the slug instead of drifting to the far edge.
 const slugTextStyle = /** @type {React.CSSProperties} */ ({
   minWidth: 0,
-  font: `500 12.5px/1.2 ${FONT_MONO}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(12.5),
+  lineHeight: 1.2,
+  fontFamily: FONT_MONO,
   color: TEXT,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -1970,7 +2010,10 @@ const slugPencilStyle = /** @type {React.CSSProperties} */ ({
 const slugInputStyle = /** @type {React.CSSProperties} */ ({
   flex: 1,
   minWidth: 0,
-  font: `500 12.5px/1.2 ${FONT_MONO}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(12.5),
+  lineHeight: 1.2,
+  fontFamily: FONT_MONO,
   color: TEXT,
   padding: 0,
   border: 0,
@@ -1995,7 +2038,9 @@ const slugIconButtonStyle = /** @type {React.CSSProperties} */ ({
 // record's fields, so they carry the header's own gutter rather than a card of
 // their own.
 const renameErrorStyle = /** @type {React.CSSProperties} */ ({
-  font: `11px/1.4 ${FONT_SANS}`,
+  fontSize: dynamicSize(11),
+  lineHeight: 1.4,
+  fontFamily: FONT_SANS,
   color: `color-mix(in srgb, ${STATUS_DANGER} 55%, #fff)`,
   padding: "7px 16px",
   background: `color-mix(in srgb, ${STATUS_DANGER} 10%, transparent)`,
@@ -2005,7 +2050,9 @@ const renameWarningStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   alignItems: "flex-start",
   gap: 8,
-  font: `11px/1.4 ${FONT_SANS}`,
+  fontSize: dynamicSize(11),
+  lineHeight: 1.4,
+  fontFamily: FONT_SANS,
   color: `color-mix(in srgb, ${STATUS_DANGER} 55%, #fff)`,
   padding: "7px 16px",
   background: `color-mix(in srgb, ${STATUS_DANGER} 10%, transparent)`,
@@ -2057,14 +2104,20 @@ const createButtonStyle = /** @type {React.CSSProperties} */ ({
   border: 0,
   borderRadius: R_BTN,
   color: TEXT_MID,
-  font: `500 12px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(12),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   cursor: "pointer",
   textAlign: "left",
   fontFamily: FONT_SANS,
 });
 
 const draftBadgeStyle = /** @type {React.CSSProperties} */ ({
-  font: `600 10px/1 ${FONT_SANS}`,
+  fontWeight: 600,
+  fontSize: dynamicSize(10),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   letterSpacing: "-0.005em",
   padding: "3px 6px",
   borderRadius: R_BADGE,
@@ -2082,7 +2135,7 @@ const createFormWrapStyle = /** @type {React.CSSProperties} */ ({
 
 const errorInlineStyle = /** @type {React.CSSProperties} */ ({
   color: `color-mix(in srgb, ${STATUS_DANGER} 55%, var(--ins-text, #fff))`,
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   padding: "8px 10px",
   background: `color-mix(in srgb, ${STATUS_DANGER} 10%, transparent)`,
   border: `1px solid color-mix(in srgb, ${STATUS_DANGER} 30%, transparent)`,

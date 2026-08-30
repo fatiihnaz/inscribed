@@ -144,7 +144,9 @@ const wrapStyle = /** @type {React.CSSProperties} */ ({
   gap: 8,
   padding: 10,
   borderRadius: R_MD,
-  font: `${FS_XS}px/1.5 ${FONT_SANS}`,
+  fontSize: FS_XS,
+  lineHeight: 1.5,
+  fontFamily: FONT_SANS,
   color: TEXT,
 });
 
@@ -169,7 +171,9 @@ const actionsStyle = /** @type {React.CSSProperties} */ ({
 const buttonBaseStyle = /** @type {React.CSSProperties} */ ({
   padding: "5px 10px",
   borderRadius: R_BTN,
-  font: `${FS_XS}px/1 ${FONT_SANS}`,
+  fontSize: FS_XS,
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   fontWeight: 600,
   cursor: "pointer",
 });

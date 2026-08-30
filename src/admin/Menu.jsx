@@ -19,7 +19,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown } from "../shared/style/icons.jsx";
 import {
   BG_RAISED, COLLECTION_ACCENT, FONT_SANS, HAIRLINE,
-  PANEL_TRANSITION, R_BADGE, R_SM, TEXT_MID, TEXT_MUTED,
+  PANEL_TRANSITION, R_BADGE, R_SM, TEXT_MID, TEXT_MUTED, dynamicSize,
 } from "../shared/style/tokens.js";
 
 const EASE = PANEL_TRANSITION.ease;
@@ -220,7 +220,10 @@ const menuTriggerStyle = /** @type {React.CSSProperties} */ ({
   border: 0,
   borderRadius: R_SM,
   color: TEXT_MID,
-  font: `500 11px/1.4 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(11),
+  lineHeight: 1.4,
+  fontFamily: FONT_SANS,
   cursor: "pointer",
 });
 
@@ -275,7 +278,10 @@ const itemStyle = /** @type {React.CSSProperties} */ ({
   padding: "0 7px",
   borderRadius: R_BADGE,
   color: TEXT_MID,
-  font: `500 11px/1.4 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(11),
+  lineHeight: 1.4,
+  fontFamily: FONT_SANS,
   cursor: "pointer",
   outline: "none",
   whiteSpace: "nowrap",

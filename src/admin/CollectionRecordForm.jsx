@@ -17,7 +17,7 @@ import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useEditorDirty, useEditorValues } from "../collections/hooks/use-collection-editor.js";
 import { CollectionFieldsForm } from "../collections/CollectionFieldsForm.jsx";
 import { buttonBaseStyle } from "./drawer-styles.js";
-import { TEXT_MUTED, TEXT_FAINT, FONT_MONO, FONT_SANS, STATUS_OK, STATUS_WARN, STATUS_DANGER, ACCENT, SURFACE_1, SURFACE_2, HAIRLINE, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, R_BADGE, R_PILL } from "../shared/style/tokens.js";
+import { TEXT_MUTED, TEXT_FAINT, FONT_MONO, FONT_SANS, STATUS_OK, STATUS_WARN, STATUS_DANGER, ACCENT, SURFACE_1, SURFACE_2, HAIRLINE, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, R_BADGE, R_PILL, dynamicSize } from "../shared/style/tokens.js";
 
 /**
  * @import { CollectionEditorState } from "../collections/hooks/use-collection-editor.js"
@@ -250,7 +250,10 @@ const metaRowStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   alignItems: "center",
   gap: 8,
-  font: `400 11px/1 ${FONT_SANS}`,
+  fontWeight: 400,
+  fontSize: dynamicSize(11),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
 });
 
@@ -260,7 +263,7 @@ const metaVersionStyle = /** @type {React.CSSProperties} */ ({
 
 const metaReadonlyStyle = /** @type {React.CSSProperties} */ ({
   color: TEXT_MUTED,
-  fontSize: 10,
+  fontSize: dynamicSize(10),
   padding: "1px 6px",
   background: SURFACE_2,
   borderRadius: R_BADGE,
@@ -268,7 +271,7 @@ const metaReadonlyStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const virtualHintStyle = /** @type {React.CSSProperties} */ ({
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   color: TEXT_MUTED,
   padding: "6px 10px",
   background: `color-mix(in srgb, ${ACCENT} 6%, transparent)`,
@@ -278,12 +281,12 @@ const virtualHintStyle = /** @type {React.CSSProperties} */ ({
 
 const hintStyle = /** @type {React.CSSProperties} */ ({
   color: TEXT_MUTED,
-  fontSize: 12,
+  fontSize: dynamicSize(12),
 });
 
 const errorStyle = /** @type {React.CSSProperties} */ ({
   color: `color-mix(in srgb, ${STATUS_DANGER} 55%, #fff)`,
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   padding: "6px 10px",
   background: `color-mix(in srgb, ${STATUS_DANGER} 10%, transparent)`,
   border: `1px solid color-mix(in srgb, ${STATUS_DANGER} 30%, transparent)`,
@@ -303,7 +306,7 @@ const actionsRowStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const draftBadgeStyle = /** @type {React.CSSProperties} */ ({
-  fontSize: 10,
+  fontSize: dynamicSize(10),
   fontWeight: 600,
   letterSpacing: "-0.005em",
   padding: "2px 6px",
@@ -339,7 +342,7 @@ const indicatorDotStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const indicatorLabelStyle = /** @type {React.CSSProperties} */ ({
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   color: TEXT_MUTED,
   whiteSpace: "nowrap",
   display: "inline-flex",
@@ -349,6 +352,6 @@ const indicatorLabelStyle = /** @type {React.CSSProperties} */ ({
 
 const indicatorTimeStyle = /** @type {React.CSSProperties} */ ({
   fontFamily: FONT_MONO,
-  fontSize: 11,
+  fontSize: dynamicSize(11),
   color: TEXT_FAINT,
-});
+});

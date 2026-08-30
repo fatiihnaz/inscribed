@@ -52,9 +52,9 @@ import { PanelArea } from "./PanelArea.jsx";
 import { readOpenTarget, stripOpenParams } from "./deep-link.js";
 
 import { emptyStateStyle } from "../editors/styles.js";
-import { panelStyle, drawerBodyStyle, srOnlyStyle, paneContainerStyle, paneStyle, railStyle, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, railIndicatorStyle, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
+import { panelStyle, DRAWER_BODY_CLASS, srOnlyStyle, paneContainerStyle, paneStyle, RAIL_CLASS, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, RAIL_BAR_CLASS, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, PANEL_CLASS, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
 import { DRILL_TRANSITION, DRILL_PARALLAX, DRILL_PANE_TRANSITION, drillLayerStyle, drillPaneStyle } from "../shared/style/drill-motion.js";
-import { PANEL_WIDTH, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER } from "../shared/style/tokens.js";
+import { PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER, dynamicSize } from "../shared/style/tokens.js";
 
 // The two collections-mode panes carry the whole collections layer behind them
 // (record cache, schema form, /me). Lazy so the drawer costs the same on a site
@@ -649,16 +649,16 @@ export function Drawer({ panels = null }) {
       <style>{panelCss}</style>
       <motion.aside
         initial={false}
-        // Stays a number, not `--ins-panel-w`: framer cannot tween a `calc()`
-        // off a custom property. Moving that variable means passing the offset
-        // in from state instead.
-        animate={{ x: isDrawerOpen ? 0 : -PANEL_WIDTH }}
+        className={PANEL_CLASS}
+        // A percentage of the panel's own box, so the offset follows whatever
+        // width the breakpoints left it.
+        animate={{ x: isDrawerOpen ? "0%" : "-100%" }}
         transition={PANEL_TRANSITION}
         style={panelStyle}
       >
         {/* The handle is deliberately outside: it is what reopens the panel, so
             it must stay reachable while everything else is inert. */}
-        <div ref={bodyRef} style={drawerBodyStyle} aria-hidden={!isDrawerOpen}>
+        <div ref={bodyRef} className={DRAWER_BODY_CLASS} aria-hidden={!isDrawerOpen}>
           <ModeRail
             mode={mode}
             onChange={setMode}
@@ -841,10 +841,7 @@ export function Drawer({ panels = null }) {
         >
           <span
             className="inscribed-handle-slide"
-            style={{
-              ...handleIconStyle,
-              "--slide-x": isDrawerOpen ? "-3px" : "3px",
-            }}
+            style={{ ...handleIconStyle, "--slide-x": isDrawerOpen ? "-3px" : "3px" }}
           >
             <motion.span
               initial={false}
@@ -866,11 +863,12 @@ export function Drawer({ panels = null }) {
 // ---------------------------------------------------------------------------
 
 /**
- * Top-level area switch on the panel's left edge. Icon-only (labels live in the
- * tooltip) so the rail costs the pane as little width as possible; the dot marks
- * unsaved work waiting in an area the user isn't currently looking at.
+ * Top-level area switch, down the panel's left edge or across its top depending
+ * on which of the two the shell can spare. Icon-only (labels live in the
+ * tooltip); the dot marks unsaved work waiting in an area the user isn't
+ * currently looking at.
  *
- * Custom panels sit below the built-in areas, in the order the app registered
+ * Custom panels follow the built-in areas, in the order the app registered
  * them, and carry a badge of their own rather than a dirty dot: what is pending
  * in one is the panel's business, not this drawer's Save.
  *
@@ -889,7 +887,7 @@ function ModeRail({
 }) {
   const t = useCmsStrings();
   return (
-    <nav style={railStyle} aria-label={t("drawer.sections")}>
+    <nav className={RAIL_CLASS} aria-label={t("drawer.sections")}>
       <RailButton
         icon={<FileText size={17} />}
         label={t("drawer.page")}
@@ -967,7 +965,8 @@ function RailButton({ icon, label, active, dirty, badge = null, accent, tintIcon
         <motion.span
           layoutId="inscribed-rail-indicator"
           aria-hidden="true"
-          style={{ ...railIndicatorStyle, background: accent }}
+          className={RAIL_BAR_CLASS}
+          style={{ background: accent }}
           transition={RAIL_TRANSITION}
         />
       ) : null}
@@ -1232,6 +1231,7 @@ function PanelHeader({
         lastSavedAt={lastSavedAt}
         publishedFlash={publishedFlash}
       />
+
     </header>
   );
 }
@@ -1650,7 +1650,7 @@ const headerPillDotStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const headerPillLabelStyle = /** @type {React.CSSProperties} */ ({
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   color: TEXT_MUTED,
   whiteSpace: "nowrap",
   display: "inline-flex",
@@ -1661,7 +1661,7 @@ const headerPillLabelStyle = /** @type {React.CSSProperties} */ ({
 const headerPillTimeStyle = /** @type {React.CSSProperties} */ ({
   fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
-  fontSize: 11,
+  fontSize: dynamicSize(11),
   color: TEXT_FAINT,
 });
 
@@ -2217,7 +2217,10 @@ const refIconStyle = /** @type {React.CSSProperties} */ ({
 const refLabelStyle = /** @type {React.CSSProperties} */ ({
   flex: 1,
   minWidth: 0,
-  font: `500 11px/1.2 ${FONT_MONO}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(11),
+  lineHeight: 1.2,
+  fontFamily: FONT_MONO,
   color: TEXT_MID,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -2225,7 +2228,10 @@ const refLabelStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const refCountStyle = /** @type {React.CSSProperties} */ ({
-  font: `500 10px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(10),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
   padding: "2px 6px",
   borderRadius: 99,
@@ -2277,7 +2283,10 @@ const previewBackStyle = /** @type {React.CSSProperties} */ ({
   padding: "10px 8px",
   marginLeft: -8,
   color: TEXT,
-  font: `500 12px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(12),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   cursor: "pointer",
   fontFamily: "inherit",
 });
@@ -2287,7 +2296,10 @@ const previewTitleStyle = /** @type {React.CSSProperties} */ ({
   alignItems: "center",
   gap: 8,
   color: TEXT_MUTED,
-  font: `400 11px/1 ${FONT_SANS}`,
+  fontWeight: 400,
+  fontSize: dynamicSize(11),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
 });
 

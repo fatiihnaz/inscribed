@@ -54,7 +54,7 @@ import {
 import { useContentRadius } from "./hooks/use-content-radius.js";
 import {
   ACCENT, DUR_FAST, EASE, FONT_SANS, FS_XS, R_SM,
-  STATUS_DANGER, TEXT, TEXT_HI, RING_RADIUS,
+  STATUS_DANGER, TEXT, TEXT_HI, RING_RADIUS, dynamicSize,
 } from "../shared/style/tokens.js";
 import {
   BLOCK_TAGS,
@@ -735,7 +735,7 @@ const ghostOverlayStyle = /** @type {React.CSSProperties} */ ({
   justifyContent: "center",
   gap: 6,
   fontFamily: FONT_SANS,
-  fontSize: 13,
+  fontSize: dynamicSize(13),
   fontWeight: 500,
   letterSpacing: "0.02em",
   pointerEvents: "none",

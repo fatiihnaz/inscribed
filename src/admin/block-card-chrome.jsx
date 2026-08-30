@@ -11,7 +11,7 @@ import { ChevronDown, Undo2, Lock, typeIconFor } from "../shared/style/icons.jsx
 
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { blockResetStyle, dirtyDotStyle, rowContainerStyle, rowHeaderStyle, rowGuideBodyStyle, rowPathStyle, typeIconStyle, groupIconStyle } from "./drawer-styles.js";
-import { TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, FONT_SANS } from "../shared/style/tokens.js";
+import { TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, FONT_SANS, dynamicSize } from "../shared/style/tokens.js";
 
 /**
  * @import { BlockResponse, BlockType } from "../shared/contracts/schemas.js"
@@ -46,7 +46,9 @@ export const cardPreviewStyle = /** @type {React.CSSProperties} */ ({
   flex: "0 1 auto",
   minWidth: 0,
   maxWidth: "45%",
-  font: `11px/1.2 ${FONT_SANS}`,
+  fontSize: dynamicSize(11),
+  lineHeight: 1.2,
+  fontFamily: FONT_SANS,
   color: TEXT_FAINT,
   whiteSpace: "nowrap",
   overflow: "hidden",

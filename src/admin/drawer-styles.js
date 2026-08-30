@@ -11,6 +11,7 @@
 
 import {
   PANEL_W, HANDLE_WIDTH, HANDLE_OVERLAP, RAIL_WIDTH, RAIL_EDGE_RADIUS,
+  COMPACT_QUERY,
   R_BADGE, R_SM, R_BTN, R_MD, R_PILL,
   FS_SM,
   DUR_BASE, EASE,
@@ -22,23 +23,24 @@ import {
   COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE,
   STATUS_WARN, STATUS_DANGER,
   FONT_SANS, FONT_MONO,
-  TYPE_META,
+  TYPE_META, dynamicSize,
 } from "../shared/style/tokens.js";
 
 // ---------------------------------------------------------------------------
 // Layout: panel shell
 // ---------------------------------------------------------------------------
 
+// Position and size live in `panelCss` under this class: docking is a
+// breakpoint, and a style object would need a resize listener to express one.
+export const PANEL_CLASS = "inscribed-panel";
+
 export const panelStyle = {
-  position: "fixed",
-  top: 0,
-  left: 0,
-  bottom: 0,
-  width: PANEL_W,
   background: BG,
   color: TEXT_HI,
   zIndex: 9998,
-  font: `13px/1.55 ${FONT_SANS}`,
+  fontSize: dynamicSize(13),
+  lineHeight: 1.55,
+  fontFamily: FONT_SANS,
   letterSpacing: "-0.005em",
   fontFeatureSettings: '"ss01", "cv11"',
   boxShadow: "0 0 40px rgba(0,0,0,0.35)",
@@ -48,13 +50,9 @@ export const panelStyle = {
 };
 
 // Everything the drawer makes `inert` while closed. The handle stays outside
-// it, since it is what reopens the panel.
-export const drawerBodyStyle = {
-  flex: 1,
-  minWidth: 0,
-  height: "100%",
-  display: "flex",
-};
+// it, since it is what reopens the panel. Whether it stacks or sits in a row
+// follows the rail, so the geometry is in `panelCss`.
+export const DRAWER_BODY_CLASS = "inscribed-drawer-body";
 
 export const paneContainerStyle = {
   flex: 1,
@@ -82,26 +80,8 @@ export const srOnlyStyle = {
 // Mode rail
 // ---------------------------------------------------------------------------
 
-export const railStyle = {
-  width: RAIL_WIDTH,
-  flexShrink: 0,
-  height: "100%",
-  // Required: nothing resets box-sizing here, so under the default content-box
-  // the top padding would push the rail 18px past the panel's bottom and take
-  // the rounded bottom-right corner off-screen with it.
-  boxSizing: "border-box",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  gap: 4,
-  // Drops the first icon to the header's own top padding, so the rail starts on
-  // the same line as the breadcrumb instead of above it.
-  paddingTop: 18,
-  background: BG_RAIL,
-  borderRight: `1px solid ${HAIRLINE}`,
-  borderTopRightRadius: RAIL_EDGE_RADIUS,
-  borderBottomRightRadius: RAIL_EDGE_RADIUS,
-};
+// Lies down below the wide shell, so both orientations live in `panelCss`.
+export const RAIL_CLASS = "inscribed-rail";
 
 export const railButtonStyle = {
   position: "relative",
@@ -144,7 +124,10 @@ export const railBadgeStyle = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  font: `600 9px/1 ${FONT_SANS}`,
+  fontWeight: 600,
+  fontSize: dynamicSize(9),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
   color: BG_RAIL,
   boxShadow: `0 0 0 2px ${BG_RAIL}`,
@@ -162,16 +145,9 @@ export const panelIconStyle = {
 
 // Active-mode bar on the rail's outer edge. Rendered by the active button and
 // animated between buttons with a framer `layoutId`, so switching modes slides
-// it instead of snapping.
-export const railIndicatorStyle = {
-  position: "absolute",
-  left: -5,
-  top: 7,
-  bottom: 7,
-  width: 2,
-  borderRadius: 1,
-  pointerEvents: "none",
-};
+// it instead of snapping. Only the fill stays inline, since it is the panel's
+// arbitrary accent; the edge it clings to turns with the rail.
+export const RAIL_BAR_CLASS = "inscribed-rail-bar";
 
 export const paneStyle = {
   flex: 1,
@@ -179,6 +155,7 @@ export const paneStyle = {
   flexDirection: "column",
   minHeight: 0,
 };
+
 
 // ---------------------------------------------------------------------------
 // Header
@@ -230,7 +207,10 @@ export const headerPathStyle = {
   display: "flex",
   alignItems: "center",
   gap: 3,
-  font: `500 12px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(12),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   letterSpacing: "-0.005em",
   overflow: "hidden",
 };
@@ -318,7 +298,10 @@ export const tabButtonStyle = {
   border: 0,
   borderBottom: "2px solid transparent",
   color: TEXT_MUTED,
-  font: `500 12px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(12),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   cursor: "pointer",
   transition: "color 140ms ease, border-color 140ms ease",
   fontFamily: "inherit",
@@ -334,7 +317,10 @@ export const tabLabelStyle = {
 };
 
 export const tabCountBadgeStyle = {
-  font: `500 10px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(10),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
   padding: "3px 6px",
   borderRadius: R_PILL,
@@ -382,7 +368,9 @@ export const searchInputStyle = {
   background: "transparent",
   border: 0,
   outline: 0,
-  font: `12.5px/1 ${FONT_SANS}`,
+  fontSize: dynamicSize(12.5),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   color: TEXT_HI,
   padding: 0,
   fontFamily: "inherit",
@@ -393,7 +381,7 @@ export const searchInputStyle = {
 export const searchClearStyle = {
   border: 0,
   cursor: "pointer",
-  fontSize: 16,
+  fontSize: dynamicSize(16),
   lineHeight: 1,
   padding: "0 2px",
 };
@@ -427,7 +415,10 @@ export const groupHeaderStyle = {
 export const groupNameStyle = {
   flex: 1,
   minWidth: 0,
-  font: `500 12px/1 ${FONT_MONO}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(12),
+  lineHeight: 1,
+  fontFamily: FONT_MONO,
   color: TEXT,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -444,7 +435,10 @@ export const groupCountStyle = {
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  font: `500 10px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(10),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
   padding: "2px 6px",
   borderRadius: R_PILL,
@@ -572,7 +566,10 @@ export const rowGuideBodyStyle = {
 export const rowPathStyle = {
   flex: 1,
   minWidth: 0,
-  font: `500 11px/1.2 ${FONT_MONO}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(11),
+  lineHeight: 1.2,
+  fontFamily: FONT_MONO,
   color: TEXT_MID,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -613,7 +610,10 @@ export const typeIconStyle = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  font: `600 11px/1 ${FONT_MONO}`,
+  fontWeight: 600,
+  fontSize: dynamicSize(11),
+  lineHeight: 1,
+  fontFamily: FONT_MONO,
 };
 
 // Legacy typeChipStyle kept for any caller that still imports it.
@@ -622,7 +622,7 @@ export const typeChipStyle = {
   alignItems: "center",
   height: 18,
   padding: "0 7px",
-  fontSize: 10,
+  fontSize: dynamicSize(10),
   fontWeight: 600,
   letterSpacing: "-0.005em",
   borderRadius: R_BADGE,
@@ -671,7 +671,7 @@ export const statusDotStyle = {
 };
 
 export const statusMsgStyle = {
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   color: TEXT,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -703,7 +703,10 @@ export const buttonBaseStyle = {
   gap: 6,
   padding: "7px 12px",
   borderRadius: R_BTN,
-  font: `500 ${FS_SM}px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: FS_SM,
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   cursor: "pointer",
   border: 0,
   fontFamily: "inherit",
@@ -750,7 +753,10 @@ export const avatarImgStyle = {
 };
 
 export const avatarInitialsStyle = {
-  font: `700 10.5px/1 ${FONT_SANS}`,
+  fontWeight: 700,
+  fontSize: dynamicSize(10.5),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   letterSpacing: "0.02em",
 };
 
@@ -763,7 +769,10 @@ export const userMetaStyle = {
 };
 
 export const userNameStyle = {
-  font: `500 12px/1.2 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(12),
+  lineHeight: 1.2,
+  fontFamily: FONT_SANS,
   color: TEXT,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -771,7 +780,9 @@ export const userNameStyle = {
 };
 
 export const userEmailStyle = {
-  font: `10.5px/1.2 ${FONT_SANS}`,
+  fontSize: dynamicSize(10.5),
+  lineHeight: 1.2,
+  fontFamily: FONT_SANS,
   color: TEXT_FAINT,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -804,7 +815,7 @@ export const errorStyle = {
   border: `1px solid color-mix(in srgb, ${STATUS_DANGER} 28%, transparent)`,
   color: `color-mix(in srgb, ${STATUS_DANGER} 35%, #fff)`,
   borderRadius: R_MD,
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   lineHeight: 1.5,
 };
 
@@ -819,23 +830,12 @@ export const conflictStyle = {
 // Handle
 // ---------------------------------------------------------------------------
 
+// Which edge it clings to follows the shell, so that half sits in `panelCss`.
 export const handleButtonStyle = {
-  position: "absolute",
-  top: 0,
-  right: 0,
-  transform: `translateX(calc(100% - ${HANDLE_OVERLAP}px))`,
-  width: HANDLE_WIDTH,
-  height: "100%",
-  // Same content-box guard as the rail: the top/bottom hairlines would
-  // otherwise make the handle 2px taller than the panel.
+  // Same content-box guard as the rail: the hairlines on the two long sides
+  // would otherwise make the handle 2px bigger than the panel.
   boxSizing: "border-box",
   background: BG_RAISED,
-  border: 0,
-  borderTop: `1px solid ${HAIRLINE}`,
-  borderRight: `1px solid ${HAIRLINE}`,
-  borderBottom: `1px solid ${HAIRLINE}`,
-  borderTopRightRadius: 10,
-  borderBottomRightRadius: 10,
   cursor: "pointer",
   display: "flex",
   alignItems: "center",
@@ -858,6 +858,99 @@ export const panelCss = `
   /* Modern height-auto interpolation for body collapse animations. */
   @supports (interpolate-size: allow-keywords) {
     :root { interpolate-size: allow-keywords; }
+  }
+
+  /* A side column, at whatever width the breakpoints left in --ins-panel-w. */
+  .${PANEL_CLASS} {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: ${PANEL_W};
+  }
+  .${PANEL_CLASS} > .inscribed-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: ${HANDLE_WIDTH}px;
+    height: 100%;
+    transform: translateX(calc(100% - ${HANDLE_OVERLAP}px));
+    border: 0;
+    border-top: 1px solid ${HAIRLINE};
+    border-right: 1px solid ${HAIRLINE};
+    border-bottom: 1px solid ${HAIRLINE};
+    border-radius: 0 10px 10px 0;
+  }
+
+  .${DRAWER_BODY_CLASS} {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+  }
+
+  .${RAIL_CLASS} {
+    flex-shrink: 0;
+    /* Required: nothing resets box-sizing here, so under the default
+       content-box the padding would push the rail past the panel and take the
+       rounded inner corners off-screen with it. */
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: ${BG_RAIL};
+    width: ${RAIL_WIDTH}px;
+    height: 100%;
+    flex-direction: column;
+    /* Drops the first icon to the header's own top padding, so the rail starts
+       on the same line as the breadcrumb instead of above it. */
+    padding-top: 18px;
+    border-right: 1px solid ${HAIRLINE};
+    border-radius: 0 ${RAIL_EDGE_RADIUS}px ${RAIL_EDGE_RADIUS}px 0;
+  }
+
+  .${RAIL_BAR_CLASS} {
+    position: absolute;
+    left: -5px;
+    top: 7px;
+    bottom: 7px;
+    width: 2px;
+    border-radius: 1px;
+    pointer-events: none;
+  }
+
+  /* Below the wide shell the panel is short of width in both bands, so the rail
+     lies down across the top and hands the pane the whole of it. */
+  @media ${COMPACT_QUERY} {
+    .${DRAWER_BODY_CLASS} { flex-direction: column; }
+
+    .${RAIL_CLASS} {
+      width: 100%;
+      height: auto;
+      flex-direction: row;
+      /* Lines the first icon up with the header badge under it. */
+      padding: 5px 8px 5px 16px;
+      border-right: 0;
+      border-bottom: 1px solid ${HAIRLINE};
+      border-radius: 0 0 ${RAIL_EDGE_RADIUS}px ${RAIL_EDGE_RADIUS}px;
+    }
+
+    .${RAIL_BAR_CLASS} {
+      left: 7px;
+      right: 7px;
+      top: -5px;
+      bottom: auto;
+      width: auto;
+      height: 2px;
+    }
+  }
+
+  /* Nothing inside the panel hands its leftover scroll to the host page, so a
+     pane scrolled to its end leaves the page where it was. The alternative is
+     locking body overflow, which takes the host's scrollbar away and shifts its
+     layout by that width. */
+  .${PANEL_CLASS}, .${PANEL_CLASS} * {
+    overscroll-behavior: contain;
   }
 
   .inscribed-rail-btn:focus-visible,
@@ -1038,7 +1131,7 @@ export const panelCss = `
   }
   .inscribed-handle:hover .inscribed-handle-slide,
   .inscribed-handle:focus-visible .inscribed-handle-slide {
-    transform: translateX(var(--slide-x, 3px));
+    transform: translate(var(--slide-x, 0px), var(--slide-y, 0px));
     filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
   }
 

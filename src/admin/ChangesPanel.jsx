@@ -29,7 +29,7 @@ import { diffWords, diffLines, stripHtml, lcsIndexPairs } from "./word-diff.js";
 
 import { emptyStateStyle } from "../editors/styles.js";
 import { paneStyle, listStyle, rowContainerStyle, rowHeaderStyle, rowGuideBodyStyle, rowPathStyle, typeIconStyle } from "./drawer-styles.js";
-import { TEXT_MUTED, TEXT_FAINT, TEXT, HAIRLINE, SURFACE_1, RADIUS_SM, R_SM, FONT_MONO, COLLECTION_ACCENT, COLLECTION_LINE, STATUS_OK, STATUS_DANGER, STATUS_WARN, FONT_SANS } from "../shared/style/tokens.js";
+import { TEXT_MUTED, TEXT_FAINT, TEXT, HAIRLINE, SURFACE_1, RADIUS_SM, R_SM, FONT_MONO, COLLECTION_ACCENT, COLLECTION_LINE, STATUS_OK, STATUS_DANGER, STATUS_WARN, FONT_SANS, dynamicSize } from "../shared/style/tokens.js";
 
 /**
  * @import { BlockResponse, BlockType, ItemSchema } from "../shared/contracts/schemas.js"
@@ -158,7 +158,10 @@ function TranslationDiffCard({ preview }) {
 const localeBadgeStyle = /** @type {React.CSSProperties} */ ({
   marginLeft: "auto",
   color: TEXT_MUTED,
-  font: `600 10px/1.4 ${FONT_MONO}`,
+  fontWeight: 600,
+  fontSize: dynamicSize(10),
+  lineHeight: 1.4,
+  fontFamily: FONT_MONO,
   letterSpacing: "0.06em",
   flexShrink: 0,
 });
@@ -794,7 +797,7 @@ const formatOnlyStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   flexDirection: "column",
   gap: 6,
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   color: TEXT_MUTED,
 });
 
@@ -805,7 +808,10 @@ const formatMarksStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const formatMarkChipStyle = /** @type {React.CSSProperties} */ ({
-  font: `500 10.5px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(10.5),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
   padding: "3px 6px",
   borderRadius: R_SM,
@@ -1149,7 +1155,7 @@ const scrollStyle = /** @type {React.CSSProperties} */ ({
 const collectionDraftCountStyle = /** @type {React.CSSProperties} */ ({
   fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
-  fontSize: 10,
+  fontSize: dynamicSize(10),
   letterSpacing: "0.04em",
   color: COLLECTION_ACCENT,
   padding: "1px 6px",
@@ -1171,7 +1177,7 @@ const lineDiffWrapStyle = /** @type {React.CSSProperties} */ ({
   background: SURFACE_1,
   overflow: "hidden",
   fontFamily: FONT_MONO,
-  fontSize: 11.5,
+  fontSize: dynamicSize(11.5),
   lineHeight: 1.6,
 });
 
@@ -1216,7 +1222,7 @@ const lineHunkStyle = /** @type {React.CSSProperties} */ ({
   borderTop: `1px solid ${HAIRLINE}`,
   borderBottom: `1px solid ${HAIRLINE}`,
   color: TEXT_FAINT,
-  fontSize: 10,
+  fontSize: dynamicSize(10),
   letterSpacing: "0.04em",
   textAlign: "center",
 });
@@ -1237,7 +1243,7 @@ const inlineDiffStyle = /** @type {React.CSSProperties} */ ({
   whiteSpace: "pre-wrap",
   wordBreak: "break-word",
   color: TEXT,
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   lineHeight: 1.55,
 });
 
@@ -1249,7 +1255,7 @@ const collapsedSpanStyle = /** @type {React.CSSProperties} */ ({
   background: "rgba(255,255,255,0.04)",
   color: TEXT_FAINT,
   fontFamily: FONT_MONO,
-  fontSize: 10,
+  fontSize: dynamicSize(10),
   letterSpacing: "0.04em",
   verticalAlign: "middle",
 });
@@ -1305,7 +1311,7 @@ const arrowDiffStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   alignItems: "center",
   gap: 8,
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   flexWrap: "wrap",
 });
 
@@ -1331,12 +1337,18 @@ const imageSideStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const imageLabelStyle = /** @type {React.CSSProperties} */ ({
-  font: `500 10.5px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(10.5),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   color: TEXT_MUTED,
 });
 
 const imageLabelNextStyle = /** @type {React.CSSProperties} */ ({
-  font: `600 10.5px/1 ${FONT_SANS}`,
+  fontWeight: 600,
+  fontSize: dynamicSize(10.5),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   color: TEXT,
 });
 
@@ -1353,7 +1365,7 @@ const imageThumbStyle = /** @type {React.CSSProperties} */ ({
 
 const emptyValueStyle = /** @type {React.CSSProperties} */ ({
   color: TEXT_FAINT,
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   fontStyle: "italic",
 });
 
@@ -1381,7 +1393,7 @@ const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
 
 const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
   fontFamily: FONT_MONO,
-  fontSize: 11,
+  fontSize: dynamicSize(11),
   color: TEXT_MUTED,
 });
 
@@ -1390,7 +1402,7 @@ function listItemGlyphStyle(kind) {
   const tone = toneForKind(kind);
   return /** @type {React.CSSProperties} */ ({
     fontFamily: FONT_MONO,
-    fontSize: 13,
+    fontSize: dynamicSize(13),
     fontWeight: 600,
     color: tone,
     width: 14,
@@ -1402,7 +1414,10 @@ function listItemGlyphStyle(kind) {
 /** @param {string} tone */
 function listItemBadgeStyle() {
   return /** @type {React.CSSProperties} */ ({
-    font: `400 11px/1 ${FONT_SANS}`,
+    fontWeight: 400,
+    fontSize: dynamicSize(11),
+    lineHeight: 1,
+    fontFamily: FONT_SANS,
     color: TEXT_MUTED,
   });
 }
@@ -1421,7 +1436,7 @@ const fieldRowStyle = /** @type {React.CSSProperties} */ ({
 
 const fieldLabelStyle = /** @type {React.CSSProperties} */ ({
   fontFamily: FONT_MONO,
-  fontSize: 10,
+  fontSize: dynamicSize(10),
   letterSpacing: "0.04em",
   color: TEXT_MUTED,
 });
@@ -1430,7 +1445,7 @@ const fieldLabelStyle = /** @type {React.CSSProperties} */ ({
 function fallbackJsonStyle(tone) {
   return /** @type {React.CSSProperties} */ ({
     fontFamily: FONT_MONO,
-    fontSize: 11,
+    fontSize: dynamicSize(11),
     color: tone === DIFF_ADDED || tone === DIFF_REMOVED ? tone : TEXT,
     background: tone === DIFF_ADDED || tone === DIFF_REMOVED
       ? `color-mix(in srgb, ${tone} 10%, transparent)`

@@ -14,6 +14,8 @@
  * has set. See `editors/field-css.js`.
  */
 
+import { dynamicSize } from "../style/tokens.js";
+
 /**
  * @typedef {"icon" | "text" | "cell"} PanelButtonShape
  *   `icon` is a square glyph target, `text` a small label, `cell` one tile in a
@@ -61,7 +63,7 @@ export function PanelButton({
 /** The month/year heading, which is a text button at the panel's own size. */
 export const headingButtonStyle = {
   padding: "4px 8px",
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   fontWeight: 600,
   letterSpacing: "-0.005em",
   textTransform: "capitalize",

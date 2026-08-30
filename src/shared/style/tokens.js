@@ -35,9 +35,31 @@ export const RAIL_WIDTH = 48;
 // area wraps around.
 export const RAIL_EDGE_RADIUS = 14;
 
-// CSS-side read of the width above; the number stays for the JS that has to
-// compute with it (the drawer's slide-out offset).
+// CSS-side read of the width above.
 export const PANEL_W = `var(--ins-panel-w, ${PANEL_WIDTH}px)`;
+
+// One shell at every size: a full-height column against the left edge. Only its
+// width changes, so there is no second layout to keep working and nothing here
+// the stylesheets cannot say on their own.
+export const BP_NARROW = 1240;
+export const BP_MOBILE = 768;
+
+export const PANEL_WIDTH_NARROW = 360;
+
+// The part of the handle left outside the panel, which is the strip of screen
+// the panel has to give up for it. A percentage, not `100vw`: the panel is
+// fixed, so this resolves against the viewport without counting a classic
+// scrollbar's width.
+export const PANEL_HANDLE_REACH = HANDLE_WIDTH - HANDLE_OVERLAP;
+export const PANEL_WIDTH_MOBILE = `calc(100% - ${PANEL_HANDLE_REACH}px)`;
+
+// Banded rather than cascading, so neither depends on which rule is written
+// first.
+export const NARROW_QUERY = `(min-width: ${BP_MOBILE}px) and (max-width: ${BP_NARROW - 1}px)`;
+export const MOBILE_QUERY = `(max-width: ${BP_MOBILE - 1}px)`;
+// Both bands at once, for what they answer the same way: below the wide shell
+// the panel is short of width either way.
+export const COMPACT_QUERY = `(max-width: ${BP_NARROW - 1}px)`;
 
 // Framer wants the control points, CSS wants the function; `EASE` below builds
 // the string from these.
@@ -76,12 +98,25 @@ export const R_BTN   = 7;   // buttons
 export const R_MD    = 8;   // single-field editors, nested cards
 export const R_PILL  = 99;  // count chips, status pills
 
-// Type ramp (px). One step per role: labels, metadata, body, headings.
-export const FS_MICRO = 9;   // uppercase micro-labels / mode chips
-export const FS_2XS   = 10;  // section labels
-export const FS_XS    = 11;  // metadata, hints
-export const FS_SM    = 12;  // default UI text / buttons
-export const FS_MD    = 12;  // field input text
+/**
+ * Every type size in the admin UI goes through this, so the whole ramp moves
+ * together on one multiplier. A phone sets `--ins-fs-scale` (see `layout-css`):
+ * the desktop steps are dense-chrome sizes, and iOS zooms the page whenever a
+ * focused control's text lands under 16px, which every one of them does.
+ *
+ * @param {number} px  The size at the desktop scale.
+ */
+export const dynamicSize = (px) => `calc(${px}px * var(--ins-fs-scale, 1))`;
+
+// Type ramp. One step per role: labels, metadata, body, headings.
+export const FS_MICRO = dynamicSize(9);   // uppercase micro-labels / mode chips
+export const FS_2XS   = dynamicSize(10);  // section labels
+export const FS_XS    = dynamicSize(11);  // metadata, hints
+export const FS_SM    = dynamicSize(12);  // default UI text / buttons
+export const FS_MD    = dynamicSize(12);  // field input text
+
+// Enough to carry FS_MD past the 16px iOS wants; the rest of the ramp follows.
+export const FS_SCALE_MOBILE = 1.35;
 
 // Motion. One fast step for hovers/color swaps, one base step for layout.
 export const DUR_FAST = "140ms";

@@ -24,7 +24,7 @@ import { useMyCollections } from "../collections/hooks/use-my-collections.js";
 import { SkeletonRows } from "./Skeleton.jsx";
 import { emptyStateStyle } from "../editors/styles.js";
 import { paneStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, listStyle, dirtyDotStyle, rowPathStyle, typeIconStyle } from "./drawer-styles.js";
-import { TEXT, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, FONT_SANS, R_MD } from "../shared/style/tokens.js";
+import { TEXT, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, FONT_SANS, R_MD, dynamicSize } from "../shared/style/tokens.js";
 
 /**
  * Memoised: it stays mounted (and animating) underneath an open collection, so
@@ -327,7 +327,10 @@ const keyStyle = /** @type {React.CSSProperties} */ ({
 const groupLabelStyle = /** @type {React.CSSProperties} */ ({
   listStyle: "none",
   padding: "12px 12px 4px",
-  font: `500 11px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(11),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   letterSpacing: "-0.005em",
   color: TEXT_MUTED,
 });
@@ -340,7 +343,10 @@ const collectionDotStyle = /** @type {React.CSSProperties} */ ({
 
 const localeStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
-  font: `500 10px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(10),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   letterSpacing: "0.06em",
   color: TEXT_FAINT,
   whiteSpace: "nowrap",
@@ -351,7 +357,9 @@ const localeStyle = /** @type {React.CSSProperties} */ ({
 const shapeStyle = /** @type {React.CSSProperties} */ ({
   flex: "1 1 auto",
   minWidth: 0,
-  font: `11px/1.2 ${FONT_SANS}`,
+  fontSize: dynamicSize(11),
+  lineHeight: 1.2,
+  fontFamily: FONT_SANS,
   color: TEXT_MUTED,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -360,7 +368,10 @@ const shapeStyle = /** @type {React.CSSProperties} */ ({
 
 const countStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
-  font: `500 10px/1 ${FONT_SANS}`,
+  fontWeight: 500,
+  fontSize: dynamicSize(10),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
   fontVariantNumeric: "tabular-nums",
   color: TEXT_FAINT,
   whiteSpace: "nowrap",

@@ -13,7 +13,7 @@
 
 import {
   BORDER, BG_RAISED, TEXT_HI, TEXT_MUTED, TEXT_FAINT,
-  FS_XS, FS_SM, R_MD, RADIUS,
+  FS_XS, FS_SM, R_MD, RADIUS, dynamicSize,
 } from "../shared/style/tokens.js";
 
 /**
@@ -82,7 +82,7 @@ export const emptyStateStyle = {
   margin: "8px 16px",
   padding: 16,
   color: TEXT_FAINT,
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   lineHeight: 1.55,
   border: `1px dashed ${BORDER}`,
   borderRadius: RADIUS,

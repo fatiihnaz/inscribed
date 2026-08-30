@@ -17,7 +17,7 @@ import { SelectEditor } from "../editors/fields/SelectEditor.jsx";
 import { StringArrayEditor } from "../editors/fields/StringArrayEditor.jsx";
 import { LinkEditor } from "../editors/fields/LinkEditor.jsx";
 import { ImageEditor } from "../editors/fields/ImageEditor.jsx";
-import { neutralTint as neutral, COLLECTION_ACCENT, FS_XS, FS_SM, R_BADGE } from "../shared/style/tokens.js";
+import { neutralTint as neutral, COLLECTION_ACCENT, FS_XS, FS_SM, R_BADGE, dynamicSize } from "../shared/style/tokens.js";
 
 // Every control on this form speaks the portable palette, so the same record
 // form reads on the dark drawer and on a light page via CollectionComposer.
@@ -201,7 +201,7 @@ const requiredMarkStyle = {
   lineHeight: 1,
 };
 const readonlyTagStyle = {
-  fontSize: 10,
+  fontSize: dynamicSize(10),
   fontWeight: 600,
   letterSpacing: "-0.005em",
   padding: "2px 6px",

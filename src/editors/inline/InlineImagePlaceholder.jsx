@@ -16,7 +16,7 @@ import { useImageUpload } from "../use-image-upload.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { Upload } from "../../shared/style/icons.jsx";
 import {
-  ACCENT, DUR_FAST, EASE, STATUS_DANGER, RING_RADIUS, R_PILL,
+  ACCENT, DUR_FAST, EASE, STATUS_DANGER, RING_RADIUS, R_PILL, dynamicSize,
 } from "../../shared/style/tokens.js";
 
 /**
@@ -108,9 +108,9 @@ export function InlineImagePlaceholder({ onChange, style }) {
   );
 }
 
-const hintStrongStyle = { fontSize: 12.5, fontWeight: 500, opacity: 0.85 };
-const hintStyle = { fontSize: 11, opacity: 0.5 };
-const errorTextStyle = { fontSize: 11.5, marginTop: 2, color: STATUS_DANGER };
+const hintStrongStyle = { fontSize: dynamicSize(12.5), fontWeight: 500, opacity: 0.85 };
+const hintStyle = { fontSize: dynamicSize(11), opacity: 0.5 };
+const errorTextStyle = { fontSize: dynamicSize(11.5), marginTop: 2, color: STATUS_DANGER };
 const progressTrackStyle = {
   width: "80%",
   height: 3,

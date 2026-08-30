@@ -25,7 +25,7 @@ import { useStoreSelector } from "../shared/state/store.js";
 import { PositionField } from "../shared/ui/PositionField.jsx";
 import { noItemsStyle } from "./styles.js";
 import {
-  ACCENT, BG_RAISED, EASE, HAIRLINE, TEXT_MUTED, STATUS_DANGER, R_BADGE, R_SM,
+  ACCENT, BG_RAISED, EASE, HAIRLINE, TEXT_MUTED, STATUS_DANGER, R_BADGE, R_SM, dynamicSize,
 } from "../shared/style/tokens.js";
 
 import { FieldEditor } from "./FieldEditor.jsx";
@@ -494,7 +494,7 @@ const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
   alignItems: "center",
   gap: 8,
   padding: "5px 6px",
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   color: TEXT_MUTED,
 });
 
@@ -523,7 +523,7 @@ const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
   justifyContent: "center",
   borderRadius: R_SM,
   fontFamily: "ui-monospace, 'SF Mono', monospace",
-  fontSize: 11,
+  fontSize: dynamicSize(11),
   fontWeight: 600,
   color: ACCENT,
   background: `color-mix(in srgb, ${ACCENT} 12%, transparent)`,
@@ -543,7 +543,7 @@ const listItemIndexInputStyle = /** @type {React.CSSProperties} */ ({
 const listItemSummaryStyle = /** @type {React.CSSProperties} */ ({
   flex: 1,
   minWidth: 0,
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   fontWeight: 450,
   marginTop: -1,
   color: "color-mix(in srgb, var(--ins-text, #fff) 90%, transparent)",
@@ -597,7 +597,7 @@ const listFieldStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const listFieldLabelStyle = /** @type {React.CSSProperties} */ ({
-  fontSize: 11,
+  fontSize: dynamicSize(11),
   fontWeight: 500,
   color: TEXT_MUTED,
   letterSpacing: "-0.005em",

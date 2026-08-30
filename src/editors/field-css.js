@@ -70,7 +70,7 @@ export const fieldCss = `
        and border, and spills sideways. */
     box-sizing: border-box;
     font-family: inherit;
-    font-size: ${FS_MD}px;
+    font-size: ${FS_MD};
     line-height: 1.4;
     padding: 7px 11px;
     border: 1px solid ${STROKE};
@@ -214,7 +214,7 @@ export const fieldCss = `
   .inscribed-panel-btn--text {
     padding: 5px 9px;
     border-radius: ${R_SM - 2}px;
-    font-size: ${FS_MICRO}px;
+    font-size: ${FS_MICRO};
     font-weight: 500;
     letter-spacing: 0.02em;
     opacity: 0.6;
@@ -222,7 +222,7 @@ export const fieldCss = `
   .inscribed-panel-btn--cell {
     padding: 9px 4px;
     border-radius: ${R_SM}px;
-    font-size: ${FS_XS}px;
+    font-size: ${FS_XS};
     font-weight: 500;
     text-transform: capitalize;
   }
@@ -263,7 +263,7 @@ export const fieldCss = `
     background: transparent;
     color: inherit;
     font-family: inherit;
-    font-size: ${FS_SM}px;
+    font-size: ${FS_SM};
     font-weight: 400;
     text-align: left;
     cursor: pointer;
@@ -287,7 +287,7 @@ export const fieldCss = `
     background: transparent;
     color: inherit;
     font-family: inherit;
-    font-size: ${FS_XS}px;
+    font-size: ${FS_XS};
     font-weight: 400;
     font-variant-numeric: tabular-nums;
     cursor: pointer;
@@ -425,7 +425,7 @@ export const fieldCss = `
     background: color-mix(in srgb, ${A} 4%, transparent);
     color: color-mix(in srgb, ${A} 75%, transparent);
     font-family: inherit;
-    font-size: ${FS_SM}px;
+    font-size: ${FS_SM};
     font-weight: 500;
     cursor: pointer;
     transition: background-color ${DUR_FAST} ${EASE}, border-color ${DUR_FAST} ${EASE}, color ${DUR_FAST} ${EASE};
@@ -483,7 +483,7 @@ export const fieldCss = `
     border-radius: ${R_SM}px;
     border: 1px solid ${LINE};
     background: ${BG};
-    font-size: ${FS_SM}px;
+    font-size: ${FS_SM};
     line-height: 1.4;
     transition: background-color ${DUR_FAST} ${EASE};
   }

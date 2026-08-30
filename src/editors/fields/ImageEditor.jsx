@@ -17,6 +17,7 @@ import { useCallback, useRef, useState } from "react";
 import { useImageUpload } from "../use-image-upload.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { fieldVariant } from "../styles.js";
+import { dynamicSize } from "../../shared/style/tokens.js";
 
 /**
  * @typedef {Object} ImageValue
@@ -196,8 +197,8 @@ const dropzoneStyle = {
   padding: "16px 14px",
 };
 
-const hintStrongStyle = { fontSize: 12, fontWeight: 500, opacity: 0.85 };
-const hintStyle = { fontSize: 11, opacity: 0.5 };
+const hintStrongStyle = { fontSize: dynamicSize(12), fontWeight: 500, opacity: 0.85 };
+const hintStyle = { fontSize: dynamicSize(11), opacity: 0.5 };
 const placeholderStyle = {
   width: "100%",
   minHeight: 92,
@@ -207,7 +208,7 @@ const placeholderStyle = {
   border: "1.5px dashed rgba(127,127,127,0.24)",
   borderRadius: 8,
   background: "rgba(127,127,127,0.03)",
-  fontSize: 11,
+  fontSize: dynamicSize(11),
   opacity: 0.5,
 };
 const previewWrapStyle = { position: "relative", display: "inline-block", width: "100%" };
@@ -227,7 +228,7 @@ const overlayBtnStyle = {
   border: "1px solid rgba(255,255,255,0.25)",
   background: "rgba(20,20,20,0.55)",
   color: "#fff",
-  fontSize: 11,
+  fontSize: dynamicSize(11),
   fontWeight: 500,
   cursor: "pointer",
   fontFamily: "inherit",
@@ -252,7 +253,7 @@ const errorStyle = {
   alignItems: "center",
   gap: 6,
   padding: "8px 10px",
-  fontSize: 12,
+  fontSize: dynamicSize(12),
   color: "inherit",
   background: "rgba(220,60,80,0.08)",
   border: "1px solid rgba(220,60,80,0.32)",
@@ -265,13 +266,13 @@ const errorCloseStyle = {
   cursor: "pointer",
   padding: "0 2px",
   opacity: 0.6,
-  fontSize: 13,
+  fontSize: dynamicSize(13),
   lineHeight: 1,
   fontFamily: "inherit",
 };
 const subLabelStyle = { display: "flex", flexDirection: "column", gap: 5 };
 const subLabelTextStyle = {
-  fontSize: 11,
+  fontSize: dynamicSize(11),
   fontWeight: 500,
   letterSpacing: "-0.005em",
   opacity: 0.65,

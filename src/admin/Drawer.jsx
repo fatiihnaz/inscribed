@@ -31,7 +31,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   ChevronsLeft, ChevronDown, ChevronLeft, ChevronRight,
-  Check, Undo2, LogOut, Search, Eye, Pencil, FileText, Layers, Folder, TypeUnknown,
+  Check, Undo2, Search, Eye, Pencil, FileText, Layers, Folder, LogOut, TypeUnknown,
 } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
@@ -54,9 +54,9 @@ import { PanelArea } from "./PanelArea.jsx";
 import { readOpenTarget, stripOpenParams } from "./deep-link.js";
 
 import { emptyStateStyle } from "../editors/styles.js";
-import { panelStyle, DRAWER_BODY_CLASS, srOnlyStyle, paneContainerStyle, paneStyle, RAIL_CLASS, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, RAIL_BAR_CLASS, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, PANEL_CLASS, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
+import { panelStyle, DRAWER_BODY_CLASS, srOnlyStyle, paneContainerStyle, paneStyle, RAIL_CLASS, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, RAIL_BAR_CLASS, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, STATUS_COLLAPSE_TRANSITION, statusCollapseStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, PANEL_CLASS, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
 import { DRILL_TRANSITION, DRILL_PARALLAX, DRILL_PANE_TRANSITION, drillLayerStyle, drillPaneStyle, switchMotion, switchLayerStyle } from "../shared/style/drill-motion.js";
-import { MOBILE_QUERY, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER, dynamicSize } from "../shared/style/tokens.js";
+import { COMPACT_QUERY, MOBILE_QUERY, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER, dynamicSize } from "../shared/style/tokens.js";
 
 // The two collections-mode panes carry the whole collections layer behind them
 // (record cache, schema form, /me). Lazy so the drawer costs the same on a site
@@ -646,6 +646,22 @@ export function Drawer({ panels = null }) {
   const tabsId = useId();
   const blockPanelId = `${tabsId}-blocks`;
 
+  // Below the wide shell the rail lies down and the header is at its narrowest
+  // (360px between the two breakpoints, tighter than a phone), so the pill hangs
+  // off the rail's spare width instead of squeezing the breadcrumb. Built once
+  // and handed to whichever row is holding it, so it is one pill rather than two
+  // taking turns.
+  const isCompact = useMediaQuery(COMPACT_QUERY);
+  const statusPill = (
+    <HeaderStatusPill
+      dirty={dirtyCount > 0}
+      draftSyncStatus={draftSyncStatus}
+      isSaving={isSaving}
+      lastSavedAt={lastSavedAt}
+      publishedFlash={publishedFlash}
+    />
+  );
+
   return (
     <MotionConfig reducedMotion="user">
       <style>{panelCss}</style>
@@ -664,11 +680,14 @@ export function Drawer({ panels = null }) {
           <ModeRail
             mode={mode}
             onChange={setMode}
+            statusPill={isCompact ? statusPill : null}
             showCollections={collectionCtx !== null}
             pageDirty={pageDirty || globalDirty}
             collectionsDirty={collectionDirtyTotal > 0}
             panels={panels}
             panelBadges={panelBadges}
+            userInfo={userInfo}
+            onSignOut={onSignOut}
           />
   
           <div style={paneContainerStyle}>
@@ -680,11 +699,7 @@ export function Drawer({ panels = null }) {
               collectionKey={selectedCollection?.key ?? null}
               onNavigate={(href) => router.push(href)}
               onBackToCollections={() => setSelectedCollection(null)}
-              dirty={dirtyCount > 0}
-              draftSyncStatus={draftSyncStatus}
-              isSaving={isSaving}
-              lastSavedAt={lastSavedAt}
-              publishedFlash={publishedFlash}
+              statusPill={isCompact ? null : statusPill}
             />
   
             {mode === "collections" || activePanel ? (
@@ -825,10 +840,11 @@ export function Drawer({ panels = null }) {
               onTogglePreview={() => setPreviewOpen((v) => !v)}
             />
             </div>
-  
+
             {userInfo ? (
               <PanelFooter userInfo={userInfo} onSignOut={onSignOut} />
             ) : null}
+  
           </div>
         </div>
 
@@ -886,6 +902,7 @@ export function Drawer({ panels = null }) {
  */
 function ModeRail({
   mode, onChange, showCollections, pageDirty, collectionsDirty, panels, panelBadges,
+  statusPill,
 }) {
   const t = useCmsStrings();
   return (
@@ -926,6 +943,12 @@ function ModeRail({
           onClick={() => onChange(panel.id)}
         />
       ))}
+      {/* The rail's other end, and only in the lying-down state: there the
+          header is at its narrowest (360px between the two breakpoints, which is
+          tighter than a phone) and the rail has width to spare. Rendered at all
+          only when it is holding something, so the column layout grows no empty
+          box at its foot. */}
+      {statusPill ? <div className="inscribed-rail-tail">{statusPill}</div> : null}
     </nav>
   );
 }
@@ -1162,16 +1185,17 @@ function CollectionsMode({ selected, onSelect, collections, dirtyKeys }) {
  *   collectionKey: string | null,
  *   onNavigate: (href: string) => void,
  *   onBackToCollections: () => void,
- *   dirty: boolean,
- *   draftSyncStatus: "idle"|"saving"|"saved"|"failed",
- *   isSaving: boolean,
- *   lastSavedAt: string | null,
- *   publishedFlash: boolean,
+ *   statusPill: React.ReactNode,
  * }} props
+ *   The account left this row for the rail, which is what gave the status pill
+ *   its slot back. See `HeaderStatusPill` for why the state belongs on screen
+ *   and the actions belong at the bottom. It arrives as a node because below
+ *   the wide shell it hangs off the rail instead, and it should be one pill
+ *   either way rather than two that take turns.
  */
 function PanelHeader({
   mode, panel, panelTrail, segments, collectionKey, onNavigate, onBackToCollections,
-  dirty, draftSyncStatus, isSaving, lastSavedAt, publishedFlash,
+  statusPill,
 }) {
   const t = useCmsStrings();
   const isCollections = mode === "collections";
@@ -1248,13 +1272,8 @@ function PanelHeader({
         </AnimatePresence>
       </nav>
 
-      <HeaderStatusPill
-        dirty={dirty}
-        draftSyncStatus={draftSyncStatus}
-        isSaving={isSaving}
-        lastSavedAt={lastSavedAt}
-        publishedFlash={publishedFlash}
-      />
+      {statusPill}
+
 
     </header>
   );
@@ -1498,8 +1517,18 @@ const crumbWrapStyle = /** @type {React.CSSProperties} */ ({
 
 /**
  * Header pill surfacing the page-level autosave state: coloured dot + label +
- * (when present) a wall-clock timestamp. Mirrors the bottom StatusBar's dot
- * tones and typography on purpose.
+ * (when present) a wall-clock timestamp.
+ *
+ * This and the bar at the bottom split the work rather than repeating it. The
+ * pill is state: what is happening to the editor's work, which is the thing
+ * they most want to know and the thing they should never have to go looking
+ * for, so it stays in the header where it is always on screen. The bar is
+ * action: what is pending, and the buttons that settle it, so it comes and goes
+ * with the work.
+ *
+ * They used to narrate each other, and during a publish both said "publishing"
+ * at once. The answer was to give the sentence to one of them, not to delete
+ * the one that was actually visible.
  *
  * @param {{
  *   dirty: boolean,
@@ -1621,6 +1650,7 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
     <motion.div
       layout
       layoutDependency={pillLayoutKey}
+      className="inscribed-header-pill"
       transition={{ duration: 0.22, ease: [0.32, 0.72, 0.18, 1] }}
       style={{ ...headerPillStyle, transformOrigin: "center", overflow: "hidden" }}
       title={view.title}
@@ -1688,6 +1718,7 @@ const headerPillTimeStyle = /** @type {React.CSSProperties} */ ({
   fontSize: dynamicSize(11),
   color: TEXT_FAINT,
 });
+
 
 // ---------------------------------------------------------------------------
 // Tab bar
@@ -2441,25 +2472,16 @@ function StatusBar({
     if (isCollectionDirty) {
       return { background: COLLECTION_ACCENT, boxShadow: `0 0 8px ${COLLECTION_ACCENT}80` };
     }
-    if (isBusy) {
-      return { background: STATUS_WARN, boxShadow: `0 0 6px ${STATUS_WARN}66` };
-    }
-    if (isFailed) {
-      return { background: STATUS_DANGER, boxShadow: "none" };
-    }
     return { background: TEXT_FAINT, boxShadow: "none" };
   })();
   const dotPulse = isBusy && !isContentDirty && !isCollectionDirty;
 
+  // What is pending, never what is in flight: the pill in the header carries
+  // the wire. A bar that also announced the publish left the two of them saying
+  // the same sentence at the one moment either is being read.
   /** @type {React.ReactNode} */
   let msg;
-  if (isSaving) {
-    // Wins over the draft wording when both are true: publishing is what the
-    // user just asked for, and any draft write beside it is background.
-    msg = <span style={statusMsgStyle}>{t("status.publishing")}</span>;
-  } else if (isDraftSaving) {
-    msg = <span style={statusMsgStyle}>{t("status.draftSaving")}</span>;
-  } else if (isBothDirty) {
+  if (isBothDirty) {
     msg = (
       <span style={statusMsgStyle}>
         {withCounters(
@@ -2511,12 +2533,10 @@ function StatusBar({
         ])}
       </span>
     );
-  } else if (isFailed) {
-    msg = <span style={statusMsgStyle}>{t("status.draftFailed")}</span>;
   } else {
-    // Clean state. The header pill carries the timestamp detail, so the bar
-    // stays a quiet idle line rather than repeating it.
-    msg = <span style={{ ...statusMsgStyle, ...statusMsgCleanStyle }}>{t("status.clean")}</span>;
+    // Nothing pending. The bar collapses rather than holding 36px to say so,
+    // and the header pill goes on saying what the autosave is doing.
+    msg = null;
   }
 
   // Same guard as the header pill: FLIP-measure the action buttons only when
@@ -2541,9 +2561,31 @@ function StatusBar({
           ? t("pill.draftSaved")
           : "";
 
+  // Nothing pending, nothing in flight, nothing to act on. The bar used to hold
+  // 36px to say "clean", which is the one thing the absence of a bar already
+  // says. The preview toggle counts as something to act on, so it keeps the bar
+  // up on its own.
+  const hasSomethingToSay = Boolean(
+    previewableCount > 0 || isContentDirty || isCollectionDirty,
+  );
+
   return (
-    <div style={statusBarStyle}>
+    <>
+      {/* Outside the collapse on purpose: a live region that unmounts cannot
+          announce, and the transitions worth announcing are exactly the ones
+          that take the bar away again. */}
       <span role="status" style={srOnlyStyle}>{announcement}</span>
+      <AnimatePresence initial={false}>
+        {hasSomethingToSay ? (
+          <motion.div
+            key="bar"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={STATUS_COLLAPSE_TRANSITION}
+            style={statusCollapseStyle}
+          >
+    <div style={statusBarStyle}>
       <div style={statusSignalStyle}>
         <span
           className={dotPulse ? "inscribed-status-pulse" : undefined}
@@ -2621,8 +2663,14 @@ function StatusBar({
         </AnimatePresence>
       </div>
     </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </>
   );
 }
+
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Footer (user info + sign out)

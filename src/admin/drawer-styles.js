@@ -636,16 +636,27 @@ export const typeChipStyle = {
 // Status bar
 // ---------------------------------------------------------------------------
 
+// The bar arriving and leaving as work appears and settles. Height, not
+// opacity: the bar is the last thing in the panel column, so what moves when it
+// goes is the content above it. Same collapse the drawer's group cards and the
+// collection panel's create row already use.
+export const STATUS_COLLAPSE_TRANSITION = { duration: 0.24, ease: [0.32, 0.72, 0.18, 1] };
+
+export const statusCollapseStyle = {
+  overflow: "hidden",
+  flexShrink: 0,
+};
+
 export const statusBarStyle = {
   display: "flex",
   alignItems: "center",
   gap: 10,
-  // Fixed height so the bar keeps a steady height whether or not the action
-  // buttons are mounted. The button row (~27px) is taller than the idle status
-  // line (~17px), so a content-driven height jumped ~10px on every dirty
-  // toggle; alignItems centres both states into the same box instead. Sized to
-  // the button plus a hair of breathing room: the controls keep their own
-  // dimensions, the bar just stops padding around them.
+  // Fixed height so the bar keeps a steady one whether or not every action
+  // button is mounted: the button row is taller than the status line, and a
+  // content-driven height jumped on each toggle. `alignItems` centres both
+  // states into the same box instead. Sized to the button plus a hair of
+  // breathing room: the controls keep their own dimensions, the bar just stops
+  // padding around them.
   minHeight: 36,
   padding: "0 16px",
   borderTop: `1px solid ${HAIRLINE}`,
@@ -678,9 +689,6 @@ export const statusMsgStyle = {
   textOverflow: "ellipsis",
 };
 
-export const statusMsgCleanStyle = {
-  color: TEXT_MID,
-};
 
 export const statusMsgEmphasisStyle = {
   color: TEXT_HI,
@@ -732,6 +740,25 @@ export const footerStyle = {
   borderTop: `1px solid ${HAIRLINE}`,
   background: BG_SUNKEN,
 };
+export const userMetaStyle = {
+  flex: 1,
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 1,
+};
+export const signOutButtonStyle = {
+  width: 26,
+  height: 26,
+  border: 0,
+  borderRadius: R_SM,
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+  padding: 0,
+};
 
 export const avatarStyle = {
   width: 26,
@@ -760,14 +787,6 @@ export const avatarInitialsStyle = {
   letterSpacing: "0.02em",
 };
 
-export const userMetaStyle = {
-  flex: 1,
-  minWidth: 0,
-  display: "flex",
-  flexDirection: "column",
-  gap: 1,
-};
-
 export const userNameStyle = {
   fontWeight: 500,
   fontSize: dynamicSize(12),
@@ -791,19 +810,6 @@ export const userEmailStyle = {
 
 // Base color + background live on `.inscribed-logout` so the hover
 // rule can swap them.
-export const signOutButtonStyle = {
-  width: 26,
-  height: 26,
-  border: 0,
-  borderRadius: R_SM,
-  cursor: "pointer",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  flexShrink: 0,
-  padding: 0,
-};
-
 // ---------------------------------------------------------------------------
 // Error / conflict messages
 // ---------------------------------------------------------------------------
@@ -905,6 +911,7 @@ export const panelCss = `
     /* Drops the first icon to the header's own top padding, so the rail starts
        on the same line as the breadcrumb instead of above it. */
     padding-top: 18px;
+    padding-bottom: 8px;
     border-right: 1px solid ${HAIRLINE};
     border-radius: 0 ${RAIL_EDGE_RADIUS}px ${RAIL_EDGE_RADIUS}px 0;
   }
@@ -942,6 +949,13 @@ export const panelCss = `
       bottom: auto;
       width: auto;
       height: 2px;
+    }
+
+    .inscribed-rail-tail {
+      margin-top: 0;
+      margin-left: auto;
+      flex-direction: row;
+      gap: 8px;
     }
   }
 
@@ -1135,6 +1149,18 @@ export const panelCss = `
   }
 
   /* Sign-out */
+  /* The rail's far end: the bottom while the rail is a column, the right once it
+     lies down. A container rather than a margin on each occupant, so the status
+     pill joining it below the wide shell does not have to negotiate with the
+     avatar over which of them owns the auto. */
+  .inscribed-rail-tail {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
   .inscribed-logout {
     background: transparent;
     color: ${TEXT_MUTED};

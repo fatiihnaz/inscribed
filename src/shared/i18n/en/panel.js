@@ -12,7 +12,6 @@ export const panel = Object.freeze({
   "status.publishing": "Publishing…",
   "status.draftSaving": "Saving draft…",
   "status.draftFailed": "Draft could not be saved",
-  "status.clean": "No changes",
   "status.unsaved_one": "{count} unsaved change",
   "status.unsaved_other": "{count} unsaved changes",
   "status.unsavedSplit": "{content} / {collection} unsaved changes",

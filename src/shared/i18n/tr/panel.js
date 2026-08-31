@@ -11,7 +11,6 @@ export const panel = Object.freeze({
   "status.publishing": "Yayınlanıyor…",
   "status.draftSaving": "Taslak kaydediliyor…",
   "status.draftFailed": "Taslak kaydedilemedi",
-  "status.clean": "Değişiklik yok",
   "status.unsaved_other": "{count} kaydedilmemiş değişiklik",
   "status.unsavedSplit": "{content} / {collection} kaydedilmemiş değişiklik",
   "status.collectionDrafts_other": "{count} koleksiyon taslağı",

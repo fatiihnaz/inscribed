@@ -188,6 +188,14 @@ export function RegionSection({
           ? "searchEmpty"
           : "rows";
 
+  // The window, not just the branch. Switching language (or the archive, or the
+  // sort) replaces every row with different content, and when the new window is
+  // already cached the branch never leaves "rows", so the list would swap
+  // silently. Search is deliberately not in here: it narrows the same list a
+  // letter at a time, and re-landing it on every keystroke would fight the
+  // immediacy that makes typing feel like filtering rather than navigating.
+  const arrivalKey = branch === "rows" ? `rows:${windowKey}` : branch;
+
   return (
     <div style={sectionWrapStyle}>
       {showHeader ? (
@@ -200,7 +208,7 @@ export function RegionSection({
           a skeleton standing in for the very rows arriving would read as the
           list arriving twice. */}
       <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={branch} {...listArrival(branch === "rows")}>
+        <motion.div key={arrivalKey} {...listArrival(branch === "rows")}>
           {branch === "error" ? (
             <div style={errorBoxStyle}>
               <span style={{ flex: 1 }}>{t("collections.listFailed", { message: error.message })}</span>

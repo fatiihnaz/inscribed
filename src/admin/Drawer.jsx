@@ -36,6 +36,8 @@ import {
 
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useInert } from "../shared/ui/use-inert.js";
+import { useSwitchDirection } from "../shared/ui/use-switch-direction.js";
+import { useMediaQuery } from "../shared/ui/use-media-query.js";
 import { EMPTY_COLLECTION_STORE, useOptionalCollectionContext } from "../collections/context.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { collectDirtyBlocks, collectDirtyRecords, dirtyCollectionKeys } from "./dirty.js";
@@ -53,8 +55,8 @@ import { readOpenTarget, stripOpenParams } from "./deep-link.js";
 
 import { emptyStateStyle } from "../editors/styles.js";
 import { panelStyle, DRAWER_BODY_CLASS, srOnlyStyle, paneContainerStyle, paneStyle, RAIL_CLASS, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, RAIL_BAR_CLASS, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgCleanStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, PANEL_CLASS, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
-import { DRILL_TRANSITION, DRILL_PARALLAX, DRILL_PANE_TRANSITION, drillLayerStyle, drillPaneStyle } from "../shared/style/drill-motion.js";
-import { PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER, dynamicSize } from "../shared/style/tokens.js";
+import { DRILL_TRANSITION, DRILL_PARALLAX, DRILL_PANE_TRANSITION, drillLayerStyle, drillPaneStyle, switchMotion, switchLayerStyle } from "../shared/style/drill-motion.js";
+import { MOBILE_QUERY, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER, dynamicSize } from "../shared/style/tokens.js";
 
 // The two collections-mode panes carry the whole collections layer behind them
 // (record cache, schema form, /me). Lazy so the drawer costs the same on a site
@@ -1060,6 +1062,15 @@ function CollectionsMode({ selected, onSelect, collections, dirtyKeys }) {
   const isOpen = selected != null;
   const tabsId = useId();
   const panelId = `${tabsId}-collection`;
+  // Which way along the strip the last switch went, so the swap below travels
+  // with it rather than always the same way.
+  const direction = useSwitchDirection(
+    collections.map((c) => c.collectionKey),
+    selected?.key ?? null,
+  );
+  // Docked as a sheet the panel has no left and right to travel between, so the
+  // switch comes up from below instead. See `switchMotion`.
+  const isSheet = useMediaQuery(MOBILE_QUERY);
 
   return (
     <section style={{ ...paneStyle, position: "relative", overflow: "hidden" }}>
@@ -1111,13 +1122,26 @@ function CollectionsMode({ selected, onSelect, collections, dirtyKeys }) {
               idPrefix={tabsId}
               panelId={panelId}
             />
-            <CollectionRegionPanel
-              key={selected.key}
-              collectionKey={selected.key}
-              scope={selected.scope}
-              panelId={panelId}
-              labelledBy={`${tabsId}-${selected.key}`}
-            />
+            {/* Switching collections remounts the panel, and used to do it as
+                a hard cut. A short lateral slide in the strip's own direction
+                instead: `mode="wait"` so the collection being left is gone
+                before the next one draws, rather than two panels fetching over
+                each other. The key moved here from the panel, which is what
+                still drops any open item pane. */}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={selected.key}
+                {...switchMotion(direction, isSheet)}
+                style={switchLayerStyle}
+              >
+                <CollectionRegionPanel
+                  collectionKey={selected.key}
+                  scope={selected.scope}
+                  panelId={panelId}
+                  labelledBy={`${tabsId}-${selected.key}`}
+                />
+              </motion.div>
+            </AnimatePresence>
           </motion.div>
         ) : null}
       </AnimatePresence>

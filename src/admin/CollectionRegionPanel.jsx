@@ -44,7 +44,8 @@ import { DerivedRows, RegionSection } from "./collection/RegionSection.jsx";
 import { ItemDetailPane } from "./collection/ItemDetailPane.jsx";
 import { CreateButton, CreatePane } from "./collection/CreatePane.jsx";
 import {
-  PANE_TRANSITION, PARALLAX_SHIFT, listLayerStyle, regionScrollStyle, searchBarStyle,
+  PANE_TRANSITION, PARALLAX_SHIFT, CREATE_COLLAPSE_TRANSITION,
+  listLayerStyle, regionScrollStyle, searchBarStyle, createCollapseStyle,
 } from "./collection/collection-styles.js";
 
 import { emptyStateStyle } from "../editors/styles.js";
@@ -242,14 +243,30 @@ export function CollectionRegionPanel({ collectionKey, scope = "page", panelId, 
           onLocaleChange={(next) => { setPickedLocale(next); setPane(null); }}
         />
 
-        {supportsCreate && meta?.schema && !showArchived ? (
-          <CreateButton
-            collectionKey={collectionKey}
-            listParams={virtualListParams}
-            locale={locale}
-            onOpen={() => setPane({ mode: "create" })}
-          />
-        ) : null}
+        {/* Collapses rather than vanishing. Switching to the archive drops this
+            row, and an instant unmount snapped everything below it up by the
+            row's height while the list underneath was still cross-fading. The
+            height is what has to be continuous; the same collapse the drawer's
+            group cards use. */}
+        <AnimatePresence initial={false}>
+          {supportsCreate && meta?.schema && !showArchived ? (
+            <motion.div
+              key="create"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={CREATE_COLLAPSE_TRANSITION}
+              style={createCollapseStyle}
+            >
+              <CreateButton
+                collectionKey={collectionKey}
+                listParams={virtualListParams}
+                locale={locale}
+                onOpen={() => setPane({ mode: "create" })}
+              />
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         <div style={regionScrollStyle}>
           {/* The archive is its own view: a row that was never created has no

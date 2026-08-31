@@ -872,6 +872,20 @@ export const saveButtonStyle = /** @type {React.CSSProperties} */ ({
 
 // -- Create lane --
 
+// The create row appearing and disappearing as the archive is toggled. An
+// animated height, not a fade: the row is in the flow, so what jumps when it
+// goes is everything below it, and opacity alone leaves that jump intact.
+// `overflow: hidden` is what lets the height clip rather than squash the button.
+//
+// The drawer's group cards collapse on these exact values, so a panel that
+// opens and closes in two speeds is not something anyone has to notice.
+export const CREATE_COLLAPSE_TRANSITION = { duration: 0.24, ease: [0.32, 0.72, 0.18, 1] };
+
+export const createCollapseStyle = /** @type {React.CSSProperties} */ ({
+  overflow: "hidden",
+  flexShrink: 0,
+});
+
 export const createBarStyle = /** @type {React.CSSProperties} */ ({
   padding: "0 16px 8px",
   flexShrink: 0,

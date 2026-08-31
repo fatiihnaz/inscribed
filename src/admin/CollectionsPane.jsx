@@ -13,6 +13,7 @@
  */
 
 import { Fragment, memo, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight, Lock, Search, TypeCollection } from "../shared/style/icons.jsx";
 
 import { useCollectionContext } from "../collections/context.js";
@@ -23,6 +24,7 @@ import { useMyCollections } from "../collections/hooks/use-my-collections.js";
 
 import { SkeletonRows } from "./Skeleton.jsx";
 import { emptyStateStyle } from "../editors/styles.js";
+import { listArrival } from "./collection/collection-styles.js";
 import { paneStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, listStyle, dirtyDotStyle, rowPathStyle, typeIconStyle } from "./drawer-styles.js";
 import { TEXT, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, FONT_SANS, R_MD, dynamicSize } from "../shared/style/tokens.js";
 
@@ -83,6 +85,14 @@ export const CollectionsPane = memo(function CollectionsPane({ onSelect }) {
     ];
   }, [visible, boundKeys]);
 
+  // Which of the three the pane is showing. Named so the arrival below can key
+  // off it: a chain of ternaries gives it nothing to key on.
+  const branch = isLoading && visible.length === 0
+    ? "loading"
+    : visible.length === 0
+      ? "empty"
+      : "rows";
+
   return (
     <section style={paneStyle}>
       {collections.length > 0 ? (
@@ -112,38 +122,45 @@ export const CollectionsPane = memo(function CollectionsPane({ onSelect }) {
         </div>
       ) : null}
 
-      {isLoading && visible.length === 0 ? (
-        <SkeletonRows count={5} lines={2} height={44} />
-      ) : visible.length === 0 ? (
-        <div style={emptyStateStyle}>
-          {search
-            ? t("collections.noSearchResults", { query: search })
-            : t("collections.noneAccessible")}
-        </div>
-      ) : (
-        <ul style={collectionListStyle} data-cms-list>
-          {groups.map((group) => (
-            <Fragment key={group.labelKey ?? "all"}>
-              {group.labelKey ? (
-                <li style={groupLabelStyle}>{t(group.labelKey)}</li>
-              ) : null}
-              {group.items.map((c) => (
-                <li key={c.collectionKey} style={{ listStyle: "none" }}>
-                  <CollectionRow
-                    collectionKey={c.collectionKey}
-                    fields={c.schema?.fields}
-                    locales={c.locales}
-                    canCreate={Boolean(c.canCreate)}
-                    onPage={boundKeys.has(c.collectionKey)}
-                    dirty={dirtyKeys.has(c.collectionKey)}
-                    onOpen={() => onSelect(c.collectionKey)}
-                  />
-                </li>
+      {/* Same arrival the record list uses, keyed on the branch rather than on
+          the rows: typing in the search box filters the list, it does not make
+          it land again. */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div key={branch} {...listArrival(branch === "rows")}>
+          {branch === "loading" ? (
+            <SkeletonRows count={5} lines={2} height={44} />
+          ) : branch === "empty" ? (
+            <div style={emptyStateStyle}>
+              {search
+                ? t("collections.noSearchResults", { query: search })
+                : t("collections.noneAccessible")}
+            </div>
+          ) : (
+            <ul style={collectionListStyle} data-cms-list>
+              {groups.map((group) => (
+                <Fragment key={group.labelKey ?? "all"}>
+                  {group.labelKey ? (
+                    <li style={groupLabelStyle}>{t(group.labelKey)}</li>
+                  ) : null}
+                  {group.items.map((c) => (
+                    <li key={c.collectionKey} style={{ listStyle: "none" }}>
+                      <CollectionRow
+                        collectionKey={c.collectionKey}
+                        fields={c.schema?.fields}
+                        locales={c.locales}
+                        canCreate={Boolean(c.canCreate)}
+                        onPage={boundKeys.has(c.collectionKey)}
+                        dirty={dirtyKeys.has(c.collectionKey)}
+                        onOpen={() => onSelect(c.collectionKey)}
+                      />
+                    </li>
+                  ))}
+                </Fragment>
               ))}
-            </Fragment>
-          ))}
-        </ul>
-      )}
+            </ul>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </section>
   );
 });
@@ -201,7 +218,7 @@ function CollectionRow({ collectionKey, fields, locales, canCreate, onPage, dirt
     <button
       type="button"
       onClick={onOpen}
-      className="inscribed-collection-row"
+      className="inscribed-listrow"
       style={rowStyle}
     >
       <span style={onPage ? badgeOnPageStyle : badgeStyle} aria-hidden="true">

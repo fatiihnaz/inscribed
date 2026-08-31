@@ -963,7 +963,6 @@ export const panelCss = `
   .inscribed-text-button:focus-visible,
   .inscribed-load-more:focus-visible,
   .inscribed-create-row:focus-visible,
-  .inscribed-create-card:focus-visible,
   .inscribed-collection-ref:focus-visible,
   .inscribed-pane-back:focus-visible,
   .inscribed-logout:focus-visible,
@@ -1209,33 +1208,45 @@ export const panelCss = `
   }
   .inscribed-text-button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  .inscribed-create-card { transition: background 140ms ease, box-shadow 140ms ease; }
 
-  /* Collections landing rows. A collection is a container, so it takes the
-     group header's fill on hover rather than a row's lighter lift. */
-  .inscribed-collection-row {
+  /* Both collection lists: the collections landing, and one collection's
+     records. One state machine for the two, because they are the same offer
+     made twice and used to answer the pointer differently (a container's fill
+     for one, a row's lighter lift for the other), which read as two kinds of
+     list rather than two depths of one.
+
+     The values are the form row's on purpose (see .inscribed-field-row): a
+     record row and a block row put the same thing under the pointer, so they
+     make the same mark. Rest states the transparent ring too, so the ring fades
+     in with the fill instead of appearing whole. */
+  .inscribed-listrow {
     background: transparent;
-    transition: background 140ms ease;
+    box-shadow: inset 0 0 0 1px transparent;
+    transition: background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
   }
-  .inscribed-collection-row:hover { background: ${SURFACE_2}; }
-
-  /* One collection's record rows. No rules between them, no frame around them;
-     they separate by spacing and a rounded hover fill, the way the rest of the
-     drawer groups things. */
-  .inscribed-region-row {
-    background: transparent;
-    transition: background 140ms ease;
-  }
-  .inscribed-region-row:hover { background: ${SURFACE_1}; }
-
   /* Keyboard parity: the rows are buttons, and tabbing through them showed
-     nothing but the chevron. A ring rather than the browser outline, so the
-     mark follows the row's own radius. */
-  .inscribed-region-row:focus-visible,
-  .inscribed-collection-row:focus-visible {
+     nothing but the chevron. The ring replaces the browser outline so the mark
+     follows the row's own radius, and the pointer earns the same one: the row
+     is one offer, and lighting it two ways would say it is two. */
+  .inscribed-listrow:hover,
+  .inscribed-listrow:focus-visible {
     outline: none;
     background: ${SURFACE_1};
     box-shadow: inset 0 0 0 1px ${BORDER};
+  }
+  /* Pressed. A nudge down rather than a scale: the row is text, and scaling it
+     resamples every glyph for the length of the press. */
+  .inscribed-listrow:active {
+    background: ${SURFACE_2};
+    transform: translateY(1px);
+  }
+  /* This row addresses the record currently selected on the page. The drawer's
+     own collection card already marks that with an accent ring, so the list
+     wears the same one and the page's selection reads as one mark across both
+     surfaces rather than two conventions for the same fact. */
+  .inscribed-listrow.is-active {
+    background: ${SURFACE_1};
+    box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
   }
 
   /* A record row's second rank (its slug, its age). Faint enough at rest that
@@ -1245,38 +1256,113 @@ export const panelCss = `
     color: ${TEXT_FAINT};
     transition: color 140ms ease;
   }
-  .inscribed-region-row:hover .inscribed-row-slug,
-  .inscribed-region-row:hover .inscribed-row-age,
-  .inscribed-region-row:focus-visible .inscribed-row-slug,
-  .inscribed-region-row:focus-visible .inscribed-row-age { color: ${TEXT_MUTED}; }
+  .inscribed-listrow:hover .inscribed-row-slug,
+  .inscribed-listrow:hover .inscribed-row-age,
+  .inscribed-listrow:focus-visible .inscribed-row-slug,
+  .inscribed-listrow:focus-visible .inscribed-row-age { color: ${TEXT_MUTED}; }
+
+  /* The list marker a row wears in place of a thumbnail, where the collection
+     declares no image. It lifts with the row's second rank, so the whole row
+     answers the pointer as one thing. */
+  .inscribed-row-mark {
+    background: ${TEXT_FAINT};
+    transition: background 140ms ease;
+  }
+  .inscribed-listrow:hover .inscribed-row-mark,
+  .inscribed-listrow:focus-visible .inscribed-row-mark { background: ${TEXT_MUTED}; }
 
   /* Navigation chevron shared by both collection lists (the block list's own
      chevron is a disclosure that rotates, not this). Repeated down every row it
      stops being an affordance and turns into texture, so only the row being
-     pointed at shows one. It keeps its space either way, so nothing shifts. */
+     pointed at shows one. It keeps its space either way, so nothing shifts.
+
+     Deliberately not shown on the active row: that row is marked already, and a
+     chevron sitting on it permanently is the texture this rule avoids. */
   .inscribed-list-chevron {
     opacity: 0;
     transition: transform 200ms ${EASE}, color 140ms ease, opacity 140ms ease;
   }
-  .inscribed-region-row:hover .inscribed-list-chevron,
-  .inscribed-region-row:focus-visible .inscribed-list-chevron,
-  .inscribed-collection-row:hover .inscribed-list-chevron,
-  .inscribed-collection-row:focus-visible .inscribed-list-chevron {
+  .inscribed-listrow:hover .inscribed-list-chevron,
+  .inscribed-listrow:focus-visible .inscribed-list-chevron {
     opacity: 1;
-    transform: translateX(2px);
+    transform: translateX(4px);
     color: ${TEXT_MID};
   }
 
-  /* "+ Yeni" toolbar row: neutral at rest, collection-tinted on hover. */
-  .inscribed-create-row {
-    box-shadow: inset 0 0 0 1px ${HAIRLINE};
-    transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  /* The detail pane's translation chips. Both are buttons: one opens the
+     record in another language, one composes it. They carried their fill and
+     their colour inline, which outranks any rule, so neither answered the
+     pointer at all and the strip read as a row of labels. */
+  .inscribed-locale-chip {
+    background: ${SURFACE_1};
+    color: ${TEXT_MID};
+    box-shadow: inset 0 0 0 1px transparent;
+    transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
   }
-  .inscribed-create-row:hover {
+  .inscribed-locale-chip:hover,
+  .inscribed-locale-chip:focus-visible {
+    outline: none;
+    color: ${TEXT_HI};
+    box-shadow: inset 0 0 0 1px ${BORDER_HI};
+  }
+  .inscribed-locale-chip:active { transform: translateY(1px); }
+
+  /* The one that composes a language rather than opening one. It is a create
+     action, so it spends the collection accent the way the "+ Yeni" row does.
+     Listed after the base so its resting fill and its hover both win. */
+  .inscribed-locale-chip-add {
+    background: transparent;
+    color: ${TEXT_FAINT};
+    box-shadow: inset 0 0 0 1px ${BORDER};
+  }
+  .inscribed-locale-chip-add:hover,
+  .inscribed-locale-chip-add:focus-visible {
     color: ${COLLECTION_ACCENT};
     background: ${COLLECTION_SOFT};
     box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
   }
+
+  /* Collection toolbar chips. Named controls at a pill's shape: they replaced
+     four unlabelled 24px squares, where the only way to know which one showed
+     the archive was to have learned it. is-on is a toggle that is currently
+     on (the archive), which is the one state a label alone cannot carry. */
+  .inscribed-toolchip {
+    background: transparent;
+    color: ${TEXT_MID};
+    box-shadow: inset 0 0 0 1px ${BORDER};
+    transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  }
+  .inscribed-toolchip:hover:not(:disabled) {
+    color: ${TEXT_HI};
+    background: ${SURFACE_1};
+    box-shadow: inset 0 0 0 1px ${BORDER_HI};
+  }
+  .inscribed-toolchip:focus-visible {
+    outline: none;
+    color: ${TEXT_HI};
+    box-shadow: inset 0 0 0 1px ${BORDER_FOCUS};
+  }
+  .inscribed-toolchip:active:not(:disabled) { transform: translateY(1px); }
+  .inscribed-toolchip.is-on,
+  .inscribed-toolchip.is-on:hover {
+    color: ${COLLECTION_ACCENT};
+    background: ${COLLECTION_SOFT};
+    box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
+  }
+
+  /* "+ Yeni": the list's primary action. Tinted at rest rather than only on
+     hover, because a control that looks inert until pointed at is not what the
+     one thing you came to do should look like. */
+  .inscribed-create-row {
+    color: ${COLLECTION_ACCENT};
+    background: ${COLLECTION_SOFT};
+    box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
+    transition: background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  }
+  .inscribed-create-row:hover {
+    background: color-mix(in srgb, ${COLLECTION_ACCENT} 17%, transparent);
+  }
+  .inscribed-create-row:active { transform: translateY(1px); }
 
   /* Detail pane back button */
   .inscribed-pane-back {

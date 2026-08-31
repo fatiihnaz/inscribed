@@ -15,11 +15,13 @@ export const collections = Object.freeze({
   "collections.clear": "Temizle",
   "collections.retry": "Yeniden dene",
   "collections.draftBadge": "Taslak",
+  "collections.untitledRecord": "Adsız kayıt",
   "collections.newBadge": "yeni",
   "collections.archivedBadge": "Arşivde",
   "collections.create": "Oluştur",
   "collections.creating": "Oluşturuluyor…",
 
+  "collections.archiveChip": "Arşiv",
   "collections.showArchive": "Arşivi göster",
   "collections.archiveEmpty": "Arşivde bir şey yok.",
   "collections.archiveRecord": "Bu kaydı arşivle",

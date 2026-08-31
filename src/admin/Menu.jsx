@@ -56,9 +56,14 @@ const itemVariants = {
  *   label: string,
  *   icon?: React.ReactNode,
  *   triggerStyle?: React.CSSProperties,
+ *   triggerClass?: string,
  * }} props
+ *   `triggerClass` swaps the trigger's state rules: the collection toolbar
+ *   dresses it as one of its chips, everywhere else it is a ghost button.
  */
-export function Menu({ value, options, onChange, label, icon, triggerStyle }) {
+export function Menu({
+  value, options, onChange, label, icon, triggerStyle, triggerClass = "inscribed-btn-ghost",
+}) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const triggerRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
@@ -126,7 +131,7 @@ export function Menu({ value, options, onChange, label, icon, triggerStyle }) {
             setOpen(true);
           }
         }}
-        className="inscribed-btn-ghost"
+        className={triggerClass}
         style={{ ...menuTriggerStyle, ...triggerStyle }}
         aria-haspopup="listbox"
         aria-expanded={open}

@@ -16,12 +16,14 @@ export const collections = Object.freeze({
   "collections.clear": "Clear",
   "collections.retry": "Try again",
   "collections.draftBadge": "Draft",
+  "collections.untitledRecord": "Untitled record",
   "collections.newBadge": "new",
   "collections.archivedBadge": "Archived",
   "collections.create": "Create",
   "collections.creating": "Creating…",
 
   // Archive and restore.
+  "collections.archiveChip": "Archive",
   "collections.showArchive": "Show the archive",
   "collections.archiveEmpty": "Nothing in the archive.",
   "collections.archiveRecord": "Archive this record",

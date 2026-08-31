@@ -156,7 +156,11 @@ describe("one driver per record", () => {
     // The StatusBar "Aç" jump: the rail opens its detail pane on the same
     // record the page is already showing fields for.
     act(() => { getHandle().setActiveCollectionItem({ key: "news", slug: "q1" }); });
-    await waitFor(() => expect(screen.getByLabelText(t("collections.backToList"))).toBeTruthy());
+    // By role and name: the back button carries its label as visible text now,
+    // and a redundant aria-label would only override what it already says.
+    await waitFor(() => expect(
+      screen.getByRole("button", { name: t("collections.backToList") }),
+    ).toBeTruthy());
     await waitFor(() => expect(fieldInputs()).toHaveLength(1));
 
     await crossDebounce(() => {

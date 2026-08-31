@@ -35,11 +35,18 @@ import { TEXT_MUTED, TEXT_FAINT, FONT_MONO, FONT_SANS, STATUS_OK, STATUS_WARN, S
  *   showMetaRow?: boolean,
  *   showActions?: boolean,
  *   readOnly?: boolean,
+ *   variant?: import("../editors/styles.js").FieldVariantName,
  * }} props
  *   `readOnly` locks the form from outside the record's own permissions: an
  *   enclosing `<CmsGroup editable={false}>` covers its collection rows too.
+ *
+ *   `variant` defaults to the drawer's palette because every caller of this
+ *   component is a drawer surface. The portable one is `CollectionFieldsForm`'s
+ *   default instead, which is what a host page reaches directly.
  */
-export function CollectionRecordForm({ editor, showMetaRow = true, showActions = true, readOnly = false }) {
+export function CollectionRecordForm({
+  editor, showMetaRow = true, showActions = true, readOnly = false, variant = "drawer",
+}) {
   const t = useCmsStrings();
   const {
     collection, slug, editorId,
@@ -108,6 +115,7 @@ export function CollectionRecordForm({ editor, showMetaRow = true, showActions =
         values={values}
         onChange={setValues}
         disabled={disabled}
+        variant={variant}
       />
 
       {error ? <div style={errorStyle}>{error}</div> : null}

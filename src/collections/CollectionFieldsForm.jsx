@@ -17,14 +17,8 @@ import { SelectEditor } from "../editors/fields/SelectEditor.jsx";
 import { StringArrayEditor } from "../editors/fields/StringArrayEditor.jsx";
 import { LinkEditor } from "../editors/fields/LinkEditor.jsx";
 import { ImageEditor } from "../editors/fields/ImageEditor.jsx";
-import { neutralTint as neutral, COLLECTION_ACCENT, FS_XS, FS_SM, R_BADGE, dynamicSize } from "../shared/style/tokens.js";
-
-// Every control on this form speaks the portable palette, so the same record
-// form reads on the dark drawer and on a light page via CollectionComposer.
-/** @type {import("../editors/styles.js").FieldVariantName} */
-const VARIANT = "neutral";
-const palette = fieldVariant(VARIANT);
-
+import { FIELD_HOVER } from "../editors/field-css.js";
+import { COLLECTION_ACCENT, FS_XS, FS_SM, R_BADGE, dynamicSize } from "../shared/style/tokens.js";
 
 // Lazy so the heavy TipTap dep stays out of the main bundle: a consumer using
 // only page-side pieces shouldn't pay ~50KB for an editor they never open. A
@@ -45,9 +39,11 @@ const RichTextEditor = lazy(() =>
  * required-field validation live in `record-payload.js`, backend error wording
  * in `record-errors.js`.
  *
- * Scalar inputs are neutral so they sit on either a dark drawer or a light
- * page. `RichText` is the exception: its TipTap surface is dark-oriented, fine
- * since the real edit path is the dark drawer.
+ * `variant` decides the palette, so the same form is the drawer's own controls
+ * inside the drawer and portable mid-greys on a host page. It defaults to
+ * `neutral`: this renders for hosts through the public `inscribed/collections`
+ * export, where the surface behind it is unknown. `RichText` is the exception
+ * either way, since its TipTap surface is dark-oriented.
  */
 
 /**
@@ -60,25 +56,33 @@ const RichTextEditor = lazy(() =>
  *   values: Record<string, *>,
  *   onChange: (next: Record<string, *>) => void,
  *   disabled?: boolean,
+ *   variant?: import("../editors/styles.js").FieldVariantName,
  * }} props
  */
-export function CollectionFieldsForm({ fields, values, onChange, disabled }) {
+export function CollectionFieldsForm({ fields, values, onChange, disabled, variant = "neutral" }) {
   const t = useCmsStrings();
+  const v = fieldVariant(variant);
   if (!fields || fields.length === 0) {
     return <div style={emptyHintStyle}>{t("collections.emptySchema")}</div>;
   }
   return (
     // Marks the whole record form as a collection surface, which is what turns
     // every focus ring, checkmark and chosen cell inside it to the collection
-    // accent. See `field-css.js`.
-    <div className="inscribed-collection" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    // accent. The palette class rides along so anything inside styling itself
+    // from the custom properties resolves without being handed the variant.
+    // See `field-css.js`.
+    <div
+      className={`inscribed-collection ${v.className}`.trim()}
+      style={{ display: "flex", flexDirection: "column", gap: 12 }}
+    >
       {fields.map((field) => (
         <FieldInput
           key={field.name}
           field={field}
           value={values[field.name]}
-          onChange={(v) => onChange({ ...values, [field.name]: v })}
+          onChange={(next) => onChange({ ...values, [field.name]: next })}
           disabled={Boolean(disabled) || field.readOnly || field.computed}
+          variant={variant}
         />
       ))}
     </div>
@@ -91,10 +95,12 @@ export function CollectionFieldsForm({ fields, values, onChange, disabled }) {
  *   value: *,
  *   onChange: (next: *) => void,
  *   disabled: boolean,
+ *   variant: import("../editors/styles.js").FieldVariantName,
  * }} props
  */
-function FieldInput({ field, value, onChange, disabled }) {
+function FieldInput({ field, value, onChange, disabled, variant }) {
   const t = useCmsStrings();
+  const palette = fieldVariant(variant);
   const labelNode = (
     <span style={palette.labelRow}>
       <span style={palette.labelText}>{field.label || field.name}</span>
@@ -112,7 +118,7 @@ function FieldInput({ field, value, onChange, disabled }) {
 
   // Caption, help text and palette are the same whichever control this is; only
   // the control differs.
-  const shell = { label: labelNode, help: field.help, variant: VARIANT };
+  const shell = { label: labelNode, help: field.help, variant };
   const common = { ...shell, value, onChange, disabled };
 
   // Only `Select` carries a source, so nothing here has to decide whether a
@@ -137,7 +143,7 @@ function FieldInput({ field, value, onChange, disabled }) {
     case "Image":
       return (
         <FieldShell {...shell} as="div">
-          <ImageEditor value={value} onChange={onChange} disabled={disabled} variant={VARIANT} />
+          <ImageEditor value={value} onChange={onChange} disabled={disabled} variant={variant} />
         </FieldShell>
       );
 
@@ -148,7 +154,7 @@ function FieldInput({ field, value, onChange, disabled }) {
             value={value}
             onChange={onChange}
             disabled={disabled}
-            variant={VARIANT}
+            variant={variant}
             itemLabel={singularize(field.label || field.name || t("collections.itemFallback"))}
           />
         </FieldShell>
@@ -166,10 +172,17 @@ function FieldInput({ field, value, onChange, disabled }) {
             onChange={onChange}
             disabled={disabled}
             addLabel={singularize(field.label || field.name)}
+            variant={variant}
             seedItem={() => seedValues(itemFields, {})}
             summarize={(item) => itemSummary(itemFields, item)}
             renderItem={(item, set) => (
-              <CollectionFieldsForm fields={itemFields} values={item} onChange={set} disabled={disabled} />
+              <CollectionFieldsForm
+                fields={itemFields}
+                values={item}
+                onChange={set}
+                disabled={disabled}
+                variant={variant}
+              />
             )}
           />
         </FieldShell>
@@ -206,7 +219,7 @@ const readonlyTagStyle = {
   letterSpacing: "-0.005em",
   padding: "2px 6px",
   borderRadius: R_BADGE,
-  background: neutral(10),
+  background: FIELD_HOVER,
   opacity: 0.6,
 };
 

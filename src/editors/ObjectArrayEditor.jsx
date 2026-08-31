@@ -13,8 +13,8 @@
  * cards stay open through a reorder or a delete. Add/remove/reorder route
  * through `list-ops`, the same helpers `<EditableList>` uses.
  *
- * Neutral palette and no drawer-only CSS: this renders on the dark drawer and on
- * a light host page alike.
+ * Palette comes from `variant`, like every other editor: this renders on the
+ * dark drawer and on a light host page alike, and nothing here is drawer-only.
  *
  * Wording still comes from the `collections.*` catalog, which is where this grew
  * up; the keys move when the two catalogs are reorganised.
@@ -26,10 +26,9 @@ import { useOpenRows } from "../core/hooks/use-open-rows.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "../shared/style/icons.jsx";
 import { inertRef } from "../shared/ui/use-inert.js";
-import { noItemsStyle } from "./styles.js";
-import {
-  neutralTint as neutral, FS_XS, FS_SM, FONT_MONO, R_SM,
-} from "../shared/style/tokens.js";
+import { fieldVariant, noItemsStyle } from "./styles.js";
+import { FIELD_HOVER, FIELD_LINE } from "./field-css.js";
+import { FS_XS, FS_SM, FONT_MONO, R_SM } from "../shared/style/tokens.js";
 
 /**
  * @param {{
@@ -40,11 +39,13 @@ import {
  *   seedItem: () => Record<string, *>,
  *   summarize: (item: Record<string, *>) => string | null,
  *   renderItem: (item: Record<string, *>, onItemChange: (next: Record<string, *>) => void) => React.ReactNode,
+ *   variant?: import("./styles.js").FieldVariantName,
  * }} props
  *   `addLabel` names one entry, already singular ("Çalışma"), for the add button.
  */
-export function ObjectArrayEditor({ value, onChange, disabled, addLabel, seedItem, summarize, renderItem }) {
+export function ObjectArrayEditor({ value, onChange, disabled, addLabel, seedItem, summarize, renderItem, variant }) {
   const t = useCmsStrings();
+  const v = fieldVariant(variant);
   const items = Array.isArray(value) ? value : [];
 
   const { isOpen, toggle, open: openRow, afterRemove, afterMove } = useOpenRows();
@@ -70,7 +71,10 @@ export function ObjectArrayEditor({ value, onChange, disabled, addLabel, seedIte
   };
 
   return (
-    <div style={shellStyle}>
+    // The palette class rides the shell rather than each card: the cards style
+    // themselves from the custom properties, which inherit. Without it they read
+    // the drawer defaults whatever palette their own inputs are wearing.
+    <div className={v.className || undefined} style={shellStyle}>
       {items.length === 0 ? (
         <div style={noItemsStyle}>{t("collections.noItems")}</div>
       ) : (
@@ -202,7 +206,7 @@ const indexStyle = {
   fontSize: FS_XS,
   fontWeight: 600,
   fontFamily: FONT_MONO,
-  background: neutral(12),
+  background: FIELD_HOVER,
   opacity: 0.85,
 };
 const summaryStyle = {
@@ -246,6 +250,6 @@ const chevronStyle = {
 const bodyClipStyle = { overflow: "hidden", minHeight: 0 };
 const bodyStyle = {
   padding: "10px 12px 12px",
-  borderTop: `1px solid ${neutral(18)}`,
+  borderTop: `1px solid ${FIELD_LINE}`,
 };
 

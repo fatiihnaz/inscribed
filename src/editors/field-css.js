@@ -35,6 +35,12 @@ const STROKE = `var(--ins-f-stroke, ${BORDER})`;
 // the label already carries a readOnly tag and dimming as well says it twice.
 const DIM = "var(--ins-f-dim, 0.55)";
 
+// The palette values a surface outside this sheet paints with. The repeatable's
+// index badge and the rule under its header are inline styles, so they reach the
+// custom properties through these rather than through a rule.
+export const FIELD_HOVER = HOVER;
+export const FIELD_LINE = LINE;
+
 // Every accent an editor spends resolves through this, so which colour a field
 // lights up in is a property of where it renders rather than of the control.
 // A collection surface sets it to the collection accent and every focus ring,

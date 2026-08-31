@@ -13,17 +13,19 @@ import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { fieldVariant } from "../editors/styles.js";
 import { COLLECTION_ACCENT, FS_XS } from "../shared/style/tokens.js";
 
-const palette = fieldVariant("neutral");
-
 /**
  * @param {{
  *   value: string,
  *   onChange: (next: string) => void,
  *   disabled?: boolean,
+ *   variant?: import("../editors/styles.js").FieldVariantName,
  * }} props
+ *   `variant` matches the record form this sits above, so the address field and
+ *   the fields under it are one form rather than two palettes stacked.
  */
-export function SlugField({ value, onChange, disabled }) {
+export function SlugField({ value, onChange, disabled, variant = "neutral" }) {
   const t = useCmsStrings();
+  const palette = fieldVariant(variant);
   return (
     <label style={palette.label}>
       <span style={palette.labelRow}>

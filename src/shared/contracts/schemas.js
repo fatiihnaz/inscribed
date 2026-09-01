@@ -322,6 +322,10 @@
  *   than the site's: a collection is shared, so its coverage can be narrower
  *   than the sites reading it. Empty or absent means it is not localized.
  *   First entry is the default.
+ * @property {string} [displayName]
+ *   What to call this collection to a human, where the key is a slug nobody
+ *   chose to read. Absent means the key is the best there is, and the panel
+ *   then heads the row with it rather than prettifying one.
  * @property {string} [displayField]
  *   Which field names a record for a human. Belongs to the collection rather
  *   than to each field pointing at it, so five references to the same

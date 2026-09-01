@@ -61,6 +61,9 @@ function mockFetch(item = ITEM) {
     if (url.includes("/cms/collections/me")) {
       return jsonRes([{
         collectionKey: KEY, canCreate: false, slugSource: "UserDefined",
+        // What names a record for a human. Without it the row headlines with
+        // the slug, which is what the contract says an absent one means.
+        displayField: "title",
         // What actually gates the rename control; `slugSource` alone does not.
         slugEditable: true,
         schema: { fields: FIELDS },

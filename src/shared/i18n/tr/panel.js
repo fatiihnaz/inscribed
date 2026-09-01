@@ -66,6 +66,7 @@ export const panel = Object.freeze({
   "block.undoThis": "Bu bloğun değişikliklerini geri al",
   "block.readOnly": "Salt okunur",
   "block.readOnlyTitle": "Salt okunur (editable={false})",
+  "block.emptyValue": "Boş",
   "block.items": "{count} öğe",
   "block.noEditor": "{type} tipi için inline editör henüz yok.",
   "block.invalidCollection": "Bu Collection bloğu geçersiz bir bağlamaya sahip: beklenen {shape} şeklini taşımıyor.",

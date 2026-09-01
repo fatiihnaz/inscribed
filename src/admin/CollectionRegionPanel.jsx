@@ -9,7 +9,7 @@
  * Layout: a record search, a "+ Yeni" row (when the collection supports
  * auto-generated slugs), then one row-list per section. Rows carry the same
  * two-line shape as the collections list a level up: a headline read from the
- * item's own data via `titleFieldName`, with the slug beneath it as the
+ * item's own data via the collection's `displayField`, with the slug beneath it as the
  * identifier. Clicking one pushes a full-height detail pane in from the left
  * while the list layer parallax-slides right and dims; the list stays mounted
  * underneath so caches and scroll survive the round-trip.
@@ -38,7 +38,7 @@ import { useCollectionMeta } from "../collections/hooks/use-my-collections.js";
 import { useCollectionLocale } from "../collections/hooks/use-collection-locale.js";
 import { stableStringify } from "../shared/util/stable-stringify.js";
 
-import { titleFieldName, imageFieldName, sortableColumns } from "./collection/collection-format.js";
+import { titleFieldOf, imageFieldName, sortableColumns } from "./collection/collection-format.js";
 import { ListToolbar } from "./collection/ListToolbar.jsx";
 import { DerivedRows, RegionSection } from "./collection/RegionSection.jsx";
 import { ItemDetailPane } from "./collection/ItemDetailPane.jsx";
@@ -107,7 +107,7 @@ export function CollectionRegionPanel({ collectionKey, scope = "page", panelId, 
     ? pickedLocale
     : routeLocale;
 
-  const titleField = useMemo(() => titleFieldName(meta?.schema), [meta]);
+  const titleField = titleFieldOf(meta);
   // Null for a collection that declares no image, which is what drops the
   // thumbnail column entirely rather than lining every row up behind an empty
   // one.

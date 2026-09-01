@@ -11,7 +11,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
-  titleFieldName, sortableColumns, shortAge, itemTitle, splitSort,
+  titleFieldOf, sortableColumns, shortAge, itemTitle, splitSort,
   imageFieldName, itemImage,
 } from "../../admin/collection/collection-format.js";
 
@@ -45,40 +45,26 @@ const DAY = 24 * HOUR;
 /** @param {number} ms  How long ago. */
 const ago = (ms) => new Date(Date.now() - ms).toISOString();
 
-describe("titleFieldName", () => {
-  it("prefers the conventional title names over an earlier textual field", () => {
-    const schema = { fields: [f("summary", "ShortText"), f("title", "ShortText")] };
-    expect(titleFieldName(schema)).toBe("title");
+describe("titleFieldOf", () => {
+  // The collection answers this. It used to be guessed from a list of
+  // conventional names, which headlined a description on any collection that
+  // called its title field something else.
+  it("takes the field the collection named", () => {
+    expect(titleFieldOf({ displayField: "urunAdi" })).toBe("urunAdi");
   });
 
-  it("reads the conventional names in their own priority order", () => {
-    const schema = { fields: [f("ad", "ShortText"), f("name", "ShortText")] };
-    expect(titleFieldName(schema)).toBe("name");
+  // The contract is explicit: absent means the slug is the best there is. A
+  // guess here would print a title on collections that said they had none.
+  it("answers null rather than inventing one", () => {
+    expect(titleFieldOf({ displayField: undefined })).toBeNull();
+    expect(titleFieldOf({ displayField: "" })).toBeNull();
+    expect(titleFieldOf(null)).toBeNull();
+    expect(titleFieldOf(undefined)).toBeNull();
   });
 
-  // Matched case-insensitively but reported verbatim: the answer addresses a
-  // key in the record's data, so the schema's own spelling is the only one that
-  // reads it.
-  it("matches a conventional name in any case and answers with the schema's own", () => {
-    expect(titleFieldName({ fields: [f("Title", "ShortText")] })).toBe("Title");
-  });
-
-  it("falls back to the first textual field", () => {
-    const schema = { fields: [f("count", "Number"), f("body", "LongText"), f("note", "ShortText")] };
-    expect(titleFieldName(schema)).toBe("body");
-  });
-
-  // Null is a real answer: the row then shows its slug rather than being handed
-  // a number or a date dressed up as a headline.
-  it("answers null when the schema has nothing textual", () => {
-    const schema = { fields: [f("count", "Number"), f("live", "Bool")] };
-    expect(titleFieldName(schema)).toBeNull();
-  });
-
-  it("answers null for a missing or empty schema", () => {
-    expect(titleFieldName(null)).toBeNull();
-    expect(titleFieldName(undefined)).toBeNull();
-    expect(titleFieldName({ fields: [] })).toBeNull();
+  // Even with an obvious candidate sitting in the schema.
+  it("does not fall back to a field that looks like a title", () => {
+    expect(titleFieldOf({ schema: { fields: [f("title", "ShortText")] } })).toBeNull();
   });
 });
 

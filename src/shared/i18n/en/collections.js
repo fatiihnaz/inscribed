@@ -49,6 +49,8 @@ export const collections = Object.freeze({
   "collections.noSearchResults": "Nothing matched \"{query}\".",
   "collections.noneAccessible": "You can't reach any collection.",
   "collections.fieldCount_one": "{count} field",
+  "collections.recordsLabel": "records",
+  "collections.recordCount_other": "{count} records",
   "collections.fieldCount_other": "{count} fields",
   "collections.sectionOnPage": "On this page",
   "collections.sectionOther": "Other collections",

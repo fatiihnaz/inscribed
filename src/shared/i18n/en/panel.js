@@ -72,6 +72,7 @@ export const panel = Object.freeze({
   "block.undoThis": "Undo this block's changes",
   "block.readOnly": "Read-only",
   "block.readOnlyTitle": "Read-only (editable={false})",
+  "block.emptyValue": "Empty",
   "block.items": "{count} items",
   "block.noEditor": "No inline editor for the {type} type yet.",
   "block.invalidCollection": "This Collection block has an invalid binding: it does not carry the expected {shape} shape.",

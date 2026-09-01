@@ -11,7 +11,7 @@
 
 import {
   PANEL_W, HANDLE_WIDTH, HANDLE_OVERLAP, RAIL_WIDTH, RAIL_EDGE_RADIUS,
-  COMPACT_QUERY,
+  COMPACT_QUERY, MOBILE_QUERY, FS_SCALE_LIST,
   R_BADGE, R_SM, R_BTN, R_MD, R_PILL,
   FS_SM,
   DUR_BASE, EASE,
@@ -1235,6 +1235,16 @@ export const panelCss = `
   .inscribed-text-button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 
+  /* The type ramp lifts on a phone because iOS zooms the page whenever a
+     focused control's text lands under 16px. This list holds no control: it is
+     a column of buttons made of text, so the reason does not reach it, and at
+     the control scale its headline and its count were simply the largest type
+     in the product. It still lifts, just by less, so the row keeps its own
+     internal order rather than being pinned at desktop density. */
+  @media ${MOBILE_QUERY} {
+    .inscribed-collection-list { --ins-fs-scale: ${FS_SCALE_LIST}; }
+  }
+
   /* Both collection lists: the collections landing, and one collection's
      records. One state machine for the two, because they are the same offer
      made twice and used to answer the pointer differently (a container's fill
@@ -1424,10 +1434,21 @@ export const panelCss = `
   }
   .inscribed-group-header:hover { background: ${SURFACE_2}; }
 
+  /* Every row's caption in the Page tab, whichever lane draws it. It carries no
+     inline colour, which is what lets the disclosure header lift it; a field
+     row is not clickable as a whole, so it simply keeps the resting tone. */
   .inscribed-row-label { color: ${TEXT_MID}; transition: color 140ms ease; }
   .inscribed-row-chevron { color: ${TEXT_MUTED}; }
   .inscribed-disclosure-header:hover .inscribed-row-label { color: ${TEXT}; }
   .inscribed-disclosure-header:hover .inscribed-row-chevron { color: ${TEXT}; }
+
+  /* A closed card's look at its own value. It is the one part of the row
+     carrying content, so it is the brightest thing in it: it used to be a step
+     fainter than the path beside it, which made the content the hardest part to
+     read. No hover lift, because there is nowhere above this to lift to. */
+  .inscribed-card-preview {
+    color: ${TEXT_HI};
+  }
 
   /* Mode rail. Active is carried by a bar on the rail's outer edge (not a fill
      alone) so the current mode stays legible at icon size. */

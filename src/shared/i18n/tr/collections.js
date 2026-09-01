@@ -44,6 +44,8 @@ export const collections = Object.freeze({
   "collections.searchCollections": "Koleksiyon ara",
   "collections.noSearchResults": "\"{query}\" araması için sonuç yok.",
   "collections.noneAccessible": "Erişebildiğin bir koleksiyon yok.",
+  "collections.recordsLabel": "kayıt",
+  "collections.recordCount_other": "{count} kayıt",
   "collections.fieldCount_other": "{count} alan",
   "collections.sectionOnPage": "Bu sayfada",
   "collections.sectionOther": "Diğer koleksiyonlar",

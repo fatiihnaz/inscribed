@@ -3,6 +3,7 @@ import { panelCss, RAIL_CLASS } from "../../admin/drawer-styles.js";
 import { localeChipStyle } from "../../admin/collection/collection-styles.js";
 import {
   BP_MOBILE, COMPACT_QUERY, PANEL_HANDLE_REACH, PANEL_WIDTH_MOBILE, COLLECTION_ACCENT,
+  MOBILE_QUERY, FS_SCALE_MOBILE, FS_SCALE_LIST,
 } from "../../shared/style/tokens.js";
 
 /**
@@ -199,5 +200,26 @@ describe("the create row", () => {
 
   it("answers a press", () => {
     expect(rule(".inscribed-create-row:active {")).toContain("translateY(1px)");
+  });
+});
+
+// The ramp lifts on a phone because iOS zooms the page whenever a focused
+// control's text lands under 16px. The collections list holds no control, so at
+// the full control scale its headline and its record count were simply the
+// largest type in the product.
+describe("the collections list on a phone", () => {
+  it("lifts by less than the controls do", () => {
+    expect(FS_SCALE_LIST).toBeLessThan(FS_SCALE_MOBILE);
+    // Still lifted: pinned at desktop density it would sit under the metadata
+    // around it, and the row's own order would inspect backwards.
+    expect(FS_SCALE_LIST).toBeGreaterThan(1);
+  });
+
+  it("scopes that to the list, leaving the rest of the ramp alone", () => {
+    const band = panelCss.slice(panelCss.indexOf(`@media ${MOBILE_QUERY}`));
+    expect(band).toContain(".inscribed-collection-list { --ins-fs-scale:");
+    // Every size in the list derives from the one variable, so one override
+    // moves the whole row together rather than each part on its own.
+    expect(panelCss).not.toContain(".inscribed-coll-name");
   });
 });

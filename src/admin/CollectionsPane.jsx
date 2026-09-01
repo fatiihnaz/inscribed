@@ -14,19 +14,21 @@
 
 import { Fragment, memo, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronRight, Lock, Search, TypeCollection } from "../shared/style/icons.jsx";
+import { ChevronRight, Lock, Search } from "../shared/style/icons.jsx";
 
 import { useCollectionContext } from "../collections/context.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { collectDirtyRecords, dirtyCollectionKeys } from "./dirty.js";
 import { useMyCollections } from "../collections/hooks/use-my-collections.js";
+import { useCollection } from "../collections/hooks/use-collection.js";
+import { buildListParams } from "../collections/params.js";
 
 import { SkeletonRows } from "./Skeleton.jsx";
 import { emptyStateStyle } from "../editors/styles.js";
 import { listArrival } from "./collection/collection-styles.js";
-import { paneStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, listStyle, dirtyDotStyle, rowPathStyle, typeIconStyle } from "./drawer-styles.js";
-import { TEXT, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, FONT_SANS, R_MD, dynamicSize } from "../shared/style/tokens.js";
+import { paneStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, listStyle, dirtyDotStyle } from "./drawer-styles.js";
+import { TEXT_HI, TEXT_MUTED, TEXT_FAINT, COLLECTION_ACCENT, COLLECTION_SOFT, HAIRLINE, FONT_SANS, R_MD, R_BADGE, dynamicSize } from "../shared/style/tokens.js";
 
 /**
  * Memoised: it stays mounted (and animating) underneath an open collection, so
@@ -136,16 +138,21 @@ export const CollectionsPane = memo(function CollectionsPane({ onSelect }) {
                 : t("collections.noneAccessible")}
             </div>
           ) : (
-            <ul style={collectionListStyle} data-cms-list>
+            <ul className="inscribed-collection-list" style={collectionListStyle} data-cms-list>
               {groups.map((group) => (
                 <Fragment key={group.labelKey ?? "all"}>
                   {group.labelKey ? (
-                    <li style={groupLabelStyle}>{t(group.labelKey)}</li>
+                    <li style={groupLabelStyle}>
+                      {t(group.labelKey)}
+                      <span style={groupCountStyle}>{group.items.length}</span>
+                      <span style={groupRuleStyle} aria-hidden="true" />
+                    </li>
                   ) : null}
                   {group.items.map((c) => (
                     <li key={c.collectionKey} style={{ listStyle: "none" }}>
                       <CollectionRow
                         collectionKey={c.collectionKey}
+                        displayName={c.displayName}
                         fields={c.schema?.fields}
                         locales={c.locales}
                         canCreate={Boolean(c.canCreate)}
@@ -165,9 +172,46 @@ export const CollectionsPane = memo(function CollectionsPane({ onSelect }) {
   );
 });
 
+/**
+ * How many records a collection holds.
+ *
+ * `/me` carries no count and the list endpoint's `total` is the only place one
+ * exists, so this asks for a single row and reads the total off the envelope.
+ * One request per collection, which is what the answer costs: this screen is a
+ * handful of rows, not a feed.
+ *
+ * Its own component rather than a hook up in the row, so one collection's
+ * request settling re-renders one number instead of the whole list. It draws
+ * nothing until the count lands: a zero that becomes forty-eight is worse than
+ * a beat of nothing, because a wrong number is one somebody may act on.
+ *
+ * @param {{ collectionKey: string }} props
+ */
+function RecordCount({ collectionKey }) {
+  const t = useCmsStrings();
+  // One row is enough to be told how many there are, and the least the endpoint
+  // will answer with.
+  const params = useMemo(() => buildListParams({ limit: 1 }), []);
+  const { total, isLoading, error } = useCollection(collectionKey, params);
+
+  if (isLoading || error) return null;
+
+  // A bare number, and vertically centred rather than stacked. The label used to
+  // sit under it, which put the two halves of one fact on the row's two
+  // different text lines, and printed the same word down every row: a legend
+  // repeated once per entry is not a legend. What it counts rides in the
+  // tooltip, where it costs nothing.
+  return (
+    <span style={countBoxStyle} title={t("collections.recordCount", { count: total })}>
+      <span style={countNumberStyle}>{total}</span>
+      <span style={countLabelStyle}>{t("collections.recordsLabel")}</span>
+    </span>
+  );
+}
+
 // Enough of the shape to recognise a collection by, not the whole schema. The
 // count beside it says how much was left out.
-const SHAPE_FIELDS = 5;
+const SHAPE_FIELDS = 3;
 
 /**
  * @param {import("../shared/contracts/schemas.js").CollectionFieldDescriptor[]} fields
@@ -180,23 +224,25 @@ function shapeOf(fields) {
 }
 
 /**
- * One collection, on the drawer's own vocabulary but over two lines: a
- * collection carries more than a row can hold on one, and the panel is 412px
- * wide. Line one is identity (glyph, key, draft), line two is properties (what
- * a record is made of, how many fields, which languages, whether it is closed
- * to new records).
+ * One collection, over two lines, with its record count opposite.
  *
- * What makes this the drawer's row rather than its own thing is the vocabulary,
- * not the line count: the block list's 20px glyph at its own size, and the
- * block path's exact type for the key, because a collection key is the same
- * kind of literal identifier a block path is.
+ * Line one is what it is: the name, and whether this page binds it. Line two is
+ * what addresses it and what a record in it is made of, in that order, because
+ * the address is the smaller fact and the shape is what tells two collections
+ * apart at a glance.
  *
- * The glyph carries the page binding as its colour, and only as its colour: the
- * section heading above the group already says it in words, so a name on the
- * glyph would make every row in that group announce it again.
+ * The name is the collection's own `displayName` where it has one and its key
+ * where it does not. The key is a literal identifier, so on the fallback path
+ * the headline is set in the identifier's family; a real name is prose and gets
+ * the sans.
+ *
+ * The page binding is a word rather than a tint on a glyph. The glyph it
+ * replaced marked nothing (every row here is a collection) and its colour asked
+ * the reader to already know the rule.
  *
  * @param {{
  *   collectionKey: string,
+ *   displayName?: string,
  *   fields: import("../shared/contracts/schemas.js").CollectionFieldDescriptor[] | undefined,
  *   locales: string[] | undefined,
  *   canCreate: boolean,
@@ -205,9 +251,12 @@ function shapeOf(fields) {
  *   onOpen: () => void,
  * }} props
  */
-function CollectionRow({ collectionKey, fields, locales, canCreate, onPage, dirty, onOpen }) {
+function CollectionRow({
+  collectionKey, displayName, fields, locales, canCreate, onPage, dirty, onOpen,
+}) {
   const t = useCmsStrings();
   const shape = fields?.length ? shapeOf(fields) : "";
+  const named = Boolean(displayName);
   // A single language is the site's own default, so naming it says nothing. The
   // marker earns its place only where the collection actually holds more.
   const languages = locales && locales.length > 1
@@ -221,14 +270,13 @@ function CollectionRow({ collectionKey, fields, locales, canCreate, onPage, dirt
       className="inscribed-listrow"
       style={rowStyle}
     >
-      <span style={onPage ? badgeOnPageStyle : badgeStyle} aria-hidden="true">
-        <TypeCollection size={13} />
-      </span>
-
       <span style={textColStyle}>
         <span style={identityLineStyle}>
-          <span style={keyStyle} title={collectionKey}>{collectionKey}</span>
-          {/* Against the key, not out at the chevron: the draft belongs to this
+          <span style={named ? nameStyle : keyHeadlineStyle} title={collectionKey}>
+            {displayName ?? collectionKey}
+          </span>
+          {onPage ? <span style={onPageBadgeStyle}>{t("collections.sectionOnPage")}</span> : null}
+          {/* Against the name, not out at the chevron: the draft belongs to this
               collection, and a dot alone on the far edge read as a row-level
               status light with nothing to attach it to. */}
           {dirty ? (
@@ -237,10 +285,10 @@ function CollectionRow({ collectionKey, fields, locales, canCreate, onPage, dirt
         </span>
 
         <span style={propertyLineStyle}>
+          {/* Only where the name above is not already the key. */}
+          {named ? <span style={keyStyle} title={collectionKey}>{collectionKey}</span> : null}
+          {named && shape ? <span style={sepStyle} aria-hidden="true">·</span> : null}
           {shape ? <span style={shapeStyle} title={shape}>{shape}</span> : null}
-          {fields?.length ? (
-            <span style={countStyle}>{t("collections.fieldCount", { count: fields.length })}</span>
-          ) : null}
           {languages ? <span style={localeStyle}>{languages}</span> : null}
           {/* Most collections take new records, so the flag is worth showing
               only where it is missing. */}
@@ -251,6 +299,10 @@ function CollectionRow({ collectionKey, fields, locales, canCreate, onPage, dirt
           ) : null}
         </span>
       </span>
+
+      {/* The first thing anyone wants to know before opening one, and the one
+          thing this screen could not say. */}
+      <RecordCount collectionKey={collectionKey} />
 
       <span className="inscribed-list-chevron" style={chevronStyle} aria-hidden="true">
         <ChevronRight size={13} />
@@ -267,37 +319,23 @@ const collectionListStyle = /** @type {React.CSSProperties} */ ({
   gap: 4,
 });
 
-// Two lines of 11px inside the same 12px inset the one-line rows use, which
-// puts the box at 44px: the 32px control height plus one more line.
+// A headline over a property line, with a figure opposite. A grid rather than a
+// flex row: the count and the chevron hold their own tracks, so a long name
+// cannot push either of them out of the column they form down the list.
 const rowStyle = /** @type {React.CSSProperties} */ ({
   boxSizing: "border-box",
-  display: "flex",
+  display: "grid",
+  gridTemplateColumns: "1fr auto auto",
   alignItems: "center",
-  gap: 8,
+  gap: 12,
   width: "100%",
-  minHeight: 44,
-  padding: "7px 12px",
+  padding: "10px 12px",
   border: 0,
   borderRadius: R_MD,
   cursor: "pointer",
   textAlign: "left",
   fontFamily: "inherit",
   color: "inherit",
-});
-
-// The block list's type badge, at its size and without its fill. The tinted
-// 28px square it replaces was the loudest object in the drawer, and it marked
-// nothing: every row in this list is a collection.
-const badgeStyle = /** @type {React.CSSProperties} */ ({
-  ...typeIconStyle,
-  color: TEXT,
-});
-
-// Bound to the page being looked at. The colour is the whole signal, so it is
-// the accent itself rather than a tint of it.
-const badgeOnPageStyle = /** @type {React.CSSProperties} */ ({
-  ...typeIconStyle,
-  color: COLLECTION_ACCENT,
 });
 
 const textColStyle = /** @type {React.CSSProperties} */ ({
@@ -320,21 +358,69 @@ const identityLineStyle = /** @type {React.CSSProperties} */ ({
 const propertyLineStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   alignItems: "center",
-  gap: 8,
+  gap: 7,
   minWidth: 0,
+  fontWeight: 500,
+  fontSize: dynamicSize(10.5),
+  lineHeight: 1.2,
+  fontFamily: FONT_SANS,
+  color: TEXT_MUTED,
 });
 
-// A collection key is a literal identifier, exactly like a block path, so it is
-// the block path's own style. It used to be 13px sans, two steps above every
-// other identifier in the drawer.
-//
-// The basis is the override: at the block path's `flex: 1` the key grows into
-// the whole line, which carries the draft dot beside it out to the far edge
-// where it reads as a row-level status light. Sized from its own text, the dot
-// stays against the key.
+// The collection's own name. Prose, so the sans, and the one thing on this row
+// set at a heading's size: it is what the eye lands on, and what holds the other
+// side of the line against the count opposite.
+const nameStyle = /** @type {React.CSSProperties} */ ({
+  minWidth: 0,
+  fontWeight: 500,
+  fontSize: dynamicSize(13.5),
+  lineHeight: 1.2,
+  fontFamily: FONT_SANS,
+  letterSpacing: "-0.01em",
+  color: TEXT_HI,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
+// The fallback headline, where the collection named itself nothing. Same size
+// as a real name, just without the tightened tracking.
+const keyHeadlineStyle = /** @type {React.CSSProperties} */ ({
+  ...nameStyle,
+  letterSpacing: 0,
+});
+
+// The address, on line two beside the shape. Only rendered where the headline
+// above is a name rather than this same key.
 const keyStyle = /** @type {React.CSSProperties} */ ({
-  ...rowPathStyle,
-  flex: "0 1 auto",
+  flexShrink: 0,
+  maxWidth: "40%",
+  fontFamily: FONT_SANS,
+  color: TEXT_FAINT,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
+const sepStyle = /** @type {React.CSSProperties} */ ({
+  flexShrink: 0,
+  color: TEXT_FAINT,
+});
+
+// The page binding, said in the words the section heading uses. It replaces a
+// tinted glyph: a colour alone asked the reader to already know the rule, and
+// the glyph itself marked nothing, since every row here is a collection.
+const onPageBadgeStyle = /** @type {React.CSSProperties} */ ({
+  flexShrink: 0,
+  fontWeight: 600,
+  fontSize: dynamicSize(9),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
+  letterSpacing: "0.02em",
+  padding: "3px 6px",
+  borderRadius: R_BADGE,
+  color: COLLECTION_ACCENT,
+  background: COLLECTION_SOFT,
 });
 
 // Sentence case at the panel's own size, not tracked-out micro-caps. The drawer
@@ -343,13 +429,36 @@ const keyStyle = /** @type {React.CSSProperties} */ ({
 // job.
 const groupLabelStyle = /** @type {React.CSSProperties} */ ({
   listStyle: "none",
-  padding: "12px 12px 4px",
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "14px 12px 6px",
   fontWeight: 500,
   fontSize: dynamicSize(11),
   lineHeight: 1,
   fontFamily: FONT_SANS,
   letterSpacing: "-0.005em",
   color: TEXT_MUTED,
+});
+
+// How many collections are under this heading. Beside the label rather than at
+// the far edge: it belongs to the heading, and out on the right it read as a
+// column header for the record counts below it.
+const groupCountStyle = /** @type {React.CSSProperties} */ ({
+  fontWeight: 500,
+  fontSize: dynamicSize(10.5),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
+  fontVariantNumeric: "tabular-nums",
+  color: TEXT_FAINT,
+});
+
+// Runs from the heading out to the panel's edge, which is what makes the label
+// read as opening a section rather than as one more row in the list.
+const groupRuleStyle = /** @type {React.CSSProperties} */ ({
+  flex: 1,
+  height: 1,
+  background: HAIRLINE,
 });
 
 const collectionDotStyle = /** @type {React.CSSProperties} */ ({
@@ -360,10 +469,6 @@ const collectionDotStyle = /** @type {React.CSSProperties} */ ({
 
 const localeStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
-  fontWeight: 500,
-  fontSize: dynamicSize(10),
-  lineHeight: 1,
-  fontFamily: FONT_SANS,
   letterSpacing: "0.06em",
   color: TEXT_FAINT,
   whiteSpace: "nowrap",
@@ -374,7 +479,8 @@ const localeStyle = /** @type {React.CSSProperties} */ ({
 const shapeStyle = /** @type {React.CSSProperties} */ ({
   flex: "1 1 auto",
   minWidth: 0,
-  fontSize: dynamicSize(11),
+  fontWeight: 400,
+  fontSize: dynamicSize(10),
   lineHeight: 1.2,
   fontFamily: FONT_SANS,
   color: TEXT_MUTED,
@@ -383,21 +489,45 @@ const shapeStyle = /** @type {React.CSSProperties} */ ({
   textOverflow: "ellipsis",
 });
 
-const countStyle = /** @type {React.CSSProperties} */ ({
-  flexShrink: 0,
-  fontWeight: 500,
-  fontSize: dynamicSize(10),
-  lineHeight: 1,
-  fontFamily: FONT_SANS,
-  fontVariantNumeric: "tabular-nums",
-  color: TEXT_FAINT,
-  whiteSpace: "nowrap",
-});
 
 const lockStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
   display: "inline-flex",
   color: TEXT_MUTED,
+});
+
+// The row's anchor, opposite the key. A figure with its unit under it rather
+// than a bare number: the unit is what makes a lone integer at the edge of a
+// row mean records rather than fields, and the key at headline size is what
+// keeps the figure from being the loudest thing here.
+const countBoxStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-end",
+  gap: 2,
+  flexShrink: 0,
+  minWidth: 34,
+});
+
+const countNumberStyle = /** @type {React.CSSProperties} */ ({
+  fontWeight: 500,
+  fontSize: dynamicSize(17),
+  lineHeight: 1.1,
+  fontFamily: FONT_SANS,
+  letterSpacing: "-0.02em",
+  fontVariantNumeric: "tabular-nums",
+  color: TEXT_HI,
+});
+
+const countLabelStyle = /** @type {React.CSSProperties} */ ({
+  fontWeight: 500,
+  fontSize: dynamicSize(9.5),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+  color: TEXT_FAINT,
+  whiteSpace: "nowrap",
 });
 
 const chevronStyle = /** @type {React.CSSProperties} */ ({

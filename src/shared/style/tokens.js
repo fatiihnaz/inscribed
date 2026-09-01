@@ -118,6 +118,12 @@ export const FS_MD    = dynamicSize(12);  // field input text
 // Enough to carry FS_MD past the 16px iOS wants; the rest of the ramp follows.
 export const FS_SCALE_MOBILE = 1.35;
 
+// For a surface that holds no control, where the rule above has nothing to
+// answer for. Enough that the smallest label in it still reads on a phone,
+// short of the point where a list of names becomes the largest type in the
+// product. See the collections list in `panelCss`.
+export const FS_SCALE_LIST = 1.15;
+
 // Motion. One fast step for hovers/color swaps, one base step for layout.
 export const DUR_FAST = "140ms";
 export const DUR_BASE = "200ms";

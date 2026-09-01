@@ -7,28 +7,27 @@
  * by any surface that lists records.
  */
 
-// Field names that conventionally hold an item's human title, in priority
-// order; anything else falls back to the schema's first textual field.
-const TITLE_FIELD_NAMES = ["title", "name", "heading", "başlık", "baslik", "ad"];
-const TEXTUAL_FIELD_TYPES = new Set(["ShortText", "LongText"]);
-
 /**
- * Name of the field whose value should headline a row, or null when the schema
- * offers nothing textual. Null is a real answer: the caller then shows the slug
- * alone rather than inventing a label.
+ * Name of the field whose value should headline a row, or null when there is
+ * none.
  *
- * @param {import("../../shared/contracts/schemas.js").CollectionSchema | null | undefined} schema
+ * The collection answers this, not a guess: `displayField` says which field
+ * names a record for a human, and it belongs to the collection so that five
+ * references to it cannot disagree about what a record is called. Absent means
+ * exactly what the contract says it means, that the slug is the best there is,
+ * so nothing is invented in its place.
+ *
+ * This used to guess from a list of conventional names ("title", "name",
+ * "başlık"…) and then fall back to the schema's first textual field, which
+ * headlined a description on any collection that named its title field
+ * something else, and printed a title on collections that had said they had
+ * none.
+ *
+ * @param {import("../../shared/contracts/schemas.js").MyCollectionResponse | null | undefined} meta
  * @returns {string | null}
  */
-export function titleFieldName(schema) {
-  const fields = schema?.fields;
-  if (!fields || fields.length === 0) return null;
-  for (const wanted of TITLE_FIELD_NAMES) {
-    const hit = fields.find((f) => f.name.toLowerCase() === wanted);
-    if (hit) return hit.name;
-  }
-  const textual = fields.find((f) => TEXTUAL_FIELD_TYPES.has(f.type));
-  return textual ? textual.name : null;
+export function titleFieldOf(meta) {
+  return meta?.displayField || null;
 }
 
 /**

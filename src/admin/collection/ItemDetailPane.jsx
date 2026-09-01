@@ -16,7 +16,7 @@ import { Archive, ArchiveRestore, Check, Pencil, Undo2, X } from "../../shared/s
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { useDrawerDraftRole } from "../../collections/hooks/use-draft-driver.js";
 import { useCollectionMeta } from "../../collections/hooks/use-my-collections.js";
-import { imageFieldName, titleFieldName } from "./collection-format.js";
+import { imageFieldName, titleFieldOf } from "./collection-format.js";
 import { useCollectionEditor, useEditorDirty } from "../../collections/hooks/use-collection-editor.js";
 
 import { CollectionRecordForm, DraftIndicator } from "../CollectionRecordForm.jsx";
@@ -53,7 +53,7 @@ export function ItemDetailPane({ collectionKey, slug, onBack, onOpenItem, onAddT
   // also remounts, which is what closes the heading's editor.
   const editor = useCollectionEditor(collectionKey, slug, { ...role, onRenamed: onOpenItem });
   const meta = useCollectionMeta(collectionKey);
-  const titleField = titleFieldName(meta?.schema);
+  const titleField = titleFieldOf(meta);
   const imageField = imageFieldName(meta?.schema);
   const dirty = useEditorDirty(editor);
   const isDirty = dirty && editor.canEdit;

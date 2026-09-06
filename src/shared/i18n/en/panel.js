@@ -53,6 +53,14 @@ export const panel = Object.freeze({
   "drawer.searchPlaceholder": "Search blocks (path or type)",
   "drawer.searchLabel": "Search blocks",
   "drawer.searchClear": "Clear",
+
+  // Toolbar switches. The changed filter narrows the list in place; the Changes
+  // tab is the other thing, and opens the whole diff on its own surface.
+  "drawer.refUnsaved": "unsaved changes",
+  "drawer.changedOnly": "Only blocks with unsaved changes",
+  "drawer.densityCompact": "Shut every block to one line",
+  "drawer.densityComfortable": "Open the light fields again",
+  "drawer.emptyChanged": "Nothing on this page has unsaved changes.",
   "drawer.emptySearch": "Nothing matches \"{query}\".",
   "drawer.emptyPage": "No editable blocks on this page. Run the manifest sync to pick up new ones.",
   "drawer.emptyGlobal": "No blocks are marked scope=\"global\" yet.",

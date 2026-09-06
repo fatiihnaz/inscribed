@@ -15,7 +15,7 @@ import { useStoreSelector } from "../shared/state/store.js";
 import { useDrawerDraftRole } from "../collections/hooks/use-draft-driver.js";
 import { useCollectionEditor } from "../collections/hooks/use-collection-editor.js";
 import { CollectionRecordForm } from "./CollectionRecordForm.jsx";
-import { CardHeader, TypeIcon, disclosureBodyStyle, disclosureHeaderStyle, disclosureRowStyle, fieldPathStyle, rowClassName, rowInsetStyle } from "./block-card-chrome.jsx";
+import { CardHeader, TypeIcon, cardTextColStyle, disclosureBodyStyle, disclosureHeaderStyle, disclosureRowStyle, fieldPathStyle, rowClassName, rowInsetStyle, rowTone } from "./block-card-chrome.jsx";
 import { TEXT_MUTED } from "../shared/style/tokens.js";
 
 /**
@@ -61,9 +61,11 @@ function InvalidCollectionCard({ block, topLevel, displayPath }) {
       style={rowInsetStyle(disclosureRowStyle, topLevel)}
     >
       <div style={{ ...disclosureHeaderStyle, cursor: "default" }}>
-        <TypeIcon type={block.blockType} compact={topLevel} />
-        <span style={fieldPathStyle} title={block.blockPath}>
-          {displayPath ?? block.blockPath}
+        <TypeIcon type={block.blockType} compact={topLevel} tone={rowTone({ isCollection: true })} />
+        <span style={cardTextColStyle}>
+          <span className="inscribed-row-label" style={fieldPathStyle} title={block.blockPath}>
+            {displayPath ?? block.blockPath}
+          </span>
         </span>
       </div>
       <div style={disclosureBodyStyle}>

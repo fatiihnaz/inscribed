@@ -30,8 +30,8 @@ import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
-  ChevronsLeft, ChevronDown, ChevronLeft, ChevronRight,
-  Check, Undo2, Search, Eye, Pencil, FileText, Layers, Folder, LogOut, TypeUnknown,
+  ChevronsLeft, ChevronsDownUp, ChevronsUpDown, ChevronDown, ChevronLeft, ChevronRight,
+  Check, Undo2, Search, Pencil, FileText, Layers, Folder, LogOut, TypeUnknown, GitMerge,
 } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
@@ -49,14 +49,15 @@ import { describeSaveError } from "./save-error.js";
 
 import { BlockCard } from "./BlockCard.jsx";
 import { ChangesPanel } from "./ChangesPanel.jsx";
+import { cardTextColStyle, cardLabelStyle, cardValueStyle } from "./block-card-chrome.jsx";
 import { Collapse } from "./Collapse.jsx";
 import { PanelArea } from "./PanelArea.jsx";
 import { readOpenTarget, stripOpenParams } from "./deep-link.js";
 
 import { emptyStateStyle } from "../editors/styles.js";
-import { panelStyle, DRAWER_BODY_CLASS, srOnlyStyle, paneContainerStyle, paneStyle, RAIL_CLASS, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, RAIL_BAR_CLASS, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, STATUS_COLLAPSE_TRANSITION, statusCollapseStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, PANEL_CLASS, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
+import { panelStyle, DRAWER_BODY_CLASS, srOnlyStyle, paneContainerStyle, paneStyle, RAIL_CLASS, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, RAIL_BAR_CLASS, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, toolButtonStyle, toolCountStyle, refRowStyle, rowActionsStyle, typeIconStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, STATUS_COLLAPSE_TRANSITION, statusCollapseStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, PANEL_CLASS, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
 import { DRILL_TRANSITION, DRILL_PARALLAX, DRILL_PANE_TRANSITION, drillLayerStyle, drillPaneStyle, switchMotion, switchLayerStyle } from "../shared/style/drill-motion.js";
-import { COMPACT_QUERY, MOBILE_QUERY, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT, HAIRLINE, SURFACE_1, SURFACE_2, R_MD, FONT_SANS, FONT_MONO, STATUS_OK, STATUS_WARN, STATUS_DANGER, dynamicSize } from "../shared/style/tokens.js";
+import { COMPACT_QUERY, MOBILE_QUERY, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MUTED, TEXT_FAINT, BORDER, HAIRLINE, SURFACE_1, FONT_SANS, STATUS_OK, STATUS_WARN, STATUS_DANGER, dynamicSize } from "../shared/style/tokens.js";
 
 // The two collections-mode panes carry the whole collections layer behind them
 // (record cache, schema form, /me). Lazy so the drawer costs the same on a site
@@ -152,6 +153,12 @@ export function Drawer({ panels = null }) {
   // Search filter (path + type), Page/Global tabs only; Collection lanes
   // filter inside their own panel.
   const [search, setSearch] = useState("");
+  // Narrow the list to blocks holding unsaved work.
+  const [changedOnly, setChangedOnly] = useState(false);
+  // How much of each field is on screen at rest. "compact" shuts every row down
+  // to its label and its one-line value, which is the only way a page carrying
+  // thirty fields can be scanned rather than scrolled.
+  const [density, setDensity] = useState(/** @type {"comfortable" | "compact"} */ ("comfortable"));
 
   // Split blocks into page/global lists. Deliberately independent of `drafts`:
   // the drawer re-renders on every keystroke, and if these arrays were rebuilt
@@ -630,15 +637,24 @@ export function Drawer({ panels = null }) {
         || block.blockType.toLowerCase().includes(q);
   };
 
+  // Narrows the list to blocks holding unsaved work. Not the same thing as the
+  // Changes tab, which shows the whole diff on its own surface: this one leaves
+  // the editor where it is and takes the untouched rows out of the way.
+  //
+  // The predicate reads `drafts` only while the filter is on, so with it off
+  // the memo below still bails out on a keystroke and the card list holds.
+  const matchChanged = (block) =>
+    !changedOnly || isBlockDirty(block, drafts.has(block.blockPath), drafts.get(block.blockPath));
+
   const filteredPage = useMemo(
-    () => pageBlockList.filter(matchSearch),
+    () => pageBlockList.filter((b) => matchSearch(b) && matchChanged(b)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pageBlockList, search],
+    [pageBlockList, search, changedOnly, changedOnly ? drafts : null],
   );
   const filteredGlobal = useMemo(
-    () => globalBlockList.filter(matchSearch),
+    () => globalBlockList.filter((b) => matchSearch(b) && matchChanged(b)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [globalBlockList, search],
+    [globalBlockList, search, changedOnly, changedOnly ? drafts : null],
   );
 
   const bodyRef = useInert(!isDrawerOpen);
@@ -686,6 +702,9 @@ export function Drawer({ panels = null }) {
             collectionsDirty={collectionDirtyTotal > 0}
             panels={panels}
             panelBadges={panelBadges}
+            previewOpen={isPreviewOpen}
+            onTogglePreview={() => setPreviewOpen((v) => !v)}
+            previewableCount={previewableCount + collectionDirtyTotal}
             userInfo={userInfo}
             onSignOut={onSignOut}
           />
@@ -751,7 +770,16 @@ export function Drawer({ panels = null }) {
               />
             ) : (
               <>
-                <Toolbar value={search} onChange={setSearch} />
+                <Toolbar
+                  value={search}
+                  onChange={setSearch}
+                  changedOnly={changedOnly}
+                  onToggleChanged={() => setChangedOnly((v) => !v)}
+                  changedCount={dirtyCount}
+                  density={density}
+                  onToggleDensity={() =>
+                    setDensity((d) => (d === "compact" ? "comfortable" : "compact"))}
+                />
                 {activeTab === "page" && pageCollectionRefs.length > 0 && !search ? (
                   <CollectionRefStrip
                     refs={pageCollectionRefs}
@@ -770,6 +798,7 @@ export function Drawer({ panels = null }) {
                   labelledBy={`${tabsId}-${activeTab}`}
                   blockList={activeTab === "page" ? filteredPage : filteredGlobal}
                   activeBlockPath={activeBlock}
+                  density={density}
                   itemSchemas={itemSchemas}
                   editorVisibility={editorVisibility}
                   closedGroups={closedGroups}
@@ -777,9 +806,11 @@ export function Drawer({ panels = null }) {
                   emptyHint={
                     search
                       ? t("drawer.emptySearch", { query: search })
-                      : activeTab === "page"
-                        ? t("drawer.emptyPage")
-                        : t("drawer.emptyGlobal")
+                      : changedOnly
+                        ? t("drawer.emptyChanged")
+                        : activeTab === "page"
+                          ? t("drawer.emptyPage")
+                          : t("drawer.emptyGlobal")
                   }
                 />
               </>
@@ -835,9 +866,6 @@ export function Drawer({ panels = null }) {
                 setLastSavedAt(null);
               }}
               onSaveAll={onSaveAll}
-              previewableCount={previewableCount + collectionDirtyTotal}
-              isPreviewOpen={isPreviewOpen}
-              onTogglePreview={() => setPreviewOpen((v) => !v)}
             />
             </div>
 
@@ -898,13 +926,28 @@ export function Drawer({ panels = null }) {
  *   collectionsDirty: boolean,
  *   panels: readonly import("../shared/panels.js").CmsPanel[] | null,
  *   panelBadges: Map<string, number|boolean|null>,
+ *   previewOpen: boolean,
+ *   onTogglePreview: () => void,
+ *   previewableCount: number,
  * }} props
  */
 function ModeRail({
   mode, onChange, showCollections, pageDirty, collectionsDirty, panels, panelBadges,
-  statusPill,
+  previewOpen, onTogglePreview, previewableCount, statusPill,
 }) {
   const t = useCmsStrings();
+  // Below the wide shell the rail lies down, so the axis a leaving button
+  // collapses along changes with it.
+  const isRow = useMediaQuery(COMPACT_QUERY);
+  const railSlotOpen = isRow
+    ? { width: "auto", marginRight: 0, opacity: 1 }
+    : { height: "auto", marginBottom: 0, opacity: 1 };
+  // The negative margin cancels the rail's own 4px gap, so a button on its way
+  // out takes its share of the spacing with it rather than leaving a step.
+  const railSlotShut = isRow
+    ? { width: 0, marginRight: -4, opacity: 0 }
+    : { height: 0, marginBottom: -4, opacity: 0 };
+
   return (
     <nav className={RAIL_CLASS} aria-label={t("drawer.sections")}>
       <RailButton
@@ -915,6 +958,33 @@ function ModeRail({
         accent={ACCENT}
         onClick={() => onChange("page")}
       />
+      {/* The diff, on the rail rather than behind the status bar's eye. It is
+          not a mode: it lays over whichever area is open and hands it back on
+          the way out, which is why it carries `previewOpen` instead of `mode`.
+          There when there is something to compare and gone when there is not,
+          so the rail never offers a screen that would open empty. */}
+      <AnimatePresence initial={false}>
+        {previewableCount > 0 ? (
+          <motion.div
+            key="diff"
+            initial={railSlotShut}
+            animate={railSlotOpen}
+            exit={railSlotShut}
+            transition={RAIL_TRANSITION}
+            style={{ overflow: "hidden", flexShrink: 0 }}
+          >
+            <RailButton
+              icon={<GitMerge size={17} />}
+              label={previewOpen ? t("status.closePreview") : t("status.preview")}
+              active={previewOpen}
+              dirty={false}
+              badge={previewableCount}
+              accent={ACCENT}
+              onClick={onTogglePreview}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
       {/* Hidden without the provider: there is no area behind it. An app that
           opted in keeps it even while /me is empty. */}
       {showCollections ? (
@@ -1003,16 +1073,34 @@ function RailButton({ icon, label, active, dirty, badge = null, accent, tintIcon
       >
         {icon}
       </motion.span>
-      {typeof badge === "number" && badge > 0 ? (
-        <span style={{ ...railBadgeStyle, background: accent }}>
-          {badge > 99 ? "99+" : badge}
-        </span>
-      ) : badge || dirty ? (
-        <span
-          style={{ ...railDirtyDotStyle, background: accent }}
-          aria-label={dirty ? t("drawer.unsavedDot") : t("drawer.pendingDot")}
-        />
-      ) : null}
+      {/* The count arrives and leaves rather than blinking on: this badge is
+          the only place the drawer says how much is waiting, and a number that
+          appears fully formed reads as having always been there. The figure
+          inside rolls on each change, same as the status bar's. */}
+      <AnimatePresence initial={false}>
+        {typeof badge === "number" && badge > 0 ? (
+          <motion.span
+            key="badge"
+            initial={{ scale: 0.4, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.4, opacity: 0 }}
+            transition={RAIL_TRANSITION}
+            style={{ ...railBadgeStyle, background: accent }}
+          >
+            {badge > 99 ? "99+" : <RollingCount value={badge} />}
+          </motion.span>
+        ) : badge || dirty ? (
+          <motion.span
+            key="dot"
+            initial={{ scale: 0.4, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.4, opacity: 0 }}
+            transition={RAIL_TRANSITION}
+            style={{ ...railDirtyDotStyle, background: accent }}
+            aria-label={dirty ? t("drawer.unsavedDot") : t("drawer.pendingDot")}
+          />
+        ) : null}
+      </AnimatePresence>
     </button>
   );
 }
@@ -1913,10 +2001,27 @@ function TabButton({ id, domId, panelId, label, count, active, dirty, accent = A
 // ---------------------------------------------------------------------------
 
 /**
- * @param {{ value: string, onChange: (v: string) => void }} props
+ * Search, plus the two switches that decide how much of the list is on screen.
+ *
+ * The changed filter and the Changes tab are different things and both stay:
+ * this one narrows the list in place so the editor keeps working where it is,
+ * while the tab opens the whole diff on a surface of its own.
+ *
+ * @param {{
+ *   value: string,
+ *   onChange: (v: string) => void,
+ *   changedOnly: boolean,
+ *   onToggleChanged: () => void,
+ *   changedCount: number,
+ *   density: "comfortable" | "compact",
+ *   onToggleDensity: () => void,
+ * }} props
  */
-function Toolbar({ value, onChange }) {
+function Toolbar({
+  value, onChange, changedOnly, onToggleChanged, changedCount, density, onToggleDensity,
+}) {
   const t = useCmsStrings();
+  const isCompact = density === "compact";
   return (
     <div style={toolbarStyle}>
       <div className="inscribed-search" style={searchWrapStyle}>
@@ -1941,6 +2046,38 @@ function Toolbar({ value, onChange }) {
           </button>
         ) : null}
       </div>
+
+      {/* Always here on a wide panel, whether or not anything is dirty yet: a
+          control that appears on the first keystroke reads as one that was
+          removed. It goes quiet instead, and only carries a count once there is
+          one. On a phone the quiet state is dropped in `panelCss` rather than
+          here, since it is the width that cannot afford an idle square, and a
+          breakpoint is not something a style object can express. */}
+      <button
+        type="button"
+        onClick={onToggleChanged}
+        className={`inscribed-tool-btn${changedOnly ? " is-on" : ""}${changedCount === 0 && !changedOnly ? " is-idle" : ""}`}
+        style={toolButtonStyle}
+        disabled={changedCount === 0 && !changedOnly}
+        aria-pressed={changedOnly}
+        title={t("drawer.changedOnly")}
+        aria-label={t("drawer.changedOnly")}
+      >
+        <GitMerge size={13} />
+        {changedCount > 0 ? <span style={toolCountStyle}>{changedCount}</span> : null}
+      </button>
+
+      <button
+        type="button"
+        onClick={onToggleDensity}
+        className={`inscribed-tool-btn${isCompact ? " is-on" : ""}`}
+        style={toolButtonStyle}
+        aria-pressed={isCompact}
+        title={isCompact ? t("drawer.densityComfortable") : t("drawer.densityCompact")}
+        aria-label={isCompact ? t("drawer.densityComfortable") : t("drawer.densityCompact")}
+      >
+        {isCompact ? <ChevronsUpDown size={13} /> : <ChevronsDownUp size={13} />}
+      </button>
     </div>
   );
 }
@@ -1957,6 +2094,7 @@ function Toolbar({ value, onChange }) {
  * @param {{
  *   blockList: BlockResponse[],
  *   activeBlockPath: string | null,
+ *   density: "comfortable" | "compact",
  *   itemSchemas: Map<string, import("../shared/contracts/schemas.js").ItemSchema>,
  *   editorVisibility: Map<string, "hidden"|"readonly">,
  *   closedGroups: Set<string>,
@@ -1967,7 +2105,7 @@ function Toolbar({ value, onChange }) {
  * }} props
  */
 const GroupedBlockList = memo(function GroupedBlockList({
-  blockList, activeBlockPath,
+  blockList, activeBlockPath, density,
   itemSchemas, editorVisibility, closedGroups, onToggleGroup, emptyHint,
   panelId, labelledBy,
 }) {
@@ -1991,6 +2129,7 @@ const GroupedBlockList = memo(function GroupedBlockList({
                   block={chunk.block}
                   displayPath={displayLabelOf(chunk.block, null)}
                   topLevel
+                  density={density}
                   isActive={activeBlockPath === chunk.block.blockPath}
                   itemSchema={itemSchemas.get(chunk.block.blockPath) ?? null}
                   readOnly={editorVisibility.get(chunk.block.blockPath) === "readonly"}
@@ -2002,6 +2141,7 @@ const GroupedBlockList = memo(function GroupedBlockList({
                   groupName={chunk.name}
                   blocks={chunk.blocks}
                   activeBlockPath={activeBlockPath}
+                  density={density}
                   itemSchemas={itemSchemas}
                   editorVisibility={editorVisibility}
                   isOpen={!closedGroups.has(chunk.name)}
@@ -2027,6 +2167,7 @@ const GroupedBlockList = memo(function GroupedBlockList({
  *   groupName: string,
  *   blocks: BlockResponse[],
  *   activeBlockPath: string | null,
+ *   density: "comfortable" | "compact",
  *   itemSchemas: Map<string, import("../shared/contracts/schemas.js").ItemSchema>,
  *   editorVisibility: Map<string, "hidden"|"readonly">,
  *   isOpen: boolean,
@@ -2034,7 +2175,7 @@ const GroupedBlockList = memo(function GroupedBlockList({
  * }} props
  */
 function GroupCard({
-  groupName, blocks, activeBlockPath,
+  groupName, blocks, activeBlockPath, density,
   itemSchemas, editorVisibility, isOpen, onToggle,
 }) {
   const t = useCmsStrings();
@@ -2090,6 +2231,7 @@ function GroupCard({
                   block={block}
                   displayPath={displayLabelOf(block, groupName)}
                   topLevel={false}
+                  density={density}
                   isActive={activeBlockPath === block.blockPath}
                   itemSchema={itemSchemas.get(block.blockPath) ?? null}
                   readOnly={editorVisibility.get(block.blockPath) === "readonly"}
@@ -2218,27 +2360,50 @@ function CollectionRefStrip({ refs, dirtyKeys, onOpen }) {
   const t = useCmsStrings();
   return (
     <div style={refStripStyle}>
-      {refs.map((ref) => (
-        <button
-          key={ref.key}
-          type="button"
-          onClick={() => onOpen(ref.key)}
-          className="inscribed-collection-ref"
-          style={refRowStyle}
-        >
-          <span style={refIconStyle}>
-            <Layers size={12} />
-          </span>
-          <span style={refLabelStyle} title={ref.key}>{ref.label}</span>
-          {ref.count > 0 ? <span style={refCountStyle}>{ref.count}</span> : null}
-          {dirtyKeys.has(ref.key) ? (
-            <span style={refDirtyDotStyle} aria-label={t("drawer.unsavedDot")} />
-          ) : null}
-          <span style={refChevronStyle} aria-hidden="true">
-            <ChevronRight size={12} />
-          </span>
-        </button>
-      ))}
+      {refs.map((ref) => {
+        const dirty = dirtyKeys.has(ref.key);
+        const count = ref.count > 0 ? t("collections.recordCount", { count: ref.count }) : null;
+        // The count line doubles as the unsaved marker. A dot here would be the
+        // one left in the panel, and it says less than the sentence does.
+        const value = dirty
+          ? [count, t("drawer.refUnsaved")].filter(Boolean).join(" · ")
+          : count;
+        return (
+          <button
+            key={ref.key}
+            type="button"
+            onClick={() => onOpen(ref.key)}
+            className="inscribed-collection-ref"
+            style={refRowStyle}
+          >
+            <span aria-hidden="true" style={{ ...typeIconStyle, color: COLLECTION_ACCENT }}>
+              <Layers size={13} />
+            </span>
+            <span style={cardTextColStyle}>
+              <span className="inscribed-row-label" style={cardLabelStyle} title={ref.key}>
+                {ref.label}
+              </span>
+              {value ? (
+                <span
+                  style={dirty ? { ...cardValueStyle, color: COLLECTION_ACCENT } : cardValueStyle}
+                >
+                  {value}
+                </span>
+              ) : null}
+              {dirty ? <span style={srOnlyStyle}>{t("drawer.unsavedDot")}</span> : null}
+            </span>
+            <span style={rowActionsStyle}>
+              <span className="inscribed-row-chevron" style={refChevronStyle} aria-hidden="true">
+                <ChevronRight size={13} />
+              </span>
+            </span>
+          </button>
+        );
+      })}
+      {/* These rows now look exactly like the block rows under them, and they do
+          a different thing: they leave the page rather than edit it. The rule is
+          what marks the seam, same as the one closing a group. */}
+      <div aria-hidden="true" style={refDividerStyle} />
     </div>
   );
 }
@@ -2247,67 +2412,20 @@ const refStripStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   flexDirection: "column",
   gap: 2,
-  padding: "0 16px 8px",
+  padding: "0 16px",
 });
 
-const refRowStyle = /** @type {React.CSSProperties} */ ({
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  width: "100%",
-  padding: "7px 10px",
-  borderRadius: R_MD,
-  border: 0,
-  cursor: "pointer",
-  textAlign: "left",
-  fontFamily: "inherit",
-});
-
-const refIconStyle = /** @type {React.CSSProperties} */ ({
-  display: "inline-flex",
-  color: COLLECTION_ACCENT,
-  flexShrink: 0,
-});
-
-const refLabelStyle = /** @type {React.CSSProperties} */ ({
-  flex: 1,
-  minWidth: 0,
-  fontWeight: 500,
-  fontSize: dynamicSize(11),
-  lineHeight: 1.2,
-  fontFamily: FONT_MONO,
-  color: TEXT_MID,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-});
-
-const refCountStyle = /** @type {React.CSSProperties} */ ({
-  fontWeight: 500,
-  fontSize: dynamicSize(10),
-  lineHeight: 1,
-  fontFamily: FONT_SANS,
-  fontVariantNumeric: "tabular-nums",
-  padding: "2px 6px",
-  borderRadius: 99,
-  background: SURFACE_2,
-  color: TEXT_FAINT,
-  flexShrink: 0,
-});
-
-const refDirtyDotStyle = /** @type {React.CSSProperties} */ ({
-  width: 5,
-  height: 5,
-  borderRadius: "50%",
-  background: COLLECTION_ACCENT,
-  boxShadow: `0 0 5px color-mix(in srgb, ${COLLECTION_ACCENT} 50%, transparent)`,
-  flexShrink: 0,
-});
-
+// Points along the drill, not down into a body: this row opens another surface.
 const refChevronStyle = /** @type {React.CSSProperties} */ ({
   display: "inline-flex",
-  color: TEXT_FAINT,
-  flexShrink: 0,
+  width: 20,
+  justifyContent: "center",
+});
+
+const refDividerStyle = /** @type {React.CSSProperties} */ ({
+  height: 1,
+  margin: "8px 0 0",
+  background: BORDER,
 });
 
 // Shared enter/exit choreography for StatusBar action buttons: a small upward
@@ -2433,16 +2551,12 @@ function withCounters(text, slots) {
  *   draftSyncStatus: "idle"|"saving"|"saved"|"failed",
  *   onDiscardAll: () => void,
  *   onSaveAll: () => void,
- *   previewableCount: number,
- *   isPreviewOpen: boolean,
- *   onTogglePreview: () => void,
  * }} props
  */
 function StatusBar({
   dirtyCount, collectionDirtyCount, firstDirtyCollectionTarget, onGoToCollection,
   isSaving, draftSyncStatus,
   onDiscardAll, onSaveAll,
-  previewableCount, isPreviewOpen, onTogglePreview,
 }) {
   const t = useCmsStrings();
   const isContentDirty = dirtyCount > 0;
@@ -2540,11 +2654,8 @@ function StatusBar({
   }
 
   // Same guard as the header pill: FLIP-measure the action buttons only when
-  // the visible button set (or the preview label swap) changes, not on every
-  // drawer re-render.
+  // the visible button set changes, not on every drawer re-render.
   const actionsLayoutKey = [
-    previewableCount > 0,
-    isPreviewOpen,
     isContentDirty,
     isOnlyCollectionDirty && Boolean(firstDirtyCollectionTarget),
   ].join("|");
@@ -2563,11 +2674,13 @@ function StatusBar({
 
   // Nothing pending, nothing in flight, nothing to act on. The bar used to hold
   // 36px to say "clean", which is the one thing the absence of a bar already
-  // says. The preview toggle counts as something to act on, so it keeps the bar
-  // up on its own.
-  const hasSomethingToSay = Boolean(
-    previewableCount > 0 || isContentDirty || isCollectionDirty,
-  );
+  // says.
+  //
+  // It used to stay up on its own for the preview toggle, which lived here.
+  // That toggle is on the rail now, where it has a fixed place instead of
+  // appearing in a bar that comes and goes, so the bar is back to being about
+  // unsaved work alone.
+  const hasSomethingToSay = Boolean(isContentDirty || isCollectionDirty);
 
   return (
     <>
@@ -2595,22 +2708,6 @@ function StatusBar({
       </div>
       <div style={statusActionsStyle}>
         <AnimatePresence mode="popLayout" initial={false}>
-          {previewableCount > 0 ? (
-            <motion.button
-              key="preview"
-              type="button"
-              onClick={onTogglePreview}
-              className="inscribed-btn-ghost"
-              style={btnGhostStyle}
-              aria-label={isPreviewOpen ? t("status.closePreview") : t("status.preview")}
-              title={isPreviewOpen ? t("status.closePreview") : t("status.preview")}
-              aria-pressed={isPreviewOpen}
-              {...statusActionMotion}
-              layoutDependency={actionsLayoutKey}
-            >
-              {isPreviewOpen ? <Pencil size={13} /> : <Eye size={13} />}
-            </motion.button>
-          ) : null}
           {isContentDirty ? (
             <motion.button
               key="discard"

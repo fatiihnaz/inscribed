@@ -49,6 +49,14 @@ export const panel = Object.freeze({
   "drawer.searchPlaceholder": "Blok ara (yol veya tip)",
   "drawer.searchLabel": "Blok ara",
   "drawer.searchClear": "Temizle",
+
+  // Araç çubuğu anahtarları. Değişenler filtresi listeyi yerinde daraltıyor;
+  // Değişiklikler sekmesi ayrı bir şey, tüm farkı kendi yüzeyinde açıyor.
+  "drawer.refUnsaved": "kaydedilmemiş değişiklik",
+  "drawer.changedOnly": "Yalnızca kaydedilmemiş bloklar",
+  "drawer.densityCompact": "Her bloğu tek satıra indir",
+  "drawer.densityComfortable": "Hafif alanları yeniden aç",
+  "drawer.emptyChanged": "Bu sayfada kaydedilmemiş bir değişiklik yok.",
   "drawer.emptySearch": "\"{query}\" araması için sonuç yok.",
   "drawer.emptyPage": "Bu sayfada düzenlenebilir blok yok. Yeni bloklar eklemek için manifest sync'ini çalıştır.",
   "drawer.emptyGlobal": "Henüz scope=\"global\" işaretli blok yok.",

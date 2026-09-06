@@ -11,9 +11,9 @@
 
 import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Trash2, ChevronUp, ChevronDown } from "../shared/style/icons.jsx";
+import { GripVertical, Plus, Trash2, ChevronDown } from "../shared/style/icons.jsx";
 
-import { addItem, moveItem, moveItemTo, moveItemToIndex, removeItem } from "../shared/util/list-ops.js";
+import { addItem, moveItemTo, moveItemToIndex, removeItem } from "../shared/util/list-ops.js";
 import { firstNonEmptyText } from "../shared/util/text.js";
 import { useOpenRows } from "../core/hooks/use-open-rows.js";
 import { useCmsContext } from "../shared/state/cms-context.js";
@@ -23,9 +23,11 @@ import {
 } from "../core/hooks/use-list-reorder.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { PositionField } from "../shared/ui/PositionField.jsx";
+import { FieldMessage } from "./FieldMessage.jsx";
 import { noItemsStyle } from "./styles.js";
 import {
-  ACCENT, BG_RAISED, EASE, HAIRLINE, TEXT_MUTED, STATUS_DANGER, R_BADGE, R_SM, dynamicSize,
+  ACCENT, BG_RAISED, BORDER, EASE, TEXT_MUTED, TEXT_FAINT,
+  FONT_SANS, R_BADGE, R_SM, dynamicSize,
 } from "../shared/style/tokens.js";
 
 import { FieldEditor } from "./FieldEditor.jsx";
@@ -68,9 +70,9 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
 
   if (!itemSchema) {
     return (
-      <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
+      <FieldMessage tone="warn">
         {t("editors.list.noSchema", { schema: "itemSchema", component: "<EditableList>" })}
-      </div>
+      </FieldMessage>
     );
   }
 
@@ -83,16 +85,6 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
   const onRemove = (i) => {
     setItems(removeItem(items, i));
     afterRemove(i);
-  };
-
-  /** @param {number} i @param {-1|1} dir */
-  const onMove = (i, dir) => {
-    const next = moveItem(items, i, dir);
-    if (next === items) return;
-    // Before the commit: the boxes have to be measured as they still are.
-    animateMove(i, i + dir);
-    setItems(next);
-    afterMove(i, i + dir);
   };
 
   /** @param {number} i @param {number} seat */
@@ -142,8 +134,6 @@ export function ListEditor({ blockPath, value, onChange, itemSchema, disabled })
           onFieldChange={(k, v) => onFieldChange(i, k, v)}
           onRemove={() => onRemove(i)}
           onMoveTo={(seat) => onMoveTo(i, seat)}
-          onMoveUp={i > 0 ? () => onMove(i, -1) : null}
-          onMoveDown={i < items.length - 1 ? () => onMove(i, 1) : null}
         />
       ))}
 
@@ -197,15 +187,13 @@ function AddItemButton({ onAdd, label }) {
  *   onFieldChange: (fieldKey: string, value: *) => void,
  *   onRemove: () => void,
  *   onMoveTo: (seat: number) => void,
- *   onMoveUp: (() => void) | null,
- *   onMoveDown: (() => void) | null,
  * }} props
  */
 function ListItemCard({
   blockPath, index, total, item, itemSchema, disabled,
   registerNode, onGrab, dragging, settling, shifting, flipOffset, suppressSlide,
   isOpen, onToggle, onOpen,
-  onFieldChange, onRemove, onMoveTo, onMoveUp, onMoveDown,
+  onFieldChange, onRemove, onMoveTo,
 }) {
   // Selects a boolean, not the signal itself: a row click elsewhere in the list
   // leaves the other cards alone.
@@ -302,6 +290,13 @@ function ListItemCard({
           onToggle();
         }}
       >
+        {/* Handle and seat are two things, so they get two slots. The grip's
+            width is reserved whether or not it is showing, so hovering a row
+            never shifts the summary beside it; the badge stays what it has
+            always been, a field you click and type a position into. */}
+        <span aria-hidden="true" style={listItemGripStyle} className="inscribed-repeat-grip">
+          {disabled ? null : <GripVertical size={13} />}
+        </span>
         <span data-no-drag>
           <PositionField
             index={index}
@@ -320,51 +315,33 @@ function ListItemCard({
           {summary || t("editors.list.emptyItem")}
         </span>
 
-        {/* Reorder/delete are edit affordances, omitted in read-only mode. */}
-        {!disabled && (
-        <div data-no-drag style={{ display: "inline-flex", gap: 2, marginLeft: "auto" }}>
-          {onMoveUp ? (
+        {/* The block row's fixed lane, to the pixel: delete (an edit
+            affordance, so it is absent in read-only mode) and the chevron.
+            Reserving it rather than sizing to content is what keeps a summary
+            from re-wrapping the moment the pointer arrives. */}
+        <span style={listItemActionsStyle}>
+          {disabled ? null : (
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
-              style={listItemIconStyle}
-              title={t("editors.list.moveUp")}
-              aria-label={t("editors.list.moveUp")}
+              data-no-drag
+              onClick={(e) => { e.stopPropagation(); onRemove(); }}
+              className="inscribed-repeat-delete"
+              style={listItemDangerStyle}
+              title={t("editors.list.delete")}
+              aria-label={t("editors.list.delete")}
             >
-              <ChevronUp size={12} />
+              <Trash2 size={12} />
             </button>
-          ) : null}
-          {onMoveDown ? (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
-              style={listItemIconStyle}
-              title={t("editors.list.moveDown")}
-              aria-label={t("editors.list.moveDown")}
-            >
-              <ChevronDown size={12} />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            style={listItemDangerStyle}
-            title={t("editors.list.delete")}
-            aria-label={t("editors.list.delete")}
+          )}
+          <motion.span
+            initial={false}
+            animate={{ rotate: isOpen ? 180 : 0 }}
+            transition={{ duration: 0.24, ease: EASE_POINTS }}
+            style={{ display: "inline-flex", color: TEXT_MUTED }}
           >
-            <Trash2 size={12} />
-          </button>
-        </div>
-        )}
-
-        <motion.span
-          initial={false}
-          animate={{ rotate: isOpen ? 180 : 0 }}
-          transition={{ duration: 0.24, ease: EASE_POINTS }}
-          style={{ display: "inline-flex", color: TEXT_MUTED, marginLeft: disabled ? "auto" : 4 }}
-        >
-          <ChevronDown size={13} />
-        </motion.span>
+            <ChevronDown size={13} />
+          </motion.span>
+        </span>
       </div>
 
       <AnimatePresence initial={false}>
@@ -395,9 +372,9 @@ function ListItemCard({
                   <motion.div key={key} variants={fieldVariants} style={listFieldStyle}>
                     <div style={listFieldLabelStyle}>{key}</div>
                     {editor ?? (
-                      <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
+                      <FieldMessage tone="warn">
                         {t("editors.list.unsupportedField", { type: field.blockType })}
-                      </div>
+                      </FieldMessage>
                     )}
                   </motion.div>
                 );
@@ -492,10 +469,42 @@ const landingSlotStyle = /** @type {React.CSSProperties} */ ({
 const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   alignItems: "center",
-  gap: 8,
-  padding: "5px 6px",
+  gap: 6,
+  padding: "5px 6px 5px 0",
   fontSize: dynamicSize(12),
   color: TEXT_MUTED,
+});
+
+// Reserved, not conditional: the grip fades in on hover (see
+// `.inscribed-repeat-grip`) and a slot that appeared with it would push the
+// whole row sideways under the pointer.
+const listItemGripStyle = /** @type {React.CSSProperties} */ ({
+  flexShrink: 0,
+  // Narrower than the glyph's own box, which is fine: the six dots only ink the
+  // middle third of it. Every pixel in this slot is one the summary does not
+  // get, and the summary is the only part of the row carrying content.
+  width: 10,
+  // Pulls the badge back toward the grip: the row's 6px gap is right between
+  // the badge and the summary, but too wide between a handle and the number it
+  // belongs to.
+  marginRight: -3,
+  height: 20,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: TEXT_MUTED,
+});
+
+// The block row's `rowActionsStyle`, restated here rather than imported: the
+// editor kit does not reach up into `admin/`. Keep the two in step.
+const listItemActionsStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 2,
+  flexShrink: 0,
+  marginLeft: "auto",
+  width: 46,
 });
 
 /**
@@ -511,9 +520,11 @@ function indexBoxWidth(total) {
   return `max(20px, calc(${digits}ch + 10px))`;
 }
 
-// Gold index chip, tinted to keep this surface distinct from the Collection
-// editor. `boxSizing` is explicit because the width above includes the padding
-// and nothing in the drawer resets it.
+// The seat readout. Neutral, not tinted: the accent is spent on state and on
+// create actions, and an index is neither, so a list of ten of these used to
+// put ten accent chips in a panel that was otherwise saving the colour for
+// unsaved work. `boxSizing` is explicit because the width above includes the
+// padding and nothing in the drawer resets it.
 const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
   flexShrink: 0,
   boxSizing: "border-box",
@@ -522,11 +533,15 @@ const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
   alignItems: "center",
   justifyContent: "center",
   borderRadius: R_SM,
-  fontFamily: "ui-monospace, 'SF Mono', monospace",
+  fontFamily: FONT_SANS,
+  // The box is sized in `ch` (see `indexBoxWidth`), which only holds still if
+  // every digit is the same width. Mono gave that for free; the sans has to be
+  // told.
+  fontVariantNumeric: "tabular-nums",
   fontSize: dynamicSize(11),
   fontWeight: 600,
-  color: ACCENT,
-  background: `color-mix(in srgb, ${ACCENT} 12%, transparent)`,
+  color: TEXT_MUTED,
+  background: `color-mix(in srgb, var(--ins-text, #fff) 6%, transparent)`,
 });
 
 // The badge's own box, so typing a position never resizes the row. Only the
@@ -535,7 +550,8 @@ const listItemIndexInputStyle = /** @type {React.CSSProperties} */ ({
   ...listItemIndexStyle,
   padding: 0,
   border: 0,
-  background: `color-mix(in srgb, ${ACCENT} 26%, transparent)`,
+  color: ACCENT,
+  background: `color-mix(in srgb, ${ACCENT} 22%, transparent)`,
   textAlign: "center",
   outline: "none",
 });
@@ -554,7 +570,7 @@ const listItemSummaryStyle = /** @type {React.CSSProperties} */ ({
 
 const listItemSummaryEmptyStyle = /** @type {React.CSSProperties} */ ({
   ...listItemSummaryStyle,
-  color: TEXT_MUTED,
+  color: TEXT_FAINT,
   fontWeight: 400,
   fontStyle: "italic",
 });
@@ -573,18 +589,23 @@ const listItemIconStyle = /** @type {React.CSSProperties} */ ({
   padding: 0,
 });
 
+// Muted at rest, danger on hover (see `.inscribed-repeat-delete`). A row that
+// paints its delete red before anyone has reached for it reads as a warning
+// about the row itself.
 const listItemDangerStyle = /** @type {React.CSSProperties} */ ({
   ...listItemIconStyle,
-  color: STATUS_DANGER,
+  borderRadius: R_SM,
 });
 
-// Hung off a hairline under the badge column rather than closed in by a rule
-// above it: the badge sits at 6px with a 20px box, so the line lands at 15.5px
-// and reads as running down out of the number.
+// Hung off a guide under the badge column rather than closed in by a rule above
+// it. The badge starts at 13px (no inset, a 10px grip slot, then 3px) with a
+// 20px box, so the line lands at 23.5px and reads as running down out of the
+// number, the same way a block row's body drops out of its type glyph. Tone
+// matches that guide too: it says "open", never "changed".
 const listItemBodyStyle = /** @type {React.CSSProperties} */ ({
-  margin: "2px 0 6px 15px",
+  margin: "2px 0 6px 22px",
   padding: "2px 0 4px 14px",
-  borderLeft: `1px solid ${HAIRLINE}`,
+  borderLeft: `1px solid ${BORDER}`,
   display: "flex",
   flexDirection: "column",
   gap: 10,
@@ -596,11 +617,14 @@ const listFieldStyle = /** @type {React.CSSProperties} */ ({
   gap: 4,
 });
 
+// A row schema's field key, and it is a key, so it is mono like every other
+// label in the panel. It used to be the one sans caption left inside the Page
+// tab, which put three label languages in one column.
 const listFieldLabelStyle = /** @type {React.CSSProperties} */ ({
-  fontSize: dynamicSize(11),
+  fontFamily: FONT_SANS,
+  fontSize: dynamicSize(10.5),
   fontWeight: 500,
   color: TEXT_MUTED,
-  letterSpacing: "-0.005em",
 });
 
 // Border in longhand so hover can override `borderColor` alone, as on the cards.

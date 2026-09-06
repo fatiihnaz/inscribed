@@ -2,10 +2,13 @@
 /**
  * @file `BoolEditor`, which is a switch in two different rooms.
  *
- * In a collection form it is a settings row: caption on the left, switch on the
- * right. In the drawer the block card already names the field, so there is no
- * caption and the row must not survive as an empty column pushing the switch to
- * the far edge.
+ * Both rooms get the same control: the field frame, the value as a word, and
+ * the switch on the right edge. What changes is whether a caption sits above
+ * it — in the drawer the block card already names the field, so there is none.
+ *
+ * The switch used to ride the caller's label row with no frame at all, which
+ * made it the one control in the drawer that did not start where the others
+ * did.
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
 import React from "react";
@@ -23,19 +26,30 @@ afterEach(cleanup);
 const label = (/** @type {HTMLElement} */ container) => container.querySelector("label");
 
 describe("BoolEditor", () => {
-  it("lays out as a settings row when it carries its own caption", () => {
+  it("carries its caption above the control, not beside it", () => {
     const { container } = render(<BoolEditor value={false} onChange={() => {}} label="Yayında" />);
     expect(screen.getByText("Yayında")).toBeTruthy();
-    expect(label(container).style.justifyContent).toBe("space-between");
+    // The caption is a sibling of the frame, so the frame is free to be the
+    // same box every other field draws.
+    expect(label(container).contains(screen.getByText("Yayında"))).toBe(false);
   });
 
-  it("shrinks to the switch when the caption is somewhere else", () => {
-    const { container } = render(<BoolEditor value={false} onChange={() => {}} hideLabel />);
-    // No empty column left behind, and the label stops at the control rather
-    // than spanning the panel as an invisible toggle target.
-    expect(label(container).querySelector("div")).toBeNull();
-    expect(label(container).style.display).toBe("inline-flex");
-    expect(label(container).style.justifyContent).toBe("flex-start");
+  it("wears the field frame in both rooms", () => {
+    const { container: withCaption } = render(
+      <BoolEditor value={false} onChange={() => {}} label="Yayında" />,
+    );
+    const { container: bare } = render(<BoolEditor value={false} onChange={() => {}} hideLabel />);
+    for (const c of [withCaption, bare]) {
+      expect(label(c).className).toContain("inscribed-field");
+      expect(label(c).style.justifyContent).toBe("space-between");
+    }
+  });
+
+  it("says which end is on, so the track is never read alone", () => {
+    const { rerender } = render(<BoolEditor value={false} onChange={() => {}} hideLabel />);
+    expect(screen.getByText("editors.bool.off")).toBeTruthy();
+    rerender(<BoolEditor value onChange={() => {}} hideLabel />);
+    expect(screen.getByText("editors.bool.on")).toBeTruthy();
   });
 
   it("drops a caption it was given once hideLabel says so", () => {

@@ -60,6 +60,33 @@ async function mount() {
 const openValues = () =>
   /** @type {HTMLInputElement[]} */ (screen.queryAllByRole("textbox")).map((el) => el.value);
 
+/** Let a close animation finish before reading which cards are open. */
+const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 300)); });
+
+/**
+ * Drive a reorder the way the seat badge does: double-click the readout, type
+ * the destination, press Enter.
+ *
+ * @param {number} from  Zero-based row to pick up.
+ * @param {number} seat  One-based destination, as an editor would type it.
+ */
+async function moveToSeat(from, seat) {
+  // Found by shape rather than by copy: this file renders against the real
+  // string catalog, so an aria-label match would break on a wording change.
+  const badges = Array.from(document.querySelectorAll('span[role="button"]'))
+    .filter((el) => /^\d+$/.test(el.textContent?.trim() ?? ""));
+  // Two acts, not one: the readout only becomes an input once React has
+  // flushed, and inside a single act callback the DOM is still the old one.
+  await act(async () => { fireEvent.doubleClick(badges[from]); });
+  const input = /** @type {HTMLInputElement} */ (
+    document.querySelector('input[inputmode="numeric"]')
+  );
+  await act(async () => {
+    fireEvent.change(input, { target: { value: String(seat) } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  });
+}
+
 afterEach(cleanup);
 
 describe("open state through a reorder", () => {
@@ -69,10 +96,12 @@ describe("open state through a reorder", () => {
     fireEvent.click(screen.getByText("Ada"));
     expect(openValues()).toEqual(["Ada"]);
 
-    // Ada is first, so the only move available is down.
-    await act(async () => {
-      fireEvent.click(screen.getAllByLabelText("Move down")[0]);
-    });
+    // Ada is first; send her to seat 2 through the position field, which is
+    // now the only reorder path a test can drive (the other is a real drag).
+    await moveToSeat(0, 2);
+    // The body of the row that closed is still on screen while it folds, and
+    // AnimatePresence keeps its last tree, so a read taken mid-exit sees two.
+    await settle();
 
     expect(openValues()).toEqual(["Ada"]);
   });

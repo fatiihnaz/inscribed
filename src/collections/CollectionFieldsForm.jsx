@@ -7,6 +7,7 @@ import { seedValues } from "./record-payload.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { fieldVariant } from "../editors/styles.js";
 import { ObjectArrayEditor } from "../editors/ObjectArrayEditor.jsx";
+import { FieldMessage } from "../editors/FieldMessage.jsx";
 import { FieldShell } from "../editors/fields/FieldShell.jsx";
 import { TextEditor } from "../editors/fields/TextEditor.jsx";
 import { NumberEditor } from "../editors/fields/NumberEditor.jsx";
@@ -194,7 +195,7 @@ function FieldInput({ field, value, onChange, disabled, variant }) {
     case "RichText":
       return (
         <FieldShell {...shell} as="div">
-          <Suspense fallback={<div style={palette.help}>{t("collections.editorLoading")}</div>}>
+          <Suspense fallback={<FieldMessage>{t("collections.editorLoading")}</FieldMessage>}>
             <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel />
           </Suspense>
         </FieldShell>

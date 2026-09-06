@@ -13,6 +13,11 @@
  * vocabulary hold `{ slug, label }` pairs rather than plain strings, so the list
  * is normalised on the way in and only strings are ever written back.
  *
+ * The well caps at `VISIBLE_CAP` entries. A tag list is the one field here with
+ * no natural ceiling (the adder takes a pasted block of lines in one go), and
+ * an uncapped one pushes every field under it off the panel. The rest collapse
+ * behind a single counting chip, which is also the control that opens them.
+ *
  * Wording still comes from the `collections.*` catalog, which is where this
  * editor grew up; the keys move when the two catalogs are reorganised.
  */
@@ -34,11 +39,24 @@ import { choiceLabel, choiceSlug } from "../../shared/util/choice-value.js";
  * }} props
  *   `itemLabel` names one entry ("Etiket"), for the adder's placeholder.
  */
+/**
+ * Roughly three rows at the drawer's width. Past this the well stops being a
+ * field and starts being the page.
+ */
+const VISIBLE_CAP = 12;
+
 export function StringArrayEditor({ value, onChange, itemLabel, disabled, variant }) {
   const t = useCmsStrings();
   const v = fieldVariant(variant);
   const entries = Array.isArray(value) ? value : [];
   const items = entries.map(choiceSlug);
+  const [expanded, setExpanded] = useState(false);
+
+  const hidden = Math.max(0, entries.length - VISIBLE_CAP);
+  // Collapsing back below the cap must not leave the well stuck open on a
+  // count that no longer exists.
+  const isExpanded = expanded && hidden > 0;
+  const shown = hidden > 0 && !isExpanded ? entries.slice(0, VISIBLE_CAP) : entries;
 
   /**
    * Adding the same entry twice is never what the editor meant, so a duplicate
@@ -59,7 +77,7 @@ export function StringArrayEditor({ value, onChange, itemLabel, disabled, varian
         <div style={noItemsStyle}>{t("collections.noItems")}</div>
       ) : (
         <div style={chipRowStyle}>
-          {entries.map((entry, i) => (
+          {shown.map((entry, i) => (
             <span key={i} className={`inscribed-chip ${v.className}`.trim()}>
               {choiceLabel(entry)}
               {!disabled && (
@@ -75,6 +93,16 @@ export function StringArrayEditor({ value, onChange, itemLabel, disabled, varian
               )}
             </span>
           ))}
+
+          {hidden > 0 ? (
+            <button
+              type="button"
+              className={`inscribed-chip inscribed-chip-more ${v.className}`.trim()}
+              onClick={() => setExpanded(!isExpanded)}
+            >
+              {isExpanded ? t("editors.tags.less") : t("editors.tags.more", { count: hidden })}
+            </button>
+          ) : null}
         </div>
       )}
 

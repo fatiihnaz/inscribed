@@ -22,7 +22,7 @@ import {
   ACCENT, ACCENT_SOFT, ACCENT_LINE, ACCENT_GLOW, FOCUS_RING,
   COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE,
   STATUS_WARN, STATUS_DANGER,
-  FONT_SANS, FONT_MONO,
+  FONT_SANS,
   TYPE_META, dynamicSize,
 } from "../shared/style/tokens.js";
 
@@ -347,14 +347,28 @@ export const tabDirtyDotStyle = {
 // Toolbar (search)
 // ---------------------------------------------------------------------------
 
+// A row, stated: the search box is the only thing here that flexes, and
+// without a flex context the switches beside it wrapped onto a line of their
+// own under it.
 export const toolbarStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
   padding: "10px 16px 6px",
 };
 
 // Base background + box-shadow set in CSS (`.inscribed-search`) so the
 // `:focus-within` rule can swap them.
+//
+// `flex: 1` belongs here, not only on the input inside it: the toolbar is a
+// flex row, so without it the box shrink-wraps its placeholder and the switches
+// beside it slide in against the text. It takes whatever the row has left, and
+// `minWidth: 0` is what lets it give that width back on a narrow panel instead
+// of pushing the switches off the edge.
 export const searchWrapStyle = {
   position: "relative",
+  flex: 1,
+  minWidth: 0,
   display: "flex",
   alignItems: "center",
   gap: 8,
@@ -374,6 +388,32 @@ export const searchInputStyle = {
   color: TEXT_HI,
   padding: 0,
   fontFamily: "inherit",
+};
+
+// The two switches beside the search box: narrow to changed blocks, and shut
+// every row down to its one-line value. Square-ish, at the search box's height,
+// so the toolbar reads as one strip rather than a box with buttons after it.
+// Colour and the pressed fill live on `.inscribed-tool-btn` so the states can
+// swap them.
+export const toolButtonStyle = {
+  height: 30,
+  minWidth: 30,
+  padding: "0 8px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 5,
+  border: 0,
+  borderRadius: R_BTN,
+  cursor: "pointer",
+  flexShrink: 0,
+};
+
+export const toolCountStyle = {
+  fontSize: dynamicSize(11),
+  fontWeight: 500,
+  lineHeight: 1,
+  fontVariantNumeric: "tabular-nums",
 };
 
 // Base color + background live on `.inscribed-search-clear` so the
@@ -418,7 +458,7 @@ export const groupNameStyle = {
   fontWeight: 500,
   fontSize: dynamicSize(12),
   lineHeight: 1,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   color: TEXT,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -466,18 +506,22 @@ export const groupBodyStyle = {
   paddingBottom: 8,
 };
 
-// Group spine: a hairline living in the rows' existing left padding (the gutter
-// left of the type-icon column), so it ties the children to the header without
-// indenting them. Absolute on purpose: children keep their own editor rails, so
-// nothing double-indents. `left` matches the header label's left edge (its 6px
-// padding) so the line drops straight from under the group name.
+// Group spine, living in the rows' existing left padding (the gutter left of
+// the type-icon column) so it ties the children to the header without indenting
+// them. Absolute on purpose: children keep their own editor rails, so nothing
+// double-indents.
+//
+// `left` is the centre of the header's folder glyph, not its left edge: every
+// guide in the panel drops out of the middle of the glyph above it, and the
+// rail was the one that didn't. Tone matches `rowGuideBodyStyle` for the same
+// reason.
 export const groupRailStyle = {
   position: "absolute",
-  left: 6,
+  left: 12,
   top: 2,
   bottom: 6,
   width: 1,
-  background: HAIRLINE,
+  background: BORDER,
   borderRadius: 1,
   pointerEvents: "none",
 };
@@ -551,12 +595,17 @@ export const rowHeaderStyle = {
   color: "inherit",
 };
 
-// Body indented under the header by a hairline guide, centred beneath the
-// glyph column, so an open row still reads as part of its header.
+// Body indented under the header by a guide, centred beneath the glyph column,
+// so an open row still reads as part of its header.
+//
+// The guide says "open", never "changed": the glyph it drops out of already
+// carries the row's state, and running the accent down 200px of hairline spends
+// it on one bit of information. One step up the neutral ramp (hairline ->
+// border) is all a body needs to read as tied to its header.
 export const rowGuideBodyStyle = {
   margin: "4px 0 4px 9px",
   padding: "4px 0 6px 14px",
-  borderLeft: `1px solid ${HAIRLINE}`,
+  borderLeft: `1px solid ${BORDER}`,
   display: "flex",
   flexDirection: "column",
   gap: 10,
@@ -569,11 +618,31 @@ export const rowPathStyle = {
   fontWeight: 500,
   fontSize: dynamicSize(11),
   lineHeight: 1.2,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   color: TEXT_MID,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
+};
+
+// Unsaved marker for surfaces that have nowhere better to put it (the
+// collections list). A block row does not use it: there the type glyph carries
+// the state, so a dot beside the label would say it twice and, mounting only
+// once the row is dirty, would resize the label on the first keystroke.
+// A row that navigates instead of disclosing: the collection references above
+// the block list. It is one element playing the parts a block row splits over
+// two, so it takes the header's layout and states the container's box itself.
+//
+// Spreading `rowContainerStyle` and `rowHeaderStyle` over each other does NOT
+// work and is why this lives here: the container lays out a column and the
+// header never says otherwise, so the glyph, the label and the chevron stack.
+// The padding is a top-level block row's (`rowInsetStyle` with `topLevel`), so
+// a reference and a block start their label on the same vertical.
+export const refRowStyle = {
+  ...rowHeaderStyle,
+  padding: "6px 12px 6px 6px",
+  borderRadius: R_MD,
+  cursor: "pointer",
 };
 
 export const dirtyDotStyle = {
@@ -583,6 +652,19 @@ export const dirtyDotStyle = {
   background: ACCENT,
   boxShadow: `0 0 5px ${ACCENT_GLOW}`,
   flexShrink: 0,
+};
+
+// Trailing controls of a row (undo, chevron). Fixed width, whether or not
+// anything is in it: these mount and unmount with state, and a lane that sizes
+// to its contents hands the label a different width on every one of those
+// changes. Sized to undo + chevron, which is the most it ever holds.
+export const rowActionsStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 2,
+  flexShrink: 0,
+  width: 46,
 };
 
 // Base color + background live on `.inscribed-icon-button` so the
@@ -610,10 +692,6 @@ export const typeIconStyle = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  fontWeight: 600,
-  fontSize: dynamicSize(11),
-  lineHeight: 1,
-  fontFamily: FONT_MONO,
 };
 
 // Legacy typeChipStyle kept for any caller that still imports it.
@@ -1059,6 +1137,23 @@ export const panelCss = `
   }
   .inscribed-search-clear:hover { color: ${TEXT}; }
 
+  /* Toolbar switches. They wear the search box's resting surface so the strip
+     reads as one control group; pressed is the accent, because a filter left on
+     is a thing the editor needs to remember is on. */
+  .inscribed-tool-btn {
+    background: ${SURFACE_1};
+    box-shadow: inset 0 0 0 1px ${HAIRLINE};
+    color: ${TEXT_MUTED};
+    transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  }
+  .inscribed-tool-btn:hover:not(:disabled) { color: ${TEXT}; background: ${SURFACE_2}; }
+  .inscribed-tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .inscribed-tool-btn.is-on {
+    color: ${ACCENT};
+    background: ${ACCENT_SOFT};
+    box-shadow: inset 0 0 0 1px ${ACCENT_LINE};
+  }
+
   /* Body collapse: height 0 to auto via interpolate-size. */
   .inscribed-collapse {
     height: 0;
@@ -1242,6 +1337,10 @@ export const panelCss = `
      in the product. It still lifts, just by less, so the row keeps its own
      internal order rather than being pinned at desktop density. */
   @media ${MOBILE_QUERY} {
+    /* A dimmed square with nothing in it is a placeholder for a filter that has
+       nothing to filter. On a phone that width belongs to the search box. */
+    .inscribed-tool-btn.is-idle { display: none; }
+
     .inscribed-collection-list { --ins-fs-scale: ${FS_SCALE_LIST}; }
   }
 
@@ -1476,15 +1575,17 @@ export const panelCss = `
 
   /* Page-side collection reference rows: neutral at rest, collection-tinted on
      hover, matching the region panel's "+ Yeni" row. */
+  /* A reference wears the block row's shell, so it drops the outlined box it
+     used to carry: this panel shows hierarchy with flow, not with cards. What
+     is left to say is that it is a container you enter, and the drawer already
+     fills a container's header on hover. */
   .inscribed-collection-ref {
     background: transparent;
-    box-shadow: inset 0 0 0 1px ${HAIRLINE};
-    transition: background 140ms ease, box-shadow 140ms ease;
+    transition: background 140ms ease;
   }
-  .inscribed-collection-ref:hover {
-    background: ${COLLECTION_SOFT};
-    box-shadow: inset 0 0 0 1px ${COLLECTION_LINE};
-  }
+  .inscribed-collection-ref:hover { background: ${COLLECTION_SOFT}; }
+  .inscribed-collection-ref:hover .inscribed-row-label,
+  .inscribed-collection-ref:hover .inscribed-row-chevron { color: ${TEXT}; }
 
   /* Menu (the toolbar's sort/language pickers). The selected row keeps the
      collection accent on hover, so hovering never reads as reselecting. */

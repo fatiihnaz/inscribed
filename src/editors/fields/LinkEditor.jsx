@@ -16,7 +16,7 @@
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { looksLikeAddress } from "../../shared/util/url.js";
 import { Link as LinkIcon, TypeShortText } from "../../shared/style/icons.jsx";
-import { STATUS_WARN, FS_XS } from "../../shared/style/tokens.js";
+import { FieldMessage } from "../FieldMessage.jsx";
 import { FieldShell } from "./FieldShell.jsx";
 import { fieldVariant } from "../styles.js";
 
@@ -81,7 +81,7 @@ export function LinkEditor({ value, onChange, disabled, label, help, variant }) 
           </Row>
         </div>
 
-        {suspect ? <span style={warnStyle}>{t("editors.url.suspect")}</span> : null}
+        {suspect ? <FieldMessage tone="warn">{t("editors.url.suspect")}</FieldMessage> : null}
       </div>
     </FieldShell>
   );
@@ -119,4 +119,3 @@ const iconStyle = /** @type {React.CSSProperties} */ ({
 
 const inputStyle = /** @type {React.CSSProperties} */ ({ paddingLeft: 34 });
 
-const warnStyle = { color: STATUS_WARN, fontSize: FS_XS, lineHeight: 1.45 };

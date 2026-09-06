@@ -161,7 +161,7 @@ const localeBadgeStyle = /** @type {React.CSSProperties} */ ({
   fontWeight: 600,
   fontSize: dynamicSize(10),
   lineHeight: 1.4,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   letterSpacing: "0.06em",
   flexShrink: 0,
 });
@@ -1127,6 +1127,8 @@ function SoloValue({ blockType, value, tone }) {
       return <img src={src} alt={value?.alt ?? ""} style={imageThumbStyle} />;
     }
     default:
+      // A serialized value, not a label: this is the one thing left in the
+      // panel that mono is still the right face for.
       return <span style={{ ...wrap, fontFamily: FONT_MONO, fontSize: 11 }}>{stableStringify(value)}</span>;
   }
 }
@@ -1176,7 +1178,7 @@ const lineDiffWrapStyle = /** @type {React.CSSProperties} */ ({
   borderRadius: RADIUS_SM,
   background: SURFACE_1,
   overflow: "hidden",
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   fontSize: dynamicSize(11.5),
   lineHeight: 1.6,
 });
@@ -1254,7 +1256,7 @@ const collapsedSpanStyle = /** @type {React.CSSProperties} */ ({
   borderRadius: 3,
   background: "rgba(255,255,255,0.04)",
   color: TEXT_FAINT,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   fontSize: dynamicSize(10),
   letterSpacing: "0.04em",
   verticalAlign: "middle",
@@ -1317,7 +1319,7 @@ const arrowDiffStyle = /** @type {React.CSSProperties} */ ({
 
 const arrowStyle = /** @type {React.CSSProperties} */ ({
   color: TEXT_MUTED,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
 });
 
 const imageRowStyle = /** @type {React.CSSProperties} */ ({
@@ -1392,7 +1394,7 @@ const listItemHeaderStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   fontSize: dynamicSize(11),
   color: TEXT_MUTED,
 });
@@ -1401,7 +1403,7 @@ const listItemIndexStyle = /** @type {React.CSSProperties} */ ({
 function listItemGlyphStyle(kind) {
   const tone = toneForKind(kind);
   return /** @type {React.CSSProperties} */ ({
-    fontFamily: FONT_MONO,
+    fontFamily: FONT_SANS,
     fontSize: dynamicSize(13),
     fontWeight: 600,
     color: tone,
@@ -1435,7 +1437,7 @@ const fieldRowStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const fieldLabelStyle = /** @type {React.CSSProperties} */ ({
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   fontSize: dynamicSize(10),
   letterSpacing: "0.04em",
   color: TEXT_MUTED,
@@ -1444,7 +1446,7 @@ const fieldLabelStyle = /** @type {React.CSSProperties} */ ({
 /** @param {string} tone */
 function fallbackJsonStyle(tone) {
   return /** @type {React.CSSProperties} */ ({
-    fontFamily: FONT_MONO,
+    fontFamily: FONT_SANS,
     fontSize: dynamicSize(11),
     color: tone === DIFF_ADDED || tone === DIFF_REMOVED ? tone : TEXT,
     background: tone === DIFF_ADDED || tone === DIFF_REMOVED

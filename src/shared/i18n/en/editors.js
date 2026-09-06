@@ -18,7 +18,6 @@ export const editors = Object.freeze({
   "editors.image.drop": "Drop it here",
   "editors.image.uploading": "Uploading {percent}%",
   "editors.image.processing": "Processing…",
-  "editors.image.dismissError": "Dismiss the error",
   "editors.image.url": "Image URL",
   "editors.image.alt": "Alt text",
   "editors.image.altPlaceholder": "Describe the image",
@@ -42,8 +41,6 @@ export const editors = Object.freeze({
   "editors.list.empty": "This list is empty. Start with the \"+ Add item\" button.",
   "editors.list.addItem": "Add item",
   "editors.list.emptyItem": "Empty item",
-  "editors.list.moveUp": "Move up",
-  "editors.list.moveDown": "Move down",
   "editors.list.delete": "Delete",
   "editors.list.unsupportedField": "The {type} type is not supported in a list itemSchema.",
 
@@ -104,4 +101,15 @@ export const editors = Object.freeze({
   "editors.combobox.nextPage": "Next page",
   "editors.combobox.noSource": "This field has no choice source. Is it declared on the page?",
   "editors.combobox.create": "Add \"{text}\"",
+
+  // The switch reads its own state back in words: it now sits inside the field
+  // frame like every other control, and a bare track with nothing beside it
+  // makes the reader work out which end is on.
+  "editors.bool.on": "Yes",
+  "editors.bool.off": "No",
+
+  // A tag well caps at a few rows so a field with forty entries cannot take the
+  // whole panel; the rest collapse behind one counting chip.
+  "editors.tags.more": "+{count} more",
+  "editors.tags.less": "Show fewer",
 });

@@ -3,15 +3,18 @@
 /**
  * @file One block row in the drawer's block list, weight-dispatched:
  *
- * Field-weight types (ShortText/LongText/Date/Link) render as
- * `FieldRow` — an always-open labeled form field (mono path label + editor),
- * no collapse chrome. Heavy types (RichText/Image/ObjectArray/Collection/unknown)
- * stay collapsible cards whose closed header shows a value preview.
+ * Every type renders the same `BlockRow`: glyph, mono blockPath, value preview,
+ * then the editor behind a disclosure. Weight only picks the resting state —
+ * field-weight types (ShortText/Number/Bool/Date/Link/…) start open, heavy ones
+ * (RichText/Image/ObjectArray/unknown) start shut — and the drawer's density
+ * switch overrides even that.
  *
  * Card header (left to right): TypeIcon badge, mono blockPath, value preview
- * (closed only), (when dirty) sage dot + Undo, chevron. Bodies slide via
- * `.inscribed-collapse`; Collection bodies stay mounted across collapse so the
- * inner `useCollectionItem` fetch isn't replayed on reopen.
+ * (closed only), then a fixed-width action lane holding Undo (when dirty) and
+ * the chevron. State (dirty, locked) is a colour on the badge, not a mark of
+ * its own: see `rowTone`. Bodies slide via `.inscribed-collapse`; Collection
+ * bodies stay mounted across collapse so the inner `useCollectionItem` fetch
+ * isn't replayed on reopen.
  *
  * Collection blocks get a dedicated lane in `CollectionBlockCard.jsx`, loaded
  * lazily: it is the drawer's only reach into the collections layer, so an app
@@ -20,8 +23,6 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Undo2, Lock } from "../shared/style/icons.jsx";
-
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useInert } from "../shared/ui/use-inert.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
@@ -29,33 +30,30 @@ import { useStoreSelector } from "../shared/state/store.js";
 import { isBlockDirty, resolveBlockValue } from "../core/resolve.js";
 
 import { FieldEditor } from "../editors/FieldEditor.jsx";
+import { FieldMessage } from "../editors/FieldMessage.jsx";
 import { ListEditor } from "../editors/ListEditor.jsx";
 import { BlockConflictNotice } from "./BlockConflictNotice.jsx";
 import { TranslationPrompt } from "./TranslationPrompt.jsx";
-import { CardHeader, TypeIcon, disclosureBodyStyle, disclosureRowStyle, fieldPathStyle, rowClassName, rowInsetStyle } from "./block-card-chrome.jsx";
-import { blockResetStyle, dirtyDotStyle } from "./drawer-styles.js";
-import { TEXT_MUTED, HAIRLINE, R_MD } from "../shared/style/tokens.js";
+import { CardHeader, disclosureBodyStyle, disclosureRowStyle, rowClassName, rowInsetStyle } from "./block-card-chrome.jsx";
 
 const CollectionLane = dynamic(
   () => import("./CollectionBlockCard.jsx").then((m) => m.CollectionLane),
   { ssr: false },
 );
 
-// Field-weight types: a single light editor, rendered always-open as a form
-// field. Everything else (RichText/Image/ObjectArray/Collection/unknown) keeps
-// the collapsible card surface.
+// Field-weight types: a single light editor, rendered as an always-open form
+// field. Everything else (RichText/Image/ObjectArray/Collection/unknown) opens
+// on a disclosure.
+//
+// This picks the row's default openness, not its shape: both lanes wear the
+// same shell now, so a type moving between the two changes when its editor is
+// on screen and nothing else.
 //
 // Listed rather than derived by exclusion so a type this build has never heard
-// of still lands on the card lane, where there is a message for it. The scalars
-// added since (Number, Bool, Url, Select) were never added here, which left a
-// boolean wearing a disclosure card and a chevron to reach one switch.
+// of still lands on the card lane, where there is a message for it.
 const INLINE_TYPES = new Set([
   "ShortText", "LongText", "Number", "Bool", "Url", "Date", "Link", "Select", "StringArray",
 ]);
-
-// A switch is the whole control and it is small, so it rides the label row the
-// way a setting does instead of opening a line of its own under the caption.
-const INLINE_CONTROL_TYPES = new Set(["Bool"]);
 
 /**
  * @import { BlockResponse, ItemSchema } from "../shared/contracts/schemas.js"
@@ -150,158 +148,18 @@ export const BlockCard = memo(function BlockCard(props) {
       />
     );
   }
-  if (INLINE_TYPES.has(props.block.blockType)) {
-    return <FieldRow {...props} />;
-  }
-  return <RegularBlockCard {...props} />;
+  return <BlockRow {...props} defaultOpen={INLINE_TYPES.has(props.block.blockType)} />;
 });
 
 /**
- * Always-open form field for field-weight blocks: mono path label on top
- * (dirty dot + undo + lock live on the label row), the editor below. Active
- * state (page region clicked) scrolls into view and lights the left rail via
- * `.is-active`.
+ * One block row. Both lanes are this component: the weight only decides whether
+ * the editor is on screen at rest, and the density switch overrides even that.
  *
- * @param {{
- *   block: BlockResponse,
- *   isActive: boolean,
- *   readOnly?: boolean,
- *   topLevel: boolean,
- *   displayPath?: string,
- * }} props
- */
-function FieldRow({ block, isActive, readOnly, topLevel, displayPath }) {
-  const t = useCmsStrings();
-  const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
-  const {
-    draft, hasDraft, hasConflict, onChange, onReset, onFocus, onTakeTheirs, onKeepMine,
-  } = useBlockDraft(block);
-
-  const effective = resolveBlockValue(block);
-  const value = resolveBlockValue(block, hasDraft, draft);
-  const isDirty = !readOnly && isBlockDirty(block, hasDraft, draft);
-  const choices = useChoiceEntry(block.blockPath);
-  const onRow = INLINE_CONTROL_TYPES.has(block.blockType);
-
-  useEffect(() => {
-    if (isActive && ref.current) {
-      ref.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }, [isActive]);
-
-  const editor = (
-    <FieldEditor
-      blockType={block.blockType}
-      value={value}
-      onChange={onChange}
-      disabled={readOnly}
-      source={choices?.source ?? null}
-      allowCustom={choices?.allowCustom}
-      hideLabel
-    />
-  );
-
-  return (
-    <div
-      ref={ref}
-      className={`inscribed-field-row${isActive ? " is-active" : ""}`}
-      style={rowInsetStyle(fieldRowStyle, topLevel)}
-      onMouseDown={onFocus}
-    >
-      <div style={fieldLabelRowStyle}>
-        <TypeIcon type={block.blockType} compact={topLevel} />
-        <span style={fieldPathStyle} title={block.blockPath}>{displayPath ?? block.blockPath}</span>
-        {isDirty ? (
-          <span style={dirtyDotStyle} aria-label={t("block.unsavedDot")} />
-        ) : null}
-        {isDirty ? (
-          <button
-            type="button"
-            onClick={onReset}
-            className="inscribed-icon-button"
-            style={blockResetStyle}
-            aria-label={t("block.undoThis")}
-            title={t("block.undo")}
-          >
-            <Undo2 size={13} />
-          </button>
-        ) : null}
-        {readOnly ? (
-          <span
-            style={{ display: "inline-flex", color: TEXT_MUTED }}
-            title={t("block.readOnlyTitle")}
-            aria-label={t("block.readOnly")}
-          >
-            <Lock size={12} />
-          </span>
-        ) : null}
-        {onRow ? editor : null}
-      </div>
-      {/* Plain boxes. The notices animate their own height, so the editor
-          between them travels by ordinary reflow. A `layout` projection here
-          animated every positional delta instead of only that one, which is
-          what made these cards drift up and down on a route change: global
-          blocks keep their identity across pages, so the projection measured
-          the previous page's position and slid them to the new one. */}
-      {/* With the control on the label row the guide body has nothing to hold,
-          so it only appears when a conflict needs somewhere to go. */}
-      {onRow && !hasConflict ? null : (
-        <div style={fieldEditorWrapStyle}>
-          <BlockConflictNotice
-            show={hasConflict}
-            block={block}
-            draft={value}
-            onTakeTheirs={onTakeTheirs}
-            onKeepMine={onKeepMine}
-          />
-          <div style={editorSlotStyle}>
-            {onRow ? null : editor}
-            <TranslationPrompt block={block} value={value} readOnly={readOnly} />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// No negative margins: group bodies clip via the collapse wrapper's
-// `overflow: hidden`, so an overhanging row gets sheared at both sides. The
-// 12px padding doubles as the active ring's cushion around label + editor.
-const fieldRowStyle = /** @type {React.CSSProperties} */ ({
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-  padding: "6px 12px 8px",
-  borderRadius: R_MD,
-});
-
-const fieldLabelRowStyle = /** @type {React.CSSProperties} */ ({
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  minHeight: 22,
-});
-
-// Same guide-line geometry as disclosureBodyStyle (line centred under the
-// 20px icon), so open fields and opened heavy blocks indent identically.
-const fieldEditorWrapStyle = /** @type {React.CSSProperties} */ ({
-  margin: "0 0 0 9px",
-  padding: "2px 0 2px 14px",
-  borderLeft: `1px solid ${HAIRLINE}`,
-  display: "flex",
-  flexDirection: "column",
-});
-
-// Transparent slot whose only job is to give the editor a projected box, so it
-// travels when the conflict panel above it comes and goes. Inherits the column
-// flow it replaces, so nothing about the editor's own layout changes.
-const editorSlotStyle = /** @type {React.CSSProperties} */ ({
-  display: "flex",
-  flexDirection: "column",
-  minWidth: 0,
-});
-
-/**
+ * It used to be two near-copies. `FieldRow` drew its own label line and hung an
+ * always-open editor off it, `RegularBlockCard` used `CardHeader` and a
+ * disclosure, and the two drifted: only one could be collapsed, only one showed
+ * a value preview, and each spaced its body a couple of pixels differently.
+ *
  * @param {{
  *   block: BlockResponse,
  *   isActive: boolean,
@@ -309,29 +167,43 @@ const editorSlotStyle = /** @type {React.CSSProperties} */ ({
  *   readOnly?: boolean,
  *   topLevel: boolean,
  *   displayPath?: string,
+ *   density?: "comfortable" | "compact",
+ *   defaultOpen: boolean,
  * }} props
  */
-function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, displayPath }) {
+function BlockRow({
+  block, isActive, itemSchema, readOnly, topLevel, displayPath, density, defaultOpen,
+}) {
   const t = useCmsStrings();
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
   const {
     draft, hasDraft, hasConflict, onChange, onReset, onFocus, onTakeTheirs, onKeepMine,
   } = useBlockDraft(block);
 
-  const effective = resolveBlockValue(block);
   const value = resolveBlockValue(block, hasDraft, draft);
   // A read-only block carries no dirty state to surface, so suppress the
-  // dot/reset/rail and let it read as a passive, locked view.
+  // undo and the accent and let it read as a passive, locked view.
   const isDirty = !readOnly && isBlockDirty(block, hasDraft, draft);
-
   const choices = useChoiceEntry(block.blockPath);
-  const [isOpen, setIsOpen] = useState(false);
+
+  const restingOpen = density === "compact" ? false : defaultOpen;
+  const [isOpen, setIsOpen] = useState(restingOpen);
+
+  // Density is a page-wide instruction, so it overrides whatever each row was
+  // left at. Adjusted during render rather than in an effect: an effect would
+  // also fire on mount, and a `setState` there costs every card an extra render
+  // per keystroke even though it only ever re-sets the value it already had.
+  const [seenDensity, setSeenDensity] = useState(density);
+  if (density !== seenDensity) {
+    setSeenDensity(density);
+    setIsOpen(restingOpen);
+  }
 
   useEffect(() => {
     if (isActive) setIsOpen(true);
   }, [isActive]);
 
-  // A conflict is waiting on a decision that lives in the body, so a shut card
+  // A conflict is waiting on a decision that lives in the body, so a shut row
   // would hide the thing the banner just sent the user to.
   useEffect(() => {
     if (hasConflict) setIsOpen(true);
@@ -373,7 +245,7 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
         aria-hidden={!isOpen}
         onMouseDown={onFocus}
       >
-        {/* Plain, as in `FieldRow`: the notices carry their own height, and the
+        {/* Plain boxes: the notices carry their own height, and the
             `.inscribed-collapse` above already animates this body opening. A
             projection inside a collapsing box measured against a clipped height
             and fought it. */}
@@ -387,6 +259,9 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
           />
           <div style={editorSlotStyle}>
             {renderEditor(block, value, onChange, itemSchema, readOnly, t, choices)}
+            {/* The padlock in the gutter says the field is locked; this says
+                why, which is the part an editor can act on. */}
+            {readOnly ? <FieldMessage>{t("block.readOnlyTitle")}</FieldMessage> : null}
             <TranslationPrompt block={block} value={value} readOnly={readOnly} />
           </div>
         </div>
@@ -395,12 +270,26 @@ function RegularBlockCard({ block, isActive, itemSchema, readOnly, topLevel, dis
   );
 }
 
+// Transparent slot whose only job is to give the editor a projected box, so it
+// travels when the conflict panel above it comes and goes. Inherits the column
+// flow it replaces, so nothing about the editor's own layout changes.
+const editorSlotStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  flexDirection: "column",
+  minWidth: 0,
+});
+
 /**
- * One-line value summary for a closed heavy card. Returns null when there is
- * nothing meaningful to show (the header then stays as-is).
+ * One-line value summary for a closed row, which every type can now be: with
+ * the density switch on, the preview is the only thing a field shows, so a type
+ * with no case here reads as empty when it is full.
+ *
+ * Returns null when there is genuinely nothing to show; the header then says so
+ * in the panel's own voice.
  *
  * @param {string} blockType
  * @param {*} value
+ * @param {(key: string, vars?: Record<string, *>) => string} t
  * @returns {string | null}
  */
 function blockPreview(blockType, value, t) {
@@ -421,8 +310,37 @@ function blockPreview(blockType, value, t) {
     }
     case "ObjectArray":
       return Array.isArray(value) ? t("block.items", { count: value.length }) : null;
+    case "Bool":
+      // Only a set boolean previews. `null` here means nobody has answered,
+      // which is not the same statement as "No".
+      return typeof value === "boolean"
+        ? t(value ? "editors.bool.on" : "editors.bool.off")
+        : null;
+    case "Number":
+      return typeof value === "number" && Number.isFinite(value) ? String(value) : null;
+    case "Link": {
+      if (!value || typeof value !== "object") return null;
+      // The text a visitor reads comes first; the address is the fallback for a
+      // link nobody has titled yet.
+      return value.label || value.href || null;
+    }
+    case "Date": {
+      if (typeof value !== "string" || !value) return null;
+      const at = new Date(value);
+      // An unparseable string is still what the field holds, so it shows rather
+      // than reading as empty. A raw ISO stamp is not, which is why a valid one
+      // is formatted.
+      if (Number.isNaN(at.getTime())) return value;
+      return at.toLocaleDateString();
+    }
+    case "StringArray":
+      return Array.isArray(value) && value.length
+        ? value.map((x) => (typeof x === "string" ? x : x?.label ?? x?.slug ?? "")).join(" · ")
+        : null;
     default:
-      return null;
+      // The scalars left (ShortText, LongText, Url, Select) are their own
+      // preview.
+      return typeof value === "string" && value.trim() ? value : null;
   }
 }
 
@@ -465,11 +383,10 @@ function renderEditor(block, value, onChange, itemSchema, readOnly, t, choices) 
     disabled: readOnly,
     source: choices?.source ?? null,
     allowCustom: choices?.allowCustom,
+    // The row above already names the field. Without this every heavy card
+    // printed a second caption under the mono path, in a different face.
+    hideLabel: true,
   });
   if (primitive) return primitive;
-  return (
-    <div style={{ color: TEXT_MUTED, fontSize: 12 }}>
-      {t("block.noEditor", { type: block.blockType })}
-    </div>
-  );
+  return <FieldMessage tone="warn">{t("block.noEditor", { type: block.blockType })}</FieldMessage>;
 }

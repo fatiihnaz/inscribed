@@ -14,7 +14,7 @@ import { FieldShell } from "./FieldShell.jsx";
 import { fieldVariant } from "../styles.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { looksLikeAddress } from "../../shared/util/url.js";
-import { STATUS_WARN, FS_XS } from "../../shared/style/tokens.js";
+import { FieldMessage } from "../FieldMessage.jsx";
 
 /**
  * @param {{
@@ -43,12 +43,8 @@ export function UrlEditor({ value, onChange, disabled, label, help, variant }) {
         spellCheck={false}
         className={`inscribed-field ${v.className}`.trim()}
       />
-      {suspect ? (
-        <span style={warnStyle}>{t("editors.url.suspect")}</span>
-      ) : null}
+      {suspect ? <FieldMessage tone="warn">{t("editors.url.suspect")}</FieldMessage> : null}
     </FieldShell>
   );
 }
 
-
-const warnStyle = { color: STATUS_WARN, fontSize: FS_XS, lineHeight: 1.45 };

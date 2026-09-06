@@ -20,7 +20,7 @@ import { BoolEditor } from "./fields/BoolEditor.jsx";
 import { UrlEditor } from "./fields/UrlEditor.jsx";
 import { SelectEditor } from "./fields/SelectEditor.jsx";
 import { StringArrayEditor } from "./fields/StringArrayEditor.jsx";
-import { TEXT_MUTED, dynamicSize } from "../shared/style/tokens.js";
+import { FieldMessage } from "./FieldMessage.jsx";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 
 // Lazy so the heavy TipTap dep stays out of the eager drawer chunk; fetched the
@@ -83,19 +83,11 @@ export function FieldEditor({ blockType, value, onChange, disabled, hideLabel, s
  */
 function RichTextLoading() {
   const t = useCmsStrings();
-  return (
-    <div style={{ fontSize: dynamicSize(12), color: TEXT_MUTED, padding: "4px 0" }}>
-      {t("editors.richText.loading")}
-    </div>
-  );
+  return <FieldMessage>{t("editors.richText.loading")}</FieldMessage>;
 }
 
 /** Same shape of hint `ListEditor` shows when its row schema never arrived. */
 function MissingSource() {
   const t = useCmsStrings();
-  return (
-    <div style={{ fontSize: dynamicSize(12), color: TEXT_MUTED, padding: "4px 0" }}>
-      {t("editors.combobox.noSource")}
-    </div>
-  );
+  return <FieldMessage tone="warn">{t("editors.combobox.noSource")}</FieldMessage>;
 }

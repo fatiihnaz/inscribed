@@ -15,7 +15,7 @@ import { buttonBaseStyle, btnGhostStyle, rowPathStyle } from "../drawer-styles.j
 import {
   BG, BG_RAISED, TEXT_HI, TEXT, TEXT_MID, TEXT_MUTED, TEXT_FAINT,
   COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, STATUS_DANGER,
-  BORDER, HAIRLINE, SURFACE_1, FONT_MONO, FONT_SANS,
+  BORDER, HAIRLINE, SURFACE_1, FONT_SANS,
   R_BADGE, R_MD, R_SM, R_BTN, R_PILL, dynamicSize,
 } from "../../shared/style/tokens.js";
 
@@ -204,7 +204,7 @@ export const filterChipStyle = /** @type {React.CSSProperties} */ ({
   fontWeight: 500,
   fontSize: dynamicSize(10.5),
   lineHeight: 1,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
 });
 
 export const filterChipKeyStyle = /** @type {React.CSSProperties} */ ({
@@ -354,7 +354,7 @@ export const rowSlugStyle = /** @type {React.CSSProperties} */ ({
   minWidth: 0,
   fontSize: dynamicSize(10.5),
   lineHeight: 1.2,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -607,7 +607,7 @@ export const detailTitleStyle = /** @type {React.CSSProperties} */ ({
   fontWeight: 500,
   fontSize: dynamicSize(11),
   lineHeight: 1.2,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   color: TEXT,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -618,7 +618,7 @@ export const detailVersionStyle = /** @type {React.CSSProperties} */ ({
   fontWeight: 500,
   fontSize: dynamicSize(11),
   lineHeight: 1,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   color: TEXT_MUTED,
   flexShrink: 0,
 });
@@ -671,7 +671,7 @@ export const slugTextStyle = /** @type {React.CSSProperties} */ ({
   fontWeight: 500,
   fontSize: dynamicSize(11),
   lineHeight: 1.2,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   color: TEXT,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -695,7 +695,7 @@ export const slugInputStyle = /** @type {React.CSSProperties} */ ({
   fontWeight: 500,
   fontSize: dynamicSize(12.5),
   lineHeight: 1.2,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   color: TEXT,
   padding: 0,
   border: 0,

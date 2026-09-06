@@ -4,6 +4,7 @@
  * @file Date field editor. Value shape: ISO 8601 string, e.g. "2026-08-15T18:00:00.000Z".
  */
 
+import { FieldMessage } from "../FieldMessage.jsx";
 import { FieldShell } from "./FieldShell.jsx";
 import { DatePicker } from "./DatePicker.jsx";
 import { fieldVariant } from "../styles.js";
@@ -50,10 +51,12 @@ export function DateEditor({
   return (
     <div style={v.label}>
       {field}
-      <span style={{ ...v.help, fontVariantNumeric: "tabular-nums" }}>
-        {remaining.past
-          ? t("editors.date.past")
-          : t("editors.date.remaining", { time: spellOut(remaining, t) })}
+      <span style={{ fontVariantNumeric: "tabular-nums" }}>
+        <FieldMessage>
+          {remaining.past
+            ? t("editors.date.past")
+            : t("editors.date.remaining", { time: spellOut(remaining, t) })}
+        </FieldMessage>
       </span>
     </div>
   );

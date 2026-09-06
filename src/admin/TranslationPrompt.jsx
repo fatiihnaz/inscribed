@@ -32,7 +32,7 @@ import { FieldEditor } from "../editors/FieldEditor.jsx";
 import { BlockNotice, NoticeButton } from "./BlockNotice.jsx";
 import { isSubstantialChange, TRANSLATION_INLINE_MAX } from "./translation-scope.js";
 import { blockResetStyle } from "./drawer-styles.js";
-import { TEXT_MUTED, TEXT_FAINT, FONT_MONO, dynamicSize } from "../shared/style/tokens.js";
+import { TEXT_MUTED, TEXT_FAINT, FONT_SANS, dynamicSize } from "../shared/style/tokens.js";
 
 /**
  * @import { BlockResponse } from "../shared/contracts/schemas.js"
@@ -282,7 +282,7 @@ const localeBadgeStyle = /** @type {React.CSSProperties} */ ({
   fontWeight: 600,
   fontSize: dynamicSize(10),
   lineHeight: 1.4,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   letterSpacing: "0.06em",
   flexShrink: 0,
 });

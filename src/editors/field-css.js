@@ -24,6 +24,7 @@
 import {
   ACCENT, COLLECTION_ACCENT, BORDER, BORDER_HI, SURFACE_2, SURFACE_3,
   DUR_BASE, DUR_FAST, EASE, FS_MICRO, FS_MD, FS_SM, FS_XS, R_SM, R_MD,
+  STATUS_WARN, STATUS_DANGER,
   neutralTint as neutral,
 } from "../shared/style/tokens.js";
 
@@ -40,6 +41,7 @@ const DIM = "var(--ins-f-dim, 0.55)";
 // custom properties through these rather than through a rule.
 export const FIELD_HOVER = HOVER;
 export const FIELD_LINE = LINE;
+export const FIELD_BG = BG;
 
 // Every accent an editor spends resolves through this, so which colour a field
 // lights up in is a property of where it renders rather than of the control.
@@ -165,6 +167,35 @@ export const fieldCss = `
     background: transparent;
     box-shadow: none;
   }
+
+  /* The one line a field is allowed to say something on, under its control.
+     Four tones and nothing else: a hint, a warning, an error, and the accent
+     for something the field wants noticed. Before this, a link's warning was
+     inline in the editor, an upload error was a box of its own, and a missing
+     row schema was a bare div, so the same kind of sentence arrived in three
+     shapes depending on which editor you were standing in.
+
+     Neutral is currentColor at low opacity rather than a text token, since
+     these render on a light host page too, where the white-alpha ramp is
+     invisible. The three loud tones are worth their own colour on both. */
+  .inscribed-field-msg {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    font-size: ${FS_XS};
+    line-height: 1.45;
+    color: currentColor;
+    opacity: 0.55;
+  }
+  .inscribed-field-msg > svg {
+    flex-shrink: 0;
+    /* Optical, not metric: the glyph's box is taller than the cap height it
+       has to sit level with. */
+    margin-top: 1px;
+  }
+  .inscribed-field-msg.is-warn   { color: ${STATUS_WARN}; opacity: 1; }
+  .inscribed-field-msg.is-danger { color: ${STATUS_DANGER}; opacity: 1; }
+  .inscribed-field-msg.is-accent { color: ${A}; opacity: 1; }
 
   /* Panel controls. The browser's own focus ring is replaced rather than just
      removed: these are buttons, so dropping the outline without putting
@@ -361,10 +392,56 @@ export const fieldCss = `
     cursor: not-allowed;
   }
 
+  /* What you can do to the picture above it, in a bar across the bottom of the
+     frame they share. Both halves take the width evenly so neither reads as the
+     safer one; only the hover tells them apart. */
+  /* Dropping onto a filled frame replaces what is in it, and used to say
+     nothing at all: the drag state only ever reached the empty dropzone. */
+  .inscribed-image-frame.is-dragging {
+    border-color: color-mix(in srgb, ${A} 55%, transparent);
+    background: color-mix(in srgb, ${A} 8%, transparent);
+  }
+
+  .inscribed-image-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    flex: 1;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: ${R_SM - 2}px;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: ${FS_XS};
+    font-weight: 500;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity ${DUR_FAST} ${EASE}, color ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE};
+  }
+  .inscribed-image-action:hover:not(:disabled),
+  .inscribed-image-action:focus-visible {
+    opacity: 1;
+    background: ${HOVER};
+  }
+  .inscribed-image-action:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .inscribed-image-action.is-destructive:hover:not(:disabled),
+  .inscribed-image-action.is-destructive:focus-visible {
+    color: ${STATUS_DANGER};
+    background: color-mix(in srgb, ${STATUS_DANGER} 14%, transparent);
+  }
+
   /* The image dropzone. Dragging is a real event the browser reports to us, so
      it arrives as a class rather than a pseudo-class, but it lands in the same
      place as every other state. */
   .inscribed-dropzone {
+    /* Same trap as the field: 100% wide plus its own border overflows the row
+       under content-box, and the edge gets clipped. */
+    box-sizing: border-box;
     border: 1.5px dashed ${LINE};
     border-radius: ${R_MD}px;
     background: ${BG};
@@ -417,6 +494,25 @@ export const fieldCss = `
   }
   .inscribed-repeat-row-header:hover {
     background: ${HOVER};
+  }
+
+  /* Grip and delete both live in slots the row reserves whether or not they
+     are showing, so revealing them is an opacity change and never a reflow.
+     :focus-visible brings them back for the keyboard, which never triggers
+     the hover that would otherwise be their only way in. */
+  .inscribed-repeat-grip,
+  .inscribed-repeat-delete {
+    opacity: 0;
+    transition: opacity ${DUR_FAST} ${EASE}, color ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE};
+  }
+  .inscribed-repeat-row-header:hover .inscribed-repeat-grip { opacity: 0.5; }
+  .inscribed-repeat-row-header:hover .inscribed-repeat-delete,
+  .inscribed-repeat-delete:focus-visible {
+    opacity: 1;
+  }
+  .inscribed-repeat-delete:hover {
+    color: ${STATUS_DANGER};
+    background: color-mix(in srgb, ${STATUS_DANGER} 14%, transparent);
   }
 
   .inscribed-repeat-add {
@@ -496,6 +592,28 @@ export const fieldCss = `
   .inscribed-chip:hover {
     background: ${HOVER};
   }
+
+  /* The chip that stands for the entries the well is holding back, and the
+     control that reveals them. Dashed, because in this kit a dashed edge means
+     "there is more here than you can see": the add row and the empty dropzone
+     say the same thing the same way. */
+  .inscribed-chip-more {
+    border-style: dashed;
+    background: transparent;
+    cursor: pointer;
+    padding: 3px 9px;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.75;
+    transition: opacity ${DUR_FAST} ${EASE}, color ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE};
+  }
+  .inscribed-chip-more:hover,
+  .inscribed-chip-more:focus-visible {
+    opacity: 1;
+    color: ${A};
+    background: color-mix(in srgb, ${A} 10%, transparent);
+  }
+
   .inscribed-chip-remove {
     display: inline-flex;
     align-items: center;

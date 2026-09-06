@@ -14,7 +14,7 @@
  */
 
 import {
-  BORDER, DUR_FAST, EASE, FONT_MONO, FONT_SANS, FS_2XS, FS_XS,
+  BORDER, DUR_FAST, EASE, FONT_SANS, FS_2XS, FS_XS,
   R_MD, R_SM, RING_RADIUS, ROOMY_INSET,
 } from "../shared/style/tokens.js";
 
@@ -186,7 +186,7 @@ export function regionChipStyle({ roomy, highlight, accent, straddle = roomy }) 
     padding: "0 7px",
     borderRadius: R_MD,
     color: highlight ? accent : "var(--ins-text, #fff)",
-    fontFamily: FONT_MONO,
+    fontFamily: FONT_SANS,
     fontSize: FS_2XS,
     fontWeight: 500,
     letterSpacing: "0.02em",

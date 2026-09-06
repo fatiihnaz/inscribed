@@ -6,9 +6,11 @@
  * render on a light host page through `CollectionComposer`. Pick one with
  * `fieldVariant(name)` rather than importing the halves separately.
  *
- * The two still carry slightly different geometry (padding, radius, size);
- * converging them is a deliberate follow-up, since it is the one change here
- * that is visible rather than structural.
+ * Geometry is not a palette's business. `field-css.js` converged the control
+ * frames a while ago; the captions were the half left behind, sitting a pixel
+ * apart and at two different sizes depending on which surface an editor landed
+ * on. Only colour varies between the two now, so anything shared below is
+ * shared outright rather than restated with a different number.
  */
 
 import {
@@ -35,11 +37,15 @@ export const noItemsStyle = {
 };
 
 
+// The caption/control stack, one geometry for both palettes.
 export const labelStyle = {
   display: "flex",
   flexDirection: "column",
-  gap: 5,
+  gap: 6,
 };
+
+// Shared by both palettes; only `color` is filled in per variant.
+const labelRowStyle = { display: "inline-flex", alignItems: "baseline", gap: 6 };
 
 // The shape a floating panel's body and footer take, shared by the calendar and
 // the picker so the two sit at the same rhythm. Colour comes from the palette's
@@ -73,6 +79,13 @@ export const labelTextStyle = {
   fontWeight: 500,
 };
 
+// Same caption, said in whatever colour the surface behind it can carry.
+const labelTextGeometry = {
+  fontSize: FS_XS,
+  letterSpacing: "-0.005em",
+  fontWeight: 500,
+};
+
 
 
 // The "nothing here" placeholder, shared by the drawer's panes and by
@@ -93,9 +106,8 @@ export const emptyStateStyle = {
 
 const drawerVariant = {
   label: labelStyle,
-  labelRow: { display: "inline-flex", alignItems: "baseline", gap: 6 },
+  labelRow: labelRowStyle,
   labelText: labelTextStyle,
-  help: { color: TEXT_MUTED, fontSize: FS_XS, lineHeight: 1.45 },
   // Marks a region so `field-css.js` can hand it this palette's custom
   // properties. The drawer's values are the defaults, so it needs no class.
   className: "",
@@ -124,10 +136,9 @@ const drawerVariant = {
 // `currentColor` and gray alphas rather than tokens, so these read on the dark
 // drawer and on a light page without being told which one they are on.
 const neutralVariant = {
-  label: { display: "flex", flexDirection: "column", gap: 6, fontSize: FS_SM, color: "inherit" },
-  labelRow: { display: "inline-flex", alignItems: "baseline", gap: 6 },
-  labelText: { fontSize: FS_XS, fontWeight: 500, letterSpacing: "-0.005em", opacity: 0.65 },
-  help: { color: "currentColor", opacity: 0.5, fontSize: FS_XS, lineHeight: 1.45 },
+  label: { ...labelStyle, color: "inherit" },
+  labelRow: labelRowStyle,
+  labelText: { ...labelTextGeometry, opacity: 0.65 },
   className: "inscribed-neutral",
   // Everything else on this palette is a translucent tint over whatever the
   // host provides, but a portalled panel has no host behind it to blend

@@ -17,7 +17,7 @@ import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useEditorDirty, useEditorValues } from "../collections/hooks/use-collection-editor.js";
 import { CollectionFieldsForm } from "../collections/CollectionFieldsForm.jsx";
 import { buttonBaseStyle } from "./drawer-styles.js";
-import { TEXT_MUTED, TEXT_FAINT, FONT_MONO, FONT_SANS, STATUS_OK, STATUS_WARN, STATUS_DANGER, ACCENT, SURFACE_1, SURFACE_2, HAIRLINE, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, R_BADGE, R_PILL, dynamicSize } from "../shared/style/tokens.js";
+import { TEXT_MUTED, TEXT_FAINT, FONT_SANS, STATUS_OK, STATUS_WARN, STATUS_DANGER, ACCENT, SURFACE_1, SURFACE_2, HAIRLINE, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, R_BADGE, R_PILL, dynamicSize } from "../shared/style/tokens.js";
 
 /**
  * @import { CollectionEditorState } from "../collections/hooks/use-collection-editor.js"
@@ -359,7 +359,7 @@ const indicatorLabelStyle = /** @type {React.CSSProperties} */ ({
 });
 
 const indicatorTimeStyle = /** @type {React.CSSProperties} */ ({
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   fontSize: dynamicSize(11),
   color: TEXT_FAINT,
 });

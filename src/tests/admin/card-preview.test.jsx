@@ -35,7 +35,6 @@ import { CmsProvider } from "../../core/CmsProvider.jsx";
 import { BlockCard } from "../../admin/BlockCard.jsx";
 import { createCmsConfig } from "../../shared/config.js";
 import { createTranslator, resolveStrings } from "../../shared/i18n/translate.js";
-import { fieldRowStyle, fieldEditorWrapStyle } from "../../admin/BlockCard.jsx";
 import {
   cardLabelStyle, fieldPathStyle, disclosureRowStyle, disclosureBodyStyle,
 } from "../../admin/block-card-chrome.jsx";
@@ -55,7 +54,7 @@ const block = (blockType, value) => ({
   sortOrder: 1,
 });
 
-function renderCard(b) {
+function renderCard(b, props) {
   globalThis.fetch = vi.fn(async (input) => {
     const url = String(input);
     if (url.includes("/cms/collections/me")) return jsonRes([]);
@@ -63,7 +62,7 @@ function renderCard(b) {
   });
   return render(
     <CmsProvider config={CONFIG} isAdmin getAccessToken={async () => "tok"}>
-      <BlockCard block={b} isActive={false} topLevel itemSchema={null} />
+      <BlockCard block={b} isActive={false} topLevel itemSchema={null} {...props} />
     </CmsProvider>,
   );
 }
@@ -104,14 +103,25 @@ describe("the closed cards", () => {
 });
 
 describe("the light types", () => {
-  // They are never closed, so there is nothing to preview: the editor itself is
-  // the value, already on screen.
-  it("open straight into their editor rather than a preview", async () => {
+  // They wear the same header as everything else, but they start open, so the
+  // editor is what is on screen and the preview under the label is folded away.
+  it("start on their editor, with the preview folded shut behind it", async () => {
     renderCard(block("ShortText", "Bahar Şenliği"));
     await waitFor(() => expect(document.querySelector(".inscribed-field-row")).toBeTruthy());
 
-    expect(header()).toBeNull();
+    expect(header()).toBeTruthy();
     expect(screen.getByRole("textbox")).toBeTruthy();
+    expect(document.querySelector(".inscribed-collapse.is-open")).toBeTruthy();
+  });
+
+  // With the density switch on, a closed scalar is all an editor sees, so a
+  // type with no preview of its own would read as empty when it is full.
+  it("preview their value once they are shut", async () => {
+    renderCard(block("ShortText", "Bahar Şenliği"), { density: "compact" });
+    await waitFor(() => expect(header()).toBeTruthy());
+
+    expect(document.querySelector(".inscribed-collapse.is-open")).toBeNull();
+    expect(header()?.textContent).toContain("Bahar Şenliği");
   });
 });
 
@@ -161,19 +171,19 @@ describe("the closed card's two lines", () => {
   });
 });
 
-describe("the two lanes' shared vocabulary", () => {
-  // An always-open field and an opened heavy block are the same shape: a
-  // caption, then a body hung off a guide. They were spaced two different ways,
-  // and the comment claiming they matched was only true horizontally.
-  it("spaces an open field exactly like an opened card", () => {
-    expect(fieldRowStyle).toBe(disclosureRowStyle);
-    expect(fieldEditorWrapStyle).toBe(disclosureBodyStyle);
-  });
-
-  // One label object, so the two cannot drift apart again and both can be
-  // lifted by whatever hover rule their lane has.
-  it("captions both lanes with the same label", () => {
+describe("the row's shared vocabulary", () => {
+  // One label object, so the lanes cannot drift apart again and the label can
+  // be lifted by whatever hover rule sits above it.
+  it("captions every row with the same label", () => {
     expect(fieldPathStyle).toBe(cardLabelStyle);
     expect(fieldPathStyle.color).toBeUndefined();
+  });
+
+  // The shell is one object rather than two that happen to match: a field row
+  // and a heavy card used to be spaced two different ways, and the comment
+  // claiming they matched was only true horizontally.
+  it("hangs every body off the same guide", () => {
+    expect(disclosureRowStyle).toBeTruthy();
+    expect(disclosureBodyStyle.borderLeft).toContain("1px solid");
   });
 });

@@ -16,7 +16,6 @@ export const editors = Object.freeze({
   "editors.image.drop": "Bırak",
   "editors.image.uploading": "Yükleniyor {percent}%",
   "editors.image.processing": "İşleniyor…",
-  "editors.image.dismissError": "Hatayı kapat",
   "editors.image.url": "Görsel URL",
   "editors.image.alt": "Alt metin",
   "editors.image.altPlaceholder": "Görseli tarif et",
@@ -37,8 +36,6 @@ export const editors = Object.freeze({
   "editors.list.empty": "Liste boş. \"+ Öğe ekle\" butonuyla başlayabilirsin.",
   "editors.list.addItem": "Öğe ekle",
   "editors.list.emptyItem": "Boş öğe",
-  "editors.list.moveUp": "Yukarı taşı",
-  "editors.list.moveDown": "Aşağı taşı",
   "editors.list.delete": "Sil",
   "editors.list.unsupportedField": "{type} tipi list itemschema'sında desteklenmiyor.",
 
@@ -92,4 +89,15 @@ export const editors = Object.freeze({
   "editors.combobox.nextPage": "Sonraki sayfa",
   "editors.combobox.noSource": "Bu alanın seçenek kaynağı yok. Sayfada bildirildi mi?",
   "editors.combobox.create": "\"{text}\" olarak ekle",
+
+  // Anahtar kendi durumunu kelimeyle de söylüyor: artık diğer kontroller gibi
+  // alan çerçevesinin içinde duruyor, ve yanında hiçbir şey olmayan çıplak bir
+  // ray hangi ucun açık olduğunu okuyucuya çıkarttırıyor.
+  "editors.bool.on": "Evet",
+  "editors.bool.off": "Hayır",
+
+  // Etiket kutusu birkaç satırda tavan yapıyor: kırk değerli bir alan panelin
+  // tamamını almasın. Kalanı tek bir sayan çipin arkasına iniyor.
+  "editors.tags.more": "+{count} daha",
+  "editors.tags.less": "Daha az göster",
 });

@@ -8,8 +8,8 @@
  *
  * Refined direction:
  *
- *   - 4px spacing grid; sans carries labels, prose, and (with tabular figures)
- *     numbers, while mono is reserved for literal identifiers
+ *   - 4px spacing grid; sans carries labels, prose, identifiers, and (with
+ *     tabular figures) numbers, while mono is reserved for verbatim values
  *   - explicit type ramp (textHi / text / textMid / textMuted / textFaint)
  *   - block-type glyph badges replace the dekoratif grip
  *   - draft accent (sage) on dirty, collection accent (pink-purple) on
@@ -204,9 +204,14 @@ export const STATUS_DANGER = "var(--ins-danger, rgb(232, 132, 152))";
 // Typography
 export const FONT_SANS = 'var(--ins-font-sans, "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif)';
 // Deliberately unbranded: the platform's own code face, not a shipped
-// developer font. Mono is reserved for literal identifiers (block paths,
-// slugs, raw values); anything that is prose, a label, or a number uses the
-// sans with tabular figures instead.
+// developer font.
+//
+// Reserved for a value shown verbatim: a serialized object in the changes
+// preview, a `<code>` mark inside rich text. It used to carry the admin's
+// identifiers too (block paths, group names, field keys), which meant every
+// label in a dense panel was set in a second face at 11px; those read as
+// texture rather than as meaning, so they are sans now and lean on size,
+// weight and the type glyph instead.
 export const FONT_MONO = 'var(--ins-font-mono, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace)';
 
 // ---------------------------------------------------------------------------

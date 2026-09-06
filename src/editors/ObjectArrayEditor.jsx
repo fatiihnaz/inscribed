@@ -28,7 +28,7 @@ import { ChevronDown, ChevronUp, Plus, Trash2 } from "../shared/style/icons.jsx"
 import { inertRef } from "../shared/ui/use-inert.js";
 import { fieldVariant, noItemsStyle } from "./styles.js";
 import { FIELD_HOVER, FIELD_LINE } from "./field-css.js";
-import { FS_XS, FS_SM, FONT_MONO, R_SM } from "../shared/style/tokens.js";
+import { FS_XS, FS_SM, FONT_SANS, R_SM } from "../shared/style/tokens.js";
 
 /**
  * @param {{
@@ -205,7 +205,7 @@ const indexStyle = {
   borderRadius: R_SM,
   fontSize: FS_XS,
   fontWeight: 600,
-  fontFamily: FONT_MONO,
+  fontFamily: FONT_SANS,
   background: FIELD_HOVER,
   opacity: 0.85,
 };

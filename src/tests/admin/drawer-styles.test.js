@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { panelCss, RAIL_CLASS } from "../../admin/drawer-styles.js";
+import {
+  panelCss, RAIL_CLASS, refRowStyle, rowHeaderStyle, rowContainerStyle, rowActionsStyle,
+} from "../../admin/drawer-styles.js";
 import { localeChipStyle } from "../../admin/collection/collection-styles.js";
 import {
   BP_MOBILE, COMPACT_QUERY, PANEL_HANDLE_REACH, PANEL_WIDTH_MOBILE, COLLECTION_ACCENT,
@@ -221,5 +223,33 @@ describe("the collections list on a phone", () => {
     // Every size in the list derives from the one variable, so one override
     // moves the whole row together rather than each part on its own.
     expect(panelCss).not.toContain(".inscribed-coll-name");
+  });
+});
+
+// A collection reference is one element playing the parts a block row splits
+// over a container and a header. Built by spreading those two over each other
+// it came out as a vertical stack, because the container lays out a column and
+// the header never says otherwise. Nothing rendered the strip in a test, so the
+// whole suite passed with the glyph sitting on top of its own label.
+describe("a reference row", () => {
+  it("lays out along the row, not down it", () => {
+    expect(refRowStyle.display).toBe("flex");
+    expect(refRowStyle.flexDirection).toBeUndefined();
+    expect(rowContainerStyle.flexDirection).toBe("column");
+  });
+
+  it("keeps the header's own geometry", () => {
+    expect(refRowStyle.gap).toBe(rowHeaderStyle.gap);
+    expect(refRowStyle.alignItems).toBe(rowHeaderStyle.alignItems);
+    expect(refRowStyle.minHeight).toBe(rowHeaderStyle.minHeight);
+    // Mandatory on a <button>, or the UA border paints a line around the row.
+    expect(refRowStyle.border).toBe(0);
+  });
+
+  it("starts its label where a top-level block row starts one", () => {
+    // 6px inset, then the glyph column, then the header's gap. A block row gets
+    // the same 6 from `rowInsetStyle(base, true)`.
+    expect(refRowStyle.padding).toBe("6px 12px 6px 6px");
+    expect(rowActionsStyle.width).toBe(46);
   });
 });

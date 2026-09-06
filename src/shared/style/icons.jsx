@@ -95,6 +95,18 @@ export const ChevronsRight = createIcon("chevrons-right", [
   ["path", { d: "m13 17 5-5-5-5", key: "17xmmf" }],
 ]);
 
+// The density pair: arrows pulling together shut the list, arrows pushing apart
+// open it. Direction is the whole message, so they are only ever used together.
+export const ChevronsDownUp = createIcon("chevrons-down-up", [
+  ["path", { d: "m7 20 5-5 5 5", key: "13zhd1" }],
+  ["path", { d: "m7 4 5 5 5-5", key: "13zhd2" }],
+]);
+
+export const ChevronsUpDown = createIcon("chevrons-up-down", [
+  ["path", { d: "m7 15 5 5 5-5", key: "13zhd3" }],
+  ["path", { d: "m7 9 5-5 5 5", key: "13zhd4" }],
+]);
+
 export const Check = createIcon("check", [
   ["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }],
 ]);

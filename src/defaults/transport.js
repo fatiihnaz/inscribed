@@ -4,8 +4,8 @@
  * knows the concrete endpoints, headers, and `CmsApiError` mapping; swap it out
  * via `createCmsConfig({ transport })` (see the `CmsTransport` contract).
  *
- * No framework coupling. `uploadImage` is browser-only (`XMLHttpRequest`, for
- * progress events); every other method is `fetch`.
+ * No framework coupling. `uploadFile` (and so `uploadImage`) is browser-only
+ * (`XMLHttpRequest`, for progress events); every other method is `fetch`.
  */
 
 import { CmsApiError, toApiError } from "../shared/contracts/errors.js";
@@ -86,6 +86,56 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
     const u = new URL(`${base}/cms${path}`);
     if (params) for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
     return withLocale(u, opts);
+  };
+
+  /**
+   * Hoisted out of the returned object so `uploadImage` can point at the same
+   * function without `this`, which a destructured method would lose.
+   *
+   * Browser-only: `XMLHttpRequest` rather than `fetch`, for the progress events
+   * an upload wants. The CDN when the site configured one, the API's own media
+   * route when it did not.
+   *
+   * @param {File} file
+   * @param {{ onProgress?: (progress: number) => void, accessToken?: string | null }} [opts]
+   * @returns {Promise<{ data: { url: string } }>}
+   */
+  const uploadFile = (file, opts = {}) => {
+    const target = cdn ?? `${base}/cms/media`;
+    const { onProgress, accessToken } = opts;
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const body = new FormData();
+      body.append("file", file);
+
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+      });
+
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch {
+            reject(new Error("Invalid JSON in upload response"));
+          }
+        } else {
+          let detail = xhr.statusText || "Upload failed";
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (parsed?.detail) detail = parsed.detail;
+          } catch { /* ignore */ }
+          reject(new CmsApiError({ status: xhr.status, detail }));
+        }
+      });
+
+      xhr.addEventListener("error", () => reject(new Error("Network error")));
+      xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
+
+      xhr.open("POST", target);
+      if (accessToken) xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+      xhr.send(body);
+    });
   };
 
   return {
@@ -365,43 +415,12 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
       return /** @type {*} */ (await res.json());
     },
 
-    uploadImage(file, opts = {}) {
-      const target = cdn ?? `${base}/cms/media`;
-      const { onProgress, accessToken } = opts;
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        const body = new FormData();
-        body.append("file", file);
-
-        xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-        });
-
-        xhr.addEventListener("load", () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              resolve(JSON.parse(xhr.responseText));
-            } catch {
-              reject(new Error("Invalid JSON in upload response"));
-            }
-          } else {
-            let detail = xhr.statusText || "Upload failed";
-            try {
-              const parsed = JSON.parse(xhr.responseText);
-              if (parsed?.detail) detail = parsed.detail;
-            } catch { /* ignore */ }
-            reject(new CmsApiError({ status: xhr.status, detail }));
-          }
-        });
-
-        xhr.addEventListener("error", () => reject(new Error("Network error")));
-        xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
-
-        xhr.open("POST", target);
-        if (accessToken) xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
-        xhr.send(body);
-      });
-    },
+    uploadFile,
+    // One endpoint behind both names, so a site with no `cdnUrl` uploads a PDF
+    // exactly where it uploads a picture. `uploadImage` is the older of the two
+    // and stays a real property rather than an alias in prose: a wrapper that
+    // spreads this object has to keep finding it.
+    uploadImage: uploadFile,
 
     async request(path, init = {}) {
       const { accessToken, headers: extraHeaders, ...rest } = init;

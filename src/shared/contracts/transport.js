@@ -101,7 +101,18 @@
  *   one here is ignored, and a claim-derived slug is refused outright: those
  *   have a draft slot of their own under `saveCollectionItemDraft`.
  * @property {(key: string, opts?: CmsRequestOptions) => Promise<void>} deleteCollectionNewDraft
+ * @property {(file: File, opts?: { onProgress?: (progress: number) => void, accessToken?: string | null }) => Promise<{ data: { url: string } }>} uploadFile
+ *   Any file, whatever its type: what a `File` field uploads through. Only the
+ *   url comes back, because it is the only half the server knows that the
+ *   caller does not; `name`, `mime` and `size` are read off the local `File`.
  * @property {(file: File, opts?: { onProgress?: (progress: number) => void, accessToken?: string | null }) => Promise<{ data: { url: string } }>} uploadImage
+ *   The same upload narrowed to pictures, and its own method because it is the
+ *   older contract: a transport written before `uploadFile` existed still
+ *   satisfies every image field. The default transport points both at one
+ *   endpoint. A transport defining only this one is not silently used for files
+ *   either, since an image pipeline is free to re-encode what it is handed and
+ *   a PDF would not survive it; the `File` field says the method is missing
+ *   instead.
  * @property {(path: string, init?: RequestInit & { accessToken?: string }) => Promise<*>} [request]
  *   Escape hatch for the endpoints an app puts on the same backend beside the
  *   CMS API, which is what an admin panel (`createCmsPage({ panels })`) talks

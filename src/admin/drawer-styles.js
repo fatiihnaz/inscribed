@@ -54,6 +54,17 @@ export const panelStyle = {
 // follows the rail, so the geometry is in `panelCss`.
 export const DRAWER_BODY_CLASS = "inscribed-drawer-body";
 
+// `overscrollBehavior` belongs here and on nothing inside: it is what keeps a
+// pane scrolled to its end from carrying the host page with it. It works
+// because this box is already `overflow: hidden`, which makes it a scroll
+// container that can never scroll, so chaining walks up from whichever pane hit
+// its end, reaches this, and stops.
+//
+// Setting it on the descendants as well is what it used to do, and that broke
+// the wheel: every clip box in the panel is a scroll container too (a group's
+// collapse, a row's value slot, an editor frame, a truncated label), and
+// `contain` on one of those ends the chain right under the pointer. A tall
+// group read as unscrollable because the wheel was landing on its collapse.
 export const paneContainerStyle = {
   flex: 1,
   minWidth: 0,
@@ -61,6 +72,7 @@ export const paneContainerStyle = {
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
+  overscrollBehavior: "contain",
 };
 
 export const srOnlyStyle = {
@@ -1035,14 +1047,6 @@ export const panelCss = `
       flex-direction: row;
       gap: 8px;
     }
-  }
-
-  /* Nothing inside the panel hands its leftover scroll to the host page, so a
-     pane scrolled to its end leaves the page where it was. The alternative is
-     locking body overflow, which takes the host's scrollbar away and shifts its
-     layout by that width. */
-  .${PANEL_CLASS}, .${PANEL_CLASS} * {
-    overscroll-behavior: contain;
   }
 
   .inscribed-rail-btn:focus-visible,

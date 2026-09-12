@@ -184,6 +184,42 @@ describe("Image field ({ src, alt } object)", () => {
   });
 });
 
+describe("File field ({ url, name, mime, size } object)", () => {
+  const brochure = {
+    name: "brochure", type: "File", label: "Broşür", required: false,
+    readOnly: false, filterable: false, source: null, help: null, itemFields: null,
+  };
+  const doc = (url, name) => ({ url, name, mime: "application/pdf", size: 2517000 });
+
+  it("seeds a missing File to all four empty halves", () => {
+    expect(seedValues([brochure], {}))
+      .toEqual({ brochure: { url: "", name: "", mime: "", size: 0 } });
+  });
+
+  it("keeps the metadata on the wire rather than stripping down to the url", () => {
+    const v = doc("https://cdn.example/a3f9.pdf", "2026 Raporu");
+    expect(buildPayload([brochure], { brochure: v })).toEqual({ brochure: v });
+  });
+
+  it("nulls a file with no url", () => {
+    expect(buildPayload([brochure], { brochure: { url: "", name: "", mime: "", size: 0 } }))
+      .toEqual({ brochure: null });
+  });
+
+  it("treats an optional empty file as valid, but requires a name once uploaded", () => {
+    expect(requiredMissing([brochure], { brochure: doc("", "") })).toBeNull();
+    expect(requiredMissing([brochure], { brochure: doc("https://cdn/a.pdf", "") }))
+      .toBe("Broşür → Name");
+    expect(requiredMissing([brochure], { brochure: doc("https://cdn/a.pdf", "Rapor") })).toBeNull();
+  });
+
+  it("flags a required-but-empty File by its label", () => {
+    const required = { ...brochure, required: true };
+    expect(requiredMissing([required], { brochure: doc("", "") })).toBe("Broşür");
+    expect(requiredMissing([required], { brochure: doc("https://cdn/a.pdf", "Rapor") })).toBeNull();
+  });
+});
+
 const t = createTranslator(resolveStrings("tr"), "tr");
 
 describe("humanizeCollectionError", () => {

@@ -19,6 +19,11 @@
  *     the text it shows as.
  *   - Date: ISO 8601 string, empty string when unset.
  *   - Image: { src, alt }
+ *   - File: { url, name, mime, size }. An upload of any type. The field takes
+ *     no typed address, which is what lets all four halves be filled at once:
+ *     every value came from an upload that knew the file's own name, type and
+ *     size, so a consumer never renders around a missing one. `mime` is the
+ *     browser's own reading and is empty for an extension it does not know.
  *   - Link: { href, label }
  *   - Select: string, chosen from the field's `source`. A collection-backed
  *     source stores the target record's slug, which is what makes a reference a
@@ -39,7 +44,7 @@
  * `Select` usually stores a key rather than display text, and how a date reads
  * is a language and design choice.
  *
- * @typedef {"ShortText" | "LongText" | "RichText" | "Number" | "Bool" | "Url" | "Date" | "Image" | "Link" | "Select" | "StringArray" | "ObjectArray" | "Collection"} BlockType
+ * @typedef {"ShortText" | "LongText" | "RichText" | "Number" | "Bool" | "Url" | "Date" | "Image" | "File" | "Link" | "Select" | "StringArray" | "ObjectArray" | "Collection"} BlockType
  */
 
 /**
@@ -163,6 +168,11 @@
  * `Image` is a fixed-shape `{ src, alt }` object: `src` a Url, `alt` a
  * ShortText, both required once the field has a value. It renders an upload
  * dropzone (`config.transport.uploadImage`) instead of a bare text box.
+ *
+ * `File` is the same bargain for everything else: `{ url, name, mime, size }`
+ * through `config.transport.uploadFile`, with `url` and `name` required once
+ * the field has a value. It offers no address box at all, so a file already on
+ * the CDN is uploaded again rather than pointed at.
  *
  * @typedef {Exclude<BlockType, "Collection">} CollectionFieldType
  *

@@ -386,6 +386,8 @@ function isValueEmpty(blockType, value) {
       return value === "";
     case "Image":
       return !value.src;
+    case "File":
+      return !value.url;
     case "Link":
       return !value.href;
     case "Date":
@@ -430,6 +432,18 @@ function renderBlock(blockType, value, props) {
     }
     case "Image":
       return <img {...rest} src={value.src} alt={value.alt ?? ""} />;
+    // No `download` attribute: it is ignored cross-origin, which is where every
+    // uploaded file lives, so promising a save the browser will not perform is
+    // worse than an ordinary link. A consumer wanting more than an anchor (an
+    // icon, the size, a viewer) passes a function child.
+    case "File": {
+      const href = safeHref(value.url);
+      return (
+        <a {...rest} href={href}>
+          {value.name || value.url}
+        </a>
+      );
+    }
     case "Link": {
       const href = safeHref(value.href);
       return (

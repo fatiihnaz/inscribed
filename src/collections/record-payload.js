@@ -48,6 +48,7 @@ function defaultFor(type) {
     case "StringArray": return [];
     case "ObjectArray": return [];
     case "Image":       return { src: "", alt: "" };
+    case "File":        return { url: "", name: "", mime: "", size: 0 };
     case "Link":        return { href: "", label: "" };
     default:            return "";
   }
@@ -64,8 +65,9 @@ function defaultFor(type) {
  * date or select is the clearest case, since `""` is not a date or an option.
  *
  * Two things stay as they are. An empty array is a value ("no tags"), not an
- * absent one, and an `Image` keeps its `{ src, alt }` shape whenever `src` is
- * set, since the backend rejects a half-filled one.
+ * absent one, and the compound scalars (`Image`, `File`, `Link`) keep their
+ * whole shape whenever their address half is set, since the backend rejects a
+ * half-filled one.
  *
  * @param {CollectionFieldDescriptor[]} fields
  * @param {Record<string, *>} values
@@ -88,6 +90,11 @@ export function buildPayload(fields, values) {
     if (field.type === "Image") {
       const image = values[field.name];
       out[field.name] = image?.src ? image : null;
+      continue;
+    }
+    if (field.type === "File") {
+      const file = values[field.name];
+      out[field.name] = file?.url ? file : null;
       continue;
     }
     if (field.type === "Link") {
@@ -146,6 +153,21 @@ export function requiredMissing(fields, values) {
         continue;
       }
       if (!a) return `${field.label || field.name} → Alt`;
+      continue;
+    }
+
+    // Same rule as an image's alt: a file that exists has to be called
+    // something, since the name is the only half a visitor reads. Runs before
+    // the `!required` skip for the same reason.
+    if (field.type === "File") {
+      const v = value && typeof value === "object" ? value : {};
+      const u = typeof v.url === "string" ? v.url.trim() : "";
+      const n = typeof v.name === "string" ? v.name.trim() : "";
+      if (!u) {
+        if (field.required) return field.label || field.name;
+        continue;
+      }
+      if (!n) return `${field.label || field.name} → Name`;
       continue;
     }
 

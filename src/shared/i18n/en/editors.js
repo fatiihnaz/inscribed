@@ -22,8 +22,25 @@ export const editors = Object.freeze({
   "editors.image.alt": "Alt text",
   "editors.image.altPlaceholder": "Describe the image",
 
+  // File editing. Worded apart from the image keys rather than shared with
+  // them: "Upload an image" standing over a field that wants a spreadsheet is
+  // the kind of copy that gets the wrong thing uploaded.
+  "editors.file.upload": "Upload a file",
+  "editors.file.uploadHint": "click or drag and drop",
+  "editors.file.drop": "Drop it here",
+  "editors.file.uploading": "Uploading {percent}%",
+  "editors.file.processing": "Processing…",
+  "editors.file.empty": "No file",
+  "editors.file.untitled": "Untitled file",
+  "editors.file.open": "Open",
+  "editors.file.replace": "Replace",
+  "editors.file.remove": "Remove",
+  "editors.file.name": "File name",
+  "editors.file.namePlaceholder": "Name this file",
+
   // The upload flow's own failures.
   "editors.upload.notImage": "Please pick an image file.",
+  "editors.upload.noFileTransport": "This site's transport has no uploadFile method, so files cannot be uploaded.",
   "editors.upload.noUrl": "The CDN response carried no url",
   "editors.upload.failed": "Upload failed.",
 

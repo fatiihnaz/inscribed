@@ -18,6 +18,7 @@ import { SelectEditor } from "../editors/fields/SelectEditor.jsx";
 import { StringArrayEditor } from "../editors/fields/StringArrayEditor.jsx";
 import { LinkEditor } from "../editors/fields/LinkEditor.jsx";
 import { ImageEditor } from "../editors/fields/ImageEditor.jsx";
+import { FileEditor } from "../editors/fields/FileEditor.jsx";
 import { FIELD_HOVER } from "../editors/field-css.js";
 import { COLLECTION_ACCENT, FS_XS, FS_SM, R_BADGE, dynamicSize } from "../shared/style/tokens.js";
 
@@ -145,6 +146,13 @@ function FieldInput({ field, value, onChange, disabled, variant }) {
       return (
         <FieldShell {...shell} as="div">
           <ImageEditor value={value} onChange={onChange} disabled={disabled} variant={variant} />
+        </FieldShell>
+      );
+
+    case "File":
+      return (
+        <FieldShell {...shell} as="div">
+          <FileEditor value={value} onChange={onChange} disabled={disabled} variant={variant} />
         </FieldShell>
       );
 

@@ -24,6 +24,7 @@ import { useMemo } from "react";
 import { Pencil, TypeCollection, typeIconFor } from "../shared/style/icons.jsx";
 
 import { stableStringify } from "../shared/util/stable-stringify.js";
+import { fileKindLabel, formatBytes } from "../shared/util/file.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { diffWords, diffLines, stripHtml, lcsIndexPairs } from "./word-diff.js";
 
@@ -296,6 +297,8 @@ export function DiffContent({ blockType, prev, next, itemSchema, sharedOps }) {
       return <ArrowDiff prev={prev} next={next} />;
     case "Image":
       return <ImageDiff prev={prev} next={next} />;
+    case "File":
+      return <FileDiff prev={prev} next={next} />;
     case "ObjectArray":
       return (
         <ListDiff
@@ -837,6 +840,34 @@ function LinkDiff({ prev, next }) {
 }
 
 /**
+ * A file has no thumbnail to set beside another, so it reads like a link's
+ * diff: the two halves someone can recognise, plus the size when it moved. The
+ * mime stays out of it. A replacement that changed the type already shows a
+ * different name and size, and one that did not would add a row saying nothing.
+ *
+ * @param {{ prev: *, next: * }} props
+ */
+function FileDiff({ prev, next }) {
+  const prevSize = formatBytes(prev?.size) ?? "—";
+  const nextSize = formatBytes(next?.size) ?? "—";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <FieldLabeled label="name">
+        <InlineWordDiff prev={prev?.name ?? ""} next={next?.name ?? ""} />
+      </FieldLabeled>
+      <FieldLabeled label="url">
+        <InlineWordDiff prev={prev?.url ?? ""} next={next?.url ?? ""} />
+      </FieldLabeled>
+      {prevSize !== nextSize ? (
+        <FieldLabeled label="size">
+          <ArrowDiff prev={prevSize} next={nextSize} />
+        </FieldLabeled>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * @param {{ prev: *, next: * }} props
  */
 function ArrowDiff({ prev, next }) {
@@ -1125,6 +1156,11 @@ function SoloValue({ blockType, value, tone }) {
       const src = value?.src;
       if (!src) return <span style={emptyValueStyle}>—</span>;
       return <img src={src} alt={value?.alt ?? ""} style={imageThumbStyle} />;
+    }
+    case "File": {
+      if (!value?.url) return <span style={emptyValueStyle}>—</span>;
+      const meta = [fileKindLabel(value?.mime), formatBytes(value?.size)].filter(Boolean).join(" · ");
+      return <span style={wrap}>{value.name || value.url}{meta ? ` (${meta})` : ""}</span>;
     }
     default:
       // A serialized value, not a label: this is the one thing left in the

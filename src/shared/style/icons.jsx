@@ -407,6 +407,7 @@ const TYPE_ICONS = {
   Url: TypeLink,
   Date: TypeDate,
   Image,
+  File: FileText,
   Link: TypeLink,
   Select: TypeSelect,
   StringArray: TypeStringArray,

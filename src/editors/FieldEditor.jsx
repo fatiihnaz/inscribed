@@ -13,6 +13,7 @@ import { lazy, Suspense } from "react";
 
 import { TextEditor } from "./fields/TextEditor.jsx";
 import { ImageEditor } from "./fields/ImageEditor.jsx";
+import { FileEditor } from "./fields/FileEditor.jsx";
 import { LinkEditor } from "./fields/LinkEditor.jsx";
 import { DateEditor } from "./fields/DateEditor.jsx";
 import { NumberEditor } from "./fields/NumberEditor.jsx";
@@ -66,6 +67,7 @@ export function FieldEditor({ blockType, value, onChange, disabled, hideLabel, s
     case "Bool":      return <BoolEditor value={value} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />;
     case "Url":       return <UrlEditor value={value} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />;
     case "Image":     return <ImageEditor value={value} onChange={onChange} disabled={disabled} />;
+    case "File":      return <FileEditor value={value} onChange={onChange} disabled={disabled} />;
     case "Link":      return <LinkEditor value={value} onChange={onChange} disabled={disabled} />;
     case "Date":      return <DateEditor value={value} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />;
     case "Select":    return source

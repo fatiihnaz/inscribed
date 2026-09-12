@@ -20,7 +20,21 @@ export const editors = Object.freeze({
   "editors.image.alt": "Alt metin",
   "editors.image.altPlaceholder": "Görseli tarif et",
 
+  "editors.file.upload": "Dosya yükle",
+  "editors.file.uploadHint": "tıkla veya sürükle-bırak",
+  "editors.file.drop": "Bırak",
+  "editors.file.uploading": "Yükleniyor {percent}%",
+  "editors.file.processing": "İşleniyor…",
+  "editors.file.empty": "Dosya yok",
+  "editors.file.untitled": "Adsız dosya",
+  "editors.file.open": "Aç",
+  "editors.file.replace": "Değiştir",
+  "editors.file.remove": "Kaldır",
+  "editors.file.name": "Dosya adı",
+  "editors.file.namePlaceholder": "Dosyayı adlandır",
+
   "editors.upload.notImage": "Lütfen bir görsel dosyası seçin.",
+  "editors.upload.noFileTransport": "Bu sitenin transport'unda uploadFile metodu yok, dosya yüklenemiyor.",
   "editors.upload.noUrl": "CDN cevabında url bulunamadı",
   "editors.upload.failed": "Yükleme başarısız.",
 

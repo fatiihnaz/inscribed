@@ -246,6 +246,7 @@ export const TYPE_META = {
   Url:        { color: "rgb(228, 204, 164)", label: "URL" },
   Date:       { color: "rgb(184, 222, 214)", label: "Date" },
   Image:      { color: "rgb(174, 218, 184)", label: "Image" },
+  File:       { color: "rgb(166, 206, 192)", label: "File" },
   Link:       { color: "rgb(228, 204, 164)", label: "Link" },
   Select:     { color: "rgb(212, 196, 232)", label: "Select" },
   StringArray:       { color: "rgb(212, 196, 232)", label: "Strings" },

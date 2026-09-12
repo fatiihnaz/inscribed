@@ -397,13 +397,19 @@ export const fieldCss = `
      safer one; only the hover tells them apart. */
   /* Dropping onto a filled frame replaces what is in it, and used to say
      nothing at all: the drag state only ever reached the empty dropzone. */
-  .inscribed-image-frame.is-dragging {
+  .inscribed-image-frame.is-dragging,
+  .inscribed-file-frame.is-dragging {
     border-color: color-mix(in srgb, ${A} 55%, transparent);
     background: color-mix(in srgb, ${A} 8%, transparent);
   }
 
-  .inscribed-image-action {
+  /* The file frame's bar holds a link among its buttons (the only place the
+     uploaded address is visible, since that field has no URL box), so the rule
+     has to undo an anchor's underline as well. */
+  .inscribed-image-action,
+  .inscribed-file-action {
     display: inline-flex;
+    text-decoration: none;
     align-items: center;
     justify-content: center;
     gap: 5px;
@@ -421,16 +427,21 @@ export const fieldCss = `
     transition: opacity ${DUR_FAST} ${EASE}, color ${DUR_FAST} ${EASE}, background-color ${DUR_FAST} ${EASE};
   }
   .inscribed-image-action:hover:not(:disabled),
-  .inscribed-image-action:focus-visible {
+  .inscribed-image-action:focus-visible,
+  .inscribed-file-action:hover:not(:disabled),
+  .inscribed-file-action:focus-visible {
     opacity: 1;
     background: ${HOVER};
   }
-  .inscribed-image-action:disabled {
+  .inscribed-image-action:disabled,
+  .inscribed-file-action:disabled {
     opacity: 0.35;
     cursor: not-allowed;
   }
   .inscribed-image-action.is-destructive:hover:not(:disabled),
-  .inscribed-image-action.is-destructive:focus-visible {
+  .inscribed-image-action.is-destructive:focus-visible,
+  .inscribed-file-action.is-destructive:hover:not(:disabled),
+  .inscribed-file-action.is-destructive:focus-visible {
     color: ${STATUS_DANGER};
     background: color-mix(in srgb, ${STATUS_DANGER} 14%, transparent);
   }

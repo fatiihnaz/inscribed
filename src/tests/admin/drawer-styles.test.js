@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  panelCss, RAIL_CLASS, refRowStyle, rowHeaderStyle, rowContainerStyle, rowActionsStyle,
+  panelCss, RAIL_CLASS, paneContainerStyle, refRowStyle, rowHeaderStyle, rowContainerStyle,
+  rowActionsStyle,
 } from "../../admin/drawer-styles.js";
 import { localeChipStyle } from "../../admin/collection/collection-styles.js";
 import {
@@ -251,5 +252,23 @@ describe("a reference row", () => {
     // the same 6 from `rowInsetStyle(base, true)`.
     expect(refRowStyle.padding).toBe("6px 12px 6px 6px");
     expect(rowActionsStyle.width).toBe(46);
+  });
+});
+
+// `overscroll-behavior: contain` on a scroll container that cannot scroll ends
+// the chain there. The panel used to set it on every descendant, and every clip
+// box in it is a scroll container (a group's collapse, a row's value slot, an
+// editor frame, a truncated label), so the wheel did nothing wherever one of
+// them was under the pointer: a group taller than the drawer read as stuck.
+describe("the panel's scroll boundary", () => {
+  it("stops the chain at the pane column", () => {
+    expect(paneContainerStyle.overscrollBehavior).toBe("contain");
+    // It can only be the boundary because it is already a scroll container that
+    // never scrolls; without the clip it would hand the page the leftover.
+    expect(paneContainerStyle.overflow).toBe("hidden");
+  });
+
+  it("leaves everything inside it free to chain up to that boundary", () => {
+    expect(panelCss).not.toContain("overscroll-behavior");
   });
 });

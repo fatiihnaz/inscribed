@@ -308,6 +308,17 @@ function blockPreview(blockType, value, t) {
       }
       return null;
     }
+    case "File": {
+      if (!value || typeof value !== "object") return null;
+      if (typeof value.name === "string" && value.name) return value.name;
+      // The CDN's filename is usually a hash, so it is the fallback rather than
+      // the preview: it says a file is there when nobody has titled it.
+      if (typeof value.url === "string" && value.url) {
+        const clean = value.url.split(/[?#]/)[0];
+        return clean.slice(clean.lastIndexOf("/") + 1) || null;
+      }
+      return null;
+    }
     case "ObjectArray":
       return Array.isArray(value) ? t("block.items", { count: value.length }) : null;
     case "Bool":

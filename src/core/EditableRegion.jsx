@@ -28,6 +28,7 @@ import { useContentRadius } from "./hooks/use-content-radius.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, ownVisibility, strongerVisibility } from "../shared/state/group-context.js";
 import { ACCENT } from "../shared/style/tokens.js";
 import { typeIconFor } from "../shared/style/icons.jsx";
+import { safeHref } from "../shared/util/url.js";
 import {
   BLOCK_TAGS,
   CHROME_ICON,
@@ -474,14 +475,4 @@ function renderPlaceholder(as, rest, isAdmin) {
   return <Tag {...rest}>{isAdmin ? EMPTY_PLACEHOLDER : null}</Tag>;
 }
 
-// Block `javascript:`/`data:`/`vbscript:` URLs on Link blocks: whitelist
-// common schemes + relative/anchor forms, anything else becomes "" (inert).
-const HREF_ALLOWED = /^(https?:|mailto:|tel:|\/|#|\.\/|\.\.\/)/i;
-
-/** @param {*} href */
-function safeHref(href) {
-  if (typeof href !== "string") return "";
-  const trimmed = href.trim();
-  return HREF_ALLOWED.test(trimmed) ? trimmed : "";
-}
 

@@ -1,6 +1,27 @@
 /**
- * @file Address checks shared by the editors that hold one.
+ * @file Address checks shared by the editors that hold one and the places that
+ * render one.
  */
+
+// Allow the common schemes and relative/anchor forms only, so `javascript:`,
+// `data:` and `vbscript:` become "" (inert) rather than being enumerated.
+const HREF_ALLOWED = /^(https?:|mailto:|tel:|\/|#|\.\/|\.\.\/)/i;
+
+/**
+ * An address safe to put in an `href`, or "" when it is not.
+ *
+ * Shared because a stored address reaches more than the page: the file editor's
+ * open link renders one inside the admin panel, where a `javascript:` value
+ * typed by one editor would run for whichever editor clicked it.
+ *
+ * @param {*} href
+ * @returns {string}
+ */
+export function safeHref(href) {
+  if (typeof href !== "string") return "";
+  const trimmed = href.trim();
+  return HREF_ALLOWED.test(trimmed) ? trimmed : "";
+}
 
 /**
  * Whether a string reads as somewhere you can go.

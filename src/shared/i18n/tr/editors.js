@@ -30,6 +30,7 @@ export const editors = Object.freeze({
   "editors.file.open": "Aç",
   "editors.file.replace": "Değiştir",
   "editors.file.remove": "Kaldır",
+  "editors.file.url": "Dosya URL'si",
   "editors.file.name": "Dosya adı",
   "editors.file.namePlaceholder": "Dosyayı adlandır",
 

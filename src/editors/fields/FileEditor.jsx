@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * @file Upload editor for the `File` block (via `FieldEditor`) and the `File`
+ * @file Editor for the `File` block (via `FieldEditor`) and the `File`
  * collection field (via `CollectionFieldsForm`). Value is a fixed-shape
  * `{ url, name, mime, size }`.
  *
- * There is no address box, and that is the type's whole premise: every value
- * here came from an upload that knew the file's own type and size, so the three
- * halves beside the url are always filled and a consumer never has to render
- * around a missing one. Pointing at a file already on the CDN means uploading
- * it again.
+ * Two ways in. An upload knows the file's own type and size and fills all four;
+ * a typed address (a document on a corporate server, a video link) leaves
+ * `mime` empty and `size` null. Typed addresses are not probed for them: the
+ * servers such links point at almost never let a browser read their headers,
+ * and fetching an editor-typed URL from the backend is an SSRF surface bought
+ * for mostly empty answers.
  *
  * Styled portably: neutral mid-gray alphas + `currentColor` (no drawer tokens),
  * and CSS transitions instead of framer-motion, so it reads on both the dark
@@ -20,15 +21,20 @@ import { useCallback, useRef, useState } from "react";
 
 import { useFileUpload } from "../use-file-upload.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
-import { FileText, Trash2, TypeShortText, Upload } from "../../shared/style/icons.jsx";
+import { FileText, Link as LinkIcon, Trash2, TypeShortText, Upload } from "../../shared/style/icons.jsx";
 import { FieldMessage } from "../FieldMessage.jsx";
 import { FIELD_BG, FIELD_HOVER, FIELD_LINE } from "../field-css.js";
 import { fieldVariant } from "../styles.js";
-import { fileKindLabel, formatBytes } from "../../shared/util/file.js";
+import { fileMeta } from "../../shared/util/file.js";
+import { looksLikeAddress, safeHref } from "../../shared/util/url.js";
 import { dynamicSize } from "../../shared/style/tokens.js";
 
 /**
- * @typedef {import("../use-file-upload.js").FileValue} FileValue
+ * @typedef {Object} FileValue
+ * @property {string} url
+ * @property {string} name
+ * @property {string} mime        Empty when unknown.
+ * @property {number|null} size   Bytes; null when unknown.
  */
 
 /**
@@ -45,7 +51,7 @@ export function FileEditor({ value, onChange, disabled, variant }) {
   const url = typeof obj.url === "string" ? obj.url : "";
   const name = typeof obj.name === "string" ? obj.name : "";
   const mime = typeof obj.mime === "string" ? obj.mime : "";
-  const size = typeof obj.size === "number" ? obj.size : 0;
+  const size = typeof obj.size === "number" ? obj.size : null;
 
   const { upload, isUploading, progress, error: uploadError } = useFileUpload();
   const [isDragging, setIsDragging] = useState(false);
@@ -72,7 +78,12 @@ export function FileEditor({ value, onChange, disabled, variant }) {
 
   // What the file is, as against what it has been called. The two sit one above
   // the other because the title is the editor's and this line is not.
-  const meta = [fileKindLabel(mime), formatBytes(size)].filter(Boolean).join(" · ");
+  const meta = fileMeta({ url, mime, size });
+  // The address can be typed now, so a stored `javascript:` would run in the
+  // panel of whichever editor clicked "open". An address that fails the check
+  // gets no link at all rather than an inert one.
+  const openHref = safeHref(url);
+  const suspect = url.trim().length > 0 && !looksLikeAddress(url);
 
   return (
     <div style={shellStyle}>
@@ -106,18 +117,19 @@ export function FileEditor({ value, onChange, disabled, variant }) {
               ) : null}
             </div>
             <div style={actionsStyle}>
-              {/* The one way to see where the file landed, now that no address
-                  box shows it. Stays for a read-only editor: looking at the
-                  attachment is not editing it. */}
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inscribed-file-action"
-              >
-                <Upload size={12} style={openIconStyle} />
-                {t("editors.file.open")}
-              </a>
+              {/* Stays for a read-only editor: looking at the attachment is not
+                  editing it. */}
+              {openHref ? (
+                <a
+                  href={openHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inscribed-file-action"
+                >
+                  <Upload size={12} style={openIconStyle} />
+                  {t("editors.file.open")}
+                </a>
+              ) : null}
               {!disabled ? (
                 <>
                   <button
@@ -131,7 +143,7 @@ export function FileEditor({ value, onChange, disabled, variant }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => onChange({ url: "", name: "", mime: "", size: 0 })}
+                    onClick={() => onChange({ url: "", name: "", mime: "", size: null })}
                     disabled={isUploading}
                     className="inscribed-file-action is-destructive"
                   >
@@ -179,27 +191,43 @@ export function FileEditor({ value, onChange, disabled, variant }) {
         <FieldMessage tone="danger" role="alert">{uploadError}</FieldMessage>
       ) : null}
 
-      {/* Only once there is a file: a title box over an empty field names
-          nothing, and the dropzone above is the only thing to do there. Framed
-          like the link and image pairs even at one row, so a titled file sits
-          on the same vertical as every other framed field in the drawer. */}
-      {url ? (
-        <div className={`inscribed-field-group ${v.className}`.trim()}>
-          <div>
-            <span aria-hidden="true" style={groupIconStyle}><TypeShortText size={15} /></span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => onChange({ url, mime, size, name: e.target.value })}
-              placeholder={t("editors.file.namePlaceholder")}
-              aria-label={t("editors.file.name")}
-              disabled={disabled}
-              className={`inscribed-field ${v.className}`.trim()}
-              style={groupInputStyle}
-            />
-          </div>
+      {/* Address and title as one framed pair, the shape the image and link
+          fields use. Shown on an empty field too: the address box is how a
+          document on another server or a video link gets in without an
+          upload. */}
+      <div className={`inscribed-field-group ${v.className}`.trim()}>
+        <div>
+          <span aria-hidden="true" style={groupIconStyle}><LinkIcon size={15} /></span>
+          <input
+            type="url"
+            value={url}
+            // The type and size described the uploaded file. A hand-edited
+            // address points somewhere else, so they go rather than lie.
+            onChange={(e) => onChange({ url: e.target.value, name, mime: "", size: null })}
+            placeholder="https://…"
+            spellCheck={false}
+            aria-label={t("editors.file.url")}
+            disabled={disabled}
+            className={`inscribed-field ${v.className}`.trim()}
+            style={groupInputStyle}
+          />
         </div>
-      ) : null}
+        <div>
+          <span aria-hidden="true" style={groupIconStyle}><TypeShortText size={15} /></span>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => onChange({ url, mime, size, name: e.target.value })}
+            placeholder={t("editors.file.namePlaceholder")}
+            aria-label={t("editors.file.name")}
+            disabled={disabled}
+            className={`inscribed-field ${v.className}`.trim()}
+            style={groupInputStyle}
+          />
+        </div>
+      </div>
+
+      {suspect ? <FieldMessage tone="warn">{t("editors.url.suspect")}</FieldMessage> : null}
 
       <input
         ref={inputRef}

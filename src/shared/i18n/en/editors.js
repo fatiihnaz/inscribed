@@ -35,6 +35,7 @@ export const editors = Object.freeze({
   "editors.file.open": "Open",
   "editors.file.replace": "Replace",
   "editors.file.remove": "Remove",
+  "editors.file.url": "File URL",
   "editors.file.name": "File name",
   "editors.file.namePlaceholder": "Name this file",
 

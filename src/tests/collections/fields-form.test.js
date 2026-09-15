@@ -191,9 +191,9 @@ describe("File field ({ url, name, mime, size } object)", () => {
   };
   const doc = (url, name) => ({ url, name, mime: "application/pdf", size: 2517000 });
 
-  it("seeds a missing File to all four empty halves", () => {
+  it("seeds a missing File to all four empty halves, size unknown", () => {
     expect(seedValues([brochure], {}))
-      .toEqual({ brochure: { url: "", name: "", mime: "", size: 0 } });
+      .toEqual({ brochure: { url: "", name: "", mime: "", size: null } });
   });
 
   it("keeps the metadata on the wire rather than stripping down to the url", () => {
@@ -202,8 +202,15 @@ describe("File field ({ url, name, mime, size } object)", () => {
   });
 
   it("nulls a file with no url", () => {
-    expect(buildPayload([brochure], { brochure: { url: "", name: "", mime: "", size: 0 } }))
+    expect(buildPayload([brochure], { brochure: { url: "", name: "", mime: "", size: null } }))
       .toEqual({ brochure: null });
+  });
+
+  it("keeps a typed address whole, with its unknown type and size", () => {
+    const link = { url: "https://intranet.sirket.com.tr/a.pdf", name: "Rapor", mime: "", size: null };
+    expect(buildPayload([brochure], { brochure: link })).toEqual({ brochure: link });
+    expect(requiredMissing([brochure], { brochure: link })).toBeNull();
+    expect(requiredMissing([brochure], { brochure: { ...link, name: "" } })).toBe("Broşür → Name");
   });
 
   it("treats an optional empty file as valid, but requires a name once uploaded", () => {

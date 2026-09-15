@@ -20,7 +20,10 @@ import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
  */
 
 /**
- * @typedef {Object} FileValue
+ * What an upload produces. Unlike a typed address it always knows the type
+ * and size, which is why this is narrower than the editor's own value type.
+ *
+ * @typedef {Object} UploadedFile
  * @property {string} url    Where the file now lives.
  * @property {string} name   Seeded from the filename; the editor's to retitle.
  * @property {string} mime   The browser's own reading, empty for an extension it does not know.
@@ -29,7 +32,7 @@ import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 
 /**
  * @typedef {Object} UseFileUploadResult
- * @property {(file: File) => Promise<FileValue | null>} upload
+ * @property {(file: File) => Promise<UploadedFile | null>} upload
  * @property {() => void} reset   Clear a lingering error/progress.
  * @property {boolean} isUploading
  * @property {number} progress
@@ -47,7 +50,7 @@ export function useFileUpload() {
   const upload = useCallback(
     /**
      * @param {File} file
-     * @returns {Promise<FileValue | null>}
+     * @returns {Promise<UploadedFile | null>}
      */
     async (file) => {
       // Said by name rather than quietly routed through `uploadImage`: a

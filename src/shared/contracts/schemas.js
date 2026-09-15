@@ -19,11 +19,12 @@
  *     the text it shows as.
  *   - Date: ISO 8601 string, empty string when unset.
  *   - Image: { src, alt }
- *   - File: { url, name, mime, size }. An upload of any type. The field takes
- *     no typed address, which is what lets all four halves be filled at once:
- *     every value came from an upload that knew the file's own name, type and
- *     size, so a consumer never renders around a missing one. `mime` is the
- *     browser's own reading and is empty for an extension it does not know.
+ *   - File: { url, name, mime, size }. Uploaded or typed. An upload fills all
+ *     four; a typed address (a document on another server, a video link)
+ *     leaves `mime` "" and `size` null, since nothing reads them off a server
+ *     that is not ours. `mime` is also "" for an upload whose extension the
+ *     browser does not know. A consumer showing the size has to handle null.
+ *     Empty is `{ url: "", name: "", mime: "", size: null }`.
  *   - Link: { href, label }
  *   - Select: string, chosen from the field's `source`. A collection-backed
  *     source stores the target record's slug, which is what makes a reference a
@@ -169,10 +170,10 @@
  * ShortText, both required once the field has a value. It renders an upload
  * dropzone (`config.transport.uploadImage`) instead of a bare text box.
  *
- * `File` is the same bargain for everything else: `{ url, name, mime, size }`
- * through `config.transport.uploadFile`, with `url` and `name` required once
- * the field has a value. It offers no address box at all, so a file already on
- * the CDN is uploaded again rather than pointed at.
+ * `File` is the same bargain for everything else: `{ url, name, mime, size }`,
+ * uploaded through `config.transport.uploadFile` or typed as an address, with
+ * `url` and `name` required once the field has a value. A typed address carries
+ * no `mime` or `size` (see `BlockType`).
  *
  * @typedef {Exclude<BlockType, "Collection">} CollectionFieldType
  *

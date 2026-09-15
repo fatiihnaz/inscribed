@@ -24,7 +24,7 @@ import { useMemo } from "react";
 import { Pencil, TypeCollection, typeIconFor } from "../shared/style/icons.jsx";
 
 import { stableStringify } from "../shared/util/stable-stringify.js";
-import { fileKindLabel, formatBytes } from "../shared/util/file.js";
+import { fileMeta, formatBytes } from "../shared/util/file.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { diffWords, diffLines, stripHtml, lcsIndexPairs } from "./word-diff.js";
 
@@ -1159,7 +1159,7 @@ function SoloValue({ blockType, value, tone }) {
     }
     case "File": {
       if (!value?.url) return <span style={emptyValueStyle}>—</span>;
-      const meta = [fileKindLabel(value?.mime), formatBytes(value?.size)].filter(Boolean).join(" · ");
+      const meta = fileMeta(value);
       return <span style={wrap}>{value.name || value.url}{meta ? ` (${meta})` : ""}</span>;
     }
     default:

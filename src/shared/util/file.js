@@ -1,7 +1,6 @@
 /**
  * @file Display helpers for a `File` block's stored metadata, shared by the
- * drawer editor, the changes panel and the page-side render so all three say a
- * size and a format the same way.
+ * drawer editor and the changes panel so both describe a file the same way.
  */
 
 const UNITS = ["B", "KB", "MB", "GB", "TB"];
@@ -14,7 +13,7 @@ const UNITS = ["B", "KB", "MB", "GB", "TB"];
  * something nobody reads. Binary units, matching what an OS file listing shows
  * for the same file.
  *
- * @param {number} bytes
+ * @param {number|null|undefined} bytes
  * @returns {string|null} Null when the count is not a usable number.
  */
 export function formatBytes(bytes) {
@@ -72,4 +71,23 @@ export function fileKindLabel(mime) {
   // `svg+xml` is an SVG, `x-tar` a TAR.
   const bare = subtype.split("+")[0].replace(/^x-/, "");
   return bare ? bare.slice(0, 8).toUpperCase() : null;
+}
+
+/**
+ * The line under a file's title: its format and size when an upload recorded
+ * them, else the server it lives on. A typed address has neither, and the host
+ * is what tells an editor it points at a corporate server or a video platform
+ * rather than our CDN.
+ *
+ * @param {{ url?: string, mime?: string, size?: number | null }} value
+ * @returns {string|null} Null for a relative or unparseable address with no metadata.
+ */
+export function fileMeta(value) {
+  const known = [fileKindLabel(value?.mime ?? ""), formatBytes(value?.size)].filter(Boolean);
+  if (known.length) return known.join(" · ");
+  try {
+    return new URL(value?.url ?? "").hostname || null;
+  } catch {
+    return null;
+  }
 }

@@ -48,7 +48,7 @@ function defaultFor(type) {
     case "StringArray": return [];
     case "ObjectArray": return [];
     case "Image":       return { src: "", alt: "" };
-    case "File":        return { url: "", name: "", mime: "", size: 0 };
+    case "File":        return { url: "", name: "", mime: "", size: null };
     case "Link":        return { href: "", label: "" };
     default:            return "";
   }

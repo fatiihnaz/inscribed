@@ -19,18 +19,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 import { CmsContext, useCmsContext } from "../shared/state/cms-context.js";
 import { ensureCmsConfig } from "../shared/config.js";
 import { normalizePanels } from "../shared/panels.js";
-import { resolveCmsRoute } from "../shared/route.js";
+import { matchCmsRoute, resolveCmsRoute, routeKey } from "../shared/route.js";
 import { fieldCss } from "../editors/field-css.js";
 import { buildThemeCss } from "../shared/style/theme.js";
 import { layoutCss, PAGE_SHELL_CLASS } from "../shared/style/layout-css.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
-import { indexBlocksByPath } from "./blocks.js";
+import { seedSitePages, siteSlugs } from "./site-blocks.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
 import { CmsApiError } from "../shared/contracts/errors.js";
 import { createStore, useStoreSelector } from "../shared/state/store.js";
@@ -75,8 +75,10 @@ function useConstant(create) {
  * @param {CmsConfig | { baseUrl: string }} props.config
  * @param {string|null} [props.userSub]
  * @param {boolean} [props.isAdmin]
- * @param {BlockResponse[]} [props.initialBlocks]   Server-fetched blocks, seeded into the map before first paint to avoid SSR flicker.
- * @param {{ slug: string, locale: string|null }} [props.initialRoute]   What `initialBlocks` are *for*. Without it the client re-derives both from the pathname, which is wrong on a route whose slug was pinned (`<CmsPage slug="/news/[id]">`) and cannot tell a carried-over language from a current one. `createCmsPage` passes it.
+ * @param {import("../shared/contracts/schemas.js").SitePageContent[]} [props.initialPages]
+ *   Every page's blocks in the language on screen, as `<CmsPage>` read them.
+ *   Seeded into the store before first paint, so regions render real values
+ *   during SSR and every navigation renders from what is already here.
  * @param {(slug: string, locale?: string) => void | Promise<void>} [props.onAfterSave]   Server Action run after a save, typically `revalidateCmsSlug`. `locale` is undefined on a single-language site.
  * @param {() => Promise<string>} [props.getAccessToken]   Returns the user's JWT, added as `Authorization: Bearer` on writes. When omitted and `config.clientKey` is set, the built-in browser auth (reference backend `/auth/*`) takes over; omit both for public mode.
  * @param {import("../shared/contracts/transport.js").CmsTransport} [props.transport]   Custom client transport. Defaults to REST from `config`. Passed here, not via `config`, because it holds functions that can't cross the RSC boundary.
@@ -91,8 +93,7 @@ export function CmsProvider({
   config,
   userSub: userSubProp = null,
   isAdmin: isAdminProp = false,
-  initialBlocks,
-  initialRoute,
+  initialPages,
   onAfterSave,
   onAfterCollectionSave,
   getAccessToken,
@@ -271,22 +272,32 @@ export function CmsProvider({
   // changes identity once the session resolves.
 
   const pathname = usePathname() ?? "/";
-  const router = useRouter();
-  // The URL slug: what a link points at, derived from the pathname. Not
-  // necessarily what the backend stores under, which is `contentRoute` below.
-  const { slug: routeSlug, locale } = resolveCmsRoute(pathname, normalizedConfig);
-  // Only read while the blocks store is created, so it is the mount-time route.
-  const initialPathname = pathname;
 
-  // Keyed by pathname, then by blockPath. Pathname rather than slug because two
-  // locales share one slug and each renders its own route. A return visit is
-  // instant off this map, with no effect in between to leave a frame of
-  // placeholders. Seeded from `initialBlocks` so regions render real values
-  // during SSR and first paint.
+  // Which slugs the site has content for: what a pathname is matched against,
+  // so `/news/123` finds `/news/[id]` without the page saying so. Its own store
+  // because `useCmsRoute` reads it from any component, and it only ever moves
+  // when the server hands over a new site.
+  const slugsStore = useConstant(() =>
+    createStore(siteSlugs(initialPages, normalizedConfig)),
+  );
+  const slugs = useStoreSelector(slugsStore, (s) => s);
+  const route = useMemo(
+    () => matchCmsRoute(pathname, normalizedConfig, slugs),
+    [pathname, normalizedConfig, slugs],
+  );
+  const { slug: routeSlug, locale } = route;
+  // Where this route's blocks live in the store.
+  const currentKey = routeKey(routeSlug, locale);
+
+  // Keyed by `routeKey(slug, locale)`, then by blockPath, and it holds the
+  // whole site from the first render: `initialPages` is every page in this
+  // language, with the global slug folded into each. That is what makes a
+  // navigation free: the new route's selector already resolves, with no fetch
+  // and no effect in between to leave a frame of placeholders.
   const blocksStore = useConstant(() =>
     createStore(
       /** @type {Map<string, Map<string, BlockResponse>>} */ (
-        new Map([[initialPathname, indexBlocksByPath(initialBlocks ?? [])]])
+        seedSitePages(initialPages, resolveCmsRoute(pathname, normalizedConfig).locale, normalizedConfig)
       ),
     ),
   );
@@ -329,13 +340,13 @@ export function CmsProvider({
   const setTranslationDraftsState = translationDraftsStore.set;
 
   // Replace one route's blocks wholesale; what `useCmsContent` calls once a
-  // fetch lands. Other routes' entries stay, which is the cache.
+  // fetch lands. Other routes' entries stay.
   const commitBlocks = useCallback(
-    /** @param {string} pathname @param {Map<string, BlockResponse>} blocks */
-    (pathname, blocks) => {
+    /** @param {string} key  `routeKey(slug, locale)`. @param {Map<string, BlockResponse>} blocks */
+    (key, blocks) => {
       blocksStore.set((s) => {
         const next = new Map(s);
-        next.set(pathname, blocks);
+        next.set(key, blocks);
         return next;
       });
     },
@@ -346,17 +357,17 @@ export function CmsProvider({
   // An updater returning its input is a no-op, as with the plain store.
   const patchBlocks = useCallback(
     /**
-     * @param {string} pathname
+     * @param {string} key  `routeKey(slug, locale)`.
      * @param {(prev: Map<string, BlockResponse>) => Map<string, BlockResponse>} updater
      */
-    (pathname, updater) => {
+    (key, updater) => {
       blocksStore.set((s) => {
-        const prev = s.get(pathname);
+        const prev = s.get(key);
         if (!prev) return s;
         const blocks = updater(prev);
         if (blocks === prev) return s;
         const next = new Map(s);
-        next.set(pathname, blocks);
+        next.set(key, blocks);
         return next;
       });
     },
@@ -457,86 +468,35 @@ export function CmsProvider({
     [registryStore],
   );
 
-  /**
-   * Switching language lands on a route the store has never held, and a
-   * root-layout `<CmsPage>` does not re-render with fresh server blocks for it,
-   * so the client refetch is the only thing coming. In the meantime every
-   * surface reading this route saw an empty map: the page fell back to default
-   * values and the drawer's whole block list, collection reference rows
-   * included, unmounted and came back a moment later.
-   *
-   * The two routes are one page in two languages. The manifest is
-   * locale-agnostic, so they carry the same paths, types and order, and the
-   * only thing that differs is the text. Carrying the previous route's blocks
-   * over keeps every one of those surfaces mounted, and the refetch replaces
-   * the words behind it.
-   *
-   * `draftValue` is dropped on the way: those belong to the language they were
-   * typed in, and left on they would count as this language's unpublished
-   * changes and offer themselves to the next publish.
-   *
-   * @param {string} from
-   * @param {string} to
-   */
-  const carryLocaleSwitch = useCallback((from, to) => {
-    if (blocksStore.get().has(to)) return;
-    const before = resolveCmsRoute(from, normalizedConfig);
-    const after = resolveCmsRoute(to, normalizedConfig);
-    if (before.slug !== after.slug || before.locale === after.locale) return;
-    const carried = blocksStore.get().get(from);
-    if (!carried) return;
-    provisionalRef.current.add(to);
-    /** @type {Map<string, BlockResponse>} */
-    const next = new Map();
-    for (const [path, block] of carried) {
-      next.set(path, block.draftValue == null ? block : { ...block, draftValue: null });
-    }
-    commitBlocks(to, next);
-  }, [blocksStore, commitBlocks, normalizedConfig]);
+  // A new site from the server (the layout re-rendered: `router.refresh()`, or
+  // a regeneration after publish) replaces every entry, since it is the truth
+  // for all of them. Lazy init only runs once on mount, so without this the
+  // page would keep rendering the blocks it mounted with. An editor's drafts
+  // ride their own refetch (`ContentLoader`), which lands after this and puts
+  // them back.
+  const initialPagesRef = useRef(initialPages);
+  useEffect(() => {
+    if (initialPages === initialPagesRef.current) return;
+    initialPagesRef.current = initialPages;
+    const seededLocale = resolveCmsRoute(pathname, normalizedConfig).locale;
+    slugsStore.set(siteSlugs(initialPages, normalizedConfig));
+    blocksStore.set((prev) => {
+      const next = new Map(prev);
+      for (const [key, blocks] of seedSitePages(initialPages, seededLocale, normalizedConfig)) {
+        next.set(key, blocks);
+      }
+      return next;
+    });
+    // `pathname` is the route the new site arrived on, read, never a trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPages, blocksStore, slugsStore, normalizedConfig]);
 
-  // Re-seed the blocks map when `initialBlocks` arrives with new content (e.g.
-  // navigation re-renders `<CmsPage>` for a new slug). Lazy init only runs once
-  // on mount, so without this the panel would show stale blocks.
-  // One effect for both triggers, because the refetch decision below needs to
-  // see them together: whether fresh server blocks arrived *with* this
-  // navigation is exactly what says if another fetch is needed.
-  // What the blocks now in the store were fetched for, and for which pathname.
-  // The client cannot re-derive `slug`: on `<CmsPage slug="/news/[id]">` the
-  // pathname is `/news/1`, a slug the backend never saw. State, not a ref,
-  // because `useCmsContent` addresses its fetch with it.
-  const [contentRoute, setContentRoute] = useState(() => ({
-    pathname: initialPathname,
-    slug: initialRoute?.slug ?? routeSlug,
-    locale: initialRoute?.locale ?? locale,
-  }));
-  // Entries `carryLocaleSwitch` wrote: the previous language's blocks, standing
-  // in until the real ones arrive. Present in the store but not an answer, so
-  // nothing may read their presence as "this route is already served".
-  const provisionalRef = useRef(/** @type {Set<string>} */ (new Set()));
-
-  const initialBlocksRef = useRef(initialBlocks);
+  // What a navigation leaves behind. Nothing is fetched: the store already
+  // holds every route, so the new page renders on the same commit.
   const lastPathnameRef = useRef(pathname);
   useEffect(() => {
-    const blocksChanged = initialBlocks !== initialBlocksRef.current;
-    const pathChanged = pathname !== lastPathnameRef.current;
-    if (!blocksChanged && !pathChanged) return;
-    const previousPathname = lastPathnameRef.current;
-    initialBlocksRef.current = initialBlocks;
+    if (pathname === lastPathnameRef.current) return;
     lastPathnameRef.current = pathname;
-
-    // New server content lands under the route it describes, and settles what
-    // that route's blocks are for.
-    if (blocksChanged) {
-      commitBlocks(pathname, indexBlocksByPath(initialBlocks ?? []));
-      provisionalRef.current.delete(pathname);
-      setContentRoute({
-        pathname,
-        slug: initialRoute?.slug ?? routeSlug,
-        locale: initialRoute?.locale ?? locale,
-      });
-    } else if (pathChanged) {
-      carryLocaleSwitch(previousPathname, pathname);
-    }
     // Conflicts go with the drafts they were raised against. `pendingBlock` is
     // deliberately left alone: it names a block on the route being navigated
     // *to*, so clearing it here would cancel the very jump this navigation is.
@@ -546,42 +506,19 @@ export function CmsProvider({
     // the drafts above: they are only publishable from the route that offered
     // them, so surviving a navigation would leave an edit nothing can reach.
     setTranslationDraftsState(new Map());
-
-    // A navigation needs at most one refetch. A route already answered renders
-    // from the store immediately and needs no nudge; a provisional entry only
-    // looks answered, and skipping the nudge on one is how a locale switch used
-    // to leave a public visitor reading the previous language all session.
-    if (!pathChanged || blocksChanged) return;
-    if (blocksStore.get().has(pathname) && !provisionalRef.current.has(pathname)) return;
-    // An editor's client refetch fills this, and `router.refresh()` could not
-    // help them anyway: the SSR response is ISR-cached under one tag for every
-    // visitor, so it structurally cannot carry their `draftValue`.
-    //
-    // Navigating off the route the server described drops `contentSlug`, and
-    // the fetch falls back to deriving one. That is safe here and only here: a
-    // slug can only be pinned per page (`<CmsPage slug="/news/[id]">`), and a
-    // page that pins one re-renders on the way in, so fresh blocks arrive with
-    // it and this branch is never reached. A root-layout `<CmsPage>` pins
-    // nothing, so the server derives the same slug the client would.
-    if (isAdmin) return;
-    router.refresh();
-    // `contentRoute`, `initialRoute`, `routeSlug` and `locale` are read as the
-    // values current with this navigation, never as triggers: the effect must
-    // fire on a route or content change and nothing else.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialBlocks, pathname, isAdmin, router, blocksStore, commitBlocks, carryLocaleSwitch, setDraftsState, setTranslationDraftsState, patchUi]);
+  }, [pathname, setDraftsState, setTranslationDraftsState, patchUi]);
 
   // Drop drafts for blocks that no longer exist (e.g. after a manifest sync
   // removed one). Subscribed rather than keyed on a render value, since blocks
   // now change without re-rendering the provider. Pathname-change drafts are
   // already cleared above.
-  const prunePathnameRef = useRef(pathname);
-  prunePathnameRef.current = pathname;
+  const pruneKeyRef = useRef(currentKey);
+  pruneKeyRef.current = currentKey;
   useEffect(() => {
     const prune = () => {
       // Only the route being edited: drafts belong to the page they were typed
       // on, and navigation already clears them.
-      const currentBlocks = blocksStore.get().get(prunePathnameRef.current);
+      const currentBlocks = blocksStore.get().get(pruneKeyRef.current);
       if (!currentBlocks) return;
       setDraftsState((prev) => {
         if (prev.size === 0) return prev;
@@ -772,7 +709,7 @@ export function CmsProvider({
   // ---- Draft autosave (PUT /cms/draft, 1s after last edit) ---------------
   //
   // Each edit re-arms a 1s debounce; on fire we group dirty edits by slug and
-  // PUT each. Block/version/config/pathname are read through refs so unrelated
+  // PUT each. Block/version/config/route are read through refs so unrelated
   // re-renders don't reset the timer, only a real `drafts` mutation does.
 
   const setDraftSyncStatus = useCallback(
@@ -781,8 +718,8 @@ export function CmsProvider({
     [patchUi],
   );
 
-  const draftPathnameRef = useRef(pathname);
-  draftPathnameRef.current = pathname;
+  const draftKeyRef = useRef(currentKey);
+  draftKeyRef.current = currentKey;
   const draftSlugRef = useRef(routeSlug);
   draftSlugRef.current = routeSlug;
   const draftLocaleRef = useRef(locale);
@@ -867,11 +804,11 @@ export function CmsProvider({
      * of date. Scoped to this flush's slug for the same reason.
      *
      * @param {string} slug
-     * @param {string} pathname       Cache key for this route's blocks.
+     * @param {string} key            Store key for this route's blocks.
      * @param {string} fallbackSlug   Slug for blocks that carry no `_slug` stamp.
      */
-    const pruneSettledDrafts = (slug, pathname, fallbackSlug) => {
-      const blocks = blocksStore.get().get(pathname) ?? EMPTY_BLOCKS;
+    const pruneSettledDrafts = (slug, key, fallbackSlug) => {
+      const blocks = blocksStore.get().get(key) ?? EMPTY_BLOCKS;
       setDraftsState((prev) => {
         /** @type {Map<string, *> | null} */
         let next = null;
@@ -892,8 +829,8 @@ export function CmsProvider({
       const drafts = contentDraftsStore.get();
       if (drafts.size === 0) return;
 
-      const pathname = draftPathnameRef.current ?? "/";
-      const blocks = blocksStore.get().get(pathname) ?? EMPTY_BLOCKS;
+      const activeKey = draftKeyRef.current;
+      const blocks = blocksStore.get().get(activeKey) ?? EMPTY_BLOCKS;
       /** @type {Set<string>} */
       const slugs = new Set();
       for (const blockPath of drafts.keys()) {
@@ -903,13 +840,13 @@ export function CmsProvider({
 
       for (const slug of slugs) {
         draftQueue.schedule(contentDraftKey(slug, draftLocaleRef.current), async (ctx) => {
-          const currentPathname = draftPathnameRef.current ?? "/";
+          const activeKey = draftKeyRef.current;
           const currentSlug = draftSlugRef.current;
           const currentLocale = draftLocaleRef.current;
-          const currentBlocks = blocksStore.get().get(currentPathname) ?? EMPTY_BLOCKS;
+          const currentBlocks = blocksStore.get().get(activeKey) ?? EMPTY_BLOCKS;
           const items = collectForSlug(slug, currentSlug, currentBlocks);
           if (items.length === 0) {
-            pruneSettledDrafts(slug, currentPathname, currentSlug);
+            pruneSettledDrafts(slug, activeKey, currentSlug);
             return;
           }
 
@@ -970,7 +907,7 @@ export function CmsProvider({
           // draftValue = the value sent, or null when that equals published
           // (the backend auto-cleans). Without it an undo would keep
           // `draftValue` set until the next refetch, leaving a stale dirty count.
-          patchBlocks(currentPathname, (prev) => {
+          patchBlocks(activeKey, (prev) => {
             let mutated = false;
             const nextMap = new Map(prev);
             for (const sent of items) {
@@ -983,7 +920,7 @@ export function CmsProvider({
             }
             return mutated ? nextMap : prev;
           });
-          pruneSettledDrafts(slug, currentPathname, currentSlug);
+          pruneSettledDrafts(slug, activeKey, currentSlug);
 
           if (isAllReset) setDraftSyncStatus("idle");
           else flashDraftStatus("saved");
@@ -1020,8 +957,8 @@ export function CmsProvider({
     /** @param {string[]} blockPaths */
     (blockPaths) => {
       if (blockPaths.length === 0) return;
-      const currentPathname = draftPathnameRef.current ?? "/";
-      const currentBlocks = blocksStore.get().get(currentPathname) ?? EMPTY_BLOCKS;
+      const activeKey = draftKeyRef.current;
+      const currentBlocks = blocksStore.get().get(activeKey) ?? EMPTY_BLOCKS;
       /** @type {Set<string>} */
       const slugs = new Set();
       for (const blockPath of blockPaths) {
@@ -1068,8 +1005,8 @@ export function CmsProvider({
       if (blockPaths.length === 0) return;
       /** @type {Map<string, string[]>} */
       const bySlug = new Map();
-      const currentPathname = draftPathnameRef.current ?? "/";
-      const currentBlocks = blocksStore.get().get(currentPathname) ?? new Map();
+      const activeKey = draftKeyRef.current;
+      const currentBlocks = blocksStore.get().get(activeKey) ?? new Map();
       for (const blockPath of blockPaths) {
         const block = currentBlocks.get(blockPath);
         if (!block || block.draftValue == null) continue;
@@ -1082,7 +1019,7 @@ export function CmsProvider({
 
       // Optimistic: null draftValue locally so dirtyCount and downstream
       // surfaces update without waiting for the round-trip.
-      patchBlocks(currentPathname, (prev) => {
+      patchBlocks(activeKey, (prev) => {
         let mutated = false;
         const next = new Map(prev);
         for (const pathsForSlug of bySlug.values()) {
@@ -1129,12 +1066,9 @@ export function CmsProvider({
       isAdmin,
       userSub,
       userInfo,
-      // The slug the backend stores this route under, when the server told us.
-      // Null once we have navigated away from the route it described, and a
-      // null here means "ask, don't derive".
-      contentSlug: contentRoute.pathname === pathname ? contentRoute.slug : null,
       onSignOut: onSignOut ? stableOnSignOut : browserSession ? browserSignOut : null,
 
+      slugsStore,
       blocksStore,
       commitBlocks,
       contentDraftsStore,
@@ -1173,8 +1107,6 @@ export function CmsProvider({
       isAdmin,
       userSub,
       userInfo,
-      contentRoute,
-      pathname,
       onSignOut,
       stableOnSignOut,
       browserSession,
@@ -1213,9 +1145,9 @@ export function CmsProvider({
 
   const tree = (
     <>
-      {/* Admin-only client refetch so post-save `triggerRefetch` and the
-          autosave roundtrip pull fresh versions in without a navigation.
-          Public visitors refresh via `router.refresh()` above instead. */}
+      {/* Admin-only client refetch: the site the server handed over is the
+          published one, and only a request with the editor's token carries
+          their drafts and the versions a save needs. */}
       {isAdmin ? <ContentLoader /> : null}
       <PageShell isAdmin={isAdmin}>{children}</PageShell>
       {/* A prop rather than context: the drawer is the only reader, and an
@@ -1344,8 +1276,8 @@ function SessionExpiredNotice({ onSignIn, onDismiss }) {
   );
 }
 
-// Admin-only. Public visitors render from `initialBlocks` (ISR-cached, dropped
-// on save via `revalidateCmsSlug`), so they never need this client refetch.
+// Admin-only. Public visitors render from `initialPages` (cached until a
+// publish drops the site tag), so they never need this client refetch.
 function ContentLoader() {
   useCmsContent();
   return null;

@@ -84,7 +84,7 @@ async function mount(children) {
         config={{ baseUrl: "https://api.test" }}
         transport={/** @type {*} */ (transport)}
         isAdmin
-        initialBlocks={[imageBlock(), textBlock()]}
+        initialPages={[{ slug: "/", blocks: [imageBlock(), textBlock()] }]}
       >
         {children}
       </CmsProvider>,

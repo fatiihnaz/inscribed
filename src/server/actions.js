@@ -7,20 +7,23 @@
 
 import { revalidateTag } from "next/cache";
 
-import { cmsCacheTag, cmsCollectionItemTag, cmsCollectionTag } from "./get-content.js";
+import { cmsCacheTag, cmsCollectionItemTag, cmsCollectionTag, cmsSiteTag } from "./get-content.js";
 
 /**
- * Drop the ISR cache for a page slug after an admin save.
- * Pass this directly as `onAfterSave` to `NextAuthCmsProvider` or `CmsProvider`.
+ * Drop the cached content after an admin save. Pass this directly as
+ * `onAfterSave` to `createCmsPage` or `CmsProvider`.
  *
- * Only the locale that was published: the other translations of this page are
- * cached under their own tags and nothing about them changed.
+ * Two tags: the page's own, for anything reading it through `getCmsContent`,
+ * and the site's, which is what every route renders from. Only the locale that
+ * was published: the other languages are cached under their own tags and
+ * nothing about them changed.
  *
  * @param {string} slug
  * @param {string} [locale]  Omitted on a single-language site.
  */
 export async function revalidateCmsSlug(slug, locale) {
   revalidateTag(cmsCacheTag(slug, locale));
+  revalidateTag(cmsSiteTag(locale));
 }
 
 /**

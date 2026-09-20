@@ -12,6 +12,7 @@
 /**
  * @import {
  *   ContentResponse,
+ *   SiteContentResponse,
  *   UpdatePageRequest,
  *   UpdatePageResponse,
  *   SyncManifestRequest,
@@ -52,6 +53,12 @@
  *
  * @typedef {Object} CmsTransport
  * @property {(slug: string, opts?: CmsRequestOptions) => Promise<ContentResponse>} getContent
+ * @property {(opts?: CmsRequestOptions) => Promise<SiteContentResponse>} [getSiteContent]
+ *   Every synced slug's blocks in one language, in one request. This is what
+ *   `<CmsPage>` renders a site from, so a backend answers it once per language
+ *   per publish rather than once per page. Optional on the seam only for a
+ *   backend that cannot: `getCmsSiteContent` then reads page by page over
+ *   `config.slugs`, and without those it fails with the endpoint's name.
  * @property {(key: string, params?: CollectionListParams, opts?: CmsRequestOptions) => Promise<CollectionListResponse>} getCollection
  * @property {(key: string, slug: string, opts?: CmsRequestOptions) => Promise<CollectionItemResponse>} getCollectionItem
  * @property {(key: string, params: { q?: string, slugs?: string[], locale?: string | null, limit?: number }, opts?: CmsRequestOptions) => Promise<CollectionLookupResponse>} [lookupCollection]

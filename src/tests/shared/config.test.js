@@ -70,3 +70,19 @@ describe("createCmsConfig", () => {
     ).toThrow(/theme\.accent must be a string or number/);
   });
 });
+describe("createCmsConfig slugs", () => {
+  it("defaults to null, since the reference backend reads the site in one request", () => {
+    expect(createCmsConfig({ baseUrl: "https://api.test" }).slugs).toBeNull();
+  });
+
+  it("keeps a deduplicated, frozen list when given", () => {
+    const cfg = createCmsConfig({ baseUrl: "https://api.test", slugs: ["/", "/about", "/about"] });
+    expect(cfg.slugs).toEqual(["/", "/about"]);
+    expect(Object.isFrozen(cfg.slugs)).toBe(true);
+  });
+
+  it("rejects anything that is not a list of paths", () => {
+    expect(() => createCmsConfig({ baseUrl: "https://api.test", slugs: ["about"] })).toThrow(/starting with/);
+    expect(() => createCmsConfig({ baseUrl: "https://api.test", slugs: "/about" })).toThrow(/array/);
+  });
+});

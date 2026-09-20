@@ -427,6 +427,24 @@
  */
 
 /**
+ * One page inside a whole-site read.
+ *
+ * @typedef {Object} SitePageContent
+ * @property {string} slug
+ * @property {BlockResponse[]} blocks
+ */
+
+/**
+ * Every synced slug's blocks in one language, which is what a site renders
+ * from: `GET /cms/content/all`. The global slug rides along as a page like any
+ * other, and the client folds it into each page's entry.
+ *
+ * @typedef {Object} SiteContentResponse
+ * @property {string} [locale]   Echoed back; absent on a single-language backend.
+ * @property {SitePageContent[]} pages
+ */
+
+/**
  * Single block in a `PUT /cms/content` request body.
  *
  * @typedef {Object} UpdateBlockItem

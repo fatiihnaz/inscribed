@@ -34,9 +34,12 @@ import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { useCmsSave } from "../../core/hooks/use-cms-save.js";
 import { useCmsTranslations } from "../../core/hooks/use-cms-translations.js";
+import { routeKey } from "../../shared/route.js";
 
 const PATH = "hero.body";
 const GLOBAL_PATH = "footer.tagline";
+/** Where the Turkish home page's blocks live in the store. */
+const HOME_TR = routeKey("/", "tr");
 
 /** Published rows, per language. Versions move independently on purpose. */
 let rows;
@@ -107,7 +110,7 @@ const probe = /** @type {*} */ ({});
 
 function Probe() {
   const ctx = useCmsContext();
-  const blocks = useStoreSelector(ctx.blocksStore, (s) => s.get("/") ?? EMPTY);
+  const blocks = useStoreSelector(ctx.blocksStore, (s) => s.get(HOME_TR) ?? EMPTY);
   const block = blocks.get(PATH) ?? seedBlock("tr");
 
   probe.setDraft = ctx.setDraft;
@@ -134,19 +137,8 @@ function Probe() {
  */
 function LateCard() {
   const ctx = useCmsContext();
-  const blocks = useStoreSelector(ctx.blocksStore, (s) => s.get("/") ?? EMPTY);
+  const blocks = useStoreSelector(ctx.blocksStore, (s) => s.get(HOME_TR) ?? EMPTY);
   useCmsTranslations(blocks.get(PATH) ?? seedBlock("tr"), { enabled: true });
-  return null;
-}
-
-/**
- * No translation prefetch. `Probe` asks for translations on mount, which warms
- * the other language's route and makes a switch into it a cache hit — real, but
- * it only happens once a block has actually been rewritten. The cold switch is
- * the ordinary one, and the one the carry-over exists for.
- */
-function BareProbe() {
-  probe.blocksStore = useCmsContext().blocksStore;
   return null;
 }
 
@@ -157,7 +149,7 @@ async function settle() {
 }
 
 /** Hoisted so a rerender doesn't re-seed the provider on prop identity alone. */
-let seed;
+let pages;
 
 function tree(children) {
   return (
@@ -165,7 +157,7 @@ function tree(children) {
       config={CONFIG}
       transport={/** @type {*} */ (transport)}
       isAdmin
-      initialBlocks={seed}
+      initialPages={pages}
       onAfterSave={(slug, locale) => { revalidated.push([slug, locale]); }}
     >
       {children}
@@ -194,7 +186,7 @@ beforeEach(() => {
   reads = [];
   writes = [];
   revalidated = [];
-  seed = [seedBlock("tr")];
+  pages = [{ slug: "/", blocks: [seedBlock("tr")] }];
   pathname = "/";
   holdReads = false;
 });
@@ -425,42 +417,6 @@ describe("waiting on the other language", () => {
   });
 });
 
-describe("switching language", () => {
-  it("carries the page's structure over, so nothing unmounts while the fetch is out", async () => {
-    seed = [{ ...seedBlock("tr"), draftValue: "yarım kalmış Türkçe taslak" }];
-    let view;
-    await act(async () => { view = render(tree(<BareProbe />)); });
-    await settle();
-
-    // The English route has never been in the store, and a root-layout
-    // `<CmsPage>` brings no fresh server blocks with the navigation. Without the
-    // carry-over every surface reading this route saw an empty map: the drawer's
-    // block list, its collection reference rows and all.
-    holdReads = true;
-    pathname = "/en";
-    await act(async () => { view.rerender(tree(<BareProbe />)); });
-
-    const carried = probe.blocksStore.get().get("/en");
-    expect(carried?.get(PATH)).toBeTruthy();
-    expect(carried.get(PATH).blockType).toBe("LongText");
-    // The draft belonged to Turkish. Carried over it would count as an English
-    // change and offer itself to the next publish.
-    expect(carried.get(PATH).draftValue).toBeNull();
-  });
-
-  it("carries nothing between two different pages", async () => {
-    let view;
-    await act(async () => { view = render(tree(<BareProbe />)); });
-    await settle();
-    holdReads = true;
-    pathname = "/baska-sayfa";
-    await act(async () => { view.rerender(tree(<BareProbe />)); });
-
-    // Same-slug-other-language is the only pair whose blocks are known to match.
-    expect(probe.blocksStore.get().has("/baska-sayfa")).toBe(false);
-  });
-});
-
 describe("without locales configured", () => {
   it("offers nothing and fetches nothing extra", async () => {
     await act(async () => {
@@ -469,7 +425,7 @@ describe("without locales configured", () => {
           config={{ baseUrl: "https://api.test" }}
           transport={/** @type {*} */ (transport)}
           isAdmin
-          initialBlocks={[seedBlock("tr")]}
+          initialPages={[{ slug: "/", blocks: [seedBlock("tr")] }]}
         >
           <Probe />
         </CmsProvider>,

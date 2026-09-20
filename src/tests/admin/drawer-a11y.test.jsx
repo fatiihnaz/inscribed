@@ -154,7 +154,7 @@ describe("a collapsed block card", () => {
   it("takes its editor out of the tab order until it is opened", async () => {
     mockFetch();
     render(
-      <CmsProvider config={CONFIG} isAdmin initialBlocks={[imageBlock]}>
+      <CmsProvider config={CONFIG} isAdmin initialPages={[{ slug: "/", blocks: [imageBlock] }]}>
         <BlockCard block={imageBlock} displayPath="hero.image" topLevel isActive={false} itemSchema={null} />
       </CmsProvider>,
     );

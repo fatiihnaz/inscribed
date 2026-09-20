@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { localizePath, resolveCmsRoute } from "../../shared/route.js";
+import { localizePath, matchCmsRoute, matchSlugTemplate, parseRouteKey, resolveCmsRoute, routeKey } from "../../shared/route.js";
 import { createCmsConfig, ensureCmsConfig } from "../../shared/config.js";
 
 /**
@@ -144,5 +144,65 @@ describe("createCmsConfig locales", () => {
     expect(() =>
       createCmsConfig({ baseUrl: "https://api.test", locales: "tr" }),
     ).toThrow(/array/);
+  });
+});
+
+describe("matchCmsRoute", () => {
+  const slugs = new Set(["/", "/about", "/news/[id]", "/news/latest", "/docs/[...path]", "/blog/[[...rest]]"]);
+
+  it("keeps a slug the site has as it is", () => {
+    expect(matchCmsRoute("/about", multi, slugs).slug).toBe("/about");
+    expect(matchCmsRoute("/en/about", multi, slugs)).toMatchObject({ slug: "/about", locale: "en" });
+  });
+
+  it("matches a concrete path to its dynamic-segment template", () => {
+    expect(matchCmsRoute("/news/123", multi, slugs).slug).toBe("/news/[id]");
+    expect(matchCmsRoute("/en/news/123", multi, slugs)).toMatchObject({ slug: "/news/[id]", locale: "en" });
+  });
+
+  it("prefers the exact slug over a template it would also fit", () => {
+    expect(matchCmsRoute("/news/latest", multi, slugs).slug).toBe("/news/latest");
+  });
+
+  it("matches a catch-all to any depth, and an optional one to none", () => {
+    expect(matchCmsRoute("/docs/a/b/c", multi, slugs).slug).toBe("/docs/[...path]");
+    expect(matchCmsRoute("/docs", multi, slugs).slug).toBe("/docs");
+    expect(matchCmsRoute("/blog", multi, slugs).slug).toBe("/blog/[[...rest]]");
+    expect(matchCmsRoute("/blog/2026/09", multi, slugs).slug).toBe("/blog/[[...rest]]");
+  });
+
+  it("ranks a single segment above a catch-all", () => {
+    const both = new Set(["/x/[id]", "/x/[...rest]"]);
+    expect(matchSlugTemplate("/x/1", both)).toBe("/x/[id]");
+    expect(matchSlugTemplate("/x/1/2", both)).toBe("/x/[...rest]");
+  });
+
+  it("leaves a path nothing fits as its own slug", () => {
+    expect(matchCmsRoute("/news/1/comments", multi, slugs).slug).toBe("/news/1/comments");
+    expect(matchCmsRoute("/team", multi, slugs).slug).toBe("/team");
+  });
+
+  it("is plain resolution with no slugs to match against", () => {
+    expect(matchCmsRoute("/news/1", multi)).toEqual(resolveCmsRoute("/news/1", multi));
+    expect(matchCmsRoute("/news/1", multi, new Set()).slug).toBe("/news/1");
+  });
+});
+
+describe("routeKey", () => {
+  it("is the slug alone on a single-language site", () => {
+    expect(routeKey("/about", null)).toBe("/about");
+    expect(parseRouteKey("/about")).toEqual({ slug: "/about", locale: null });
+  });
+
+  it("keeps two languages of one slug apart and round-trips", () => {
+    const tr = routeKey("/about", "tr");
+    const en = routeKey("/about", "en");
+    expect(tr).not.toBe(en);
+    expect(parseRouteKey(tr)).toEqual({ slug: "/about", locale: "tr" });
+    expect(parseRouteKey(en)).toEqual({ slug: "/about", locale: "en" });
+  });
+
+  it("survives a slug holding any printable character", () => {
+    expect(parseRouteKey(routeKey("/a:b/[id]", "en"))).toEqual({ slug: "/a:b/[id]", locale: "en" });
   });
 });

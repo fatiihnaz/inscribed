@@ -1,11 +1,13 @@
 "use client";
 
 /**
- * @file `useCmsContent()`: fetch the current page's blocks. The route comes from
- * `useCmsRoute()`, which is also what keeps the cache keyed by pathname while
- * the fetch addresses the slug. The result lands in the shared `CmsContext`
- * blocks map so `useCmsBlock` / `EditableRegion` read it without their own
- * fetches. Re-runs when `refetchToken` changes (bumped by saves).
+ * @file `useCmsContent()`: the current page's blocks, and the editor's fetch
+ * of them. A visitor never fetches: the site arrived with the page and every
+ * route renders from the store. An editor does, because only a request with
+ * their token carries `draftValue` and the versions a save needs. The result
+ * lands in the shared blocks map so `useCmsBlock` / `EditableRegion` read it
+ * without fetches of their own. Re-runs when `refetchToken` changes (bumped by
+ * saves), which is also how `refetch()` reaches a visitor's page.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -13,6 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
+import { routeKey } from "../../shared/route.js";
 import { indexBlocksByPath } from "../blocks.js";
 import { fetchRouteBlocks } from "../fetch-route-blocks.js";
 import { useCmsRoute } from "./use-cms-route.js";
@@ -36,21 +39,17 @@ const EMPTY_BLOCKS = new Map();
 /**
  * @returns {UseCmsContentResult}
  */
-
 export function useCmsContent() {
-  const { config, blocksStore, commitBlocks, uiStore, triggerRefetch, getAccessToken, contentSlug } = useCmsContext();
-  const { pathname, slug: urlSlug, locale } = useCmsRoute();
-  // The pathname is the URL's slug, not necessarily the backend's: on
-  // `<CmsPage slug="/news/[id]">` they differ, and fetching the derived one
-  // would address a slug that was never synced. `contentSlug` is what the
-  // server actually read, and is null once we have navigated off that route.
-  const slug = contentSlug ?? urlSlug;
+  const { config, isAdmin, blocksStore, commitBlocks, uiStore, triggerRefetch, getAccessToken } = useCmsContext();
+  const { slug, locale } = useCmsRoute();
+  const key = routeKey(slug, locale);
   const refetchToken = useStoreSelector(uiStore, (s) => s.refetchToken);
 
   // Blocks come straight off the store rather than a local copy: the same map
-  // is written by the SSR seed, by navigation, and by the autosave mirror, and
-  // a local array would silently miss all three (this hook is public API).
-  const byPath = useStoreSelector(blocksStore, (s) => s.get(pathname) ?? EMPTY_BLOCKS);
+  // is written by the site seed, by the editor's fetch, and by the autosave
+  // mirror, and a local array would silently miss all three (this hook is
+  // public API).
+  const byPath = useStoreSelector(blocksStore, (s) => s.get(key) ?? EMPTY_BLOCKS);
   const blocks = useMemo(() => Array.from(byPath.values()), [byPath]);
 
   const [state, setState] = useState(
@@ -58,7 +57,12 @@ export function useCmsContent() {
     () => ({ isLoading: false, error: null }),
   );
 
+  // A visitor's page is already answered by the store; only an explicit
+  // `refetch()` sends them to the backend.
+  const shouldFetch = isAdmin || refetchToken > 0;
+
   useEffect(() => {
+    if (!shouldFetch) return;
     let cancelled = false;
     // Aborts on unmount and on every re-run, so a fast navigation drops the
     // previous page's requests instead of leaving them to finish unread. This
@@ -76,9 +80,7 @@ export function useCmsContent() {
         });
         if (cancelled) return;
 
-        // Keyed by pathname, not slug: two locales share one slug, and the
-        // store is what each route renders from.
-        commitBlocks(pathname, indexBlocksByPath(merged));
+        commitBlocks(key, indexBlocksByPath(merged));
         setState({ isLoading: false, error: null });
       } catch (err) {
         if (cancelled) return;
@@ -94,7 +96,7 @@ export function useCmsContent() {
       cancelled = true;
       controller.abort();
     };
-  }, [config, pathname, slug, locale, refetchToken, commitBlocks, getAccessToken]);
+  }, [shouldFetch, config, key, slug, locale, refetchToken, commitBlocks, getAccessToken]);
 
   return {
     blocks,

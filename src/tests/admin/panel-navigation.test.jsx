@@ -78,7 +78,7 @@ function tree(panels, initialBlocks) {
   return (
     <CmsProvider
       panels={panels} config={CONFIG} isAdmin
-      initialBlocks={initialBlocks} getAccessToken={async () => "tok"}
+      initialPages={[{ slug: pathname, blocks: initialBlocks }]} getAccessToken={async () => "tok"}
     >
       <OpenDrawer />
       <UiProbe />
@@ -311,7 +311,7 @@ describe("a collection link, on an app that opted in", () => {
     render(
       <CmsProvider
         panels={PLAIN} collections={CollectionProvider} config={CONFIG} isAdmin
-        initialBlocks={[]} getAccessToken={async () => "tok"}
+        initialPages={[{ slug: "/", blocks: [] }]} getAccessToken={async () => "tok"}
       >
         <OpenDrawer />
         <UiProbe />

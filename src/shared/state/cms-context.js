@@ -97,20 +97,23 @@ import { createContext, useContext } from "react";
  * @property {string|null} userSub
  * @property {{ name: string|null, email: string|null, image: string|null } | null} userInfo  Admin-only: identity for the panel footer. Null when no session.
  * @property {(() => void) | null} onSignOut  Admin-only: invoked by the panel's logout button. Null when no auth wiring.
- * @property {string|null} contentSlug  The slug the backend stores the current route under, as reported by the server render. Differs from the URL slug on a pinned route (`<CmsPage slug="/news/[id]">`). Null once the client has navigated off the route the server described, and that null means "ask the server", not "derive it".
+ * @property {Store<Set<string>>} slugsStore
+ *   Every slug the site has content for. `useCmsRoute` matches the pathname
+ *   against it, which is how `/news/123` reads `/news/[id]` without the page
+ *   saying so. Replaced whole when the server hands over a new site.
  *
  * @property {Store<Map<string, Map<string, BlockResponse>>>} blocksStore
- *   Blocks keyed by slug, then by blockPath, and it keeps every route visited
- *   this session. Consumers select through their own pathname
- *   (`s.get(slug)?.get(path)`), which is what makes a return visit paint
- *   instantly: the moment the route commits, the selector already resolves
- *   against the blocks fetched last time, with no effect in between to leave a
- *   frame of placeholders. Regions select a single entry so one block's autosave
- *   roundtrip doesn't re-render the rest; the drawer and `useCmsSave` select the
- *   whole map for their route because they aggregate over it.
- * @property {(slug: string, blocks: Map<string, BlockResponse>) => void} commitBlocks
- *   Replace one route's blocks, as `useCmsContent` does once a fetch lands.
- *   Other routes' entries stay: that is the cache.
+ *   Blocks keyed by `routeKey(slug, locale)`, then by blockPath, holding the
+ *   whole site from the first render (see `initialPages`). Consumers select
+ *   through their own route (`s.get(key)?.get(path)`), which is what makes a
+ *   navigation paint complete on the commit that brings it in: the selector
+ *   already resolves, with no fetch and no effect in between. Regions select a
+ *   single entry so one block's autosave roundtrip doesn't re-render the rest;
+ *   the drawer and `useCmsSave` select the whole map for their route because
+ *   they aggregate over it.
+ * @property {(key: string, blocks: Map<string, BlockResponse>) => void} commitBlocks
+ *   Replace one route's blocks, as `useCmsContent` does once an editor's fetch
+ *   lands. Other routes' entries stay.
  * @property {Store<Map<string, *>>} contentDraftsStore
  *   Per-blockPath unsaved edits (live-preview overlay while typing). Regions
  *   subscribe to their own blockPath; the drawer and `useCmsSave` to the whole
@@ -131,7 +134,7 @@ import { createContext, useContext } from "react";
  *   save pulse.
  * @property {Store<Map<string, *>>} translationDraftsStore
  *   Edits staged for another language's copy of a block, keyed by
- *   `translationDraftKey(pathname, blockPath)`. Never autosaved: they exist
+ *   `translationDraftKey(routeKey, blockPath)`. Never autosaved: they exist
  *   from the moment the drawer offers the translation until the next publish
  *   carries them, and a navigation drops them.
  * @property {(key: string, value: *) => void} setTranslationDraft

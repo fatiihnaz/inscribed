@@ -43,7 +43,7 @@ function ActiveProbe() {
 
 /** @param {{ isAdmin?: boolean, children: React.ReactNode }} props */
 const App = ({ isAdmin, children }) => (
-  <CmsProvider config={{ baseUrl: BASE }} isAdmin={isAdmin} initialBlocks={BLOCKS}>
+  <CmsProvider config={{ baseUrl: BASE }} isAdmin={isAdmin} initialPages={[{ slug: "/", blocks: BLOCKS }]}>
     <ActiveProbe />
     {children}
   </CmsProvider>

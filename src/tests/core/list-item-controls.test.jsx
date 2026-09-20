@@ -67,7 +67,7 @@ async function mount(props = {}) {
         config={{ baseUrl: "https://api.test" }}
         transport={/** @type {*} */ (transport)}
         isAdmin
-        initialBlocks={[listBlock()]}
+        initialPages={[{ slug: "/", blocks: [listBlock()] }]}
       >
         <EditableList blockPath={PATH} itemSchema={ITEM_SCHEMA} {...props}>
           {(item, i) => {

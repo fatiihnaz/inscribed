@@ -41,6 +41,7 @@ import { useCmsContext } from "../shared/state/cms-context.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { useCmsRoute } from "./hooks/use-cms-route.js";
 import { useDeclaredChoiceSource } from "./hooks/use-declared-choice-source.js";
+import { routeKey } from "../shared/route.js";
 
 /**
  * @import { ChoiceSource } from "../shared/contracts/schemas.js"
@@ -97,15 +98,16 @@ export function EditableChoice({ blockPath, source, children, ...rest }) {
  */
 function useResolvedSource(source) {
   const { blocksStore } = useCmsContext();
-  const { pathname } = useCmsRoute();
+  const { slug, locale } = useCmsRoute();
+  const key = routeKey(slug, locale);
 
   const from = source?.kind === "block" ? source.blockPath : null;
   const labelField = source?.kind === "block" ? source.labelField : undefined;
-  // Global-scope blocks are fetched alongside the page and merged into the same
-  // map, so "this page plus the global ones" is just the current route's map.
+  // Global-scope blocks are folded into every page's entry, so "this page plus
+  // the global ones" is just the current route's map.
   const sourceValue = useStoreSelector(
     blocksStore,
-    (m) => (from ? m.get(pathname)?.get(from)?.value ?? null : null),
+    (m) => (from ? m.get(key)?.get(from)?.value ?? null : null),
   );
 
   return useMemo(

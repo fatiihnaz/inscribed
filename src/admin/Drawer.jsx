@@ -44,6 +44,7 @@ import { collectDirtyBlocks, collectDirtyRecords, dirtyCollectionKeys } from "./
 import { isBlockDirty } from "../core/resolve.js";
 import { useCmsSave } from "../core/hooks/use-cms-save.js";
 import { useCmsRoute } from "../core/hooks/use-cms-route.js";
+import { routeKey } from "../shared/route.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { describeSaveError } from "./save-error.js";
 
@@ -88,9 +89,11 @@ function noop() {}
  */
 export function Drawer({ panels = null }) {
   const t = useCmsStrings();
-  // `pathname` reads the blocks cache and labels the breadcrumb; `routeSlug` is
-  // what `_slug` stamps carry, so it (not the pathname) decides page vs global.
-  const { pathname, slug: routeSlug } = useCmsRoute();
+  // `pathname` labels the breadcrumb; `routeSlug` is what `_slug` stamps carry,
+  // so it (not the pathname) decides page vs global, and with the locale it
+  // keys the blocks store.
+  const { pathname, slug: routeSlug, locale } = useCmsRoute();
+  const blocksKey = routeKey(routeSlug, locale);
   const {
     setActiveBlock,
     setPendingBlock,
@@ -105,7 +108,7 @@ export function Drawer({ panels = null }) {
   // The drawer aggregates over everything, so unlike a page region it selects
   // whole slices. As a single admin surface, re-rendering on each write is fine
   // as long as the memoised card list below can still bail out.
-  const blocks = useStoreSelector(blocksStore, (s) => s.get(pathname) ?? EMPTY_BLOCKS);
+  const blocks = useStoreSelector(blocksStore, (s) => s.get(blocksKey) ?? EMPTY_BLOCKS);
   const drafts = useStoreSelector(contentDraftsStore, (m) => m);
   const activeBlock = useStoreSelector(uiStore, (s) => s.activeBlock);
   const pendingBlock = useStoreSelector(uiStore, (s) => s.pendingBlock);

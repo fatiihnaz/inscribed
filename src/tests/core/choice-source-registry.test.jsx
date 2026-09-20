@@ -55,7 +55,7 @@ function Declarer({ source }) {
 /** @param {{ declare?: boolean, isAdmin?: boolean }} opts */
 function mount({ declare = true, isAdmin = true } = {}) {
   return render(
-    <CmsProvider config={{ baseUrl: BASE }} isAdmin={isAdmin} initialBlocks={[TAGS]}>
+    <CmsProvider config={{ baseUrl: BASE }} isAdmin={isAdmin} initialPages={[{ slug: "/", blocks: [TAGS] }]}>
       {declare ? <Declarer source={SOURCE} /> : <Declarer />}
       <BlockCard block={TAGS} displayPath={TAGS.blockPath} topLevel isActive={false} itemSchema={null} />
     </CmsProvider>,
@@ -90,7 +90,7 @@ describe("choice sources declared through useCmsBlock", () => {
 
   it("registers nothing outside admin, where no drawer reads it", () => {
     const { container } = render(
-      <CmsProvider config={{ baseUrl: BASE }} initialBlocks={[TAGS]}>
+      <CmsProvider config={{ baseUrl: BASE }} initialPages={[{ slug: "/", blocks: [TAGS] }]}>
         <Declarer source={SOURCE} />
       </CmsProvider>,
     );
@@ -104,7 +104,7 @@ describe("choice sources declared through useCmsBlock", () => {
     expect(last().source).toEqual(SOURCE);
 
     rerender(
-      <CmsProvider config={{ baseUrl: BASE }} isAdmin initialBlocks={[TAGS]}>
+      <CmsProvider config={{ baseUrl: BASE }} isAdmin initialPages={[{ slug: "/", blocks: [TAGS] }]}>
         <BlockCard block={TAGS} displayPath={TAGS.blockPath} topLevel isActive={false} itemSchema={null} />
       </CmsProvider>,
     );

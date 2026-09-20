@@ -34,4 +34,5 @@ export { getBlock, getBlockValue, groupBlocksByPrefix, indexBlocksByPath } from 
  * @typedef {import("./shared/config.js").CmsConfig} CmsConfig
  * @typedef {import("./shared/style/theme.js").CmsTheme} CmsTheme
  * @typedef {import("./shared/contracts/schemas.js").BlockResponse} BlockResponse
+ * @typedef {import("./shared/contracts/schemas.js").SitePageContent} SitePageContent
  */

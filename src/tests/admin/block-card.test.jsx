@@ -94,7 +94,7 @@ afterEach(() => {
 describe("BlockCard render isolation", () => {
   it("re-renders only the edited block's editor", () => {
     render(
-      <CmsProvider config={{ baseUrl: BASE }} isAdmin initialBlocks={BLOCKS}>
+      <CmsProvider config={{ baseUrl: BASE }} isAdmin initialPages={[{ slug: "/", blocks: BLOCKS }]}>
         <Handle />
         <CardList />
       </CmsProvider>,

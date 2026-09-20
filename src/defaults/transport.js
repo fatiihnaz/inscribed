@@ -158,6 +158,23 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
       return /** @type {*} */ (await res.json());
     },
 
+    // Same credential branch as `getContent`, one level up: the whole site in
+    // one language rather than one page of it.
+    async getSiteContent(opts = {}) {
+      const target =
+        !opts.accessToken && clientKey
+          ? url(`/public/${encodeURIComponent(clientKey)}/content/all`, undefined, opts)
+          : url("/content/all", undefined, opts);
+      const res = await fetch(target, {
+        method: "GET",
+        headers: headers(opts.accessToken),
+        signal: opts.signal,
+        ...cacheInit(opts.cache),
+      });
+      if (!res.ok) throw await toApiError(res);
+      return /** @type {*} */ (await res.json());
+    },
+
     async getCollection(key, params, opts = {}) {
       const u = new URL(`${base}/cms/collections/${encodeURIComponent(key)}`);
       if (params) {

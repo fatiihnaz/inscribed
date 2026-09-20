@@ -19,8 +19,11 @@ import {
   getCmsCollection,
   getCmsCollectionItem,
   getCmsPageBlocks,
+  getCmsSiteContent,
+  cmsSiteTag,
 } from "../../server/get-content.js";
 import { noServiceToken } from "../../defaults/service-token.js";
+import { CmsApiError } from "../../shared/contracts/errors.js";
 
 const BASE = "https://api.test";
 
@@ -354,5 +357,109 @@ describe("includeDrafts", () => {
     // preview says so with `includeDrafts`, and hands the token in through
     // `config.getServiceToken` either way.
     for (const b of blocks) expect(b.draftValue ?? null).toBeNull();
+  });
+});
+
+describe("getCmsSiteContent", () => {
+  const sitePages = [
+    { slug: "/", blocks: [block("hero.title", { draftValue: "taslak" })] },
+    { slug: "/about", blocks: [block("about.title")] },
+    { slug: "__global", blocks: [block("footer.copyright")] },
+  ];
+
+  /** A transport with the whole-site read. */
+  const siteTransport = () => ({
+    ...fakeTransport(),
+    getSiteContent: vi.fn(async () => ({ pages: sitePages })),
+  });
+
+  it("reads the site in one request, under the site tag", async () => {
+    const transport = siteTransport();
+    const pages = await getCmsSiteContent(configWith(transport), { locale: "tr" });
+
+    expect(transport.getSiteContent).toHaveBeenCalledTimes(1);
+    expect(transport.getContent).not.toHaveBeenCalled();
+    expect(transport.getSiteContent.mock.calls[0][0]).toMatchObject({
+      locale: "tr",
+      cache: { revalidate: false, tags: ["cms-site-tr"] },
+    });
+    expect(pages.map((p) => p.slug)).toEqual(["/", "/about", "__global"]);
+  });
+
+  it("keeps the pre-i18n tag on a single-language site", async () => {
+    const transport = siteTransport();
+    await getCmsSiteContent(configWith(transport));
+    expect(cmsSiteTag()).toBe("cms-site");
+    expect(transport.getSiteContent.mock.calls[0][0].cache.tags).toEqual(["cms-site"]);
+    expect(transport.getSiteContent.mock.calls[0][0].locale).toBeUndefined();
+  });
+
+  it("strips drafts, the same as a page read: this response is cached for everyone", async () => {
+    const pages = await getCmsSiteContent(configWith(siteTransport()));
+    expect(pages[0].blocks[0].draftValue ?? null).toBeNull();
+
+    const withDrafts = await getCmsSiteContent(configWith(siteTransport()), { includeDrafts: true });
+    expect(withDrafts[0].blocks[0].draftValue).toBe("taslak");
+  });
+
+  it("resolves the service token once and hands it to the read", async () => {
+    const getServiceToken = vi.fn(async () => "svc");
+    const transport = siteTransport();
+    await getCmsSiteContent(configWith(transport, { getServiceToken }));
+    expect(getServiceToken).toHaveBeenCalledTimes(1);
+    expect(transport.getSiteContent.mock.calls[0][0].accessToken).toBe("svc");
+  });
+
+  describe("without the whole-site read", () => {
+    const notFound = () => new CmsApiError({ status: 404, detail: "no such route" });
+
+    it("reads page by page over config.slugs, plus the global slug, each under its own tag and the site's", async () => {
+      const transport = fakeTransport({
+        pages: {
+          "/": { slug: "/", blocks: [block("hero.title")] },
+          __global: { slug: "__global", blocks: [block("footer.copyright")] },
+        },
+      });
+      const pages = await getCmsSiteContent(
+        configWith(transport, { slugs: ["/", "/about"] }),
+        { locale: "en" },
+      );
+
+      expect(transport.getContent.mock.calls.map(([slug]) => slug)).toEqual(["/", "/about", "__global"]);
+      expect(cacheOf(transport.getContent, 0).tags).toEqual(["cms-en-/", "cms-site-en"]);
+      expect(pages.map((p) => [p.slug, p.blocks.length])).toEqual([["/", 1], ["/about", 0], ["__global", 1]]);
+    });
+
+    it("falls back the same way when the endpoint answers 404", async () => {
+      const transport = {
+        ...fakeTransport({ pages: { "/": { slug: "/", blocks: [block("hero.title")] } } }),
+        getSiteContent: vi.fn(async () => { throw notFound(); }),
+      };
+      const pages = await getCmsSiteContent(configWith(transport, { slugs: ["/"] }));
+      expect(pages.map((p) => p.slug)).toEqual(["/", "__global"]);
+    });
+
+    it("treats a slug the backend has not synced as empty, not as a failure", async () => {
+      const transport = fakeTransport();
+      transport.getContent.mockImplementation(async (slug) => {
+        if (slug === "/missing") throw notFound();
+        return { slug, blocks: [] };
+      });
+      const pages = await getCmsSiteContent(configWith(transport, { slugs: ["/", "/missing"] }));
+      expect(pages.find((p) => p.slug === "/missing").blocks).toEqual([]);
+    });
+
+    it("names the endpoint when there are no slugs to fall back on", async () => {
+      await expect(getCmsSiteContent(configWith(fakeTransport()))).rejects.toThrow(/\/cms\/content\/all/);
+    });
+
+    it("lets any other failure of the whole-site read through", async () => {
+      const transport = {
+        ...fakeTransport(),
+        getSiteContent: vi.fn(async () => { throw new CmsApiError({ status: 500, detail: "down" }); }),
+      };
+      await expect(getCmsSiteContent(configWith(transport, { slugs: ["/"] }))).rejects.toMatchObject({ status: 500 });
+      expect(transport.getContent).not.toHaveBeenCalled();
+    });
   });
 });

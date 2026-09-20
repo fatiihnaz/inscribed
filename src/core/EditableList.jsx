@@ -40,6 +40,7 @@ import {
 
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsRoute } from "./hooks/use-cms-route.js";
+import { routeKey } from "../shared/route.js";
 import { useCmsStrings } from "./hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
@@ -208,8 +209,9 @@ export function EditableList({ blockPath, itemSchema, children, defaultValue, sc
   const hasLocalDraft = useStoreSelector(contentDraftsStore, (m) => m.has(fullPath));
   const localDraft = useStoreSelector(contentDraftsStore, (m) => m.get(fullPath));
 
-  const { pathname } = useCmsRoute();
-  const block = useStoreSelector(blocksStore, (s) => s.get(pathname)?.get(fullPath));
+  const { slug, locale } = useCmsRoute();
+  const key = routeKey(slug, locale);
+  const block = useStoreSelector(blocksStore, (s) => s.get(key)?.get(fullPath));
   const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === fullPath);
   // Precedence (as EditableRegion): local draft > backend `draftValue` >
   // published value, so a saved-but-unpublished list survives navigation.

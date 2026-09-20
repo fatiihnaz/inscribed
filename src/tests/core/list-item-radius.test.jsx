@@ -108,7 +108,7 @@ async function mount(renderItem) {
         config={{ baseUrl: "https://api.test" }}
         transport={/** @type {*} */ (transport)}
         isAdmin
-        initialBlocks={[listBlock()]}
+        initialPages={[{ slug: "/", blocks: [listBlock()] }]}
       >
         {/* No add slot: it renders the item shape a second time, and one is
             enough to measure. */}

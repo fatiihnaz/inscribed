@@ -57,7 +57,7 @@ describe("declaring a block from the hook", () => {
     }
 
     const { getByTestId } = render(
-      <CmsProvider config={{ baseUrl: BASE }} isAdmin initialBlocks={[block("meta.durum")]}>
+      <CmsProvider config={{ baseUrl: BASE }} isAdmin initialPages={[{ slug: "/", blocks: [block("meta.durum")] }]}>
         <Probe blockPath="meta.durum" />
         <Declarer />
       </CmsProvider>,
@@ -72,7 +72,7 @@ describe("declaring a block from the hook", () => {
     }
 
     const tree = (/** @type {boolean} */ withDeclarer) => (
-      <CmsProvider config={{ baseUrl: BASE }} isAdmin initialBlocks={[block("meta.durum")]}>
+      <CmsProvider config={{ baseUrl: BASE }} isAdmin initialPages={[{ slug: "/", blocks: [block("meta.durum")] }]}>
         <Probe blockPath="meta.durum" />
         {withDeclarer ? <Declarer /> : null}
       </CmsProvider>
@@ -91,7 +91,7 @@ describe("declaring a block from the hook", () => {
     }
 
     const { getByTestId } = render(
-      <CmsProvider config={{ baseUrl: BASE }} initialBlocks={[block("meta.durum")]}>
+      <CmsProvider config={{ baseUrl: BASE }} initialPages={[{ slug: "/", blocks: [block("meta.durum")] }]}>
         <Probe blockPath="meta.durum" />
         <Declarer />
       </CmsProvider>,
@@ -108,7 +108,7 @@ describe("declaring a block from the hook", () => {
     }
 
     render(
-      <CmsProvider config={{ baseUrl: BASE }} isAdmin initialBlocks={[block("meta.durum")]}>
+      <CmsProvider config={{ baseUrl: BASE }} isAdmin initialPages={[{ slug: "/", blocks: [block("meta.durum")] }]}>
         <Declarer />
       </CmsProvider>,
     );

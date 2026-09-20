@@ -4,14 +4,12 @@
  * @file `useCmsTranslations(block, { enabled })`: the other languages' copies of
  * one block, ready to edit.
  *
- * The fetched blocks land in `blocksStore` under the **other language's real
- * pathname** (`/en/haber-lab`), not a private cache. That route is one the app
- * genuinely has, so the fetch doubles as a warm cache for navigating there, and
- * a card that opens second reads what the first one already pulled. It commits
- * the page + global merge rather than the page alone, because a partial entry
- * would show as a frame of missing header blocks the moment someone did
- * navigate: `blocksStore` is what a route renders from before its own fetch
- * lands.
+ * The fetched blocks land in `blocksStore` under the **other language's own
+ * route key** (`routeKey("/haber-lab", "en")`), not a private cache, so a card
+ * that opens second reads what the first one already pulled, and `useCmsSave`
+ * finds the version it publishes against where every other route's lives. It
+ * commits the page + global merge rather than the page alone, so a header
+ * block's translation sits beside the page's the way the site seed put them.
  *
  * Drafts typed here are **not** autosaved. They live in
  * `translationDraftsStore` from the moment the drawer offers them until the
@@ -24,7 +22,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
-import { localizePath, otherLocales as resolveOtherLocales } from "../../shared/route.js";
+import { localizePath, otherLocales as resolveOtherLocales, routeKey } from "../../shared/route.js";
 import { translationDraftKey } from "../../shared/state/draft-keys.js";
 import { indexBlocksByPath } from "../blocks.js";
 import { fetchRouteBlocks } from "../fetch-route-blocks.js";
@@ -72,17 +70,17 @@ function cacheFor(store) {
 
 /**
  * @param {{ inFlight: Map<string, Promise<BlockResponse[]>> }} cache
- * @param {string} pathname
+ * @param {string} key   The target route's store key.
  * @param {() => Promise<BlockResponse[]>} run
  * @returns {Promise<BlockResponse[]>}
  */
-function dedupe(cache, pathname, run) {
-  const existing = cache.inFlight.get(pathname);
+function dedupe(cache, key, run) {
+  const existing = cache.inFlight.get(key);
   if (existing) return existing;
   const promise = run().finally(() => {
-    if (cache.inFlight.get(pathname) === promise) cache.inFlight.delete(pathname);
+    if (cache.inFlight.get(key) === promise) cache.inFlight.delete(key);
   });
-  cache.inFlight.set(pathname, promise);
+  cache.inFlight.set(key, promise);
   return promise;
 }
 
@@ -90,7 +88,7 @@ function dedupe(cache, pathname, run) {
  * @typedef {Object} TranslationTarget
  * @property {string} locale
  * @property {string} pathname   The route this language's copy lives at.
- * @property {string} key        `translationDraftKey(pathname, blockPath)`.
+ * @property {string} key        `translationDraftKey(routeKey(slug, locale), blockPath)`.
  * @property {BlockResponse|null} block  Null until the fetch lands, or when
  *   this language has no row for the path.
  * @property {*} value           The staged edit, else the published value.
@@ -131,11 +129,11 @@ export function useCmsTranslations(block, options) {
   // The route's slug, never the block's own. `fetchRouteBlocks` already folds
   // the global slug in, so a header block's other languages arrive inside the
   // page's entry; addressing the fetch by `_slug` instead would ask for
-  // `__global`, which is not a route, and key the result under a pathname
-  // (`/en__global`) that nothing can resolve a locale back out of.
-  const pathnames = useMemo(
-    () => otherLocales.map((l) => localizePath(routeSlug, l, config)),
-    [otherLocales, routeSlug, config],
+  // `__global`, which is not a route, and key the result under an entry
+  // nothing renders from.
+  const keys = useMemo(
+    () => otherLocales.map((l) => routeKey(routeSlug, l)),
+    [otherLocales, routeSlug],
   );
 
   // Which `refetchToken` this hook has finished asking about, not whether a
@@ -149,7 +147,7 @@ export function useCmsTranslations(block, options) {
   );
 
   useEffect(() => {
-    if (!enabled || pathnames.length === 0) return;
+    if (!enabled || keys.length === 0) return;
 
     let cancelled = false;
     // Shared with every other card on this page: the second block to be
@@ -158,9 +156,9 @@ export function useCmsTranslations(block, options) {
     // languages' versions, and sending a stale version is the 409 this avoids.
     const cache = cacheFor(blocksStore);
 
-    const stale = pathnames
-      .map((pathname, i) => ({ pathname, targetLocale: otherLocales[i] }))
-      .filter(({ pathname }) => cache.fetchedAt.get(pathname) !== refetchToken);
+    const stale = keys
+      .map((key, i) => ({ key, targetLocale: otherLocales[i] }))
+      .filter(({ key }) => cache.fetchedAt.get(key) !== refetchToken);
     if (stale.length === 0) {
       // Another card already pulled these. Ready without a request, which is
       // the whole point of sharing the cache.
@@ -171,14 +169,14 @@ export function useCmsTranslations(block, options) {
     (async () => {
       try {
         const accessToken = await getAccessToken();
-        await Promise.all(stale.map(async ({ pathname, targetLocale }) => {
+        await Promise.all(stale.map(async ({ key, targetLocale }) => {
           // No abort signal, unlike `useCmsContent`'s fetch. This one is shared:
           // the first card to ask owns the request, so its signal would cancel
           // the response every other card is waiting on. There is nothing to
           // abort for anyway — the result lands in a store the whole provider
           // reads, so a card that unmounted mid-flight has left the next one a
           // warm entry rather than wasted a request.
-          const merged = await dedupe(cache, pathname, () => fetchRouteBlocks({
+          const merged = await dedupe(cache, key, () => fetchRouteBlocks({
             config,
             slug: routeSlug,
             locale: targetLocale,
@@ -186,8 +184,8 @@ export function useCmsTranslations(block, options) {
           }));
           // Recorded even when this card has moved on, since the entry it
           // commits is good for whoever asks next.
-          cache.fetchedAt.set(pathname, refetchToken);
-          commitBlocks(pathname, indexBlocksByPath(merged));
+          cache.fetchedAt.set(key, refetchToken);
+          commitBlocks(key, indexBlocksByPath(merged));
         }));
         if (cancelled) return;
         setSettled({ token: refetchToken, error: null });
@@ -203,7 +201,7 @@ export function useCmsTranslations(block, options) {
 
     return () => { cancelled = true; };
   }, [
-    enabled, pathnames, otherLocales, refetchToken, settled.token,
+    enabled, keys, otherLocales, refetchToken, settled.token,
     config, routeSlug, blocksStore, commitBlocks, getAccessToken,
   ]);
 
@@ -212,20 +210,19 @@ export function useCmsTranslations(block, options) {
   // re-render this card for a write that cannot change anything it shows.
   const targetBlocks = useStoreSelector(
     blocksStore,
-    (s) => pathnames.map((p) => s.get(p) ?? EMPTY_BLOCKS),
+    (s) => keys.map((k) => s.get(k) ?? EMPTY_BLOCKS),
     sameEntries,
   );
   const drafts = useStoreSelector(translationDraftsStore, (m) => m);
 
   const targets = useMemo(
     () => otherLocales.map((targetLocale, i) => {
-      const pathname = pathnames[i];
-      const key = translationDraftKey(pathname, blockPath);
+      const key = translationDraftKey(keys[i], blockPath);
       const target = targetBlocks[i].get(blockPath) ?? null;
       const hasDraft = drafts.has(key);
       return {
         locale: targetLocale,
-        pathname,
+        pathname: localizePath(routeSlug, targetLocale, config),
         key,
         block: target,
         value: hasDraft ? drafts.get(key) : target?.value,
@@ -234,7 +231,7 @@ export function useCmsTranslations(block, options) {
         reset: () => clearTranslationDrafts([key]),
       };
     }),
-    [otherLocales, pathnames, blockPath, targetBlocks, drafts, setTranslationDraft, clearTranslationDrafts],
+    [otherLocales, keys, routeSlug, config, blockPath, targetBlocks, drafts, setTranslationDraft, clearTranslationDrafts],
   );
 
   return {

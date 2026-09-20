@@ -67,7 +67,7 @@ async function mount() {
           getMyCollections: async () => [],
         })}
         isAdmin
-        initialBlocks={[BLOCK]}
+        initialPages={[{ slug: "/", blocks: [BLOCK] }]}
       >
         <Probe />
         <BlockCard block={BLOCK} displayPath={PATH} topLevel isActive={false} itemSchema={null} />

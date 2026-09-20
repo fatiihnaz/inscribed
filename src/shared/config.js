@@ -58,6 +58,10 @@ import { DEFAULT_ADMIN_LOCALE } from "./i18n/default-locale.js";
  * @property {CmsTheme|null} theme
  *   Overridable visual tokens (see `theme.js`), emitted as CSS custom
  *   properties by `CmsProvider`. Null when no overrides given.
+ * @property {readonly string[]|null} slugs
+ *   Only for a backend without the whole-site read (`GET /cms/content/all`):
+ *   the slugs to read one by one instead. Null otherwise, which is the normal
+ *   case; the reference backend answers the site in one request.
  */
 
 /**
@@ -72,6 +76,7 @@ import { DEFAULT_ADMIN_LOCALE } from "./i18n/default-locale.js";
  * @param {string} [opts.adminLocale]   Language of the admin panel's own chrome ("Kaydet", "Koleksiyonlar", …). Built-in: `"en"` (default) and `"tr"`. Any other tag works alongside `adminStrings`, and drives plural selection. Unrelated to `locales`, which is what the site's *content* comes in.
  * @param {Record<string, string>} [opts.adminStrings]   Overrides for panel wording, keyed flat (`"drawer.save"`). Supply a few to reword, or a whole catalog to add a language. Anything omitted falls back to English.
  * @param {CmsTheme} [opts.theme]   Overrides for the admin/editing visual tokens (accent, fonts, radius, …). Unknown keys are dropped; unset keys keep their defaults.
+ * @param {string[]} [opts.slugs]   Fallback for a backend with no `GET /cms/content/all`: the page slugs to read one by one. Leave it out against the reference backend.
  * @returns {CmsConfig}
  */
 
@@ -84,6 +89,7 @@ export function createCmsConfig({
   adminLocale,
   adminStrings,
   theme,
+  slugs,
   ...rest
 }) {
   if (!baseUrl || typeof baseUrl !== "string") {
@@ -117,7 +123,20 @@ export function createCmsConfig({
     adminLocale: adminLocale ?? DEFAULT_ADMIN_LOCALE,
     adminStrings: normalizeAdminStrings(adminStrings),
     theme: normalizeTheme(theme),
+    slugs: normalizeSlugs(slugs),
   });
+}
+
+/**
+ * @param {string[] | undefined | null} slugs
+ * @returns {readonly string[] | null}
+ */
+function normalizeSlugs(slugs) {
+  if (slugs == null) return null;
+  if (!Array.isArray(slugs) || slugs.some((s) => typeof s !== "string" || !s.startsWith("/"))) {
+    throw new Error('createCmsConfig: slugs must be an array of paths starting with "/"');
+  }
+  return Object.freeze([...new Set(slugs)]);
 }
 
 /**

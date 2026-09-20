@@ -20,6 +20,7 @@ import DOMPurify from "isomorphic-dompurify";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsRoute } from "./hooks/use-cms-route.js";
+import { routeKey } from "../shared/route.js";
 import { useCmsStrings } from "./hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { isBlockDirty, resolveBlockValue } from "./resolve.js";
@@ -142,8 +143,9 @@ export function EditableRegion({ blockPath, as, children, hidden, readOnly, edit
   // Own block on the current route only, and selection as a boolean: another
   // block's save or selection leaves this region alone, and a navigation reads
   // the new route's cached blocks on its very first render.
-  const { pathname } = useCmsRoute();
-  const block = useStoreSelector(blocksStore, (s) => s.get(pathname)?.get(fullPath));
+  const { slug, locale } = useCmsRoute();
+  const key = routeKey(slug, locale);
+  const block = useStoreSelector(blocksStore, (s) => s.get(key)?.get(fullPath));
   const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === fullPath);
   const blockType = block ? block.blockType : null;
   const value = resolveBlockValue(block, hasLocalDraft, localDraft);

@@ -55,7 +55,7 @@ afterEach(() => {
  */
 function mount(value) {
   const rendered = render(
-    <CmsProvider config={{ baseUrl: BASE }} isAdmin initialBlocks={[]}>
+    <CmsProvider config={{ baseUrl: BASE }} isAdmin initialPages={[{ slug: "/", blocks: [] }]}>
       <ListEditor blockPath="x.rows" value={value} onChange={() => {}} itemSchema={SCHEMA} />
     </CmsProvider>,
   );

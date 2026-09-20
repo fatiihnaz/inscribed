@@ -12,12 +12,13 @@ import { createRestTransport } from "../defaults/transport.js";
 import { mergePageBlocks, resolveGlobalSlug } from "../core/merge-blocks.js";
 import { ensureCmsConfig } from "../shared/config.js";
 import { noServiceToken } from "../defaults/service-token.js";
+import { CmsApiError } from "../shared/contracts/errors.js";
 import { handleSsrFailure } from "./ssr-failure.js";
 
 /**
  * @import { CmsConfig } from "../shared/config.js"
  * @import { ServiceTokenProvider } from "../shared/contracts/service-token.js"
- * @import { BlockResponse, CollectionItemResponse, CollectionListParams, CollectionListResponse, ContentResponse, SyncManifestRequest, SyncResultResponse } from "../shared/contracts/schemas.js"
+ * @import { BlockResponse, CollectionItemResponse, CollectionListParams, CollectionListResponse, ContentResponse, SitePageContent, SyncManifestRequest, SyncResultResponse } from "../shared/contracts/schemas.js"
  */
 
 /**
@@ -33,6 +34,18 @@ import { handleSsrFailure } from "./ssr-failure.js";
  */
 export function cmsCacheTag(slug, locale) {
   return locale ? `cms-${locale}-${slug}` : `cms-${slug}`;
+}
+
+/**
+ * Cache tag for the whole site's blocks in one language: what every route
+ * renders from, so a publish anywhere drops it and each route regenerates on
+ * its next request. Per locale for the same reason the page tag is.
+ *
+ * @param {string|null} [locale]
+ * @returns {string}
+ */
+export function cmsSiteTag(locale) {
+  return locale ? `cms-site-${locale}` : "cms-site";
 }
 
 /**
@@ -145,6 +158,93 @@ export async function getCmsContent(config, slug, options) {
   const blocks = withoutDrafts(content.blocks, "draftValue", options?.includeDrafts);
   return blocks === content.blocks ? content : { ...content, blocks };
 }
+
+/**
+ * Every synced slug's blocks in one language, in one request and under one
+ * tag. This is what `<CmsPage>` renders a site from: fetched once per language
+ * at build, dropped by `revalidateCmsSlug` on publish, and never keyed on the
+ * request, which is what lets every route prerender.
+ *
+ * The global slug comes back as a page like any other; folding it into each
+ * page is the client's job (`CmsProvider`), so the payload carries it once.
+ *
+ * A backend without the whole-site read (a transport with no `getSiteContent`,
+ * or one answering it 404) is read page by page over `config.slugs` instead,
+ * each page under its own tag and the site's. Without `slugs` there is nothing
+ * to read, and the error names the endpoint rather than rendering an empty
+ * site that would look like a sync problem.
+ *
+ * @param {CmsConfig} config
+ * @param {GetCmsContentOptions} [options]
+ * @returns {Promise<SitePageContent[]>}
+ */
+export async function getCmsSiteContent(config, options) {
+  const getServiceToken = config.getServiceToken ?? noServiceToken;
+  const accessToken = options?.accessToken ?? (await getServiceToken());
+  const transport = config.transport ?? createRestTransport(config);
+  const locale = options?.locale ?? null;
+  const siteTag = cmsSiteTag(locale);
+  const request = {
+    accessToken,
+    locale: locale ?? undefined,
+    cache: {
+      revalidate: options?.revalidate ?? false,
+      tags: [siteTag, ...(options?.tags ?? [])],
+    },
+  };
+
+  /** @type {SitePageContent[] | null} */
+  let pages = null;
+  if (transport.getSiteContent) {
+    try {
+      pages = (await transport.getSiteContent(request)).pages;
+    } catch (err) {
+      // A 404 is the endpoint missing, on a backend older than this read. Any
+      // other failure is the backend failing, and stays one.
+      if (!(err instanceof CmsApiError && err.status === 404)) throw err;
+    }
+  }
+
+  if (!pages) {
+    if (!config.slugs?.length) {
+      throw new Error(
+        "inscribed: the backend has no whole-site read (GET /cms/content/all). " +
+          "Add it, or pass `slugs` to createCmsConfig() to read the site page by page.",
+      );
+    }
+    if (process.env.NODE_ENV !== "production" && !warnedSlugFallback) {
+      warnedSlugFallback = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[inscribed] no whole-site read on the backend; reading ${config.slugs.length} slugs one by one from config.slugs.`,
+      );
+    }
+    const slugs = config.globalSlug && !config.slugs.includes(config.globalSlug)
+      ? [...config.slugs, config.globalSlug]
+      : [...config.slugs];
+    pages = await Promise.all(slugs.map(async (slug) => {
+      try {
+        const content = await transport.getContent(slug, {
+          ...request,
+          cache: { ...request.cache, tags: [cmsCacheTag(slug, locale), ...request.cache.tags] },
+        });
+        return { slug, blocks: content.blocks };
+      } catch (err) {
+        // An unsynced slug is absent content, not a failure, same as a page read.
+        if (err instanceof CmsApiError && err.status === 404) return { slug, blocks: [] };
+        throw err;
+      }
+    }));
+  }
+
+  return pages.map((page) => {
+    const blocks = withoutDrafts(page.blocks, "draftValue", options?.includeDrafts);
+    return blocks === page.blocks ? page : { ...page, blocks };
+  });
+}
+
+/** Once per process: the fallback would otherwise say so on every render. */
+let warnedSlugFallback = false;
 
 /**
  * Fetch a page's blocks and the global slug (`config.globalSlug`) in parallel,

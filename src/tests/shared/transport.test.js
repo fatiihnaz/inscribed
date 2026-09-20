@@ -442,3 +442,39 @@ describe("baseUrl normalisation", () => {
     expect(lastCall()[0]).not.toContain("api.test//");
   });
 });
+
+describe("getSiteContent", () => {
+  it("GETs /cms/content/all and returns the parsed body", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    const body = { locale: "tr", pages: [{ slug: "/", blocks: [] }] };
+    fetchResolves(body);
+
+    const out = await t.getSiteContent({ locale: "tr", accessToken: "tok" });
+    const [url, init] = lastCall();
+    expect(url).toBe(`${BASE}/cms/content/all?locale=tr`);
+    expect(init.headers.Authorization).toBe("Bearer tok");
+    expect(out).toEqual(body);
+  });
+
+  it("routes a tokenless read through the public endpoint when clientKey is set", async () => {
+    const t = createRestTransport({ baseUrl: BASE, clientKey: "my-site" });
+    fetchResolves({ pages: [] });
+    await t.getSiteContent();
+    expect(lastCall()[0]).toBe(`${BASE}/cms/public/my-site/content/all`);
+  });
+
+  it("carries the cache hint like every other read", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves({ pages: [] });
+    await t.getSiteContent({ cache: { revalidate: false, tags: ["cms-site"] } });
+    expect(lastCall()[1].next).toEqual({ revalidate: false, tags: ["cms-site"] });
+  });
+
+  it("surfaces a missing endpoint as a 404 CmsApiError", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves({ title: "Not Found", status: 404 }, 404);
+    const err = await t.getSiteContent().catch((e) => e);
+    expect(err).toBeInstanceOf(CmsApiError);
+    expect(err.isNotFound).toBe(true);
+  });
+});

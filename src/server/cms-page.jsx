@@ -1,43 +1,36 @@
 /**
  * @file `createCmsPage` factory, server-only, published under `inscribed/page`.
  * One factory call (typically `app/lib/cms.jsx`) holds your config, session
- * strategy, and revalidation; then every page reduces to:
+ * strategy, and revalidation; the root layout wraps everything once:
  *
- *   import { CmsPage } from "../lib/cms.jsx";
+ *   // app/layout.jsx
+ *   import { CmsPage } from "./lib/cms.jsx";
+ *
+ *   export default function RootLayout({ children }) {
+ *     return <html><body><CmsPage>{children}</CmsPage></body></html>;
+ *   }
+ *
+ * and every page is just its regions:
+ *
  *   import { EditableRegion } from "inscribed";
  *
  *   export default function Page() {
- *     return (
- *       <CmsPage slug="/foo">
- *         <main>
- *           <EditableRegion blockPath="hero.title" as="h1" />
- *         </main>
- *       </CmsPage>
- *     );
+ *     return <main><EditableRegion blockPath="hero.title" as="h1" /></main>;
  *   }
  *
- * `slug` is optional. When omitted, the helper reads the active pathname from
- * the `x-pathname` header so you can wrap the root layout once and let static
- * pages inherit it. That header isn't standard; populate it via middleware:
+ * `<CmsPage>` reads the whole site's blocks in one request (see
+ * `getCmsSiteContent`) and hands them to the provider, so it never needs to
+ * know which page is rendering: no request header, nothing per page, and every
+ * route prerenders at build. A publish drops the site's cache tag and the next
+ * request regenerates the route it hit. On the client, a navigation renders
+ * from the same store, so no route ever waits on a fetch.
  *
- *   // middleware.js
- *   import { NextResponse } from "next/server";
- *   export function middleware(req) {
- *     const headers = new Headers(req.headers);
- *     headers.set("x-pathname", req.nextUrl.pathname);
- *     return NextResponse.next({ request: { headers } });
- *   }
+ * On a multilingual site the layout is `app/[locale]/layout.jsx` and passes its
+ * segment through, which is the one thing the read is keyed on:
  *
- * Dynamic routes (`/news/[id]`) still need an explicit `slug` because the
- * header carries the concrete path, not the manifest template.
- *
- * On a multilingual site the same applies to `locale`: it too is read from the
- * header by default, so an `app/[locale]/…` route that wants to prerender
- * should pass its own segment through and skip the header entirely:
- *
- *   export default async function Page({ params }) {
+ *   export default async function RootLayout({ children, params }) {
  *     const { locale } = await params;
- *     return <CmsPage slug="/about" locale={locale}>…</CmsPage>;
+ *     return <html lang={locale}><body><CmsPage locale={locale}>{children}</CmsPage></body></html>;
  *   }
  *
  * `Provider` is passed in rather than imported so its `"use client"` boundary
@@ -48,7 +41,7 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 
-import { getCmsCollection, getCmsCollectionItem, getCmsPageBlocks } from "./get-content.js";
+import { getCmsCollection, getCmsCollectionItem, getCmsSiteContent } from "./get-content.js";
 import { ensureCmsConfig } from "../shared/config.js";
 import { normalizePanels } from "../shared/panels.js";
 import { localizePath, resolveCmsRoute } from "../shared/route.js";
@@ -82,10 +75,9 @@ const PATHNAME_HEADER = "x-pathname";
  *   too pass it to your provider as well. Default: REST against `config.baseUrl`.
  * @property {*} Provider
  *   The CMS provider component, typically `CmsProvider` or your own wrapper
- *   around it. Receives `config`, `isAdmin`, `userSub`, `initialBlocks`,
- *   `initialRoute`, `onAfterSave`, `session`, and (when `collections` is given)
- *   `collections`. A wrapper must forward all of them; spreading `{...props}`
- *   is what does that.
+ *   around it. Receives `config`, `isAdmin`, `userSub`, `initialPages`,
+ *   `onAfterSave`, `session`, and (when `collections` is given) `collections`.
+ *   A wrapper must forward all of them; spreading `{...props}` is what does that.
  *
  * The three auth callbacks below form a `CmsAuthAdapter` (see `shared/contracts/auth.js`);
  * omit them all for a public read-only site, or spread an adapter from an
@@ -163,7 +155,7 @@ const PATHNAME_HEADER = "x-pathname";
 /**
  * @param {CreateCmsPageOptions} options
  * @returns {{
- *   CmsPage: (props: { slug?: string, locale?: string, children: React.ReactNode }) => Promise<React.ReactElement>,
+ *   CmsPage: (props: { locale?: string, children: React.ReactNode }) => Promise<React.ReactElement>,
  *   localePath: (slug: string, locale?: string) => string,
  *   getCmsRoute: () => Promise<import("../shared/route.js").CmsRoute>,
  *   resolveCollectionItem: (key: string, slug: string, options?: import("./get-content.js").GetCmsContentOptions & { path?: (slug: string) => string }) => Promise<import("../shared/contracts/schemas.js").CollectionItemResponse>,
@@ -225,36 +217,56 @@ export function createCmsPage(options) {
         }
       : normalizedConfig;
 
-  async function CmsPage({ slug, locale, children }) {
-    // `headers()` opts a route out of static rendering, so it is read only when
-    // something is still unresolved. Pin both `slug` and `locale` and the page
-    // never touches them, which is what lets a localized route prerender.
-    const needsHeaders = slug == null || (locale == null && normalizedConfig.locales.length > 0);
-    const route = needsHeaders
-      ? await resolveRouteFromHeaders(normalizedConfig, slug == null)
-      : { locale: locale ?? null, slug };
+  /**
+   * The whole site in `locale`, or nothing when the backend is unreachable:
+   * `handleSsrFailure` decides whether that empty render may be cached (never)
+   * and whether a build may ship it (never).
+   *
+   * @param {string|null} locale
+   * @returns {Promise<import("../shared/contracts/schemas.js").SitePageContent[]>}
+   */
+  async function readSite(locale) {
+    try {
+      const pages = await getCmsSiteContent(serverConfig, { locale });
+      warnIfLarge(pages, locale);
+      return pages;
+    } catch (err) {
+      handleSsrFailure(err, { kind: "site", target: "*", locale }, onSsrError);
+      return [];
+    }
+  }
 
-    const resolvedSlug = slug ?? route.slug;
-    const resolvedLocale = locale ?? route.locale;
+  /**
+   * @param {{ locale?: string, children: React.ReactNode }} props
+   */
+  async function CmsPage({ locale, children }) {
+    // Nothing here reads the request: no header, no cookie. That is what lets
+    // every route under this layout prerender, so the one input the read is
+    // keyed on, the language, has to come from the segment.
+    const localized = normalizedConfig.locales.length > 0;
+    if (localized && locale == null) {
+      throw new Error(
+        "<CmsPage> needs `locale` on a localized site. Render it from app/[locale]/layout.jsx " +
+          "and pass the segment through: <CmsPage locale={locale}>.",
+      );
+    }
+    // An unknown segment value is not a language the site has, so it is not a
+    // page either. `generateStaticParams` keeps this off the built routes; this
+    // is for the request-time miss.
+    if (localized && !normalizedConfig.locales.includes(/** @type {string} */ (locale))) notFound();
+    const resolvedLocale = localized ? /** @type {string} */ (locale) : null;
 
     // The session and the content are independent, so they overlap rather than
     // queue: a session that hits a database or decrypts a JWT would otherwise
     // sit in front of every content request.
-    // No catch here: `getCmsPageBlocks` already decides per fetch what a
-    // failure means (see `ssr-failure.js`), and what reaches this far is
-    // something the page must not render through: a framework bail-out signal,
-    // or a build-phase refusal.
-    const [session, initialBlocks] = await Promise.all([
+    const [session, initialPages] = await Promise.all([
       getSession(),
-      getCmsPageBlocks(serverConfig, resolvedSlug, {
-        contentOptions: { locale: resolvedLocale },
-        onSsrError,
-      }),
+      readSite(resolvedLocale),
     ]);
 
     return (
       <Provider config={normalizedConfig} isAdmin={deriveAdmin(session)} userSub={deriveUserSub(session)}
-        initialBlocks={initialBlocks} initialRoute={{ slug: resolvedSlug, locale: resolvedLocale }}
+        initialPages={initialPages}
         onAfterSave={onAfterSave}
         onAfterCollectionSave={onAfterCollectionSave}
         collections={collections?.CollectionProvider}
@@ -282,18 +294,18 @@ export function createCmsPage(options) {
   }
 
   /**
-   * The active route, split into `{ pathname, slug, locale }`, for Server
-   * Components that need the language before rendering: a root layout setting
-   * `<html lang>` is the case this exists for.
+   * The active route, split into `{ pathname, slug, locale }`, for a Server
+   * Component that has no `params` of its own to read the language from.
    *
-   * Reads the `x-pathname` header, so the middleware contract stays inside the
-   * SDK rather than every app knowing the header's name. Client Components use
-   * `useCmsRoute()` instead.
+   * Reads the `x-pathname` header the middleware sets, and reading a header
+   * opts the route out of static rendering. A layout under `app/[locale]/`
+   * has `params.locale` and should use that instead; this is for the odd
+   * component with no segment to read. Client Components use `useCmsRoute()`.
    *
    * @returns {Promise<import("../shared/route.js").CmsRoute>}
    */
   async function getCmsRoute() {
-    return resolveCmsRoute(await resolvePathnameFromHeaders(false), normalizedConfig);
+    return resolveCmsRoute(await resolvePathnameFromHeaders(), normalizedConfig);
   }
 
   /**
@@ -453,7 +465,7 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
   async function RegionRows({ collection, filter, limit, offset, as, empty, children, rest }) {
     // Resolved here rather than passed down from `CmsPage`: a region can be
     // mounted anywhere in the tree, and this component is already async.
-    const { locale } = await resolveRouteFromHeaders(serverConfig, false);
+    const { locale } = await resolveRouteFromHeaders(serverConfig);
     const params = buildListParams({ filter, limit, offset, locale });
 
     let items = [];
@@ -535,64 +547,41 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
 }
 
 /**
- * Read the pathname from the `x-pathname` header set by consumer middleware.
- * `await` covers both Next 14 (sync `headers()`) and Next 15 (async). Warns
- * in dev when the header is missing, falls back to `/` silently in prod.
+ * Read the pathname from the `x-pathname` header set by `inscribed/middleware`,
+ * falling back to `/` without it. `await` covers both Next 14 (sync `headers()`)
+ * and Next 15 (async).
  *
- * @param {boolean} warnWhenMissing
- *   False when the caller pinned its own slug and only wants the locale: the
- *   header is then a nice-to-have, and warning about it would nag pages that
- *   are already doing the right thing.
+ * Only the collection bindings and `getCmsRoute` read this; `<CmsPage>` itself
+ * never does, which is what keeps the routes under it static.
+ *
  * @returns {Promise<string>}
  */
-async function resolvePathnameFromHeaders(warnWhenMissing) {
+async function resolvePathnameFromHeaders() {
   const h = await headers();
-  const pathname = h.get(PATHNAME_HEADER);
-  if (pathname) return pathname;
-
-  if (
-    warnWhenMissing &&
-    !warnedMissingPathname &&
-    process.env.NODE_ENV !== "production" &&
-    isPageRequest(h)
-  ) {
-    warnedMissingPathname = true;
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[inscribed] <CmsPage> rendered without a slug prop and no "${PATHNAME_HEADER}" ` +
-        'request header was found, so every page will read the blocks of "/".\n' +
-        "  Add the middleware from `inscribed/middleware`, widen its matcher to cover " +
-        "this route, or pass slug={...} explicitly.",
-    );
-  }
-  return "/";
+  return h.get(PATHNAME_HEADER) || "/";
 }
+
+// Past this the RSC payload starts to weigh on every hard load: the site rides
+// in the root layout's props, once per document. Compressed it is a fraction,
+// but a site this size is where splitting the read starts to pay.
+const SITE_PAYLOAD_WARN_BYTES = 300_000;
+let warnedLargeSite = false;
 
 /**
- * Whether the request is a page view rather than an asset fetch.
- *
- * A path the matcher deliberately excludes (`/favicon.ico`, `/robots.txt`) with
- * no file behind it 404s, and Next renders not-found through the root layout:
- * `<CmsPage>` then runs headerless through no fault of the app. Those arrive as
- * image or wildcard-accept requests, so gating on a navigation (`document`), an
- * RSC payload, or HTML keeps the warning for the case that is actually broken.
- *
- * A non-browser client asking for a page with a wildcard `accept` is the trade:
- * it stays silent, but the same missing middleware warns on the first real
- * browser hit.
- *
- * @param {Awaited<ReturnType<typeof headers>>} h
+ * @param {import("../shared/contracts/schemas.js").SitePageContent[]} pages
+ * @param {string|null} locale
  */
-function isPageRequest(h) {
-  return (
-    h.has("rsc") ||
-    h.get("sec-fetch-dest") === "document" ||
-    (h.get("accept") ?? "").includes("text/html")
+function warnIfLarge(pages, locale) {
+  if (process.env.NODE_ENV === "production" || warnedLargeSite) return;
+  const bytes = JSON.stringify(pages).length;
+  if (bytes < SITE_PAYLOAD_WARN_BYTES) return;
+  warnedLargeSite = true;
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[inscribed] the site's blocks${locale ? ` (${locale})` : ""} serialize to ${Math.round(bytes / 1024)} KB, ` +
+      "which every hard load carries in the page payload. Large RichText values are the usual reason.",
   );
 }
-
-/** Once per process: a missing middleware trips this on every page render. */
-let warnedMissingPathname = false;
 
 /**
  * Where a record that moved to `canonicalSlug` now lives, derived from the path
@@ -611,7 +600,7 @@ let warnedMissingPathname = false;
  * @returns {Promise<string | null>}
  */
 async function canonicalPathFor(canonicalSlug) {
-  const pathname = await resolvePathnameFromHeaders(false);
+  const pathname = await resolvePathnameFromHeaders();
   const cut = pathname.lastIndexOf("/");
   if (cut < 0 || pathname.slice(cut + 1) === "") {
     if (!warnedMissingRedirectPath && process.env.NODE_ENV !== "production") {
@@ -640,11 +629,10 @@ let warnedMissingRedirectPath = false;
  * arrived under, so the two are resolved independently.
  *
  * @param {CmsConfig} config
- * @param {boolean} warnWhenMissing
  * @returns {Promise<{ locale: string|null, slug: string }>}
  */
-async function resolveRouteFromHeaders(config, warnWhenMissing) {
-  const pathname = await resolvePathnameFromHeaders(warnWhenMissing);
+async function resolveRouteFromHeaders(config) {
+  const pathname = await resolvePathnameFromHeaders();
   const { locale, slug } = resolveCmsRoute(pathname, config);
   return { locale, slug };
 }

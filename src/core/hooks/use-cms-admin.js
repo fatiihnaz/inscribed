@@ -10,6 +10,7 @@ import { useCallback, useState } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
+import { routeKey } from "../../shared/route.js";
 import { useCmsRoute } from "./use-cms-route.js";
 
 /**
@@ -39,9 +40,9 @@ export function useCmsAdmin() {
     config, isAdmin, blocksStore, triggerRefetch, onAfterSave, getAccessToken,
     setBlockConflicts,
   } = useCmsContext();
-  // `pathname` keys the block cache, `routeSlug` addresses the backend. They
-  // part ways as soon as the route carries a locale prefix.
-  const { pathname, slug: routeSlug, locale } = useCmsRoute();
+  // `routeSlug` addresses the backend; the store key adds the language.
+  const { slug: routeSlug, locale } = useCmsRoute();
+  const key = routeKey(routeSlug, locale);
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(/** @type {Error|null} */ (null));
@@ -69,7 +70,7 @@ export function useCmsAdmin() {
         // they group by the same rule rather than through two code paths.
         /** @type {Map<string, { slug: string, locale: string|null, updates: UpdateBlockItem[] }>} */
         const byTarget = new Map();
-        const blocks = blocksStore.get().get(pathname) ?? new Map();
+        const blocks = blocksStore.get().get(key) ?? new Map();
         for (const update of updates) {
           const block = /** @type {BlockResponse | undefined} */ (blocks.get(update.blockPath));
           const slug = block?._slug ?? routeSlug;
@@ -147,7 +148,7 @@ export function useCmsAdmin() {
         setIsSaving(false);
       }
     },
-    [isAdmin, config, blocksStore, pathname, routeSlug, locale, triggerRefetch, onAfterSave, getAccessToken, setBlockConflicts],
+    [isAdmin, config, blocksStore, key, routeSlug, locale, triggerRefetch, onAfterSave, getAccessToken, setBlockConflicts],
   );
 
   const save = useCallback(

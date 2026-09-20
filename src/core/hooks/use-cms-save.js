@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { deepEqual } from "../../shared/util/deep-equal.js";
-import { resolveCmsRoute } from "../../shared/route.js";
+import { parseRouteKey, routeKey } from "../../shared/route.js";
 import { parseTranslationDraftKey } from "../../shared/state/draft-keys.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
 import { useCmsRoute } from "./use-cms-route.js";
@@ -64,7 +64,7 @@ const EMPTY_BLOCKS = new Map();
  */
 export function useCmsSave() {
   const {
-    config, blocksStore, contentDraftsStore, setActiveBlock,
+    blocksStore, contentDraftsStore, setActiveBlock,
     clearDraft, clearDrafts, discardServerDrafts, settleDraftWrites,
     translationDraftsStore, clearTranslationDrafts,
     setBlockConflicts,
@@ -74,12 +74,12 @@ export function useCmsSave() {
   // a single admin surface.
   const drafts = useStoreSelector(contentDraftsStore, (m) => m);
   const translationDrafts = useStoreSelector(translationDraftsStore, (m) => m);
-  const { pathname, locale } = useCmsRoute();
+  const { slug, locale } = useCmsRoute();
   // The whole store, not this route's slice: a staged translation is versioned
   // against the language it targets, and that language's blocks live under
   // their own route key.
   const allBlocks = useStoreSelector(blocksStore, (s) => s);
-  const blocks = allBlocks.get(pathname) ?? EMPTY_BLOCKS;
+  const blocks = allBlocks.get(routeKey(slug, locale)) ?? EMPTY_BLOCKS;
   const { savePage, isSaving, error, clearError } = useCmsAdmin();
 
   // A block is dirty when its effective value (local draft, else server-side
@@ -120,11 +120,11 @@ export function useCmsSave() {
     for (const [key, value] of translationDrafts) {
       const parsed = parseTranslationDraftKey(key);
       if (!parsed) continue;
-      const targetLocale = resolveCmsRoute(parsed.pathname, config).locale;
+      const targetLocale = parseRouteKey(parsed.routeKey).locale;
       // A staged edit for the language already on screen would be published
       // twice, and one for no language at all cannot be addressed.
       if (!targetLocale || targetLocale === locale) continue;
-      const target = (allBlocks.get(parsed.pathname) ?? EMPTY_BLOCKS).get(parsed.blockPath);
+      const target = (allBlocks.get(parsed.routeKey) ?? EMPTY_BLOCKS).get(parsed.blockPath);
       if (!target) continue;
       if (deepEqual(value, target.value)) continue;
       out.push({
@@ -147,7 +147,7 @@ export function useCmsSave() {
       || a.locale.localeCompare(b.locale));
 
     return { dirtyUpdates: out, translationKeys: keys, translationPreviews: previews };
-  }, [drafts, blocks, translationDrafts, allBlocks, config, locale]);
+  }, [drafts, blocks, translationDrafts, allBlocks, locale]);
 
   // A failure only describes pending edits, so once none are left it has
   // nothing left to be about: resolving a conflict by taking the other side

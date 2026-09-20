@@ -1,10 +1,14 @@
 "use client";
 
 /**
- * @file `useCmsRoute()`: the active route, split into the pathname the client
- * caches under and the slug the backend stores. Every surface that used to call
- * `usePathname()` for itself reads this instead, so the cache key and the wire
- * identity can't drift apart one call site at a time.
+ * @file `useCmsRoute()`: the active route, split into the pathname, the slug
+ * the backend stores content under, and the language. Every surface that used
+ * to call `usePathname()` for itself reads this instead, so the store key and
+ * the wire identity can't drift apart one call site at a time.
+ *
+ * The slug is matched, not just derived: the site's slugs are in context, so a
+ * concrete path under a dynamic segment (`/news/123`) resolves to the manifest
+ * template (`/news/[id]`) that holds its content.
  *
  * Also the app's own answer to "which language am I in": it reads the locale
  * list off the config already in context, so a page has nothing to re-declare
@@ -15,7 +19,8 @@ import { useCallback, useMemo } from "react";
 import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
-import { localizePath, resolveCmsRoute } from "../../shared/route.js";
+import { useStoreSelector } from "../../shared/state/store.js";
+import { localizePath, matchCmsRoute } from "../../shared/route.js";
 
 /**
  * @typedef {import("../../shared/route.js").CmsRoute & {
@@ -31,9 +36,13 @@ import { localizePath, resolveCmsRoute } from "../../shared/route.js";
  * @returns {UseCmsRouteResult}
  */
 export function useCmsRoute() {
-  const { config } = useCmsContext();
+  const { config, slugsStore } = useCmsContext();
   const pathname = usePathname() ?? "/";
-  const route = useMemo(() => resolveCmsRoute(pathname, config), [pathname, config]);
+  const slugs = useStoreSelector(slugsStore, (s) => s);
+  const route = useMemo(
+    () => matchCmsRoute(pathname, config, slugs),
+    [pathname, config, slugs],
+  );
 
   const localePath = useCallback(
     /** @param {string} slug @param {string} [locale] */

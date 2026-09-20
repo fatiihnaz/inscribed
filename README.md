@@ -39,6 +39,7 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
   - [Access control](#access-control)
   - [Custom panels](#custom-panels)
   - [Linking into the admin surface](#linking-into-the-admin-surface)
+  - [Content delivery](#content-delivery)
   - [Caching & revalidation](#caching--revalidation)
 - [Architecture: the seams](#architecture-the-seams)
 - [Bring your own backend](#bring-your-own-backend)
@@ -64,10 +65,13 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
   `predev` / `prebuild` hook.
 - **Rich content types.** Short/long plain text, RichText (Tiptap), Image, Link,
   Date, repeatable Lists, and bindings into collections of structured records.
-- **App Router native.** Server Components fetch content (ISR-cacheable),
-  Client Components edit it, Server Actions revalidate it. SSR-seeded, no
-  layout-shift flicker. Collections fetch on the server too and stream behind
-  their own Suspense boundary, so a slow one never holds up the page.
+- **Static by default.** The root layout reads the whole site's blocks once
+  per language, so every route prerenders at `next build` with its content in
+  place, and a navigation renders from what the page already brought: no CMS
+  request, no placeholder frame. A publish drops one cache tag and the next
+  request regenerates the route. Collections fetch on the server too and
+  stream behind their own Suspense boundary, so a slow one never holds up the
+  page.
 - **Draft autosave.** Edits debounce to a draft endpoint as you type; publish is
   an explicit save.
 - **Backend-agnostic core.** A single `CmsTransport` seam isolates all data
@@ -88,12 +92,14 @@ inscribed is a peer of your app's framework runtime:
 
 Node 18+ for the `cms-sync` CLI. The package is ESM-only.
 
-**Backend contract.** 4.x talks to a backend that serves
-`/cms/public/{clientKey}/content`, issues `content:*` capabilities, accepts the
-whole manifest at `POST /cms/sync`, and exposes the draft-discard `DELETE`
-endpoints. An older backend answers some of those with 404 and the drawer will
-not mount for editors. See [Bring your own backend](#bring-your-own-backend)
-for the full surface.
+**Backend contract.** 5.x talks to a backend that serves the whole site at
+`/cms/content/all` (and `/cms/public/{clientKey}/content/all` for anonymous
+reads), issues `content:*` capabilities, accepts the whole manifest at
+`POST /cms/sync`, and exposes the draft-discard `DELETE` endpoints. A backend
+without the whole-site read is read page by page over `slugs` in the config
+(see [Content delivery](#content-delivery)); an older one answers some of the
+rest with 404 and the drawer will not mount for editors. See [Bring your own
+backend](#bring-your-own-backend) for the full surface.
 
 [Localization](#localization) additionally needs a backend that stores content
 per locale and accepts `?locale=` on the content and collection endpoints. It is
@@ -132,34 +138,10 @@ export const cmsConfig = createCmsConfig({
 });
 ```
 
-### 2. Add the pathname middleware
+### 2. Build a page factory
 
-`createCmsPage` resolves the current page slug from an `x-pathname` request
-header so you can wrap your root layout once and let every static page inherit
-it. Populate the header with a tiny middleware:
-
-```js
-// middleware.js
-import { NextResponse } from "next/server";
-
-export function middleware(req) {
-  const headers = new Headers(req.headers);
-  headers.set("x-pathname", req.nextUrl.pathname);
-  return NextResponse.next({ request: { headers } });
-}
-```
-
-Whatever your `matcher` excludes gets no header, and a `<CmsPage>` that gets
-neither a header nor a `slug` falls back to `/`, which means every page reads
-the same blocks. In development it warns once per process, but only for a real
-page request: an excluded path that 404s (`/favicon.ico` on a site that ships no
-icon) renders not-found through your **root layout** and reaches `<CmsPage>` the
-same way, and that case is harmless enough to stay quiet.
-
-### 3. Build a page factory
-
-`createCmsPage` centralises the per-page boilerplate: it fetches the page's
-blocks server-side, resolves the session, and renders your provider.
+`createCmsPage` centralises the boilerplate: it reads the site's blocks
+server-side, resolves the session, and renders your provider.
 
 ```jsx
 // app/lib/cms.jsx
@@ -178,31 +160,50 @@ export const { CmsPage } = createCmsPage({
 });
 ```
 
-### 4. Wrap the layout and author content
+### 3. Wrap the root layout and author content
+
+`<CmsPage>` goes in the root layout, once. It reads **every page's blocks in
+one request** and hands them to the provider, so it never needs to know which
+page is rendering: nothing per page, no request header, and every route under
+it prerenders at build.
+
+```jsx
+// app/layout.jsx
+import { CmsPage } from "./lib/cms.jsx";
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        <CmsPage>{children}</CmsPage>
+      </body>
+    </html>
+  );
+}
+```
+
+A page is just its regions:
 
 ```jsx
 // app/page.jsx  (a Server Component)
-import { CmsPage } from "./lib/cms.jsx";
 import { EditableRegion } from "inscribed";
 
 export default function Home() {
   return (
-    <CmsPage slug="/">
-      <main>
-        <EditableRegion
-          blockPath="hero.title"
-          as="h1"
-          blockType="ShortText"
-          defaultValue="Welcome"
-        />
-        <EditableRegion
-          blockPath="hero.body"
-          as="p"
-          blockType="RichText"
-          defaultValue="<p>Edit me.</p>"
-        />
-      </main>
-    </CmsPage>
+    <main>
+      <EditableRegion
+        blockPath="hero.title"
+        as="h1"
+        blockType="ShortText"
+        defaultValue="Welcome"
+      />
+      <EditableRegion
+        blockPath="hero.body"
+        as="p"
+        blockType="RichText"
+        defaultValue="<p>Edit me.</p>"
+      />
+    </main>
   );
 }
 ```
@@ -216,7 +217,7 @@ There is **no marker to add**: every `page.{js,jsx,ts,tsx}` under `app/` is a
 knows this file owns the regions reachable from it (this file plus everything it
 imports). See [Slugs](#slugs) for the derivation rules.
 
-### 5. Register the manifest
+### 4. Register the manifest
 
 Run the discovery + sync once so the backend knows about your regions. Wire it
 into your scripts so it stays in sync with the code:
@@ -231,8 +232,11 @@ into your scripts so it stays in sync with the code:
 }
 ```
 
-That's the full read path: visitors get server-rendered, ISR-cacheable content.
-Editing is the same components plus an auth adapter covered next.
+That's the full read path: every route is built with its content in place, a
+publish drops the cache and the next request regenerates the route, and moving
+between pages renders from what the page already brought (see
+[Content delivery](#content-delivery)). Editing is the same components plus an
+auth adapter covered next.
 
 ---
 
@@ -389,19 +393,11 @@ The rules behind that table:
 - **A page that declares no regions owns no rows**, so its slug never reaches
   the backend. A collection detail view or a form page costs nothing.
 
-Dynamic routes are the one place the slug is also written by hand: the
-`x-pathname` header carries the concrete path (`/news/1`), not the template, so
-`<CmsPage>` needs it explicitly and it has to match the folder names.
-
-```jsx
-// app/news/[id]/page.jsx
-<CmsPage slug="/news/[id]">
-```
-
-The pinned slug travels to the client too, as `initialRoute`, so the editor's
-refetch addresses `/news/[id]` rather than re-deriving `/news/1` from the URL.
-That matters only if you mount `<CmsProvider>` through a wrapper of your own:
-forward the prop, or spread `{...props}`.
+Dynamic routes need nothing extra at runtime. The client matches the concrete
+path against the site's slugs, so `/news/1` reads `/news/[id]`: an **exact slug
+wins** over a template, a template with fewer dynamic segments over one with
+more, and a catch-all (`[...path]`) loses to anything more specific. Nothing on
+the page names the slug, so nothing can disagree with the folder.
 
 > **Check the derivation** with `cms-sync --dry-run`. It prints each slug beside
 > the page file it came from, which is where a surprise shows up.
@@ -633,6 +629,11 @@ you import decides where the data is fetched:
 | ----------- | ------- | -------- |
 | your `createCmsPage` factory | server, streamed | the default: content reaches the HTML a crawler sees |
 | `inscribed/collections` | client, on mount | you are already inside a `"use client"` component |
+
+The server form reads the route's language off the request header the
+middleware sets, so a page rendering one is served per request rather than
+prerendered. That suits records that change constantly; the page's own blocks
+still come from the static site read either way.
 
 Opt in with the `collections` option; the factory then returns the components
 beside `CmsPage`:
@@ -962,41 +963,51 @@ export const middleware = createCmsMiddleware(cms);
 export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"] };
 ```
 
-Then move your routes under `app/[locale]/` — but keep `<CmsPage>` in the root
-layout, **above** that segment:
+Then move your routes under `app/[locale]/` and make that folder's layout the
+**root layout**, so the language is a segment param and nothing has to read the
+request to learn it:
 
 ```jsx
-// app/layout.jsx        ← above [locale], not inside it
-import { CmsPage, getCmsRoute } from "./lib/cms.jsx";
+// app/[locale]/layout.jsx        ← the root layout; there is no app/layout.jsx
+import { CmsPage } from "../lib/cms.jsx";
+import { locales } from "../../cms.config.js";
 
-export default async function RootLayout({ children }) {
-  const { locale } = await getCmsRoute();
+export function generateStaticParams() {
+  return locales.map((locale) => ({ locale }));
+}
+export const dynamicParams = false;
+
+export default async function RootLayout({ children, params }) {
+  const { locale } = await params;
   return (
     <html lang={locale}>
-      <body><CmsPage>{children}</CmsPage></body>
+      <body><CmsPage locale={locale}>{children}</CmsPage></body>
     </html>
   );
 }
 ```
 
-That placement is load-bearing. A layout instance belongs to its segment's
-value, so a `<CmsPage>` inside `app/[locale]/` is torn down and rebuilt every
-time the language changes. The editor's session is client state inside
-`CmsProvider` — admin-ness resolves after hydration, since the refresh cookie
-lives on the API origin — so the remount signs them out mid-session and the
-drawer disappears. The block cache goes with it, and every switch re-fetches.
+`locale` is the one thing `<CmsPage>` is keyed on: it reads the whole site in
+that language, and `generateStaticParams` is what builds every language ahead
+of time. A localized site that omits the prop fails at build with the line to
+add; a segment value outside `locales` is not found.
 
-Above the segment the provider survives the switch: the session holds, and the
-page you came from renders from cache when you go back.
+The provider remounts when the language changes, since a layout instance
+belongs to its segment's value. The editor's session survives it (the built-in
+browser auth is module state, not React state), the drawer closes, and the new
+language's blocks arrive with the new layout, so the switch paints complete.
 
-`getCmsRoute()` comes back from `createCmsPage` and resolves the language from
-the same header `<CmsPage>` reads, which the root layout needs because it sits
-above `[locale]` and has no `params.locale` of its own.
+`getCmsRoute()` comes back from `createCmsPage` for a Server Component with no
+`params` of its own. It reads the request header, and a header read opts that
+route out of static rendering, so anything under `app/[locale]/` should take
+`params.locale` instead.
 
 The default language stays at the root and the others sit behind their prefix:
 `/about` is Turkish, `/en/about` is English. The middleware rewrites the
-unprefixed path onto `app/[locale]/` so `tr` never reaches the address bar, and
-sets the `x-pathname` header `<CmsPage>` reads.
+unprefixed path onto `app/[locale]/` so `tr` never reaches the address bar; a
+site that prefixes every language needs no middleware at all. It also sets the
+`x-pathname` header the [collection bindings](#fetching-on-the-server) and
+`getCmsRoute()` read.
 
 A leading segment counts as a locale only when `locales` lists it, so a page at
 `/en-masse` is not mistaken for English. (Reading also handles a prefix on
@@ -1049,7 +1060,7 @@ Everything downstream follows the route on its own:
 | ------- | --------- |
 | Blocks | Read and written in the route's locale; `__global` too, so the header matches the page |
 | Drafts | One slot per language, on their own autosave lanes |
-| Cache tags | `cms-{locale}-{slug}`, so publishing one language leaves the others cached |
+| Cache tags | `cms-site-{locale}` for the site read and `cms-{locale}-{slug}` per page, so publishing one language leaves the others cached |
 | `useCollection` | Lists the route's locale unless you pass `locale` yourself |
 | New records | Composed in the route's locale, with a per-language draft slot |
 | The drawer | Offers the other languages when a text block is rewritten, and publishes them together |
@@ -1466,27 +1477,68 @@ since a marker left in place would re-fire on every later visit.
 `?cms-collection=` and `?cms-record=` need the [collections](#collections) layer
 to be wired; without it they are ignored with a warning in development.
 
+### Content delivery
+
+`<CmsPage>` reads the **whole site** in one request (`GET /cms/content/all`,
+one language at a time) and hands every page's blocks to the provider. Three
+things follow from that one read:
+
+- **Every route prerenders.** Nothing in the read depends on the request, so
+  `next build` renders each page with its content in place, and a route stays
+  static until a publish drops the site's tag (see
+  [Caching & revalidation](#caching--revalidation)).
+- **A navigation is free.** The client store holds the site from the first
+  render, keyed by slug and language, so the next page's regions resolve on the
+  commit that brings it in: no request, no skeleton, no placeholder frame. A
+  concrete path under a dynamic segment finds its template on its own (see
+  [Slugs](#slugs)).
+- **Nothing per page.** A page declares regions and nothing else: no slug, no
+  wrapper, no extra line for a page whose regions sit inside client components.
+
+The site rides in the root layout's payload, once per document. A site of a
+few dozen pages is a few tens of kilobytes compressed; development warns once
+the serialized blocks pass 300 KB, which is where large RichText bodies start
+to weigh. A visitor who keeps one tab open across a publish keeps reading the
+site they loaded until the next full load.
+
+Editors are the one exception. Their drafts, and the versions a save needs,
+ride a request of their own sent with their token once per route
+(`useCmsContent`). The published copy paints first; the drafts overlay it a
+moment later.
+
+> **Backend without the whole-site read?** Pass `slugs` to `createCmsConfig`
+> and the site is read page by page over that list (plus the global slug), each
+> page under its own tag and the site's. Without `slugs` a missing endpoint
+> fails with its name rather than rendering an empty site. See
+> [Bring your own backend](#bring-your-own-backend).
+
 ### Caching & revalidation
 
-Server reads are ISR-cacheable and tagged, so each publish drops exactly what it
+Server reads are cached and tagged, so each publish drops exactly what it
 invalidates:
 
 | Read | Tag | Dropped by |
 | ---- | --- | ---------- |
-| `getCmsPageBlocks` | `cms-{slug}`, or `cms-{locale}-{slug}` | `revalidateCmsSlug` as `onAfterSave` |
+| `getCmsSiteContent` (what `<CmsPage>` renders from) | `cms-site`, or `cms-site-{locale}` | `revalidateCmsSlug` as `onAfterSave` |
+| `getCmsPageBlocks` / `getCmsContent` | `cms-{slug}`, or `cms-{locale}-{slug}` | the same, which drops both |
 | `getCmsCollection` | `cms-collection-{key}` | `revalidateCmsCollection` as `onAfterCollectionSave` |
 | `getCmsCollectionItem` | `cms-collection-{key}-{slug}` (plus the collection's) | the same, which drops both |
 
 Pass those two Server Actions and stale visitor content is gone on the next
-request; omit one and the page keeps serving the pre-publish version. Publishing a
-record always drops the **whole** collection, not just the record: a write can
-move rows between filter windows, reorder a list or change its total, so every
-window that mentions the collection is suspect.
+request; omit one and the page keeps serving the pre-publish version. Every
+route renders from the site read, so a publish anywhere marks every route of
+that language stale; each regenerates on its next request, from the Data Cache
+except for the one read that changed. Publishing a record always drops the
+**whole** collection, not just the record: a write can move rows between filter
+windows, reorder a list or change its total, so every window that mentions the
+collection is suspect.
 
-The global slug (header/footer/site-wide blocks) is fetched in parallel and merged
-into the same blocks map, so a shared block edited on any page reflects everywhere.
-Tags you pass yourself stay off that shared entry: `__global` backs every page, so
-one page's revalidation must not rebuild everyone's header and footer.
+The global slug (header/footer/site-wide blocks) comes back inside the site
+read like any other page and is folded into every page's entry on the client,
+so a shared block edited on any page reflects everywhere. `getCmsPageBlocks`,
+for a server component reading one page, fetches it beside the page and keeps
+caller tags off that shared entry: `__global` backs every page, so one page's
+revalidation must not rebuild everyone's header and footer.
 
 On a [multilingual site](#localization), each language of a page is its own tag, so
 publishing the English copy leaves the Turkish render alone. Collections are the
@@ -1496,10 +1548,11 @@ window shares the one collection tag.
 
 #### When the backend is unreachable
 
-A content fetch that fails does not take the page down: it renders with the
-blocks it has, and a collection region renders its `empty` branch. The page and
-the global slug fail independently, so a page-level failure still leaves the
-header and footer in place.
+A content fetch that fails does not take the page down: the site read renders
+its routes empty for that request, a page read (`getCmsPageBlocks`) renders
+with the blocks it has, and a collection region renders its `empty` branch. A
+page read and its global slug fail independently, so a page-level failure still
+leaves the header and footer in place.
 
 What that render is *worth* depends on why the fetch failed, so the three cases
 are kept apart:
@@ -1531,26 +1584,25 @@ createCmsPage({
 });
 ```
 
-`kind` is `"page" | "global" | "collection"`, `target` the slug or collection
-key. It is not called for a 404, which is absence rather than failure. The SDK
-also logs to the console in development only; a throw from your reporter is
-swallowed.
+`kind` is `"site" | "page" | "global" | "collection"`, `target` the slug or
+collection key (`"*"` for the site read). It is not called for a 404, which is
+absence rather than failure. The SDK also logs to the console in development
+only; a throw from your reporter is swallowed.
 
-**Drafts never survive a server read.** `getCmsContent`, `getCmsPageBlocks`,
-`getCmsCollection` and `getCmsCollectionItem` drop `draftValue` and `draftData`
-before returning. These responses are ISR-cached under one tag for **every**
-visitor, so a draft that survived would be served to the public. An editor's
-unpublished work reaches the page through the client store instead, fetched with
-their own token.
+**Drafts never survive a server read.** `getCmsSiteContent`, `getCmsContent`,
+`getCmsPageBlocks`, `getCmsCollection` and `getCmsCollectionItem` drop
+`draftValue` and `draftData` before returning. These responses are cached under
+one tag for **every** visitor, so a draft that survived would be served to the
+public. An editor's unpublished work reaches the page through the client store
+instead, fetched with their own token.
 
 > **Building a preview route?** Pass `includeDrafts: true` to keep drafts in the
 > response, and cache that route separately (or not at all). The flag is explicit
 > because intent cannot be read off the credential: a deliberate preview and a
 > service key that is merely over-scoped look exactly the same from here.
 
-On the client, blocks are cached per route for the life of the session. Returning
-to a page you have already visited renders from that cache on the first render and
-revalidates behind it, so a soft navigation shows no gap.
+On the client the whole site is in the store from the first render (see
+[Content delivery](#content-delivery)); a navigation reads it and sends nothing.
 
 ---
 
@@ -1586,6 +1638,7 @@ To target a backend other than the reference REST API, implement the
 /**
  * @typedef {Object} CmsTransport
  * @property {(slug, opts?) => Promise<ContentResponse>}                              getContent
+ * @property {(opts?) => Promise<SiteContentResponse>}                                getSiteContent   (optional, see below)
  * @property {(key, params?, opts?) => Promise<PagedListResponse>}                    getCollection
  * @property {(key, slug, opts?) => Promise<CollectionItemResponse>}                  getCollectionItem
  * @property {(opts?) => Promise<MyCollectionResponse[]>}                             getMyCollections
@@ -1614,6 +1667,14 @@ still satisfies the contract, and serves a single-language site correctly.
 The one exception is `getCollection`, which reads its locale from `params`
 alongside `filter` / `offset` / `limit`: for a list the language narrows the
 window, and `params` is what the client hashes into its cache key.
+
+`getSiteContent` answers with every synced slug's blocks in one language,
+`{ pages: [{ slug, blocks }] }`, the global slug included. It is what
+`<CmsPage>` renders a site from, so a backend answers it once per language per
+publish rather than once per page. A backend that cannot answer it leaves the
+method out and the app passes `slugs` to `createCmsConfig`; the site is then
+read page by page through `getContent` (see
+[Content delivery](#content-delivery)).
 
 ```js
 // my-transport.js
@@ -1645,13 +1706,13 @@ Inject it on **both** sides:
 
 ```js
 // server: pass at the call site (server-only objects can carry functions)
-import { getCmsPageBlocks } from "inscribed/server";
+import { getCmsSiteContent } from "inscribed/server";
 
 const transport = createMyTransport({ baseUrl });
-const blocks = await getCmsPageBlocks({ ...cmsConfig, transport }, slug);
+const pages = await getCmsSiteContent({ ...cmsConfig, transport }, { locale });
 ```
 
-`createCmsPage` also accepts a `transport` option for its server-side SSR fetch.
+`createCmsPage` also accepts a `transport` option for its server-side site read.
 
 **Errors are part of the contract.** Throw `CmsApiError` (exported from
 `inscribed`) for any non-2xx, so the UI branches the same way whatever the
@@ -1689,7 +1750,7 @@ bundle:
 | `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `EditableChoice`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCmsRoute`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
 | `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `CollectionComposer`, `useCollection`, `useCollectionItem`, `useCollectionRecord`, `useMyCollections`, `useCollectionCreate`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
 | `inscribed/panels` | client | `useCmsPanel`, `PanelStack` (what a [custom panel](#custom-panels)'s own component reads and renders) |
-| `inscribed/server` | server only | `getCmsContent`, `getCmsPageBlocks`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
+| `inscribed/server` | server only | `getCmsSiteContent`, `getCmsContent`, `getCmsPageBlocks`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsSiteTag`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
 | `inscribed/page` | server only | `createCmsPage` (returns `CmsPage`, `localePath`, `getCmsRoute`, and the server collection bindings), `createCmsConfig` |
 | `inscribed/actions` | Server Action | `revalidateCmsSlug`, `revalidateCmsCollection` |
 | `inscribed/middleware` | edge | `createCmsMiddleware` |

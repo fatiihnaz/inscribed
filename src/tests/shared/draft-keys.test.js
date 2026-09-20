@@ -10,6 +10,7 @@ import {
   contentDraftKey, itemDraftKey, newDraftKey,
   translationDraftKey, parseTranslationDraftKey,
 } from "../../shared/state/draft-keys.js";
+import { routeKey } from "../../shared/route.js";
 
 describe("contentDraftKey", () => {
   it("gives each language of a page its own lane", () => {
@@ -57,26 +58,35 @@ describe("itemDraftKey", () => {
 });
 
 describe("translationDraftKey", () => {
-  it("round-trips a pathname holding the delimiter's plausible rivals", () => {
-    // Both halves are user-shaped: a pathname can carry a colon, a blockPath
+  it("round-trips a route key holding the delimiter's plausible rivals", () => {
+    // Both halves are user-shaped: a slug can carry a colon, a blockPath
     // carries dots and brackets. Whatever separates them has to be a character
     // neither side can produce.
-    const key = translationDraftKey("/en/a:b", "hero.items[0].title");
+    const key = translationDraftKey(routeKey("/a:b", "en"), "hero.items[0].title");
     expect(parseTranslationDraftKey(key)).toEqual({
-      pathname: "/en/a:b",
+      routeKey: routeKey("/a:b", "en"),
       blockPath: "hero.items[0].title",
     });
   });
 
   it("keeps one blockPath's languages apart", () => {
-    expect(translationDraftKey("/en/about", "hero.title"))
-      .not.toBe(translationDraftKey("/de/about", "hero.title"));
+    expect(translationDraftKey(routeKey("/about", "en"), "hero.title"))
+      .not.toBe(translationDraftKey(routeKey("/about", "de"), "hero.title"));
   });
 
   it("keeps the same blockPath on two pages apart", () => {
     // Navigating from /a to /b must not hand /a's half-typed translation to /b.
-    expect(translationDraftKey("/en/a", "hero.title"))
-      .not.toBe(translationDraftKey("/en/b", "hero.title"));
+    expect(translationDraftKey(routeKey("/a", "en"), "hero.title"))
+      .not.toBe(translationDraftKey(routeKey("/b", "en"), "hero.title"));
+  });
+
+  it("survives the route key's own separator", () => {
+    // The route key joins locale and slug with its own control character; the
+    // first unit separator still has to be this key's, or the locale would be
+    // read as the whole route.
+    const parsed = parseTranslationDraftKey(translationDraftKey(routeKey("/a", "en"), "x.y"));
+    expect(parsed?.routeKey).toBe(routeKey("/a", "en"));
+    expect(parsed?.blockPath).toBe("x.y");
   });
 
   it("reports a key it did not write", () => {

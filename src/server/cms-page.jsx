@@ -382,10 +382,11 @@ export function createCmsPage(options) {
    * @param {string} key
    * @param {string} slug   The slug from the route, canonical or alias.
    * @param {import("./get-content.js").GetCmsContentOptions & { path?: (slug: string) => string }} [options]
-   *   `path` builds the redirect target from the canonical slug. Omit it and the
+   *   `path` builds the redirect target from the canonical slug, and is handed
+   *   the language beside it: `(slug, { locale }) => string`. Omit it and the
    *   current pathname's last segment is swapped, which is right for the usual
    *   `/news/[slug]` shape and keeps any locale prefix the visitor arrived
-   *   under. Pass one when the slug isn't the last segment.
+   *   under, but reads the request and so makes the route dynamic.
    * @returns {Promise<import("../shared/contracts/schemas.js").CollectionItemResponse>}
    */
   async function resolveCollectionItem(key, slug, options) {
@@ -402,9 +403,7 @@ export function createCmsPage(options) {
 
     if (item.slug === slug) return item;
 
-    const target = options?.path
-      ? options.path(item.slug)
-      : await canonicalPathFor(item.slug);
+    const target = await canonicalAddress(item.slug, options);
     // Outside the try: `permanentRedirect` signals by throwing, and catching it
     // here would turn the redirect into a failed fetch.
     if (target) permanentRedirect(target);
@@ -441,7 +440,8 @@ export function createCmsPage(options) {
    *   A function mapping the record to metadata fields is the common case.
    *   Pass an object instead to reach the rest: `map` (the same function),
    *   `param` (route segment holding the slug, default `"slug"`), plus anything
-   *   `resolveCollectionItem` takes.
+   *   `resolveCollectionItem` takes. `path` is the one worth passing: without it
+   *   the canonical link is derived from the request and the route goes dynamic.
    * @returns {(props: { params: * }) => Promise<*>}
    */
   function collectionMetadata(key, mapOrOptions) {
@@ -465,9 +465,7 @@ export function createCmsPage(options) {
       // case where it could not: the canonical link is what carries the record's
       // real address to search engines either way, so it is built from the
       // record rather than from what the route asked for.
-      const canonical = resolveOptions.path
-        ? resolveOptions.path(item.slug)
-        : await canonicalPathFor(item.slug);
+      const canonical = await canonicalAddress(item.slug, resolveOptions, params?.locale);
       const mapped = map ? await map(item) : null;
 
       return {
@@ -476,6 +474,62 @@ export function createCmsPage(options) {
         // translated record, say) keeps them, and can override the canonical.
         alternates: { ...(canonical ? { canonical } : null), ...mapped?.alternates },
       };
+    };
+  }
+
+  /**
+   * A whole `generateStaticParams` for a collection detail route: the slugs the
+   * collection holds, so `next build` renders a page per record rather than
+   * leaving every one of them to its first visitor.
+   *
+   * Pages through the collection rather than asking for all of it at once, and
+   * stops at `max`. Past that the records still work: Next renders an unlisted
+   * slug on demand unless the route sets `dynamicParams = false`.
+   *
+   * On a localized site Next runs this once per language and hands it the
+   * parent segment's params, so the rows come back in the language the pages
+   * are being built in.
+   *
+   * A read that fails here fails the build, deliberately: a detail route with
+   * no params is a route with no pages, and shipping that as a green deploy is
+   * the outcome this exists to prevent.
+   *
+   * @param {string} key
+   * @param {{ param?: string, filter?: Record<string, *>, pageSize?: number, max?: number }} [options]
+   *   `param` names the segment holding the slug (default `"slug"`).
+   * @returns {(props?: { params?: * }) => Promise<Record<string, string>[]>}
+   */
+  function collectionStaticParams(key, options) {
+    const { param = "slug", filter, pageSize = 100, max = 1000 } = options ?? {};
+
+    return async function generateStaticParams(props) {
+      const params = await props?.params;
+      const locale = params?.locale ?? null;
+
+      /** @type {Record<string, string>[]} */
+      const out = [];
+      let total = Infinity;
+      for (let offset = 0; out.length < max && out.length < total; offset += pageSize) {
+        const page = await getCmsCollection(
+          serverConfig, key, buildListParams({ filter, limit: pageSize, offset, locale }),
+        );
+        total = page.total;
+        if (page.items.length === 0) break;
+        for (const item of page.items) {
+          if (out.length >= max) break;
+          out.push({ [param]: item.slug });
+        }
+      }
+
+      if (total > max && !warnedStaticParamsCap && process.env.NODE_ENV !== "production") {
+        warnedStaticParamsCap = true;
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[inscribed] CollectionItem.staticParams("${key}") stopped at ${max} of ${total} records. ` +
+            "The rest render on their first request; raise `max` to prerender them.",
+        );
+      }
+      return out;
     };
   }
 
@@ -489,6 +543,7 @@ export function createCmsPage(options) {
     // `CollectionItem` reaches both without touching its own wiring.
     serverCollections.CollectionItem.resolve = resolveCollectionItem;
     serverCollections.CollectionItem.metadata = collectionMetadata;
+    serverCollections.CollectionItem.staticParams = collectionStaticParams;
   }
 
   return { CmsPage, localePath, getCmsRoute, resolveCollectionItem, ...serverCollections };
@@ -673,6 +728,39 @@ async function canonicalPathFor(canonicalSlug) {
 
 /** Same once-per-process budget as the pathname warning above. */
 let warnedMissingRedirectPath = false;
+let warnedDerivedCanonical = false;
+let warnedStaticParamsCap = false;
+
+/**
+ * Where a record canonically lives: the redirect target when a slug turns out
+ * to be an old address, and the canonical link either way.
+ *
+ * `path` is what keeps a detail route static. Without it the address is derived
+ * from the request, and reading the request opts the whole route out of static
+ * rendering, so a page whose metadata goes through here is dynamic for the sake
+ * of one link. It is handed the locale as well as the slug, because on a
+ * localized site the address carries a prefix nothing here can know.
+ *
+ * @param {string} slug   The record's own slug, not the one asked for.
+ * @param {{ path?: (slug: string, context: { locale: string|null }) => string, locale?: string|null } | undefined} options
+ * @param {string|null} [routeLocale]   The segment's locale, where a caller has one.
+ * @returns {Promise<string | null>}
+ */
+async function canonicalAddress(slug, options, routeLocale) {
+  const locale = routeLocale ?? options?.locale ?? readRequestLocale() ?? null;
+  if (options?.path) return options.path(slug, { locale });
+
+  if (!warnedDerivedCanonical && process.env.NODE_ENV !== "production") {
+    warnedDerivedCanonical = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[inscribed] a collection detail route is building its canonical address from the request, " +
+        "which makes that route dynamic. Pass path: (slug, { locale }) => localePath(`/news/${slug}`, locale) " +
+        "to keep it static.",
+    );
+  }
+  return canonicalPathFor(slug);
+}
 
 /**
  * The language a collection region should read, for a region that was not

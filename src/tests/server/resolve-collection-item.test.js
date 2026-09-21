@@ -258,6 +258,134 @@ describe("CollectionItem.metadata", () => {
   });
 });
 
+/**
+ * A detail route is static only while nothing on it reads the request, and the
+ * canonical address is the last thing that did. These pin the escape hatch that
+ * makes it optional, and the params helper that gives the route pages to build.
+ */
+describe("keeping a detail route static", () => {
+  /** @returns {Promise<{ headerReads: number, canonical: string }>} */
+  async function metadataFor({ locale, path }) {
+    vi.resetModules();
+    const { createCmsPage } = await import("../../server/cms-page.jsx");
+    let headerReads = 0;
+    requestHeaders.current = new Proxy(new Headers({ "x-pathname": "/en/news/eski" }), {
+      get(target, key) {
+        if (key === "get") headerReads += 1;
+        const value = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const { CollectionItem } = createCmsPage({
+      config: { baseUrl: "https://api.test", locales: ["tr", "en"] },
+      transport: { getCollectionItem: async () => ITEM },
+      Provider: () => null,
+      collections: {
+        CollectionProvider: () => null,
+        CollectionRecord: () => null,
+        CollectionRows: () => null,
+      },
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // The canonical slug, so the redirect stays out of the way: what this is
+    // about is where the canonical address comes from, not the rename.
+    const meta = await CollectionItem.metadata("news", path ? { path } : undefined)({
+      params: { slug: ITEM.slug, locale },
+    });
+    warn.mockRestore();
+    return { headerReads, canonical: meta.alternates.canonical };
+  }
+
+  it("hands the route's language to the path builder, and reads no header", async () => {
+    const out = await metadataFor({
+      locale: "en",
+      path: (slug, { locale }) => (locale === "tr" ? `/haber/${slug}` : `/${locale}/news/${slug}`),
+    });
+    expect(out.canonical).toBe("/en/news/yeni-adres");
+    expect(out.headerReads).toBe(0);
+  });
+
+  it("falls back to the request without one, which is what costs the route its static render", async () => {
+    const out = await metadataFor({ locale: "en" });
+    expect(out.canonical).toBe("/en/news/yeni-adres");
+    expect(out.headerReads).toBeGreaterThan(0);
+  });
+});
+
+describe("CollectionItem.staticParams", () => {
+  /** A backend holding `total` records, answered a window at a time. */
+  function paged(total) {
+    const rows = Array.from({ length: total }, (_, i) => ({ ...ITEM, slug: `haber-${i}` }));
+    const calls = [];
+    return {
+      calls,
+      transport: {
+        getCollectionItem: async () => ITEM,
+        getCollection: async (key, params) => {
+          calls.push(params ?? {});
+          const offset = params?.offset ?? 0;
+          const limit = params?.limit ?? total;
+          return { items: rows.slice(offset, offset + limit), total, offset, limit };
+        },
+      },
+    };
+  }
+
+  async function factoryWith(transport) {
+    vi.resetModules();
+    const { createCmsPage } = await import("../../server/cms-page.jsx");
+    return createCmsPage({
+      config: { baseUrl: "https://api.test", locales: ["tr", "en"] },
+      transport,
+      Provider: () => null,
+      collections: {
+        CollectionProvider: () => null,
+        CollectionRecord: () => null,
+        CollectionRows: () => null,
+      },
+    });
+  }
+
+  it("lists every slug, paging through the collection", async () => {
+    const backend = paged(250);
+    const { CollectionItem } = await factoryWith(backend.transport);
+    const params = await CollectionItem.staticParams("news")({ params: { locale: "tr" } });
+
+    expect(params).toHaveLength(250);
+    expect(params[0]).toEqual({ slug: "haber-0" });
+    expect(backend.calls).toHaveLength(3);
+    // The language comes from the segment Next is building, not from a request.
+    expect(backend.calls[0].locale).toBe("tr");
+  });
+
+  it("names the segment it was told to", async () => {
+    const backend = paged(2);
+    const { CollectionItem } = await factoryWith(backend.transport);
+    const params = await CollectionItem.staticParams("news", { param: "id" })({});
+    expect(params).toEqual([{ id: "haber-0" }, { id: "haber-1" }]);
+  });
+
+  it("stops at max, leaving the rest to render on demand", async () => {
+    const backend = paged(500);
+    const { CollectionItem } = await factoryWith(backend.transport);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const params = await CollectionItem.staticParams("news", { max: 120, pageSize: 50 })({});
+    const warned = warn.mock.calls.some(([m]) => String(m).includes("stopped at 120 of 500"));
+    warn.mockRestore();
+
+    expect(params).toHaveLength(120);
+    expect(warned).toBe(true);
+  });
+
+  it("fails the build rather than leave the route with no pages", async () => {
+    const { CollectionItem } = await factoryWith({
+      getCollectionItem: async () => ITEM,
+      getCollection: async () => { throw new CmsApiError({ status: 503, detail: "down" }); },
+    });
+    await expect(CollectionItem.staticParams("news")({})).rejects.toThrow("down");
+  });
+});
+
 describe("reaching the resolver", () => {
   it("hangs off CollectionItem, so exporting the component is enough", async () => {
     // The wiring step this removes: without it a detail route needs the factory

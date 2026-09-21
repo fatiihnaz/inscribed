@@ -764,6 +764,32 @@ quick fix never has to travel to the drawer:
 </CollectionItem>
 ```
 
+**A detail route has two more things to settle**, and `CollectionItem` carries
+both, so the page never has to know how Next resolves a route:
+
+```jsx
+// app/[locale]/news/[slug]/page.jsx
+export const generateStaticParams = CollectionItem.staticParams("news");
+
+export const generateMetadata = CollectionItem.metadata("news", {
+  map: (item) => ({ title: item.data.title }),
+  path: (slug, { locale }) => localePath(`/news/${slug}`, locale),
+});
+```
+
+`staticParams` lists the collection's slugs, so `next build` renders a page per
+record rather than leaving each one to its first visitor. It pages through the
+collection and stops at `max` (default 1000); a slug past that still works, Next
+just renders it on demand. On a localized site it runs once per language and
+reads the rows in that one.
+
+`metadata` names the record's own address as the canonical one, which matters
+because a renamed record keeps answering to its old slug: without it two URLs
+serve one record and a crawler picks. `path` is how that address gets built, and
+it is the one option worth passing. Leave it out and the address is derived from
+the request instead, which makes the whole route dynamic for the sake of one
+link.
+
 An `Image` field gets the same treatment as an image region: hover the picture
 for replace/remove, or drop one onto the empty field. Alt text stays in the
 drawer, where a text input belongs.

@@ -149,15 +149,15 @@ async function settle() {
 }
 
 /** Hoisted so a rerender doesn't re-seed the provider on prop identity alone. */
-let pages;
+let site;
 
-function tree(children) {
+function tree(children, withTransport = transport) {
   return (
     <CmsProvider
       config={CONFIG}
-      transport={/** @type {*} */ (transport)}
+      transport={/** @type {*} */ (withTransport)}
       isAdmin
-      initialPages={pages}
+      initialSite={site}
       onAfterSave={(slug, locale) => { revalidated.push([slug, locale]); }}
     >
       {children}
@@ -168,8 +168,13 @@ function tree(children) {
 const CONFIG = { baseUrl: "https://api.test", locales: ["tr", "en"] };
 
 async function mount() {
+  return mountWith(transport);
+}
+
+/** @param {*} withTransport */
+async function mountWith(withTransport) {
   let view;
-  await act(async () => { view = render(tree(<Probe />)); });
+  await act(async () => { view = render(tree(<Probe />, withTransport)); });
   await settle();
   return view;
 }
@@ -186,7 +191,10 @@ beforeEach(() => {
   reads = [];
   writes = [];
   revalidated = [];
-  pages = [{ slug: "/", blocks: [seedBlock("tr")] }];
+  site = {
+    pages: [{ slug: "/", blocks: [seedBlock("tr")] }],
+    global: [{ slug: "__global", blocks: [seedGlobalBlock("tr")] }],
+  };
   pathname = "/";
   holdReads = false;
 });
@@ -239,6 +247,38 @@ describe("staging a translation", () => {
     // Reusing the pre-publish rows would send a version the backend has moved
     // past, which is a 409 on a translation the editor never got to see.
     expect(reads.some((r) => r.locale === "en")).toBe(true);
+  });
+
+  it("reads the other language in one request, globals and all", async () => {
+    // The fallback above asks for the page and the global slug separately. A
+    // backend that answers the whole site gives both in one, and every global
+    // slug it recognises rather than only the configured one.
+    const siteReads = [];
+    const wholeSiteTransport = {
+      ...transport,
+      getSiteContent: async (opts) => {
+        siteReads.push(opts?.locale ?? null);
+        return {
+          pages: [{ slug: "/", blocks: [seedBlock(opts?.locale ?? "tr")] }],
+          global: [{ slug: "__global", blocks: [seedGlobalBlock(opts?.locale ?? "tr")] }],
+        };
+      },
+    };
+    const view = await mountWith(wholeSiteTransport);
+
+    // Once for the editor's own language, once for the one being translated
+    // into. Nothing went through the per-route read.
+    expect(siteReads).toEqual(["tr", "en"]);
+    expect(reads).toEqual([]);
+    expect(probe.targets[0].block.value).toBe(rows.en.value);
+    expect(probe.globalTargets[0].block.value).toBe(globalRows.en.value);
+
+    // A read that covered the language covers every page of it, so opening a
+    // translation somewhere else is free.
+    pathname = "/hakkinda";
+    await act(async () => { view.rerender(tree(<Probe />, wholeSiteTransport)); });
+    await settle();
+    expect(siteReads).toEqual(["tr", "en"]);
   });
 
   it("counts a staged translation as an unpublished change", async () => {

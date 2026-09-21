@@ -18,12 +18,11 @@
  * versions and how `refetch()` reaches a visitor's page.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
-import { fetchSiteBlocks } from "../fetch-site-blocks.js";
-import { fetchRouteBlocks } from "../fetch-route-blocks.js";
+import { readLanguage, readsWholeSite } from "../read-blocks.js";
 import { useCmsRoute } from "./use-cms-route.js";
 
 export function useSiteBlocks() {
@@ -36,10 +35,15 @@ export function useSiteBlocks() {
   // A visitor's page is already answered by the store; only an explicit
   // `refetch()` sends them to the backend.
   const shouldFetch = isAdmin || refetchToken > 0;
-  const wholeSite = typeof config.transport.getSiteContent === "function";
   // Null while the whole-site read is available, so a navigation moves no
-  // dependency and fires no request. The fallback has to name the route.
-  const fallbackSlug = wholeSite ? null : slug;
+  // dependency and fires no request. The fallback has to name the route, and
+  // is keyed on it.
+  const fallbackSlug = readsWholeSite(config) ? null : slug;
+  // The route as it is when the read runs, read and never a trigger: on the
+  // whole-site path nothing looks at it, and on the fallback path it is what
+  // `fallbackSlug` already re-ran the effect for.
+  const slugRef = useRef(slug);
+  slugRef.current = slug;
 
   useEffect(() => {
     if (!shouldFetch) return undefined;
@@ -52,11 +56,10 @@ export function useSiteBlocks() {
     (async () => {
       try {
         const accessToken = await getAccessToken();
-        const site = fallbackSlug === null
-          ? await fetchSiteBlocks({ config, locale, accessToken, signal: controller.signal })
-          : await fetchRouteBlocks({
-            config, slug: fallbackSlug, locale, accessToken, signal: controller.signal,
-          });
+        const site = await readLanguage({
+          config, slug: fallbackSlug ?? slugRef.current, locale, accessToken,
+          signal: controller.signal,
+        });
         if (cancelled) return;
         commitSite(site, locale);
         // Only the whole-site read knows every slug. The fallback read has one

@@ -25,11 +25,12 @@ import { useStoreSelector } from "../../shared/state/store.js";
 import { globalsKey, localizePath, otherLocales as resolveOtherLocales, routeKey } from "../../shared/route.js";
 import { translationDraftKey } from "../../shared/state/draft-keys.js";
 import { readBlock } from "../blocks.js";
-import { fetchRouteBlocks } from "../fetch-route-blocks.js";
+import { readLanguage, readsWholeSite } from "../read-blocks.js";
 import { useCmsRoute } from "./use-cms-route.js";
 
 /**
  * @import { BlockResponse } from "../../shared/contracts/schemas.js"
+ * @import { SiteContent } from "../site-blocks.js"
  */
 
 /**
@@ -41,13 +42,18 @@ import { useCmsRoute } from "./use-cms-route.js";
  * that overlap in time, and the second block is usually rewritten after the
  * first one's fetch has landed.
  *
+ * Entries are keyed by what the read actually covered, which is the whole
+ * language where the backend answers the whole-site read and one route where it
+ * does not. On the first, opening a translation on another page costs nothing:
+ * that language is already in the store.
+ *
  * Keyed by `blocksStore` because that is the one object whose lifetime is
  * exactly the provider's. Keying by `config` looked equivalent and is not: a
  * frozen config outlives a remount, so a fresh provider would find `fetchedAt`
  * already claiming token 0 was pulled and skip the fetch its empty store needs.
  *
  * @type {WeakMap<object, {
- *   inFlight: Map<string, Promise<BlockResponse[]>>,
+ *   inFlight: Map<string, Promise<SiteContent>>,
  *   fetchedAt: Map<string, number>,
  * }>}
  */
@@ -66,10 +72,10 @@ function cacheFor(store) {
 }
 
 /**
- * @param {{ inFlight: Map<string, Promise<BlockResponse[]>> }} cache
- * @param {string} key   The target route's store key.
- * @param {() => Promise<BlockResponse[]>} run
- * @returns {Promise<BlockResponse[]>}
+ * @param {{ inFlight: Map<string, Promise<SiteContent>> }} cache
+ * @param {string} key   What the read covers: a language, or one route of it.
+ * @param {() => Promise<SiteContent>} run
+ * @returns {Promise<SiteContent>}
  */
 function dedupe(cache, key, run) {
   const existing = cache.inFlight.get(key);
@@ -143,6 +149,8 @@ export function useCmsTranslations(block, options) {
     () => ({ token: null, error: null }),
   );
 
+  const wholeSite = readsWholeSite(config);
+
   useEffect(() => {
     if (!enabled || keys.length === 0) return;
 
@@ -153,9 +161,13 @@ export function useCmsTranslations(block, options) {
     // languages' versions, and sending a stale version is the 409 this avoids.
     const cache = cacheFor(blocksStore);
 
-    const stale = keys
-      .map((key, i) => ({ key, targetLocale: otherLocales[i] }))
-      .filter(({ key }) => cache.fetchedAt.get(key) !== refetchToken);
+    const stale = otherLocales
+      .map((targetLocale, i) => ({
+        targetLocale,
+        // What the read covers, and so what it is worth remembering it by.
+        cacheKey: wholeSite ? `site:${targetLocale}` : `route:${keys[i]}`,
+      }))
+      .filter(({ cacheKey }) => cache.fetchedAt.get(cacheKey) !== refetchToken);
     if (stale.length === 0) {
       // Another card already pulled these. Ready without a request, which is
       // the whole point of sharing the cache.
@@ -166,14 +178,14 @@ export function useCmsTranslations(block, options) {
     (async () => {
       try {
         const accessToken = await getAccessToken();
-        await Promise.all(stale.map(async ({ key, targetLocale }) => {
+        await Promise.all(stale.map(async ({ cacheKey, targetLocale }) => {
           // No abort signal, unlike the provider's own read. This one is shared:
           // the first card to ask owns the request, so its signal would cancel
           // the response every other card is waiting on. There is nothing to
           // abort for anyway — the result lands in a store the whole provider
           // reads, so a card that unmounted mid-flight has left the next one a
           // warm entry rather than wasted a request.
-          const site = await dedupe(cache, key, () => fetchRouteBlocks({
+          const site = await dedupe(cache, cacheKey, () => readLanguage({
             config,
             slug: routeSlug,
             locale: targetLocale,
@@ -181,7 +193,7 @@ export function useCmsTranslations(block, options) {
           }));
           // Recorded even when this card has moved on, since the entry it
           // commits is good for whoever asks next.
-          cache.fetchedAt.set(key, refetchToken);
+          cache.fetchedAt.set(cacheKey, refetchToken);
           // Writes that language's page entry and its globals; every other
           // language's, this one's included, is left alone.
           commitSite(site, targetLocale);
@@ -200,7 +212,7 @@ export function useCmsTranslations(block, options) {
 
     return () => { cancelled = true; };
   }, [
-    enabled, keys, otherLocales, refetchToken, settled.token,
+    enabled, keys, otherLocales, refetchToken, settled.token, wholeSite,
     config, routeSlug, blocksStore, commitSite, getAccessToken,
   ]);
 

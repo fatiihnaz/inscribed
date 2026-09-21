@@ -11,8 +11,6 @@
  * `<CmsPage>`, so every caller seeds the store through one function.
  */
 
-import { resolveGlobalSlug } from "./merge-blocks.js";
-
 /**
  * @import { CmsConfig } from "../shared/config.js"
  * @import { SiteContent } from "./site-blocks.js"
@@ -100,7 +98,9 @@ export async function fetchSiteBlocks({ config, locale, accessToken, signal }) {
  * @returns {Promise<SiteContent>}
  */
 export async function fetchRouteBlocks({ config, slug, locale, accessToken, signal }) {
-  const globalSlug = resolveGlobalSlug(config.globalSlug, slug);
+  // None when there is no global slug, and none when the page is the global
+  // slug itself, which would otherwise be fetched twice.
+  const globalSlug = config.globalSlug && config.globalSlug !== slug ? config.globalSlug : null;
   const opts = { accessToken: accessToken || undefined, locale, signal };
 
   const [pageResponse, globalResponse] = await Promise.all([

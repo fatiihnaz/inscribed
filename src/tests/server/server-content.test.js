@@ -18,7 +18,6 @@ import {
   getCmsContent,
   getCmsCollection,
   getCmsCollectionItem,
-  getCmsPageBlocks,
   getCmsSiteContent,
   cmsSiteTag,
 } from "../../server/get-content.js";
@@ -148,60 +147,6 @@ describe("cache tags", () => {
   });
 });
 
-describe("page + global merge", () => {
-  const pages = {
-    "/haberler": { slug: "/haberler", blocks: [block("hero.title"), block("hero.body")] },
-    __global: { slug: "__global", blocks: [block("footer.copyright")] },
-  };
-
-  it("stamps every block with the slug it must be PUT back to", async () => {
-    const transport = fakeTransport({ pages });
-    const blocks = await getCmsPageBlocks(configWith(transport), "/haberler");
-
-    expect(blocks.map((b) => [b.blockPath, b._slug])).toEqual([
-      ["hero.title", "/haberler"],
-      ["hero.body", "/haberler"],
-      ["footer.copyright", "__global"],
-    ]);
-  });
-
-  it("keeps the page's block on a path collision and drops the global twin", async () => {
-    const transport = fakeTransport({
-      pages: {
-        "/haberler": { slug: "/haberler", blocks: [block("hero.title", { value: "sayfa" })] },
-        __global: {
-          slug: "__global",
-          blocks: [block("hero.title", { value: "global" }), block("footer.copyright")],
-        },
-      },
-    });
-    const blocks = await getCmsPageBlocks(configWith(transport), "/haberler");
-
-    expect(blocks.map((b) => b.blockPath)).toEqual(["hero.title", "footer.copyright"]);
-    expect(blocks[0].value).toBe("sayfa");
-    expect(blocks[0]._slug).toBe("/haberler");
-  });
-
-  it("renders the page when the global fetch fails", async () => {
-    const transport = fakeTransport({ pages });
-    transport.getContent.mockImplementation(async (slug) => {
-      if (slug === "__global") throw new Error("backend down");
-      return pages[slug];
-    });
-
-    const blocks = await getCmsPageBlocks(configWith(transport), "/haberler");
-    expect(blocks.map((b) => b.blockPath)).toEqual(["hero.title", "hero.body"]);
-  });
-
-  it("does not fetch the global slug twice when the page is the global slug", async () => {
-    const transport = fakeTransport({ pages });
-    await getCmsPageBlocks(configWith(transport), "__global");
-
-    expect(transport.getContent).toHaveBeenCalledTimes(1);
-    expect(transport.getContent.mock.calls[0][0]).toBe("__global");
-  });
-});
-
 describe("service token", () => {
   it("reads unauthenticated by default", async () => {
     expect(await noServiceToken()).toBe("");
@@ -211,71 +156,13 @@ describe("service token", () => {
     expect(transport.getContent.mock.calls[0][1].accessToken).toBe("");
   });
 
-  it("resolves the token once for a page and its global", async () => {
-    const getServiceToken = vi.fn(async () => "svc");
-    const transport = fakeTransport();
-    await getCmsPageBlocks(configWith(transport, { getServiceToken }), "/haberler");
-
-    // `getCmsPageBlocks` passes the resolved token down as `contentOptions.
-    // accessToken`, and `getCmsContent`'s `?? await getServiceToken()` then
-    // short-circuits on it — including on the empty-string default, which is
-    // not nullish.
-    expect(getServiceToken).toHaveBeenCalledTimes(1);
-    expect(transport.getContent).toHaveBeenCalledTimes(2);
-    for (const call of transport.getContent.mock.calls) {
-      expect(call[1].accessToken).toBe("svc");
-    }
-  });
-
   it("never resolves a token when the caller supplies one", async () => {
     const getServiceToken = vi.fn(async () => "svc");
-    const transport = fakeTransport();
-    await getCmsPageBlocks(configWith(transport, { getServiceToken }), "/haberler", {
-      contentOptions: { accessToken: "onizleme" },
-    });
+    const transport = { ...fakeTransport(), getSiteContent: vi.fn(async () => ({ pages: [], global: [] })) };
+    await getCmsSiteContent(configWith(transport, { getServiceToken }), { accessToken: "onizleme" });
 
     expect(getServiceToken).not.toHaveBeenCalled();
-    expect(transport.getContent.mock.calls[0][1].accessToken).toBe("onizleme");
-  });
-});
-
-describe("caller tags on the shared global fetch", () => {
-  it("keeps a page-scoped tag off the shared __global entry", async () => {
-    const transport = fakeTransport({
-      pages: {
-        "/haberler": { slug: "/haberler", blocks: [block("hero.title")] },
-        __global: { slug: "__global", blocks: [block("footer.copyright")] },
-      },
-    });
-    await getCmsPageBlocks(configWith(transport), "/haberler", {
-      contentOptions: { tags: ["kampanya"] },
-    });
-
-    // `__global` is one cache entry behind every page: a per-page tag on it
-    // would let that page's revalidate drop everyone's header/footer. The
-    // page's own fetch keeps the caller tag.
-    const globalCall = transport.getContent.mock.calls.find(([slug]) => slug === "__global");
-    expect(globalCall[1].cache.tags).toEqual(["cms-__global"]);
-    const pageCall = transport.getContent.mock.calls.find(([slug]) => slug === "/haberler");
-    expect(pageCall[1].cache.tags).toContain("kampanya");
-  });
-
-  it("fetches __global in the page's own language", async () => {
-    const transport = fakeTransport({
-      pages: {
-        "/haberler": { slug: "/haberler", blocks: [block("hero.title")] },
-        __global: { slug: "__global", blocks: [block("footer.copyright")] },
-      },
-    });
-    await getCmsPageBlocks(configWith(transport), "/haberler", {
-      contentOptions: { locale: "en" },
-    });
-
-    // An English page with a Turkish header would be worse than no header, so
-    // the locale rides along even though the caller's tags deliberately don't.
-    const globalCall = transport.getContent.mock.calls.find(([slug]) => slug === "__global");
-    expect(globalCall[1].locale).toBe("en");
-    expect(globalCall[1].cache.tags).toEqual(["cms-en-__global"]);
+    expect(transport.getSiteContent.mock.calls[0][0].accessToken).toBe("onizleme");
   });
 });
 
@@ -318,14 +205,6 @@ describe("includeDrafts", () => {
     expect(content.blocks[0].draftValue).toBe("taslak başlık");
   });
 
-  it("strips draftValue from both halves of the page+global merge", async () => {
-    const transport = fakeTransport({ pages: draftedPages });
-    const blocks = await getCmsPageBlocks(configWith(transport), "/haberler");
-
-    expect(blocks).toHaveLength(2);
-    for (const b of blocks) expect(b.draftValue ?? null).toBeNull();
-  });
-
   it("strips draftData from a collection window", async () => {
     const transport = fakeTransport({
       list: {
@@ -349,14 +228,22 @@ describe("includeDrafts", () => {
   });
 
   it("keeps stripping even when a write-capable service token is in play", async () => {
-    const transport = fakeTransport({ pages: draftedPages });
+    const transport = {
+      ...fakeTransport(),
+      getSiteContent: vi.fn(async () => ({
+        pages: [draftedPages["/haberler"]],
+        global: [draftedPages.__global],
+      })),
+    };
     const config = configWith(transport, { getServiceToken: async () => "content-write-svc" });
-    const blocks = await getCmsPageBlocks(config, "/haberler");
+    const site = await getCmsSiteContent(config);
 
     // Intent is never inferred from the credential: a consumer building a
     // preview says so with `includeDrafts`, and hands the token in through
     // `config.getServiceToken` either way.
-    for (const b of blocks) expect(b.draftValue ?? null).toBeNull();
+    for (const b of [...site.pages, ...site.global].flatMap((p) => p.blocks)) {
+      expect(b.draftValue ?? null).toBeNull();
+    }
   });
 });
 

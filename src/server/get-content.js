@@ -9,17 +9,15 @@
  */
 
 import { createRestTransport } from "../defaults/transport.js";
-import { mergePageBlocks, resolveGlobalSlug } from "../core/merge-blocks.js";
 import { readsWholeSite } from "../core/read-blocks.js";
 import { ensureCmsConfig } from "../shared/config.js";
 import { noServiceToken } from "../defaults/service-token.js";
 import { CmsApiError } from "../shared/contracts/errors.js";
-import { handleSsrFailure } from "./ssr-failure.js";
 
 /**
  * @import { CmsConfig } from "../shared/config.js"
  * @import { ServiceTokenProvider } from "../shared/contracts/service-token.js"
- * @import { BlockResponse, CollectionItemResponse, CollectionListParams, CollectionListResponse, ContentResponse, SitePageContent, SyncManifestRequest, SyncResultResponse } from "../shared/contracts/schemas.js"
+ * @import { CollectionItemResponse, CollectionListParams, CollectionListResponse, ContentResponse, SitePageContent, SyncManifestRequest, SyncResultResponse } from "../shared/contracts/schemas.js"
  */
 
 /**
@@ -303,63 +301,6 @@ function noSiteReadError(config, viaPublicEndpoint) {
 
 /** Once per process: the fallback would otherwise say so on every render. */
 let warnedSlugFallback = false;
-
-/**
- * Fetch a page's blocks and the global slug (`config.globalSlug`) in parallel,
- * then stamp each block with its source slug so the save layer can PUT it back
- * to the right place. Blocks are ISR-cached under `cmsCacheTag(slug)`.
- *
- * Collection-typed blocks are declarations only here; `<CollectionRegion>` /
- * `<CollectionItem>` fetch their items at render time under their own tag.
- *
- * A `contentOptions.locale` reaches both fetches, so the header and footer
- * arrive in the page's own language rather than the Client's default.
- *
- * The two fetches fail independently: the page's blocks and the global slug's
- * are separate content, and losing one is no reason to discard the other. They
- * used to share a fate, so a page-slug failure blanked the header and footer
- * too, even though that request had succeeded. See `ssr-failure.js` for what
- * "fail" does.
- *
- * @param {CmsConfig} config
- * @param {string} slug
- * @param {{ contentOptions?: GetCmsContentOptions, onSsrError?: import("./ssr-failure.js").SsrErrorReporter | null }} [options]
- * @returns {Promise<BlockResponse[]>}
- */
-export async function getCmsPageBlocks(config, slug, options) {
-  const getServiceToken = config.getServiceToken ?? noServiceToken;
-  const accessToken =
-    options?.contentOptions?.accessToken ?? (await getServiceToken());
-
-  const globalSlug = resolveGlobalSlug(config.globalSlug, slug);
-  const locale = options?.contentOptions?.locale ?? null;
-  const onSsrError = options?.onSsrError;
-
-  const [content, globalContent] = await Promise.all([
-    getCmsContent(config, slug, { ...options?.contentOptions, accessToken })
-      .catch((err) => {
-        handleSsrFailure(err, { kind: "page", target: slug, locale }, onSsrError);
-        return { slug, blocks: [] };
-      }),
-    globalSlug
-      // Caller tags stay off this one: the __global entry is shared by every
-      // page, and a page-specific tag on it would let that page's revalidation
-      // drop everyone's header/footer.
-      ? getCmsContent(config, globalSlug, { ...options?.contentOptions, tags: undefined, accessToken })
-          .catch((err) => {
-            handleSsrFailure(err, { kind: "global", target: globalSlug, locale }, onSsrError);
-            return { slug: globalSlug, blocks: [] };
-          })
-      : Promise.resolve({ slug: "", blocks: [] }),
-  ]);
-
-  return mergePageBlocks({
-    slug,
-    globalSlug,
-    pageBlocks: content.blocks,
-    globalBlocks: globalContent.blocks,
-  });
-}
 
 /**
  * Fetch one window of a collection from a Server Component.

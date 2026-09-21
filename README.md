@@ -1571,7 +1571,7 @@ invalidates:
 | Read | Tag | Dropped by |
 | ---- | --- | ---------- |
 | `getCmsSiteContent` (what `<CmsPage>` renders from) | `cms-site`, or `cms-site-{locale}` | `revalidateCmsSlug` as `onAfterSave` |
-| `getCmsPageBlocks` / `getCmsContent` | `cms-{slug}`, or `cms-{locale}-{slug}` | the same, which drops both |
+| `getCmsContent` | `cms-{slug}`, or `cms-{locale}-{slug}` | the same, which drops both |
 | `getCmsCollection` | `cms-collection-{key}` | `revalidateCmsCollection` as `onAfterCollectionSave` |
 | `getCmsCollectionItem` | `cms-collection-{key}-{slug}` (plus the collection's) | the same, which drops both |
 
@@ -1587,10 +1587,7 @@ collection is suspect.
 The global slugs (header/footer/site-wide blocks) come back in the site read's
 own `global` list and are held once on the client, apart from any page, so a
 shared block edited on any page reflects everywhere (see
-[Content delivery](#content-delivery)). `getCmsPageBlocks`, for a server
-component reading one page, fetches `__global` beside the page and keeps caller
-tags off that shared entry: it backs every page, so one page's revalidation
-must not rebuild everyone's header and footer.
+[Content delivery](#content-delivery)).
 
 On a [multilingual site](#localization), each language of a page is its own tag, so
 publishing the English copy leaves the Turkish render alone. Collections are the
@@ -1601,10 +1598,8 @@ window shares the one collection tag.
 #### When the backend is unreachable
 
 A content fetch that fails does not take the page down: the site read renders
-its routes empty for that request, a page read (`getCmsPageBlocks`) renders
-with the blocks it has, and a collection region renders its `empty` branch. A
-page read and its global slug fail independently, so a page-level failure still
-leaves the header and footer in place.
+its routes empty for that request, and a collection region renders its `empty`
+branch.
 
 What that render is *worth* depends on why the fetch failed, so the three cases
 are kept apart:
@@ -1636,13 +1631,13 @@ createCmsPage({
 });
 ```
 
-`kind` is `"site" | "page" | "global" | "collection"`, `target` the slug or
+`kind` is `"site" | "collection"`, `target` the slug or
 collection key (`"*"` for the site read). It is not called for a 404, which is
 absence rather than failure. The SDK also logs to the console in development
 only; a throw from your reporter is swallowed.
 
 **Drafts never survive a server read.** `getCmsSiteContent`, `getCmsContent`,
-`getCmsPageBlocks`, `getCmsCollection` and `getCmsCollectionItem` drop
+`getCmsCollection` and `getCmsCollectionItem` drop
 `draftValue` and `draftData` before returning. These responses are cached under
 one tag for **every** visitor, so a draft that survived would be served to the
 public. An editor's unpublished work reaches the page through the client store
@@ -1820,7 +1815,7 @@ bundle:
 | `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `useCollection`, `useCollectionItem`, `useCollectionRecord`, `useMyCollections` (reading records) |
 | `inscribed/compose` | client | `CollectionComposer`, `CollectionFieldsForm`, `useCollectionCreate`, `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError` (writing them from your own page) |
 | `inscribed/panels` | client | `useCmsPanel`, `PanelStack` (what a [custom panel](#custom-panels)'s own component reads and renders) |
-| `inscribed/server` | server only | `getCmsSiteContent`, `getCmsContent`, `getCmsPageBlocks`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsSiteTag`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
+| `inscribed/server` | server only | `getCmsSiteContent`, `getCmsContent`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsSiteTag`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
 | `inscribed/page` | server only | `createCmsPage` (returns `CmsPage`, `localePath`, `getCmsRoute`, and the server collection bindings), `createCmsConfig` |
 | `inscribed/actions` | Server Action | `revalidateCmsSlug`, `revalidateCmsCollection` |
 | `inscribed/middleware` | edge | `createCmsMiddleware` |

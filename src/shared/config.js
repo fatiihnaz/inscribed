@@ -27,7 +27,7 @@ import { DEFAULT_ADMIN_LOCALE } from "./i18n/default-locale.js";
  *   Slug the manifest scanner writes `scope="global"` blocks to (header,
  *   footer, site-wide). Default "__global". The whole-site read needs no such
  *   name (the backend returns every `__*` slug as global); it is what the
- *   per-page reads (`config.slugs`, `getCmsPageBlocks`) fetch beside a page.
+ *   per-page fallback (`config.slugs`) fetches beside every page.
  * @property {string[]} locales
  *   Locale codes this site serves, matched against the leading path segment to
  *   split a route into `{ locale, slug }` (see `route.js`). Empty on a

@@ -17,11 +17,10 @@ const noStore = vi.fn();
 vi.mock("next/cache", () => ({ unstable_noStore: () => noStore() }));
 
 import { handleSsrFailure } from "../../server/ssr-failure.js";
-import { getCmsPageBlocks } from "../../server/get-content.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
 
 const BASE = "https://api.test";
-const PAGE = { kind: "page", target: "/haberler", locale: null };
+const PAGE = { kind: "site", target: "*", locale: null };
 
 const apiError = (status) => new CmsApiError({ status, detail: `boom ${status}` });
 
@@ -123,56 +122,5 @@ describe("a framework signal", () => {
       const signal = Object.assign(new Error(digest), { digest });
       expect(() => handleSsrFailure(signal, PAGE)).toThrow(signal);
     }
-  });
-});
-
-describe("page and global blocks fail independently", () => {
-  const pages = {
-    "/haberler": { slug: "/haberler", blocks: [{ blockPath: "hero.title", blockType: "ShortText", value: "sayfa", sortOrder: 1, version: 1 }] },
-    __global: { slug: "__global", blocks: [{ blockPath: "footer.copyright", blockType: "ShortText", value: "footer", sortOrder: 1, version: 1 }] },
-  };
-
-  const configWith = (transport) => ({ baseUrl: BASE, globalSlug: "__global", locales: [], transport });
-
-  const transportOver = (impl) => ({
-    getContent: vi.fn(impl),
-    getCollection: vi.fn(),
-    getCollectionItem: vi.fn(),
-  });
-
-  it("keeps the global blocks when the page's own fetch fails", async () => {
-    // The regression: both fetches shared one catch, so a page-slug failure
-    // discarded the header and footer that had arrived perfectly well.
-    const transport = transportOver(async (slug) => {
-      if (slug === "/haberler") throw apiError(404);
-      return pages[slug];
-    });
-
-    const blocks = await getCmsPageBlocks(configWith(transport), "/haberler");
-    expect(blocks.map((b) => b.blockPath)).toEqual(["footer.copyright"]);
-  });
-
-  it("keeps the page blocks when the global fetch fails", async () => {
-    const transport = transportOver(async (slug) => {
-      if (slug === "__global") throw apiError(404);
-      return pages[slug];
-    });
-
-    const blocks = await getCmsPageBlocks(configWith(transport), "/haberler");
-    expect(blocks.map((b) => b.blockPath)).toEqual(["hero.title"]);
-  });
-
-  it("names which half failed when it reports", async () => {
-    const onSsrError = vi.fn();
-    const transport = transportOver(async (slug) => {
-      if (slug === "__global") throw apiError(500);
-      return pages[slug];
-    });
-
-    await getCmsPageBlocks(configWith(transport), "/haberler", { onSsrError });
-
-    expect(onSsrError).toHaveBeenCalledTimes(1);
-    expect(onSsrError.mock.calls[0][1].kind).toBe("global");
-    expect(onSsrError.mock.calls[0][1].target).toBe("__global");
   });
 });

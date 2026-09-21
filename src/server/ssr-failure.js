@@ -48,7 +48,7 @@ export function isBuildPhase() {
 
 /**
  * @typedef {Object} SsrErrorContext
- * @property {"site" | "page" | "global" | "collection"} kind
+ * @property {"site" | "collection"} kind
  * @property {string} target
  *   The slug or collection key the fetch was for; `"*"` for a whole-site read.
  * @property {string|null} [locale]

@@ -57,7 +57,7 @@ and most "where should this go?" questions answer themselves.
   `tests/collections/context-split.test.jsx` are render-count guards and fail
   loudly when state migrates back.
 - **One rule, one home.** Value precedence (`core/resolve.js`), dirty state
-  (`admin/dirty.js`), block merging (`core/merge-blocks.js`), list params
+  (`admin/dirty.js`), the site seed (`core/site-blocks.js`), list params
   (`collections/params.js`) and draft scheduling (`shared/state/draft-queue.js`)
   each live in exactly one module. They were previously hand-written at a dozen
   call sites and had already drifted into disagreeing spellings. If you are
@@ -123,7 +123,6 @@ src/
     EditableList.jsx     #   List-typed blocks
     CmsGroup.jsx         #   path prefixing + cascading visibility
     resolve.js           #   value precedence: local draft > server draft > published
-    merge-blocks.js      #   page + global merge, shared by server and client reads
     blocks.js            #   path-based accessors over a block array/map
     hooks/               #   useCmsContent, useCmsBlock, useCmsAdmin, useCmsSave, ...
   collections/           # the opt-in collections namespace

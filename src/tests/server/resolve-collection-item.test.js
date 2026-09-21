@@ -310,6 +310,30 @@ describe("keeping a detail route static", () => {
     expect(out.canonical).toBe("/en/news/yeni-adres");
     expect(out.headerReads).toBeGreaterThan(0);
   });
+
+  it("hands that language to the redirect too, before anything <CmsPage> publishes is there", async () => {
+    // `generateMetadata` renders beside the layout, not under it, so the
+    // request-scoped slot can still be empty when the redirect is built. The
+    // segment's `locale` is what the canonical link already uses; the redirect
+    // from an old address must not fall back to the default language's path.
+    vi.resetModules();
+    const { createCmsPage } = await import("../../server/cms-page.jsx");
+    requestHeaders.current = new Headers({ "x-pathname": "/en/news/eski-adres" });
+    const { CollectionItem } = createCmsPage({
+      config: { baseUrl: "https://api.test", locales: ["tr", "en"] },
+      transport: { getCollectionItem: async () => ITEM },
+      Provider: () => null,
+      collections: { CollectionProvider: () => null, CollectionRecord: () => null, CollectionRows: () => null },
+    });
+    const path = (slug, { locale }) => (!locale || locale === "tr" ? `/haber/${slug}` : `/${locale}/news/${slug}`);
+    let redirectedTo = null;
+    try {
+      await CollectionItem.metadata("news", { path })({ params: { slug: "eski-adres", locale: "en" } });
+    } catch (err) {
+      redirectedTo = String(/** @type {*} */ (err)?.digest ?? "").split(";")[2] ?? null;
+    }
+    expect(redirectedTo).toBe("/en/news/yeni-adres");
+  });
 });
 
 describe("CollectionItem.staticParams", () => {

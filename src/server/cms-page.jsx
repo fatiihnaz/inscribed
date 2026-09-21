@@ -390,6 +390,24 @@ export function createCmsPage(options) {
    * @returns {Promise<import("../shared/contracts/schemas.js").CollectionItemResponse>}
    */
   async function resolveCollectionItem(key, slug, options) {
+    return settleCollectionItem(key, slug, options);
+  }
+
+  /**
+   * `resolveCollectionItem` with the route's language handed in, for the one
+   * caller that has it. `generateMetadata` renders beside the layout rather
+   * than under it, so the slot `<CmsPage>` publishes may not be filled yet when
+   * a redirect is built from there; `params.locale` is, and is what the
+   * canonical link already uses. The page body needs nothing of the sort: it
+   * renders after the layout, and the slot is filled by then.
+   *
+   * @param {string} key
+   * @param {string} slug
+   * @param {import("./get-content.js").GetCmsContentOptions & { path?: (slug: string) => string }} [options]
+   * @param {string|null} [routeLocale]
+   * @returns {Promise<import("../shared/contracts/schemas.js").CollectionItemResponse>}
+   */
+  async function settleCollectionItem(key, slug, options, routeLocale) {
     let item;
     try {
       item = await getCmsCollectionItem(serverConfig, key, slug, options);
@@ -403,7 +421,7 @@ export function createCmsPage(options) {
 
     if (item.slug === slug) return item;
 
-    const target = await canonicalAddress(item.slug, options);
+    const target = await canonicalAddress(item.slug, options, routeLocale);
     // Outside the try: `permanentRedirect` signals by throwing, and catching it
     // here would turn the redirect into a failed fetch.
     if (target) permanentRedirect(target);
@@ -460,7 +478,7 @@ export function createCmsPage(options) {
         );
       }
 
-      const item = await resolveCollectionItem(key, slug, resolveOptions);
+      const item = await settleCollectionItem(key, slug, resolveOptions, params?.locale);
       // Reached only when the redirect above did not happen, which includes the
       // case where it could not: the canonical link is what carries the record's
       // real address to search engines either way, so it is built from the

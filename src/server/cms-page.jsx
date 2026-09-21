@@ -671,24 +671,47 @@ async function resolvePathnameFromHeaders() {
 const EMPTY_SITE = { pages: [], global: [] };
 
 // Past this the RSC payload starts to weigh on every hard load: the site rides
-// in the root layout's props, once per document. Compressed it is a fraction,
-// but a site this size is where splitting the read starts to pay.
+// in the root layout's props, once per document. Compressed it is a fraction of
+// this, and a navigation costs nothing either way; what grows is the first load.
 const SITE_PAYLOAD_WARN_BYTES = 300_000;
+/** How many of the heaviest slugs to name. Enough to point somewhere, few enough to read. */
+const SITE_PAYLOAD_WARN_SLUGS = 3;
 let warnedLargeSite = false;
 
+/** @param {number} bytes */
+const asKb = (bytes) => `${Math.round(bytes / 1024)} KB`;
+
 /**
+ * Say how heavy the payload is and which slugs carry it. Which slugs is the
+ * part worth having: the total says there is a problem, the list says where,
+ * and what to do about it is a question about the content rather than about
+ * this read.
+ *
+ * Sized entry by entry rather than whole, so the total and the offenders come
+ * out of one pass.
+ *
  * @param {import("../core/site-blocks.js").SiteContent} site
  * @param {string|null} locale
  */
 function warnIfLarge(site, locale) {
   if (process.env.NODE_ENV === "production" || warnedLargeSite) return;
-  const bytes = JSON.stringify(site).length;
+
+  const sized = [...site.pages, ...site.global]
+    .map((entry) => ({ slug: entry.slug, bytes: JSON.stringify(entry).length }));
+  const bytes = sized.reduce((total, entry) => total + entry.bytes, 0);
   if (bytes < SITE_PAYLOAD_WARN_BYTES) return;
   warnedLargeSite = true;
+
+  const heaviest = sized
+    .sort((a, b) => b.bytes - a.bytes)
+    .slice(0, SITE_PAYLOAD_WARN_SLUGS)
+    .map((entry) => `${entry.slug} (${asKb(entry.bytes)})`)
+    .join(", ");
+
   // eslint-disable-next-line no-console
   console.warn(
-    `[inscribed] the site's blocks${locale ? ` (${locale})` : ""} serialize to ${Math.round(bytes / 1024)} KB, ` +
-      "which every hard load carries in the page payload. Large RichText values are the usual reason.",
+    `[inscribed] the site's blocks${locale ? ` (${locale})` : ""} serialize to ${asKb(bytes)}, ` +
+      `which every hard load carries in the page payload. Heaviest: ${heaviest}.`,
   );
 }
 

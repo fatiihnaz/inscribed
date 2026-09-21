@@ -1533,9 +1533,9 @@ page, and a route the CMS has no entry for still renders one.
 
 The site rides in the root layout's payload, once per document. A site of a
 few dozen pages is a few tens of kilobytes compressed; development warns once
-the serialized blocks pass 300 KB, which is where large RichText bodies start
-to weigh. A visitor who keeps one tab open across a publish keeps reading the
-site they loaded until the next full load.
+the serialized blocks pass 300 KB, naming the heaviest slugs so the weight has
+somewhere to point. A visitor who keeps one tab open across a publish keeps
+reading the site they loaded until the next full load.
 
 Editors are the one exception. Their drafts, and the versions a save needs,
 ride a request of their own, sent with their token once per session rather than

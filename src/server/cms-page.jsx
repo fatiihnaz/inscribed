@@ -51,6 +51,7 @@ import { headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 
 import { getCmsCollection, getCmsCollectionItem, getCmsSiteContent } from "./get-content.js";
+import { EMPTY_SITE } from "../core/site-blocks.js";
 import { ensureCmsConfig } from "../shared/config.js";
 import { normalizePanels } from "../shared/panels.js";
 import { localizePath, resolveCmsRoute } from "../shared/route.js";
@@ -684,9 +685,6 @@ async function resolvePathnameFromHeaders() {
   const h = await headers();
   return h.get(PATHNAME_HEADER) || "/";
 }
-
-/** Nothing read, in the shape the provider seeds from. */
-const EMPTY_SITE = { pages: [], global: [] };
 
 // Past this the RSC payload starts to weigh on every hard load: the site rides
 // in the root layout's props, once per document. Compressed it is a fraction of

@@ -19,7 +19,12 @@ import { resolveGlobalSlug } from "./merge-blocks.js";
  */
 
 /**
- * Whether this backend answers the whole-site read.
+ * Whether the site is read whole, in one request per language, or page by page.
+ *
+ * `config.slugs` is the switch, and the only one, for the server read
+ * (`getCmsSiteContent`) and the editor's read in the browser alike. The two
+ * must agree: a backend that answers the whole-site read for one side and not
+ * the other renders for visitors and fails for editors.
  *
  * Worth asking before reading rather than after, because it decides what a
  * read is keyed on: a whole-site read covers a language, so it is cached and
@@ -27,10 +32,13 @@ import { resolveGlobalSlug } from "./merge-blocks.js";
  * and re-run per route.
  *
  * @param {CmsConfig} config
+ * @param {import("../shared/contracts/transport.js").CmsTransport} [transport]
+ *   The transport that will do the reading; `config.transport` when omitted.
  * @returns {boolean}
  */
-export function readsWholeSite(config) {
-  return typeof config.transport.getSiteContent === "function";
+export function readsWholeSite(config, transport = config.transport) {
+  if (config.slugs?.length) return false;
+  return typeof transport?.getSiteContent === "function";
 }
 
 /**

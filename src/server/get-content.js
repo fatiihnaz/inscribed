@@ -10,6 +10,7 @@
 
 import { createRestTransport } from "../defaults/transport.js";
 import { mergePageBlocks, resolveGlobalSlug } from "../core/merge-blocks.js";
+import { readsWholeSite } from "../core/read-blocks.js";
 import { ensureCmsConfig } from "../shared/config.js";
 import { noServiceToken } from "../defaults/service-token.js";
 import { CmsApiError } from "../shared/contracts/errors.js";
@@ -171,12 +172,13 @@ export async function getCmsContent(config, slug, options) {
  * in the store: a page holds its own blocks and the globals are held once, so
  * nothing has to recognise the global slug by name or keep copies in step.
  *
- * A backend without the whole-site read (a transport with no `getSiteContent`,
- * or one answering it 404) is read page by page over `config.slugs` instead,
- * each page under its own tag and the site's, and the global slug is split back
- * out here. Without `slugs` there is nothing to read, and the error names what
- * is actually missing rather than rendering an empty site that would look like
- * a sync problem.
+ * A backend without the whole-site read is read page by page over
+ * `config.slugs` instead, each page under its own tag and the site's, and the
+ * global slug is split back out here. `slugs` is the switch (see
+ * `readsWholeSite`), and the same switch the editor's read in the browser
+ * flips on, so the two sides never disagree about how a site is read. Without
+ * it a missing endpoint fails with its name rather than rendering an empty site
+ * that would look like a sync problem.
  *
  * @param {CmsConfig} config
  * @param {GetCmsContentOptions} [options]
@@ -202,7 +204,7 @@ export async function getCmsSiteContent(config, options) {
   // from here, so every message below names both rather than guessing.
   const viaPublicEndpoint = !accessToken && Boolean(config.clientKey);
 
-  if (transport.getSiteContent) {
+  if (readsWholeSite(config, transport)) {
     try {
       const site = await transport.getSiteContent(request);
       return {
@@ -210,8 +212,8 @@ export async function getCmsSiteContent(config, options) {
         global: withoutPageDrafts(site.global, options?.includeDrafts),
       };
     } catch (err) {
-      if (!(err instanceof CmsApiError && err.status === 404)) throw err;
-      if (!config.slugs?.length) throw noSiteReadError(config, viaPublicEndpoint);
+      if (err instanceof CmsApiError && err.status === 404) throw noSiteReadError(config, viaPublicEndpoint);
+      throw err;
     }
   }
 

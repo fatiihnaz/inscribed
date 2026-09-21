@@ -436,14 +436,27 @@ describe("getCmsSiteContent", () => {
       expect(site.global.map((p) => [p.slug, p.blocks.length])).toEqual([["__global", 1]]);
     });
 
-    it("falls back the same way when the endpoint answers 404", async () => {
+    it("is decided by `slugs` alone: with them set, the whole-site read is never asked for", async () => {
+      // The same switch the editor's read in the browser flips on. Were the
+      // server to probe the endpoint instead, a REST backend without it would
+      // render for visitors and 404 for editors.
       const transport = {
         ...fakeTransport({ pages: { "/": { slug: "/", blocks: [block("hero.title")] } } }),
-        getSiteContent: vi.fn(async () => { throw notFound(); }),
+        getSiteContent: vi.fn(async () => { throw new Error("should not be asked"); }),
       };
       const site = await getCmsSiteContent(configWith(transport, { slugs: ["/"] }));
+      expect(transport.getSiteContent).not.toHaveBeenCalled();
       expect(site.pages.map((p) => p.slug)).toEqual(["/"]);
       expect(site.global.map((p) => p.slug)).toEqual(["__global"]);
+    });
+
+    it("names the endpoint when it answers 404 and there are no slugs to read instead", async () => {
+      const transport = {
+        ...fakeTransport(),
+        getSiteContent: vi.fn(async () => { throw notFound(); }),
+      };
+      await expect(getCmsSiteContent(configWith(transport))).rejects.toThrow(/\/cms\/content\/all/);
+      expect(transport.getContent).not.toHaveBeenCalled();
     });
 
     it("treats a slug the backend has not synced as empty, not as a failure", async () => {
@@ -465,7 +478,7 @@ describe("getCmsSiteContent", () => {
         ...fakeTransport(),
         getSiteContent: vi.fn(async () => { throw new CmsApiError({ status: 500, detail: "down" }); }),
       };
-      await expect(getCmsSiteContent(configWith(transport, { slugs: ["/"] }))).rejects.toMatchObject({ status: 500 });
+      await expect(getCmsSiteContent(configWith(transport))).rejects.toMatchObject({ status: 500 });
       expect(transport.getContent).not.toHaveBeenCalled();
     });
   });

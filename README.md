@@ -1545,7 +1545,9 @@ later, and from then on an editor's navigation costs no more than a visitor's.
 
 > **Backend without the whole-site read?** Pass `slugs` to `createCmsConfig`
 > and the site is read page by page over that list (plus the global slug), each
-> page under its own tag and the site's. Without `slugs` a missing endpoint
+> page under its own tag and the site's. `slugs` is the switch on both sides:
+> the server render and the editor's own read in the browser go page by page,
+> and `getSiteContent` is never asked for. Without `slugs` a missing endpoint
 > fails with its name rather than rendering an empty site. See
 > [Bring your own backend](#bring-your-own-backend).
 
@@ -1725,9 +1727,10 @@ it and that route loses its header and footer along with its own content.
 
 It is what `<CmsPage>` renders a site from, so a backend answers it once per
 language per publish rather than once per page. A backend that cannot answer it
-leaves the method out and the app passes `slugs` to `createCmsConfig`; the site
-is then read page by page through `getContent`, and the global slug is split
-back out on this side (see [Content delivery](#content-delivery)).
+needs `slugs` on `createCmsConfig` (the method itself may be left out): with
+`slugs` set the site is read page by page through `getContent`, on the server
+and in the browser alike, and the global slug is split back out on this side
+(see [Content delivery](#content-delivery)).
 
 ```js
 // my-transport.js

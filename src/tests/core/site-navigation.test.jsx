@@ -101,6 +101,7 @@ const tree = (props = {}, children = null) => (
 
 const fetchedSlugs = () =>
   contentFetches().map((c) => new URL(String(c[0])).searchParams.get("slug"));
+const urlsOf = (calls) => calls.map((c) => String(c[0]));
 
 describe("a visitor's navigation", () => {
   it("renders every route from the site the page arrived with", () => {
@@ -214,6 +215,25 @@ describe("what still fetches", () => {
     const slugs = transport.getContent.mock.calls.map(([slug]) => slug);
     expect(slugs).toContain("/news/[id]");
     expect(slugs).not.toContain("/news/7");
+  });
+
+  it("reads page by page whenever `slugs` is configured, on the REST transport too", async () => {
+    // The server decides the same way, so a backend without the whole-site
+    // read behaves the same for a visitor's render and an editor's session.
+    // Deciding it off the transport's shape instead would send the editor to
+    // `/cms/content/all` and leave them with the 404.
+    global.fetch = vi.fn(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/cms/collections/me")) return new Response("[]");
+      if (url.pathname.endsWith("/cms/content/all")) return new Response("{}", { status: 404 });
+      const slug = url.searchParams.get("slug") ?? "/";
+      return new Response(JSON.stringify({ slug, blocks: [{ ...block(`${slug} (editör)`), draftValue: "taslak" }] }));
+    });
+    const config = createCmsConfig({ baseUrl: BASE, slugs: ["/", "/about"] });
+    const { container } = render(tree({ isAdmin: true, config }));
+    await waitFor(() => expect(container.textContent).toContain("taslak"));
+    expect(fetchedSlugs()).toEqual(["/", "__global"]);
+    expect(urlsOf(contentFetches()).some((u) => u.includes("/cms/content/all"))).toBe(false);
   });
 });
 

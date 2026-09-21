@@ -60,8 +60,10 @@ import { DEFAULT_ADMIN_LOCALE } from "./i18n/default-locale.js";
  *   properties by `CmsProvider`. Null when no overrides given.
  * @property {readonly string[]|null} slugs
  *   Only for a backend without the whole-site read (`GET /cms/content/all`):
- *   the slugs to read one by one instead. Null otherwise, which is the normal
- *   case; the reference backend answers the site in one request.
+ *   the slugs to read one by one instead. Setting it is the switch: the server
+ *   render and the editor's read in the browser both go page by page and never
+ *   ask for the whole site. Null otherwise, which is the normal case; the
+ *   reference backend answers the site in one request.
  */
 
 /**
@@ -76,7 +78,7 @@ import { DEFAULT_ADMIN_LOCALE } from "./i18n/default-locale.js";
  * @param {string} [opts.adminLocale]   Language of the admin panel's own chrome ("Kaydet", "Koleksiyonlar", …). Built-in: `"en"` (default) and `"tr"`. Any other tag works alongside `adminStrings`, and drives plural selection. Unrelated to `locales`, which is what the site's *content* comes in.
  * @param {Record<string, string>} [opts.adminStrings]   Overrides for panel wording, keyed flat (`"drawer.save"`). Supply a few to reword, or a whole catalog to add a language. Anything omitted falls back to English.
  * @param {CmsTheme} [opts.theme]   Overrides for the admin/editing visual tokens (accent, fonts, radius, …). Unknown keys are dropped; unset keys keep their defaults.
- * @param {string[]} [opts.slugs]   Fallback for a backend with no `GET /cms/content/all`: the page slugs to read one by one. Leave it out against the reference backend.
+ * @param {string[]} [opts.slugs]   Fallback for a backend with no `GET /cms/content/all`: the page slugs to read one by one. Setting it turns the whole-site read off on the server and in the browser alike. Leave it out against the reference backend.
  * @returns {CmsConfig}
  */
 

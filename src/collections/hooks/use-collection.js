@@ -44,11 +44,13 @@ import { useCollectionLocale } from "./use-collection-locale.js";
 
 /**
  * @param {string} key  Backend collection key, e.g. "Teams" or "News".
- * @param {import("../../shared/contracts/schemas.js").CollectionListParams} [params]
+ * @param {import("../../shared/contracts/schemas.js").CollectionListParams & { locale?: string|null }} [params]
  *   Optional filter/offset/limit/locale. Each (key, params) tuple is its own
  *   cache entry; identical params are deduped via the in-flight table. `locale`
  *   defaults to the route's when the collection declares it, so a list under
- *   `/en` needs no extra prop and one that holds no languages gets none.
+ *   `/en` needs no extra prop and one that holds no languages gets none. Pass
+ *   `null` to address the collection's own default instead, the same thing
+ *   `locale={null}` means on the server-rendered region.
  * @returns {UseCollectionResult}
  */
 export function useCollection(key, params) {
@@ -58,7 +60,13 @@ export function useCollection(key, params) {
   // The page's own language unless the caller pinned one, which a sidebar
   // deliberately showing another locale's rows still can. Null when the
   // collection declares no such language, so it addresses its own default.
-  const requested = locale && params?.locale == null ? { ...params, locale } : params;
+  //
+  // A caller's `null` is a pin too, to that default. It is dropped rather than
+  // sent: a null inside the params would fork the cache key away from the plain
+  // window asking for the same rows, and every window is one entry.
+  const requested = params?.locale === null
+    ? withoutLocale(params)
+    : locale && params?.locale === undefined ? { ...params, locale } : params;
 
   // Stabilise params identity so inline literals don't re-trigger the effect
   // every render. The serialised form doubles as the cache key.
@@ -153,6 +161,16 @@ export function useCollection(key, params) {
  * @property {CmsApiError|Error|null} error  `error.isNotFound === true` on 404.
  * @property {() => Promise<void>} refetch
  */
+
+/**
+ * @param {import("../../shared/contracts/schemas.js").CollectionListParams & { locale?: string|null }} params
+ * @returns {import("../../shared/contracts/schemas.js").CollectionListParams | undefined}
+ */
+function withoutLocale(params) {
+  // eslint-disable-next-line no-unused-vars
+  const { locale, ...rest } = params;
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
 
 /**
  * @param {string} key   Backend collection key.

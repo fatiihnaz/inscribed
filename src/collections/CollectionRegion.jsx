@@ -46,8 +46,9 @@ import { buildListParams } from "./params.js";
  * @property {string|null} [locale]
  *   Pins the language of the window. Omit it and the region reads the route's,
  *   which is what a page wants; pass one for a sidebar deliberately showing
- *   another language's rows. Same prop, same meaning, on the server-rendered
- *   region `createCmsPage` hands back.
+ *   another language's rows, or `null` to ask for the collection's own default.
+ *   Same prop, same meaning, on the server-rendered region `createCmsPage`
+ *   hands back.
  * @property {string} [as]
  *   Wrapper element for the rows (e.g. "ul"). Without it the rows land straight
  *   in whatever container encloses the region. Extra props go to it.
@@ -74,7 +75,14 @@ export function CollectionRegion({
 }) {
   const params = buildListParams({ filter, limit, offset, locale });
 
-  const { items, isLoading, error } = useCollection(collection, params);
+  // `buildListParams` drops a null locale as it drops an absent one, since on
+  // the wire they are the same request. Here they are not: null is a pin to the
+  // collection's default and absent means the route's, so the null goes through
+  // to the hook, which is the one place that tells them apart.
+  const { items, isLoading, error } = useCollection(
+    collection,
+    locale === null ? { ...params, locale: null } : params,
+  );
 
   if (isLoading) return fallback ?? null;
   if (error) return errorNode ?? empty ?? null;

@@ -1,18 +1,24 @@
 /**
- * @file One route's blocks: the page fetch, the global-slug fetch beside it, and
- * the merge. Extracted because two callers need the identical thing for two
- * different routes: `useCmsContent` for the one being rendered, and the
- * translation panel for the same page in another language.
+ * @file One route's blocks, read page by page: the page fetch and the global
+ * slug's beside it.
+ *
+ * The fallback path. A backend that answers the whole-site read is read through
+ * `fetchSiteBlocks` instead, in one request. This is for the two cases that
+ * still need a single route: a backend without that endpoint, and the
+ * translation panel, which wants one page in a language nobody is reading.
  *
  * The global slug is fetched in the route's own locale. A Turkish page showing
  * an English header would be worse than no header at all.
+ *
+ * Returns the same `{ pages, global }` shape as the whole-site read, so both
+ * seed the store through one function.
  */
 
-import { mergePageBlocks, resolveGlobalSlug } from "./merge-blocks.js";
+import { resolveGlobalSlug } from "./merge-blocks.js";
 
 /**
- * @import { BlockResponse } from "../shared/contracts/schemas.js"
  * @import { CmsConfig } from "../shared/config.js"
+ * @import { SiteContent } from "./site-blocks.js"
  */
 
 /**
@@ -23,7 +29,7 @@ import { mergePageBlocks, resolveGlobalSlug } from "./merge-blocks.js";
  *   accessToken?: string | null,
  *   signal?: AbortSignal,
  * }} input
- * @returns {Promise<BlockResponse[]>}  Merged and `_slug`-stamped.
+ * @returns {Promise<SiteContent>}
  */
 export async function fetchRouteBlocks({ config, slug, locale, accessToken, signal }) {
   const globalSlug = resolveGlobalSlug(config.globalSlug, slug);
@@ -38,10 +44,11 @@ export async function fetchRouteBlocks({ config, slug, locale, accessToken, sign
       : Promise.resolve({ slug: "", blocks: [] }),
   ]);
 
-  return mergePageBlocks({
-    slug,
-    globalSlug,
-    pageBlocks: pageResponse.blocks,
-    globalBlocks: globalResponse.blocks,
-  });
+  return {
+    pages: [{ slug, blocks: pageResponse.blocks }],
+    // Only the one configured slug, unlike the whole-site read, which returns
+    // every global the backend recognises. This path addresses slugs by name
+    // and has only one name to go on.
+    global: globalSlug ? [{ slug: globalSlug, blocks: globalResponse.blocks }] : [],
+  };
 }

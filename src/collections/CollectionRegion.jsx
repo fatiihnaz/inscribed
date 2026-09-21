@@ -43,6 +43,11 @@ import { buildListParams } from "./params.js";
  *   `stableStringify`.
  * @property {number} [limit]   Page size (default 50, max 100, min 1).
  * @property {number} [offset]  Pagination offset (default 0).
+ * @property {string|null} [locale]
+ *   Pins the language of the window. Omit it and the region reads the route's,
+ *   which is what a page wants; pass one for a sidebar deliberately showing
+ *   another language's rows. Same prop, same meaning, on the server-rendered
+ *   region `createCmsPage` hands back.
  * @property {string} [as]
  *   Wrapper element for the rows (e.g. "ul"). Without it the rows land straight
  *   in whatever container encloses the region. Extra props go to it.
@@ -65,9 +70,9 @@ import { buildListParams } from "./params.js";
  * @param {CollectionRegionProps & Record<string, *>} props
  */
 export function CollectionRegion({
-  collection, filter, limit, offset, as, fallback, empty, error: errorNode, children, ...rest
+  collection, filter, limit, offset, locale, as, fallback, empty, error: errorNode, children, ...rest
 }) {
-  const params = buildListParams({ filter, limit, offset });
+  const params = buildListParams({ filter, limit, offset, locale });
 
   const { items, isLoading, error } = useCollection(collection, params);
 

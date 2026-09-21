@@ -364,18 +364,18 @@ describe("getCmsSiteContent", () => {
   const sitePages = [
     { slug: "/", blocks: [block("hero.title", { draftValue: "taslak" })] },
     { slug: "/about", blocks: [block("about.title")] },
-    { slug: "__global", blocks: [block("footer.copyright")] },
   ];
+  const siteGlobal = [{ slug: "__global", blocks: [block("footer.copyright")] }];
 
   /** A transport with the whole-site read. */
   const siteTransport = () => ({
     ...fakeTransport(),
-    getSiteContent: vi.fn(async () => ({ pages: sitePages })),
+    getSiteContent: vi.fn(async () => ({ pages: sitePages, global: siteGlobal })),
   });
 
   it("reads the site in one request, under the site tag", async () => {
     const transport = siteTransport();
-    const pages = await getCmsSiteContent(configWith(transport), { locale: "tr" });
+    const site = await getCmsSiteContent(configWith(transport), { locale: "tr" });
 
     expect(transport.getSiteContent).toHaveBeenCalledTimes(1);
     expect(transport.getContent).not.toHaveBeenCalled();
@@ -383,7 +383,10 @@ describe("getCmsSiteContent", () => {
       locale: "tr",
       cache: { revalidate: false, tags: ["cms-site-tr"] },
     });
-    expect(pages.map((p) => p.slug)).toEqual(["/", "/about", "__global"]);
+    // Routes and globals stay apart, which is what lets the store hold the
+    // globals once instead of copying them into every page.
+    expect(site.pages.map((p) => p.slug)).toEqual(["/", "/about"]);
+    expect(site.global.map((p) => p.slug)).toEqual(["__global"]);
   });
 
   it("keeps the pre-i18n tag on a single-language site", async () => {
@@ -395,11 +398,11 @@ describe("getCmsSiteContent", () => {
   });
 
   it("strips drafts, the same as a page read: this response is cached for everyone", async () => {
-    const pages = await getCmsSiteContent(configWith(siteTransport()));
-    expect(pages[0].blocks[0].draftValue ?? null).toBeNull();
+    const site = await getCmsSiteContent(configWith(siteTransport()));
+    expect(site.pages[0].blocks[0].draftValue ?? null).toBeNull();
 
     const withDrafts = await getCmsSiteContent(configWith(siteTransport()), { includeDrafts: true });
-    expect(withDrafts[0].blocks[0].draftValue).toBe("taslak");
+    expect(withDrafts.pages[0].blocks[0].draftValue).toBe("taslak");
   });
 
   it("resolves the service token once and hands it to the read", async () => {
@@ -420,14 +423,17 @@ describe("getCmsSiteContent", () => {
           __global: { slug: "__global", blocks: [block("footer.copyright")] },
         },
       });
-      const pages = await getCmsSiteContent(
+      const site = await getCmsSiteContent(
         configWith(transport, { slugs: ["/", "/about"] }),
         { locale: "en" },
       );
 
       expect(transport.getContent.mock.calls.map(([slug]) => slug)).toEqual(["/", "/about", "__global"]);
       expect(cacheOf(transport.getContent, 0).tags).toEqual(["cms-en-/", "cms-site-en"]);
-      expect(pages.map((p) => [p.slug, p.blocks.length])).toEqual([["/", 1], ["/about", 0], ["__global", 1]]);
+      // The global slug is split back out here, so this path hands over the
+      // same shape the whole-site read does.
+      expect(site.pages.map((p) => [p.slug, p.blocks.length])).toEqual([["/", 1], ["/about", 0]]);
+      expect(site.global.map((p) => [p.slug, p.blocks.length])).toEqual([["__global", 1]]);
     });
 
     it("falls back the same way when the endpoint answers 404", async () => {
@@ -435,8 +441,9 @@ describe("getCmsSiteContent", () => {
         ...fakeTransport({ pages: { "/": { slug: "/", blocks: [block("hero.title")] } } }),
         getSiteContent: vi.fn(async () => { throw notFound(); }),
       };
-      const pages = await getCmsSiteContent(configWith(transport, { slugs: ["/"] }));
-      expect(pages.map((p) => p.slug)).toEqual(["/", "__global"]);
+      const site = await getCmsSiteContent(configWith(transport, { slugs: ["/"] }));
+      expect(site.pages.map((p) => p.slug)).toEqual(["/"]);
+      expect(site.global.map((p) => p.slug)).toEqual(["__global"]);
     });
 
     it("treats a slug the backend has not synced as empty, not as a failure", async () => {
@@ -445,8 +452,8 @@ describe("getCmsSiteContent", () => {
         if (slug === "/missing") throw notFound();
         return { slug, blocks: [] };
       });
-      const pages = await getCmsSiteContent(configWith(transport, { slugs: ["/", "/missing"] }));
-      expect(pages.find((p) => p.slug === "/missing").blocks).toEqual([]);
+      const site = await getCmsSiteContent(configWith(transport, { slugs: ["/", "/missing"] }));
+      expect(site.pages.find((p) => p.slug === "/missing").blocks).toEqual([]);
     });
 
     it("names the endpoint when there are no slugs to fall back on", async () => {

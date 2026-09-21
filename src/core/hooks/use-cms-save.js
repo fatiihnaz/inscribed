@@ -20,7 +20,8 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { deepEqual } from "../../shared/util/deep-equal.js";
-import { parseRouteKey, routeKey } from "../../shared/route.js";
+import { globalsKey, parseRouteKey, routeKey } from "../../shared/route.js";
+import { mergeRouteBlocks, readBlock } from "../blocks.js";
 import { parseTranslationDraftKey } from "../../shared/state/draft-keys.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
 import { useCmsRoute } from "./use-cms-route.js";
@@ -79,7 +80,15 @@ export function useCmsSave() {
   // against the language it targets, and that language's blocks live under
   // their own route key.
   const allBlocks = useStoreSelector(blocksStore, (s) => s);
-  const blocks = allBlocks.get(routeKey(slug, locale)) ?? EMPTY_BLOCKS;
+  // The page's own blocks and the language's globals, as one map: a header is
+  // as publishable from here as anything else on the page.
+  const blocks = useMemo(
+    () => mergeRouteBlocks(
+      allBlocks.get(routeKey(slug, locale)) ?? EMPTY_BLOCKS,
+      allBlocks.get(globalsKey(locale)) ?? EMPTY_BLOCKS,
+    ),
+    [allBlocks, slug, locale],
+  );
   const { savePage, isSaving, error, clearError } = useCmsAdmin();
 
   // A block is dirty when its effective value (local draft, else server-side
@@ -124,7 +133,9 @@ export function useCmsSave() {
       // A staged edit for the language already on screen would be published
       // twice, and one for no language at all cannot be addressed.
       if (!targetLocale || targetLocale === locale) continue;
-      const target = (allBlocks.get(parsed.routeKey) ?? EMPTY_BLOCKS).get(parsed.blockPath);
+      const target = readBlock(
+        allBlocks, parsed.routeKey, globalsKey(targetLocale), parsed.blockPath,
+      );
       if (!target) continue;
       if (deepEqual(value, target.value)) continue;
       out.push({

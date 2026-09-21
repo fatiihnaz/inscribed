@@ -25,6 +25,7 @@ vi.mock("next/navigation", () => ({
 import { CmsProvider } from "../../core/CmsProvider.jsx";
 import { EditableRegion } from "../../core/EditableRegion.jsx";
 import { RING_RADIUS } from "../../shared/style/tokens.js";
+import { settleAdminChrome } from "../admin-chunk.js";
 
 const PATH = "hero.cover";
 
@@ -84,12 +85,15 @@ async function mount(children) {
         config={{ baseUrl: "https://api.test" }}
         transport={/** @type {*} */ (transport)}
         isAdmin
-        initialPages={[{ slug: "/", blocks: [imageBlock(), textBlock()] }]}
+        initialSite={{ pages: [{ slug: "/", blocks: [imageBlock(), textBlock()] }], global: [] }}
       >
         {children}
       </CmsProvider>,
     ));
   });
+  // The region's editing chrome, and with it the ring this file is about,
+  // arrives through a dynamic import.
+  await settleAdminChrome();
 }
 
 /** The wrapper is the ringed element: the content's parent. */

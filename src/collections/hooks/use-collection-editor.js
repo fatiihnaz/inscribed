@@ -6,10 +6,10 @@
  * debounces the autosave PUT, publishes on save. No chrome of its own, so the
  * drawer's form and the page-side `<CollectionField>` drive the same state.
  *
- * `useEditorValues` / `useEditorField` read a surface's working copy back out
- * of the collection store. Two reads on purpose: the drawer's form renders
- * every field and wants the whole object, while a page-side field wants only
- * its own key so a keystroke elsewhere doesn't re-render it.
+ * The readers that take a surface's working copy back out of the collection
+ * store live in `use-editor-values.js` and are re-exported below. They are
+ * split off because a public page renders records without ever mounting this
+ * engine, and importing one reader used to drag the whole thing along.
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
@@ -806,54 +806,10 @@ export function useCollectionEditor(
   );
 }
 
-/**
- * Whether a publish would send anything: the live overlay draft unioned with
- * the server's. A hook rather than a field on the editor state, because the
- * overlay flips on the first keystroke and the editor object must keep its
- * identity across one (it is what the record scope hangs off).
- *
- * @param {CollectionEditorState} editor
- * @returns {boolean}
- */
-export function useEditorDirty(editor) {
-  const { collectionStore } = useCollectionContext();
-  const hasLocalDraft = useStoreSelector(
-    collectionStore,
-    (s) => s.drafts.has(`${editor.collection}:${editor.slug}`),
-  );
-  return hasLocalDraft || editor.hasDraft;
-}
-
-/**
- * One surface's whole form state. For the drawer's schema-driven form, which
- * renders every field at once and so re-renders with any of them.
- *
- * @param {string | undefined} editorId
- * @returns {Record<string, *> | null}
- */
-export function useEditorValues(editorId) {
-  const { collectionStore } = useCollectionContext();
-  return useStoreSelector(
-    collectionStore,
-    (s) => (editorId ? s.editorValues.get(editorId) ?? null : null),
-  );
-}
-
-/**
- * One field of one surface. The narrow read is the point: typing in a record's
- * title must not re-render its body, image and the rest.
- *
- * @param {string | undefined} editorId
- * @param {string} name
- * @returns {*}
- */
-export function useEditorField(editorId, name) {
-  const { collectionStore } = useCollectionContext();
-  return useStoreSelector(
-    collectionStore,
-    (s) => (editorId ? s.editorValues.get(editorId)?.[name] : undefined),
-  );
-}
+// The three readers used to live here. They are on the page's side of the
+// admin split now (see `use-editor-values.js`), and re-exported so nothing that
+// imported them from this module has to move.
+export { useEditorDirty, useEditorField, useEditorValues } from "./use-editor-values.js";
 
 /**
  * Zero-padded HH:MM wall-clock string.

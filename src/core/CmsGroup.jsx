@@ -10,16 +10,21 @@
  *
  *   2. In admin mode, draws a dashed ring + label around its children on
  *      hover. Public mode is a transparent passthrough.
+ *
+ * Only the first of those is here. The ring and the label need the chip styles,
+ * the icon set and the panel's wording, so they live in `CmsGroupAdmin` behind
+ * a dynamic import; the contexts are what every descendant actually depends on,
+ * and they are published either way.
  */
 
-import { useContext, useState } from "react";
+import { lazy, Suspense, useContext } from "react";
 
 import { CmsGroupContext, CmsGroupVisibilityContext, ownVisibility, strongerVisibility } from "../shared/state/group-context.js";
-import { CHROME_ICON, regionChipStyle } from "./page-region-chrome.js";
-import { TypeGroup } from "../shared/style/icons.jsx";
-import { ACCENT, ROOMY_INSET } from "../shared/style/tokens.js";
 import { useCmsContext } from "../shared/state/cms-context.js";
-import { useCmsStrings } from "./hooks/use-cms-strings.js";
+
+const CmsGroupAdmin = lazy(() =>
+  import("./CmsGroupAdmin.jsx").then((m) => ({ default: m.CmsGroupAdmin })),
+);
 
 /**
  * @typedef {Object} CmsGroupProps
@@ -43,79 +48,27 @@ import { useCmsStrings } from "./hooks/use-cms-strings.js";
  *   the section. Still honoured.
  */
 
-const RING_COLOR_HOVER = `color-mix(in srgb, ${ACCENT} 50%, transparent)`;
-const RING_COLOR_OFF   = `color-mix(in srgb, ${ACCENT} 0%, transparent)`;
-// The dashed outline sits this far outside the group box; the label straddles it
-// and it must clear the children's halos so the group wraps them.
-const GROUP_OFFSET     = ROOMY_INSET + 4;
-
 /**
  * @param {CmsGroupProps} props
  */
 export function CmsGroup({ name, children, style, hidden, readOnly, editable, visible }) {
   const { isAdmin } = useCmsContext();
-  const t = useCmsStrings();
   const parentPrefix = useContext(CmsGroupContext);
   const parentVisibility = useContext(CmsGroupVisibilityContext);
-  const [hovered, setHovered] = useState(false);
 
   const prefix = parentPrefix ? `${parentPrefix}.${name}` : name;
-
   const visibility = strongerVisibility(parentVisibility, ownVisibility({ hidden, readOnly, visible, editable }));
-
-  if (!isAdmin) {
-    return (
-      <CmsGroupContext.Provider value={prefix}>
-        <CmsGroupVisibilityContext.Provider value={visibility}>
-          {children}
-        </CmsGroupVisibilityContext.Provider>
-      </CmsGroupContext.Provider>
-    );
-  }
-
-  const modeLabel = visibility === "hidden" ? t("core.group.hidden")
-    : visibility === "readonly" ? t("block.readOnly")
-    : null;
-  const label = modeLabel ? `${prefix} · ${modeLabel}` : prefix;
 
   return (
     <CmsGroupContext.Provider value={prefix}>
       <CmsGroupVisibilityContext.Provider value={visibility}>
-        <div
-          data-cms-group={prefix}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          style={{
-            position: "relative",
-            outline: `1.5px dashed ${hovered ? RING_COLOR_HOVER : RING_COLOR_OFF}`,
-            outlineOffset: GROUP_OFFSET,
-            borderRadius: 12,
-            transition: "outline-color 0.18s ease",
-            ...style,
-          }}
-        >
-          {children}
-          {hovered ? (
-            <span
-              aria-hidden="true"
-              style={{
-                // The same glass pill every other page-side label is drawn on;
-                // only the anchoring is the group's own, since its dashed ring
-                // sits further out than a region's halo.
-                ...regionChipStyle({ roomy: true, highlight: false, accent: ACCENT }),
-                // Straddle the outline's top line at the right, so it sits on the
-                // dashed line and clears the child block chips (which sit top-left).
-                top: -GROUP_OFFSET,
-                left: "auto",
-                right: 8 - GROUP_OFFSET,
-                pointerEvents: "none",
-              }}
-            >
-              <TypeGroup size={CHROME_ICON} style={{ flexShrink: 0, opacity: 0.8 }} />
-              {label}
-            </span>
-          ) : null}
-        </div>
+        {isAdmin ? (
+          <Suspense fallback={children}>
+            <CmsGroupAdmin prefix={prefix} visibility={visibility} style={style}>
+              {children}
+            </CmsGroupAdmin>
+          </Suspense>
+        ) : children}
       </CmsGroupVisibilityContext.Provider>
     </CmsGroupContext.Provider>
   );

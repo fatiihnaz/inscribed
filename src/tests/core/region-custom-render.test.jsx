@@ -11,6 +11,8 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import React from "react";
 import { render, cleanup, screen, fireEvent } from "@testing-library/react";
 
+import { settleAdminChrome } from "../admin-chunk.js";
+
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
   useRouter: () => ({ refresh: () => {} }),
@@ -43,7 +45,7 @@ function ActiveProbe() {
 
 /** @param {{ isAdmin?: boolean, children: React.ReactNode }} props */
 const App = ({ isAdmin, children }) => (
-  <CmsProvider config={{ baseUrl: BASE }} isAdmin={isAdmin} initialPages={[{ slug: "/", blocks: BLOCKS }]}>
+  <CmsProvider config={{ baseUrl: BASE }} isAdmin={isAdmin} initialSite={{ pages: [{ slug: "/", blocks: BLOCKS }], global: [] }}>
     <ActiveProbe />
     {children}
   </CmsProvider>
@@ -56,7 +58,13 @@ const counter = (
 );
 
 beforeEach(() => {
-  global.fetch = vi.fn(async () => new Response(JSON.stringify({ slug: "/", blocks: [] })));
+  // The editor's own refetch lands while these tests wait for the admin chunk,
+  // and it is the truth for the route: answering it with an empty page would
+  // wipe the blocks the assertions are about.
+  global.fetch = vi.fn(async (input) => {
+    const slug = new URL(String(input)).searchParams.get("slug") ?? "/";
+    return new Response(JSON.stringify({ slug, blocks: slug === "/" ? BLOCKS : [] }));
+  });
 });
 
 afterEach(() => {
@@ -77,8 +85,9 @@ describe("EditableRegion with a function child", () => {
     expect(screen.getByText("42 kişi")).toBeTruthy();
   });
 
-  it("wraps in admin so the ring has something to hang on", () => {
+  it("wraps in admin so the ring has something to hang on", async () => {
     const { container } = render(<App isAdmin>{counter}</App>);
+    await settleAdminChrome();
     const wrapper = container.querySelector("span");
     expect(wrapper).toBeTruthy();
     // `as="p"` is a block tag, so the wrapper lays out as a block and the halo
@@ -87,8 +96,9 @@ describe("EditableRegion with a function child", () => {
     expect(wrapper.querySelector("strong")).toBeTruthy();
   });
 
-  it("opens the block from the chip, and only from the chip", () => {
+  it("opens the block from the chip, and only from the chip", async () => {
     const { container } = render(<App isAdmin>{counter}</App>);
+    await settleAdminChrome();
     const wrapper = container.querySelector("span");
 
     fireEvent.click(screen.getByText("42 kişi"));
@@ -99,7 +109,7 @@ describe("EditableRegion with a function child", () => {
     expect(screen.getByTestId("active").textContent).toBe("stats.count");
   });
 
-  it("takes the enclosing group prefix", () => {
+  it("takes the enclosing group prefix", async () => {
     const { container } = render(
       <App isAdmin>
         <CmsGroup name="hero">
@@ -110,6 +120,7 @@ describe("EditableRegion with a function child", () => {
       </App>,
     );
     expect(screen.getByText("7")).toBeTruthy();
+    await settleAdminChrome();
     fireEvent.mouseEnter(container.querySelector("span"));
     expect(container.querySelector("button").textContent).toContain("hero.count");
   });
@@ -126,12 +137,13 @@ describe("EditableRegion with a function child", () => {
     expect(container.querySelector("[contenteditable]")).toBeNull();
   });
 
-  it("leaves the built-in rendering alone when children is not a function", () => {
+  it("leaves the built-in rendering alone when children is not a function", async () => {
     const { container } = render(
       <App isAdmin>
         <EditableRegion blockPath="post.title" blockType="ShortText" defaultValue="" as="h1" />
       </App>,
     );
+    await settleAdminChrome();
     expect(container.querySelector("[contenteditable]")).toBeTruthy();
   });
 });

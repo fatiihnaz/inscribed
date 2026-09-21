@@ -1495,6 +1495,11 @@ things follow from that one read:
 - **Nothing per page.** A page declares regions and nothing else: no slug, no
   wrapper, no extra line for a page whose regions sit inside client components.
 
+The read comes back as two lists, `pages` and `global`, and the store keeps
+them apart the same way: a page holds its own blocks, and the language's global
+blocks are held once. A header therefore reaches every route without a copy per
+page, and a route the CMS has no entry for still renders one.
+
 The site rides in the root layout's payload, once per document. A site of a
 few dozen pages is a few tens of kilobytes compressed; development warns once
 the serialized blocks pass 300 KB, which is where large RichText bodies start
@@ -1502,9 +1507,10 @@ to weigh. A visitor who keeps one tab open across a publish keeps reading the
 site they loaded until the next full load.
 
 Editors are the one exception. Their drafts, and the versions a save needs,
-ride a request of their own sent with their token once per route
-(`useCmsContent`). The published copy paints first; the drafts overlay it a
-moment later.
+ride a request of their own, sent with their token once per session rather than
+once per route: the same whole-site read, answered for a credential that can
+see drafts. The published copy paints first and the drafts overlay it a moment
+later, and from then on an editor's navigation costs no more than a visitor's.
 
 > **Backend without the whole-site read?** Pass `slugs` to `createCmsConfig`
 > and the site is read page by page over that list (plus the global slug), each
@@ -1668,13 +1674,29 @@ The one exception is `getCollection`, which reads its locale from `params`
 alongside `filter` / `offset` / `limit`: for a list the language narrows the
 window, and `params` is what the client hashes into its cache key.
 
-`getSiteContent` answers with every synced slug's blocks in one language,
-`{ pages: [{ slug, blocks }] }`, the global slug included. It is what
-`<CmsPage>` renders a site from, so a backend answers it once per language per
-publish rather than once per page. A backend that cannot answer it leaves the
-method out and the app passes `slugs` to `createCmsConfig`; the site is then
-read page by page through `getContent` (see
-[Content delivery](#content-delivery)).
+`getSiteContent` answers with every synced slug's blocks in one language, as
+two lists of the same kind of entry:
+
+```js
+{ locale: "tr", pages: [{ slug, blocks }], global: [{ slug, blocks }] }
+```
+
+`pages` are routes and `global` is everything that is not one (the reference
+backend counts any slug whose last segment starts with `__`). They are apart
+because the client holds them apart: a page's entry has only its own blocks,
+and the globals are stored once. That is what lets a header reach every route
+without a copy per page, and lets a route the site has no entry for still have
+one. Each global entry keeps its own slug, which is where the save layer writes
+its blocks back to.
+
+A page with no live blocks still belongs in `pages`, with an empty array. Drop
+it and that route loses its header and footer along with its own content.
+
+It is what `<CmsPage>` renders a site from, so a backend answers it once per
+language per publish rather than once per page. A backend that cannot answer it
+leaves the method out and the app passes `slugs` to `createCmsConfig`; the site
+is then read page by page through `getContent`, and the global slug is split
+back out on this side (see [Content delivery](#content-delivery)).
 
 ```js
 // my-transport.js

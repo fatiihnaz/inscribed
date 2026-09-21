@@ -35,7 +35,7 @@ function mockFetch() {
   global.fetch = vi.fn(async (input) => {
     const url = String(input);
     if (url.includes("/cms/collections/me")) return jsonRes([]);
-    return jsonRes({ slug: "/", blocks: [] });
+    return jsonRes({ pages: [{ slug: "/", blocks: [] }], global: [] });
   });
 }
 
@@ -132,18 +132,22 @@ describe("context seams / store state", () => {
     await waitFor(() => expect(handle()).not.toBeNull());
 
     const before = pageRenders;
-    // What a refetch does: replace one route's blocks.
+    // What a refetch does: write what the read brought back.
     act(() => {
-      handle().commitBlocks("/", new Map([
-        ["hero.title", {
-          blockPath: "hero.title",
-          blockType: "ShortText",
-          value: "",
-          draftValue: "taslak",
-          version: 1,
-          sortOrder: 1,
+      handle().commitSite({
+        pages: [{
+          slug: "/",
+          blocks: [{
+            blockPath: "hero.title",
+            blockType: "ShortText",
+            value: "",
+            draftValue: "taslak",
+            version: 1,
+            sortOrder: 1,
+          }],
         }],
-      ]));
+        global: [],
+      }, null);
     });
 
     expect(handle().blocksStore.get().get("/").size).toBe(1);

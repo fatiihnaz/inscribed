@@ -436,12 +436,22 @@
 
 /**
  * Every synced slug's blocks in one language, which is what a site renders
- * from: `GET /cms/content/all`. The global slug rides along as a page like any
- * other, and the client folds it into each page's entry.
+ * from: `GET /cms/content/all`.
+ *
+ * The two lists carry the same kind of entry and differ in what the list means:
+ * `pages` are routes, `global` is not. Keeping them apart is what stops the
+ * client having to recognise the global slug by name, and what lets it hold the
+ * globals in one place instead of copying them into every page.
+ *
+ * `global` is a list rather than one entry because the backend decides what
+ * counts as global (any slug whose last segment starts with `__`), so there can
+ * be several. Each keeps its own slug, which is what the save layer writes a
+ * block back to.
  *
  * @typedef {Object} SiteContentResponse
  * @property {string} [locale]   Echoed back; absent on a single-language backend.
  * @property {SitePageContent[]} pages
+ * @property {SitePageContent[]} global
  */
 
 /**

@@ -214,7 +214,9 @@ describe("session lifecycle", () => {
     });
 
     await waitFor(() => expect(adminText()).toBe("false"));
-    expect(screen.getByText(en["core.session.expired"])).toBeTruthy();
+    // The notice is its own chunk (it carries the panel's wording), so it
+    // arrives a beat after the session drops.
+    expect(await screen.findByText(en["core.session.expired"])).toBeTruthy();
   });
 
   it("drops to public silently (no notice) when another tab signs out", async () => {

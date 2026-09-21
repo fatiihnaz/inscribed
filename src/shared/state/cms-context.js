@@ -51,7 +51,12 @@ import { createContext, useContext } from "react";
  *   names. The refetch that follows the 409 puts the other editor's value back
  *   in `block.value` while the local draft still holds the user's, which is
  *   what the card's resolve panel diffs.
- * @property {number} refetchToken   Bumped to force `useCmsContent` to refetch.
+ * @property {number} refetchToken   Bumped to force the site read to run again.
+ * @property {boolean} siteLoading
+ *   Whether that read is in flight. On the ui store rather than in the hook
+ *   that reports it, because the read is mounted once by the provider and
+ *   `useCmsContent` can be called from anywhere.
+ * @property {Error|null} siteError
  */
 
 /**
@@ -104,16 +109,22 @@ import { createContext, useContext } from "react";
  *
  * @property {Store<Map<string, Map<string, BlockResponse>>>} blocksStore
  *   Blocks keyed by `routeKey(slug, locale)`, then by blockPath, holding the
- *   whole site from the first render (see `initialPages`). Consumers select
- *   through their own route (`s.get(key)?.get(path)`), which is what makes a
- *   navigation paint complete on the commit that brings it in: the selector
- *   already resolves, with no fetch and no effect in between. Regions select a
- *   single entry so one block's autosave roundtrip doesn't re-render the rest;
- *   the drawer and `useCmsSave` select the whole map for their route because
- *   they aggregate over it.
- * @property {(key: string, blocks: Map<string, BlockResponse>) => void} commitBlocks
- *   Replace one route's blocks, as `useCmsContent` does once an editor's fetch
- *   lands. Other routes' entries stay.
+ *   whole site from the first render (see `initialSite`). Consumers select
+ *   through their own route, which is what makes a navigation paint complete on
+ *   the commit that brings it in: the selector already resolves, with no fetch
+ *   and no effect in between.
+ *
+ *   One entry is not a route: `globalsKey(locale)` holds the language's global
+ *   blocks, once. A block is looked for in the route's entry and then in that
+ *   one (`readBlock`), so a header reaches every page without being copied into
+ *   each, and a route the site has no entry for still has one.
+ * @property {(site: import("../../core/site-blocks.js").SiteContent, locale: string|null) => void} commitSite
+ *   Write what a read brought back. Entries it says nothing about stay, so the
+ *   translation panel can commit one page of another language on its own.
+ * @property {(site: import("../../core/site-blocks.js").SiteContent) => void} commitSiteSlugs
+ *   Replace the matchable slug set. Only a whole-site read may: a per-route
+ *   read holds one page and would wipe the set down to it.
+ * @property {(loading: boolean, error: Error|null) => void} setSiteStatus
  * @property {Store<Map<string, *>>} contentDraftsStore
  *   Per-blockPath unsaved edits (live-preview overlay while typing). Regions
  *   subscribe to their own blockPath; the drawer and `useCmsSave` to the whole

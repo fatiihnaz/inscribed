@@ -111,6 +111,30 @@ export function routeKey(slug, locale) {
 }
 
 /**
+ * The slug one language's global blocks are stored under.
+ *
+ * Deliberately not a path. A manifest slug is derived from a route and always
+ * starts with "/", so nothing the site holds can collide with this, and the
+ * globals cannot be mistaken for a page. They are not a route, and keeping them
+ * in one slot rather than copying them into every route's entry is what lets a
+ * page learn that they changed without being told: it never held a copy.
+ *
+ * U+001D (group separator) for the same reason the other two separators here
+ * are control characters: a slug can hold any printable character.
+ */
+export const GLOBALS_SLUG = "\u001Dglobals";
+
+/**
+ * Where one language's global blocks live in the blocks store.
+ *
+ * @param {string|null|undefined} locale
+ * @returns {string}
+ */
+export function globalsKey(locale) {
+  return routeKey(GLOBALS_SLUG, locale);
+}
+
+/**
  * @param {string} key
  * @returns {{ slug: string, locale: string|null }}
  */

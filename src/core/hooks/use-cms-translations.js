@@ -22,18 +22,15 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
-import { localizePath, otherLocales as resolveOtherLocales, routeKey } from "../../shared/route.js";
+import { globalsKey, localizePath, otherLocales as resolveOtherLocales, routeKey } from "../../shared/route.js";
 import { translationDraftKey } from "../../shared/state/draft-keys.js";
-import { indexBlocksByPath } from "../blocks.js";
+import { readBlock } from "../blocks.js";
 import { fetchRouteBlocks } from "../fetch-route-blocks.js";
 import { useCmsRoute } from "./use-cms-route.js";
 
 /**
  * @import { BlockResponse } from "../../shared/contracts/schemas.js"
  */
-
-/** @type {Map<string, BlockResponse>} */
-const EMPTY_BLOCKS = new Map();
 
 /**
  * Which languages have already been pulled, and which pulls are on the wire.
@@ -115,7 +112,7 @@ function dedupe(cache, key, run) {
 export function useCmsTranslations(block, options) {
   const enabled = options?.enabled ?? false;
   const {
-    config, blocksStore, commitBlocks, uiStore,
+    config, blocksStore, commitSite, uiStore,
     translationDraftsStore, setTranslationDraft, clearTranslationDrafts,
     getAccessToken,
   } = useCmsContext();
@@ -170,13 +167,13 @@ export function useCmsTranslations(block, options) {
       try {
         const accessToken = await getAccessToken();
         await Promise.all(stale.map(async ({ key, targetLocale }) => {
-          // No abort signal, unlike `useCmsContent`'s fetch. This one is shared:
+          // No abort signal, unlike the provider's own read. This one is shared:
           // the first card to ask owns the request, so its signal would cancel
           // the response every other card is waiting on. There is nothing to
           // abort for anyway — the result lands in a store the whole provider
           // reads, so a card that unmounted mid-flight has left the next one a
           // warm entry rather than wasted a request.
-          const merged = await dedupe(cache, key, () => fetchRouteBlocks({
+          const site = await dedupe(cache, key, () => fetchRouteBlocks({
             config,
             slug: routeSlug,
             locale: targetLocale,
@@ -185,7 +182,9 @@ export function useCmsTranslations(block, options) {
           // Recorded even when this card has moved on, since the entry it
           // commits is good for whoever asks next.
           cache.fetchedAt.set(key, refetchToken);
-          commitBlocks(key, indexBlocksByPath(merged));
+          // Writes that language's page entry and its globals; every other
+          // language's, this one's included, is left alone.
+          commitSite(site, targetLocale);
         }));
         if (cancelled) return;
         setSettled({ token: refetchToken, error: null });
@@ -202,15 +201,17 @@ export function useCmsTranslations(block, options) {
     return () => { cancelled = true; };
   }, [
     enabled, keys, otherLocales, refetchToken, settled.token,
-    config, routeSlug, blocksStore, commitBlocks, getAccessToken,
+    config, routeSlug, blocksStore, commitSite, getAccessToken,
   ]);
 
-  // Only the target routes' maps, not the whole store: the current route's
-  // entry is rewritten on every autosave roundtrip, and subscribing to it would
+  // Only this block in the target languages, not their whole maps: the entries
+  // are rewritten on every autosave roundtrip, and subscribing to them would
   // re-render this card for a write that cannot change anything it shows.
   const targetBlocks = useStoreSelector(
     blocksStore,
-    (s) => keys.map((k) => s.get(k) ?? EMPTY_BLOCKS),
+    (s) => otherLocales.map(
+      (targetLocale, i) => readBlock(s, keys[i], globalsKey(targetLocale), blockPath) ?? null,
+    ),
     sameEntries,
   );
   const drafts = useStoreSelector(translationDraftsStore, (m) => m);
@@ -218,7 +219,7 @@ export function useCmsTranslations(block, options) {
   const targets = useMemo(
     () => otherLocales.map((targetLocale, i) => {
       const key = translationDraftKey(keys[i], blockPath);
-      const target = targetBlocks[i].get(blockPath) ?? null;
+      const target = targetBlocks[i];
       const hasDraft = drafts.has(key);
       return {
         locale: targetLocale,

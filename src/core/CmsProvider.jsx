@@ -17,29 +17,28 @@
  * whole layer out of its bundle.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 
 import { CmsContext, useCmsContext } from "../shared/state/cms-context.js";
 import { ensureCmsConfig } from "../shared/config.js";
 import { normalizePanels } from "../shared/panels.js";
-import { matchCmsRoute, resolveCmsRoute, routeKey } from "../shared/route.js";
-import { fieldCss } from "../editors/field-css.js";
+import { globalsKey, matchCmsRoute, resolveCmsRoute, routeKey } from "../shared/route.js";
 import { buildThemeCss } from "../shared/style/theme.js";
-import { layoutCss, PAGE_SHELL_CLASS } from "../shared/style/layout-css.js";
+import { PAGE_SHELL_CLASS } from "../shared/style/layout-css.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
-import { seedSitePages, siteSlugs } from "./site-blocks.js";
+import { EMPTY_SITE, reseedSite, seedSite, siteSlugs } from "./site-blocks.js";
+import { mergeRouteBlocks } from "./blocks.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
+import { stableStringify } from "../shared/util/stable-stringify.js";
 import { CmsApiError } from "../shared/contracts/errors.js";
 import { createStore, useStoreSelector } from "../shared/state/store.js";
 import { createDraftQueue } from "../shared/state/draft-queue.js";
 import { contentDraftKey } from "../shared/state/draft-keys.js";
 import { resolveBlockValue } from "./resolve.js";
-import { useCmsContent } from "./hooks/use-cms-content.js";
-import { useCmsStrings } from "./hooks/use-cms-strings.js";
-import { dynamicSize } from "../shared/style/tokens.js";
+import { useSiteBlocks } from "./hooks/use-site-blocks.js";
 
 /**
  * @import { CmsConfig } from "../shared/config.js"
@@ -50,6 +49,20 @@ import { dynamicSize } from "../shared/style/tokens.js";
 const AdminDrawer = dynamic(
   () => import("../admin/Drawer.jsx").then((m) => m.Drawer),
   { ssr: false },
+);
+
+// Both are admin-only and both were static imports, so a visitor's bundle
+// carried the editor stylesheet and the panel's string catalogs for surfaces
+// they can never reach. Split out, they follow the gate the render already had.
+//
+// `lazy` rather than `next/dynamic`, unlike the drawer above: these two are
+// content, not a client-only surface, so there is no reason to keep them out of
+// the server render of a session that already knows it is an admin.
+const AdminStyles = lazy(() =>
+  import("../admin/AdminStyles.jsx").then((m) => ({ default: m.AdminStyles })),
+);
+const SessionExpiredNotice = lazy(() =>
+  import("../admin/SessionExpiredNotice.jsx").then((m) => ({ default: m.SessionExpiredNotice })),
 );
 
 // `useMemo` is a cache, not a guarantee: React may drop and recompute it, which
@@ -75,10 +88,11 @@ function useConstant(create) {
  * @param {CmsConfig | { baseUrl: string }} props.config
  * @param {string|null} [props.userSub]
  * @param {boolean} [props.isAdmin]
- * @param {import("../shared/contracts/schemas.js").SitePageContent[]} [props.initialPages]
- *   Every page's blocks in the language on screen, as `<CmsPage>` read them.
- *   Seeded into the store before first paint, so regions render real values
- *   during SSR and every navigation renders from what is already here.
+ * @param {import("./site-blocks.js").SiteContent} [props.initialSite]
+ *   The whole site in the language on screen, as `<CmsPage>` read it: `pages`
+ *   (routes) and `global` (everything that is not one). Seeded into the store
+ *   before first paint, so regions render real values during SSR and every
+ *   navigation renders from what is already here.
  * @param {(slug: string, locale?: string) => void | Promise<void>} [props.onAfterSave]   Server Action run after a save, typically `revalidateCmsSlug`. `locale` is undefined on a single-language site.
  * @param {() => Promise<string>} [props.getAccessToken]   Returns the user's JWT, added as `Authorization: Bearer` on writes. When omitted and `config.clientKey` is set, the built-in browser auth (reference backend `/auth/*`) takes over; omit both for public mode.
  * @param {import("../shared/contracts/transport.js").CmsTransport} [props.transport]   Custom client transport. Defaults to REST from `config`. Passed here, not via `config`, because it holds functions that can't cross the RSC boundary.
@@ -93,7 +107,7 @@ export function CmsProvider({
   config,
   userSub: userSubProp = null,
   isAdmin: isAdminProp = false,
-  initialPages,
+  initialSite = EMPTY_SITE,
   onAfterSave,
   onAfterCollectionSave,
   getAccessToken,
@@ -110,19 +124,25 @@ export function CmsProvider({
   // `config` arrives serializable across the RSC boundary. The transport holds
   // functions, so we build it here on the client and augment it onto the config
   // the tree reads through context. A custom `transport` prop overrides it.
-  const baseConfig = useMemo(() => ensureCmsConfig(config), [config]);
-  // An inline `config={{ baseUrl }}` literal is a new object on every render of
-  // the host, which re-normalizes here and hands the whole tree a new context
-  // value each time, quietly undoing the seams-not-state design. Cheap to fix
-  // (hoist it or use `createCmsConfig`), invisible without a warning.
-  useEffect(() => {
-    if (process.env.NODE_ENV === "production") return;
-    if (Object.isFrozen(config)) return;
-    // eslint-disable-next-line no-console
-    console.warn(
-      "[inscribed] <CmsProvider config={...}> received an unfrozen object. Build it once with createCmsConfig() at module scope; an inline literal re-renders every consumer on each parent render.",
-    );
-  }, [config]);
+  //
+  // Keyed on the config's *contents*, never its identity. Serialization drops
+  // the freeze, so every server render hands this a new object saying exactly
+  // the same thing: a publish, a `router.refresh()`, any Server Action. On
+  // identity that re-normalized each time and swapped the context value, which
+  // re-rendered every consumer and re-ran the effects keyed on `config` — the
+  // editor's block fetch and the collections `/me` read both went again, per
+  // refresh. On contents it settles after the first render and stays put, which
+  // also makes an inline `config={{ baseUrl }}` literal free rather than a
+  // footgun worth warning about.
+  const configKey = stableStringify(config);
+  // Pinned in a ref rather than memoised: `useMemo` is a cache React may drop,
+  // and recomputing would mint a new frozen object, which is the one thing this
+  // is here to prevent. The write is idempotent for a given key.
+  const configRef = useRef(/** @type {{ key: string, value: CmsConfig } | null} */ (null));
+  if (configRef.current === null || configRef.current.key !== configKey) {
+    configRef.current = { key: configKey, value: ensureCmsConfig(config) };
+  }
+  const baseConfig = configRef.current.value;
   const normalizedConfig = useMemo(
     () => ({
       ...baseConfig,
@@ -277,27 +297,37 @@ export function CmsProvider({
   // so `/news/123` finds `/news/[id]` without the page saying so. Its own store
   // because `useCmsRoute` reads it from any component, and it only ever moves
   // when the server hands over a new site.
-  const slugsStore = useConstant(() =>
-    createStore(siteSlugs(initialPages, normalizedConfig)),
-  );
+  const slugsStore = useConstant(() => createStore(siteSlugs(initialSite)));
   const slugs = useStoreSelector(slugsStore, (s) => s);
   const route = useMemo(
     () => matchCmsRoute(pathname, normalizedConfig, slugs),
     [pathname, normalizedConfig, slugs],
   );
   const { slug: routeSlug, locale } = route;
-  // Where this route's blocks live in the store.
+  // Where this route's blocks live in the store, and where the language's
+  // globals do. A block is looked for in the first, then the second.
   const currentKey = routeKey(routeSlug, locale);
+  const currentGlobalsKey = globalsKey(locale);
+  // Read by the write paths below, which run after a render rather than during
+  // one, so they want the key as it is now and not as it was when they were
+  // built.
+  const draftKeyRef = useRef(currentKey);
+  draftKeyRef.current = currentKey;
+  const globalsKeyRef = useRef(currentGlobalsKey);
+  globalsKeyRef.current = currentGlobalsKey;
 
   // Keyed by `routeKey(slug, locale)`, then by blockPath, and it holds the
-  // whole site from the first render: `initialPages` is every page in this
-  // language, with the global slug folded into each. That is what makes a
-  // navigation free: the new route's selector already resolves, with no fetch
-  // and no effect in between to leave a frame of placeholders.
+  // whole site from the first render. That is what makes a navigation free:
+  // the new route's selector already resolves, with no fetch and no effect in
+  // between to leave a frame of placeholders.
+  //
+  // The globals get one entry of their own rather than a copy inside every
+  // page, so a header edit reaches every route at once and a route the site has
+  // no entry for still has a header.
   const blocksStore = useConstant(() =>
     createStore(
       /** @type {Map<string, Map<string, BlockResponse>>} */ (
-        seedSitePages(initialPages, resolveCmsRoute(pathname, normalizedConfig).locale, normalizedConfig)
+        seedSite(initialSite, resolveCmsRoute(pathname, normalizedConfig).locale)
       ),
     ),
   );
@@ -321,6 +351,8 @@ export function CmsProvider({
       draftSyncStatus: "idle",
       conflictBlocks: new Set(),
       refetchToken: 0,
+      siteLoading: false,
+      siteError: null,
     })),
   );
   // One lane per slug for block-draft writes. Pinned for the same reason the
@@ -339,37 +371,83 @@ export function CmsProvider({
   const setDraftsState = contentDraftsStore.set;
   const setTranslationDraftsState = translationDraftsStore.set;
 
-  // Replace one route's blocks wholesale; what `useCmsContent` calls once a
-  // fetch lands. Other routes' entries stay.
-  const commitBlocks = useCallback(
-    /** @param {string} key  `routeKey(slug, locale)`. @param {Map<string, BlockResponse>} blocks */
-    (key, blocks) => {
+  // Write what a read brought back: one entry per page it carried, plus the
+  // language's globals. Entries it says nothing about stay, which is what lets
+  // the translation panel commit one page of another language without
+  // disturbing the one on screen.
+  //
+  // Authoritative about drafts, unlike the `reseedSite` above: this is the
+  // editor's own read, so what it says about `draftValue` replaces what was
+  // there rather than being folded onto it.
+  const commitSite = useCallback(
+    /** @param {import("./site-blocks.js").SiteContent} site @param {string|null} locale */
+    (site, locale) => {
       blocksStore.set((s) => {
         const next = new Map(s);
-        next.set(key, blocks);
+        for (const [key, blocks] of seedSite(site, locale)) next.set(key, blocks);
         return next;
       });
     },
     [blocksStore],
   );
 
-  // Patch one route's blocks in place, for the autosave mirror and discard.
-  // An updater returning its input is a no-op, as with the plain store.
+  const commitSiteSlugs = useCallback(
+    /** @param {import("./site-blocks.js").SiteContent} site */
+    (site) => slugsStore.set(siteSlugs(site)),
+    [slugsStore],
+  );
+
+  // Patch blocks by path, for the autosave mirror and discard. A mapper
+  // returning null leaves that block alone.
+  //
+  // By path rather than by entry, because a caller holds a set of blockPaths
+  // and has no reason to know which of the two entries holds each one. It is
+  // also what makes a header's autosave reach every route at once: the globals
+  // are one entry, so patching it patches everywhere.
   const patchBlocks = useCallback(
     /**
-     * @param {string} key  `routeKey(slug, locale)`.
-     * @param {(prev: Map<string, BlockResponse>) => Map<string, BlockResponse>} updater
+     * @param {string[]} paths
+     * @param {(block: BlockResponse, path: string) => BlockResponse | null} mapBlock
      */
-    (key, updater) => {
+    (paths, mapBlock) => {
+      const keys = [draftKeyRef.current, globalsKeyRef.current];
       blocksStore.set((s) => {
-        const prev = s.get(key);
-        if (!prev) return s;
-        const blocks = updater(prev);
-        if (blocks === prev) return s;
-        const next = new Map(s);
-        next.set(key, blocks);
-        return next;
+        /** @type {Map<string, Map<string, BlockResponse>> | null} */
+        let next = null;
+        for (const key of keys) {
+          const prev = s.get(key);
+          if (!prev) continue;
+          /** @type {Map<string, BlockResponse> | null} */
+          let entry = null;
+          for (const path of paths) {
+            const current = prev.get(path);
+            if (!current) continue;
+            const updated = mapBlock(current, path);
+            if (!updated || updated === current) continue;
+            entry ??= new Map(prev);
+            entry.set(path, updated);
+          }
+          if (!entry) continue;
+          next ??= new Map(s);
+          next.set(key, entry);
+        }
+        return next ?? s;
       });
+    },
+    [blocksStore],
+  );
+
+  // What a page sees: its own blocks and the language's globals, as one map.
+  // Only ever called off the render path (a flush, a publish), where the
+  // allocation is free; a store selector would have to return a stable
+  // reference and so reads the two entries separately instead.
+  const readRouteBlocks = useCallback(
+    () => {
+      const state = blocksStore.get();
+      return mergeRouteBlocks(
+        state.get(draftKeyRef.current) ?? EMPTY_BLOCKS,
+        state.get(globalsKeyRef.current) ?? EMPTY_BLOCKS,
+      );
     },
     [blocksStore],
   );
@@ -471,25 +549,19 @@ export function CmsProvider({
   // A new site from the server (the layout re-rendered: `router.refresh()`, or
   // a regeneration after publish) replaces every entry, since it is the truth
   // for all of them. Lazy init only runs once on mount, so without this the
-  // page would keep rendering the blocks it mounted with. An editor's drafts
-  // ride their own refetch (`ContentLoader`), which lands after this and puts
-  // them back.
-  const initialPagesRef = useRef(initialPages);
+  // page would keep rendering the blocks it mounted with. `reseedSite` is what
+  // keeps an editor's unpublished drafts through it: the incoming site is the
+  // published one and says nothing about them.
+  const initialSiteRef = useRef(initialSite);
   useEffect(() => {
-    if (initialPages === initialPagesRef.current) return;
-    initialPagesRef.current = initialPages;
+    if (initialSite === initialSiteRef.current) return;
+    initialSiteRef.current = initialSite;
     const seededLocale = resolveCmsRoute(pathname, normalizedConfig).locale;
-    slugsStore.set(siteSlugs(initialPages, normalizedConfig));
-    blocksStore.set((prev) => {
-      const next = new Map(prev);
-      for (const [key, blocks] of seedSitePages(initialPages, seededLocale, normalizedConfig)) {
-        next.set(key, blocks);
-      }
-      return next;
-    });
+    slugsStore.set(siteSlugs(initialSite));
+    blocksStore.set((prev) => reseedSite(prev, initialSite, seededLocale));
     // `pathname` is the route the new site arrived on, read, never a trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialPages, blocksStore, slugsStore, normalizedConfig]);
+  }, [initialSite, blocksStore, slugsStore, normalizedConfig]);
 
   // What a navigation leaves behind. Nothing is fetched: the store already
   // holds every route, so the new page renders on the same commit.
@@ -517,15 +589,18 @@ export function CmsProvider({
   useEffect(() => {
     const prune = () => {
       // Only the route being edited: drafts belong to the page they were typed
-      // on, and navigation already clears them.
-      const currentBlocks = blocksStore.get().get(pruneKeyRef.current);
-      if (!currentBlocks) return;
+      // on, and navigation already clears them. The globals count too, or a
+      // draft on the header would read as a block that no longer exists.
+      const state = blocksStore.get();
+      const own = state.get(pruneKeyRef.current);
+      if (!own) return;
+      const globals = state.get(globalsKeyRef.current) ?? EMPTY_BLOCKS;
       setDraftsState((prev) => {
         if (prev.size === 0) return prev;
         let changed = false;
         const next = new Map();
         for (const [path, value] of prev) {
-          if (currentBlocks.has(path)) next.set(path, value);
+          if (own.has(path) || globals.has(path)) next.set(path, value);
           else changed = true;
         }
         return changed ? next : prev;
@@ -611,6 +686,12 @@ export function CmsProvider({
       });
     },
     [setTranslationDraftsState],
+  );
+
+  const setSiteStatus = useCallback(
+    /** @param {boolean} siteLoading @param {Error|null} siteError */
+    (siteLoading, siteError) => patchUi({ siteLoading, siteError }),
+    [patchUi],
   );
 
   const setDrawerOpen = useCallback(
@@ -718,8 +799,8 @@ export function CmsProvider({
     [patchUi],
   );
 
-  const draftKeyRef = useRef(currentKey);
-  draftKeyRef.current = currentKey;
+  // `draftKeyRef` and `globalsKeyRef` are pinned up with the route, since the
+  // block writers need them before this point.
   const draftSlugRef = useRef(routeSlug);
   draftSlugRef.current = routeSlug;
   const draftLocaleRef = useRef(locale);
@@ -804,11 +885,10 @@ export function CmsProvider({
      * of date. Scoped to this flush's slug for the same reason.
      *
      * @param {string} slug
-     * @param {string} key            Store key for this route's blocks.
      * @param {string} fallbackSlug   Slug for blocks that carry no `_slug` stamp.
      */
-    const pruneSettledDrafts = (slug, key, fallbackSlug) => {
-      const blocks = blocksStore.get().get(key) ?? EMPTY_BLOCKS;
+    const pruneSettledDrafts = (slug, fallbackSlug) => {
+      const blocks = readRouteBlocks();
       setDraftsState((prev) => {
         /** @type {Map<string, *> | null} */
         let next = null;
@@ -829,8 +909,7 @@ export function CmsProvider({
       const drafts = contentDraftsStore.get();
       if (drafts.size === 0) return;
 
-      const activeKey = draftKeyRef.current;
-      const blocks = blocksStore.get().get(activeKey) ?? EMPTY_BLOCKS;
+      const blocks = readRouteBlocks();
       /** @type {Set<string>} */
       const slugs = new Set();
       for (const blockPath of drafts.keys()) {
@@ -840,13 +919,12 @@ export function CmsProvider({
 
       for (const slug of slugs) {
         draftQueue.schedule(contentDraftKey(slug, draftLocaleRef.current), async (ctx) => {
-          const activeKey = draftKeyRef.current;
           const currentSlug = draftSlugRef.current;
           const currentLocale = draftLocaleRef.current;
-          const currentBlocks = blocksStore.get().get(activeKey) ?? EMPTY_BLOCKS;
+          const currentBlocks = readRouteBlocks();
           const items = collectForSlug(slug, currentSlug, currentBlocks);
           if (items.length === 0) {
-            pruneSettledDrafts(slug, activeKey, currentSlug);
+            pruneSettledDrafts(slug, currentSlug);
             return;
           }
 
@@ -907,20 +985,14 @@ export function CmsProvider({
           // draftValue = the value sent, or null when that equals published
           // (the backend auto-cleans). Without it an undo would keep
           // `draftValue` set until the next refetch, leaving a stale dirty count.
-          patchBlocks(activeKey, (prev) => {
-            let mutated = false;
-            const nextMap = new Map(prev);
-            for (const sent of items) {
-              const cur = nextMap.get(sent.blockPath);
-              if (!cur) continue;
-              const newDraftValue = deepEqual(sent.value, cur.value) ? null : sent.value;
-              if (deepEqual(cur.draftValue ?? null, newDraftValue)) continue;
-              nextMap.set(sent.blockPath, { ...cur, draftValue: newDraftValue });
-              mutated = true;
-            }
-            return mutated ? nextMap : prev;
+          const sentByPath = new Map(items.map((item) => [item.blockPath, item.value]));
+          patchBlocks([...sentByPath.keys()], (block, path) => {
+            const sent = sentByPath.get(path);
+            const draftValue = deepEqual(sent, block.value) ? null : sent;
+            if (deepEqual(block.draftValue ?? null, draftValue)) return null;
+            return { ...block, draftValue };
           });
-          pruneSettledDrafts(slug, activeKey, currentSlug);
+          pruneSettledDrafts(slug, currentSlug);
 
           if (isAllReset) setDraftSyncStatus("idle");
           else flashDraftStatus("saved");
@@ -936,7 +1008,7 @@ export function CmsProvider({
       waiters.clear();
     };
   }, [
-    contentDraftsStore, blocksStore, patchBlocks, draftQueue, setDraftsState,
+    contentDraftsStore, blocksStore, readRouteBlocks, patchBlocks, draftQueue, setDraftsState,
     stableGetAccessToken, flashDraftStatus, setDraftSyncStatus, triggerRefetch,
   ]);
 
@@ -957,8 +1029,7 @@ export function CmsProvider({
     /** @param {string[]} blockPaths */
     (blockPaths) => {
       if (blockPaths.length === 0) return;
-      const activeKey = draftKeyRef.current;
-      const currentBlocks = blocksStore.get().get(activeKey) ?? EMPTY_BLOCKS;
+      const currentBlocks = readRouteBlocks();
       /** @type {Set<string>} */
       const slugs = new Set();
       for (const blockPath of blockPaths) {
@@ -988,7 +1059,7 @@ export function CmsProvider({
         });
       }
     },
-    [stableGetAccessToken, blocksStore, draftQueue],
+    [stableGetAccessToken, readRouteBlocks, draftQueue],
   );
 
   // Silent server-draft cleanup for discard. DELETEs each affected slug's
@@ -1005,8 +1076,7 @@ export function CmsProvider({
       if (blockPaths.length === 0) return;
       /** @type {Map<string, string[]>} */
       const bySlug = new Map();
-      const activeKey = draftKeyRef.current;
-      const currentBlocks = blocksStore.get().get(activeKey) ?? new Map();
+      const currentBlocks = readRouteBlocks();
       for (const blockPath of blockPaths) {
         const block = currentBlocks.get(blockPath);
         if (!block || block.draftValue == null) continue;
@@ -1019,19 +1089,10 @@ export function CmsProvider({
 
       // Optimistic: null draftValue locally so dirtyCount and downstream
       // surfaces update without waiting for the round-trip.
-      patchBlocks(activeKey, (prev) => {
-        let mutated = false;
-        const next = new Map(prev);
-        for (const pathsForSlug of bySlug.values()) {
-          for (const blockPath of pathsForSlug) {
-            const cur = next.get(blockPath);
-            if (!cur || cur.draftValue == null) continue;
-            next.set(blockPath, { ...cur, draftValue: null });
-            mutated = true;
-          }
-        }
-        return mutated ? next : prev;
-      });
+      patchBlocks(
+        [...bySlug.values()].flat(),
+        (block) => (block.draftValue == null ? null : { ...block, draftValue: null }),
+      );
 
       // Cleanup DELETEs go through the same per-slug lane as autosave, so one
       // can't overtake a PUT still in flight and leave the draft it just
@@ -1053,7 +1114,7 @@ export function CmsProvider({
         });
       }
     },
-    [stableGetAccessToken, blocksStore, patchBlocks, draftQueue],
+    [stableGetAccessToken, readRouteBlocks, patchBlocks, draftQueue],
   );
 
   // Seams only: stores, setters, config, session. Nothing in here changes while
@@ -1070,7 +1131,9 @@ export function CmsProvider({
 
       slugsStore,
       blocksStore,
-      commitBlocks,
+      commitSite,
+      commitSiteSlugs,
+      setSiteStatus,
       contentDraftsStore,
       setDraft,
       clearDraft,
@@ -1112,7 +1175,9 @@ export function CmsProvider({
       browserSession,
       browserSignOut,
       blocksStore,
-      commitBlocks,
+      commitSite,
+      commitSiteSlugs,
+      setSiteStatus,
       contentDraftsStore,
       setDraft,
       clearDraft,
@@ -1145,20 +1210,23 @@ export function CmsProvider({
 
   const tree = (
     <>
-      {/* Admin-only client refetch: the site the server handed over is the
-          published one, and only a request with the editor's token carries
-          their drafts and the versions a save needs. */}
-      {isAdmin ? <ContentLoader /> : null}
+      {/* The site the server handed over is the published one, and only a
+          request with the editor's token carries their drafts and the versions
+          a save needs. Mounted for everyone because a visitor's `refetch()` has
+          to reach the backend too; for them it sits idle until they ask. */}
+      <SiteLoader />
       <PageShell isAdmin={isAdmin}>{children}</PageShell>
       {/* A prop rather than context: the drawer is the only reader, and an
           inline array literal on the context value would wake every consumer
           on each host render. */}
       {isAdmin ? <AdminDrawer panels={normalizedPanels} /> : null}
       {sessionExpired && browserAuth ? (
-        <SessionExpiredNotice
-          onSignIn={() => browserAuth.login()}
-          onDismiss={() => setSessionExpired(false)}
-        />
+        <Suspense fallback={null}>
+          <SessionExpiredNotice
+            onSignIn={() => browserAuth.login()}
+            onDismiss={() => setSessionExpired(false)}
+          />
+        </Suspense>
       ) : null}
     </>
   );
@@ -1166,12 +1234,10 @@ export function CmsProvider({
   return (
     <CmsContext.Provider value={value}>
       {themeCss ? <style>{themeCss}</style> : null}
-      {/* Above every surface that renders a field: the drawer, the page-side
-          inline editors, and a standalone composer on a host page. Gated on
-          `isAdmin` because all three are, so a visitor's page carries neither
-          the rules nor the editors they would style. */}
-      {isAdmin ? <style>{fieldCss}</style> : null}
-      {isAdmin ? <style>{layoutCss}</style> : null}
+      {/* The editor and layout rules, gated on `isAdmin` because every surface
+          they style is, so a visitor's page downloads neither the rules nor the
+          editors they would style. */}
+      {isAdmin ? <Suspense fallback={null}><AdminStyles /></Suspense> : null}
       {/* A prop rather than something the app nests itself, because it must
           wrap the drawer too, and the drawer is a sibling of `children`. It
           reads `config`/`isAdmin`/`getAccessToken`, so it sits inside here. */}
@@ -1214,71 +1280,9 @@ function stripAuthParams() {
   window.history.replaceState(null, "", url.toString());
 }
 
-// Inline (not in the lazy admin chunk): it must render after the drawer has
-// already unmounted, and its only trigger is an expired admin session.
-function SessionExpiredNotice({ onSignIn, onDismiss }) {
-  const t = useCmsStrings();
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: 20,
-        left: "50%",
-        transform: "translateX(-50%)",
-        zIndex: 2147483000,
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "10px 14px",
-        background: "var(--ins-bg, #1c1815)",
-        color: "var(--ins-text, #fff)",
-        borderRadius: "var(--ins-radius, 10px)",
-        fontFamily: "var(--ins-font-sans, system-ui, sans-serif)",
-        fontSize: dynamicSize(13),
-        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.35)",
-      }}
-    >
-      <span>{t("core.session.expired")}</span>
-      <button
-        type="button"
-        onClick={onSignIn}
-        style={{
-          padding: "6px 12px",
-          borderRadius: 8,
-          border: "none",
-          background: "var(--ins-accent, #c9b896)",
-          color: "#1c1815",
-          fontSize: dynamicSize(13),
-          fontWeight: 600,
-          cursor: "pointer",
-        }}
-      >
-        {t("core.session.signIn")}
-      </button>
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label={t("translations.dismiss")}
-        style={{
-          background: "none",
-          border: "none",
-          color: "inherit",
-          opacity: 0.6,
-          cursor: "pointer",
-          fontSize: dynamicSize(16),
-          lineHeight: 1,
-          padding: 2,
-        }}
-      >
-        ×
-      </button>
-    </div>
-  );
-}
-
-// Admin-only. Public visitors render from `initialPages` (cached until a
-// publish drops the site tag), so they never need this client refetch.
-function ContentLoader() {
-  useCmsContent();
+// Where the editor's read lives. Renders nothing, and for a visitor does
+// nothing at all until `refetch()` is called.
+function SiteLoader() {
+  useSiteBlocks();
   return null;
 }

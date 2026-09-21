@@ -28,6 +28,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: () => {} }),
 }));
 
+import { settleAdminChrome } from "../admin-chunk.js";
 import { CmsProvider } from "../../core/CmsProvider.jsx";
 import { EditableList } from "../../core/EditableList.jsx";
 import {
@@ -67,7 +68,7 @@ async function mount(props = {}) {
         config={{ baseUrl: "https://api.test" }}
         transport={/** @type {*} */ (transport)}
         isAdmin
-        initialPages={[{ slug: "/", blocks: [listBlock()] }]}
+        initialSite={{ pages: [{ slug: "/", blocks: [listBlock()] }], global: [] }}
       >
         <EditableList blockPath={PATH} itemSchema={ITEM_SCHEMA} {...props}>
           {(item, i) => {
@@ -78,6 +79,8 @@ async function mount(props = {}) {
       </CmsProvider>,
     );
   });
+  // The item chrome these tests are about arrives through a dynamic import.
+  await settleAdminChrome();
 }
 
 const listWarnings = (spy) =>

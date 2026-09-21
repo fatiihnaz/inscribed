@@ -21,9 +21,13 @@
  * `<CmsPage>` reads the whole site's blocks in one request (see
  * `getCmsSiteContent`) and hands them to the provider, so it never needs to
  * know which page is rendering: no request header, nothing per page, and every
- * route prerenders at build. A publish drops the site's cache tag and the next
- * request regenerates the route it hit. On the client, a navigation renders
- * from the same store, so no route ever waits on a fetch.
+ * route prerenders at build. The server-rendered collection bindings hold to
+ * the same rule, taking the language from `<CmsPage>` rather than the request.
+ *
+ * A publish drops the site's cache tag and the next request regenerates the
+ * route it hit. On the client, a navigation renders from the same store, so no
+ * route ever waits on a fetch, and an editor's drafts are read once for the
+ * whole site rather than once per route.
  *
  * On a multilingual site the layout is `app/[locale]/layout.jsx` and passes its
  * segment through, which is the one thing the read is keyed on:
@@ -38,6 +42,11 @@
  */
 
 import { Suspense } from "react";
+// Namespace import so `cache` can be feature-detected. It is exported only from
+// React's `react-server` build, which is the one a Server Component actually
+// runs against, but this module is also loaded by plain Node (tests, a consumer
+// on React 18) where a named import of it would be a link error.
+import * as ReactExports from "react";
 import { headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 
@@ -58,6 +67,38 @@ export { createCmsConfig } from "../shared/config.js";
 const PATHNAME_HEADER = "x-pathname";
 
 /**
+ * Where `<CmsPage>` leaves the language it resolved, for the collection
+ * bindings further down the same request to read.
+ *
+ * `cache()` gives one object per request, so this is a handoff between two
+ * components of one render rather than shared mutable state: the layout body
+ * has to return before anything it wraps is rendered, so the write always
+ * precedes the reads. Null when React has no `cache` to offer, which is any
+ * environment that is not rendering Server Components, and there the readers
+ * fall back to the request exactly as they used to.
+ *
+ * It exists because that fallback is `headers()`, and reading a header opts the
+ * whole route out of static rendering. A page carrying one
+ * `<CollectionRegion>` was therefore dynamic, which is the one thing
+ * `<CmsPage>` goes out of its way not to be.
+ *
+ * @type {(() => { current: string | null | undefined }) | null}
+ */
+const requestLocaleSlot = typeof ReactExports.cache === "function"
+  ? ReactExports.cache(() => ({ current: /** @type {string | null | undefined} */ (undefined) }))
+  : null;
+
+/** @param {string|null} locale */
+function publishRequestLocale(locale) {
+  if (requestLocaleSlot) requestLocaleSlot().current = locale;
+}
+
+/** @returns {string | null | undefined} `undefined` when nothing published one. */
+function readRequestLocale() {
+  return requestLocaleSlot ? requestLocaleSlot().current : undefined;
+}
+
+/**
  * @import { CmsConfig } from "../shared/config.js"
  */
 
@@ -75,7 +116,7 @@ const PATHNAME_HEADER = "x-pathname";
  *   too pass it to your provider as well. Default: REST against `config.baseUrl`.
  * @property {*} Provider
  *   The CMS provider component, typically `CmsProvider` or your own wrapper
- *   around it. Receives `config`, `isAdmin`, `userSub`, `initialPages`,
+ *   around it. Receives `config`, `isAdmin`, `userSub`, `initialSite`,
  *   `onAfterSave`, `session`, and (when `collections` is given) `collections`.
  *   A wrapper must forward all of them; spreading `{...props}` is what does that.
  *
@@ -223,16 +264,16 @@ export function createCmsPage(options) {
    * and whether a build may ship it (never).
    *
    * @param {string|null} locale
-   * @returns {Promise<import("../shared/contracts/schemas.js").SitePageContent[]>}
+   * @returns {Promise<import("../core/site-blocks.js").SiteContent>}
    */
   async function readSite(locale) {
     try {
-      const pages = await getCmsSiteContent(serverConfig, { locale });
-      warnIfLarge(pages, locale);
-      return pages;
+      const site = await getCmsSiteContent(serverConfig, { locale });
+      warnIfLarge(site, locale);
+      return site;
     } catch (err) {
       handleSsrFailure(err, { kind: "site", target: "*", locale }, onSsrError);
-      return [];
+      return EMPTY_SITE;
     }
   }
 
@@ -255,18 +296,21 @@ export function createCmsPage(options) {
     // is for the request-time miss.
     if (localized && !normalizedConfig.locales.includes(/** @type {string} */ (locale))) notFound();
     const resolvedLocale = localized ? /** @type {string} */ (locale) : null;
+    // Published for the collection bindings below, which would otherwise have
+    // to read the request to learn the same thing. See `requestLocaleSlot`.
+    publishRequestLocale(resolvedLocale);
 
     // The session and the content are independent, so they overlap rather than
     // queue: a session that hits a database or decrypts a JWT would otherwise
     // sit in front of every content request.
-    const [session, initialPages] = await Promise.all([
+    const [session, initialSite] = await Promise.all([
       getSession(),
       readSite(resolvedLocale),
     ]);
 
     return (
       <Provider config={normalizedConfig} isAdmin={deriveAdmin(session)} userSub={deriveUserSub(session)}
-        initialPages={initialPages}
+        initialSite={initialSite}
         onAfterSave={onAfterSave}
         onAfterCollectionSave={onAfterCollectionSave}
         collections={collections?.CollectionProvider}
@@ -462,10 +506,8 @@ export function createCmsPage(options) {
  * @param {import("./ssr-failure.js").SsrErrorReporter} [onSsrError]
  */
 function createServerCollections(serverConfig, { CollectionRecord, CollectionRows }, onSsrError) {
-  async function RegionRows({ collection, filter, limit, offset, as, empty, children, rest }) {
-    // Resolved here rather than passed down from `CmsPage`: a region can be
-    // mounted anywhere in the tree, and this component is already async.
-    const { locale } = await resolveRouteFromHeaders(serverConfig);
+  async function RegionRows({ collection, filter, limit, offset, locale: pinned, as, empty, children, rest }) {
+    const locale = pinned !== undefined ? pinned : await regionLocale(serverConfig);
     const params = buildListParams({ filter, limit, offset, locale });
 
     let items = [];
@@ -490,13 +532,19 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
     );
   }
 
-  /** @param {Record<string, *>} props */
-  function CollectionRegion({ collection, filter, limit, offset, as, fallback, empty, children, ...rest }) {
+  /**
+   * @param {Record<string, *>} props
+   *   `locale` pins the language of the window. Omit it and the region reads
+   *   the one `<CmsPage>` resolved for this request, which is the right answer
+   *   on every page under it; pass one for a sidebar deliberately showing
+   *   another language's rows, or `null` to ask for the collection's default.
+   */
+  function CollectionRegion({ collection, filter, limit, offset, locale, as, fallback, empty, children, ...rest }) {
     return (
       <Suspense fallback={fallback ?? null}>
         <RegionRows
           collection={collection} filter={filter} limit={limit} offset={offset}
-          as={as} empty={empty} rest={rest}
+          locale={locale} as={as} empty={empty} rest={rest}
         >
           {children}
         </RegionRows>
@@ -551,8 +599,11 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
  * falling back to `/` without it. `await` covers both Next 14 (sync `headers()`)
  * and Next 15 (async).
  *
- * Only the collection bindings and `getCmsRoute` read this; `<CmsPage>` itself
- * never does, which is what keeps the routes under it static.
+ * Reading it makes the route dynamic, so the callers are the ones that have no
+ * other source for what they need: `getCmsRoute`, the canonical-path builder
+ * behind a record redirect, and a collection region rendered outside
+ * `<CmsPage>`. `<CmsPage>` itself never reads it, which is what keeps the
+ * routes under it static.
  *
  * @returns {Promise<string>}
  */
@@ -561,6 +612,9 @@ async function resolvePathnameFromHeaders() {
   return h.get(PATHNAME_HEADER) || "/";
 }
 
+/** Nothing read, in the shape the provider seeds from. */
+const EMPTY_SITE = { pages: [], global: [] };
+
 // Past this the RSC payload starts to weigh on every hard load: the site rides
 // in the root layout's props, once per document. Compressed it is a fraction,
 // but a site this size is where splitting the read starts to pay.
@@ -568,12 +622,12 @@ const SITE_PAYLOAD_WARN_BYTES = 300_000;
 let warnedLargeSite = false;
 
 /**
- * @param {import("../shared/contracts/schemas.js").SitePageContent[]} pages
+ * @param {import("../core/site-blocks.js").SiteContent} site
  * @param {string|null} locale
  */
-function warnIfLarge(pages, locale) {
+function warnIfLarge(site, locale) {
   if (process.env.NODE_ENV === "production" || warnedLargeSite) return;
-  const bytes = JSON.stringify(pages).length;
+  const bytes = JSON.stringify(site).length;
   if (bytes < SITE_PAYLOAD_WARN_BYTES) return;
   warnedLargeSite = true;
   // eslint-disable-next-line no-console
@@ -621,18 +675,35 @@ async function canonicalPathFor(canonicalSlug) {
 let warnedMissingRedirectPath = false;
 
 /**
- * Split the request's pathname into `{ locale, slug }`.
+ * The language a collection region should read, for a region that was not
+ * given one.
  *
- * The locale always comes from the route, even when the caller pins `slug`
- * explicitly: a dynamic route (`/news/[id]`) needs the manifest template rather
- * than the concrete path, but its language is still whatever prefix the visitor
- * arrived under, so the two are resolved independently.
+ * `<CmsPage>` publishes it (see `requestLocaleSlot`), which covers every page under
+ * the layout and costs nothing. The header read below is the fallback for a
+ * region rendered outside one, and it is what makes that route dynamic, so it
+ * says so once in development rather than leaving the deopt to be discovered
+ * in a build log.
  *
  * @param {CmsConfig} config
- * @returns {Promise<{ locale: string|null, slug: string }>}
+ * @returns {Promise<string|null>}
  */
-async function resolveRouteFromHeaders(config) {
-  const pathname = await resolvePathnameFromHeaders();
-  const { locale, slug } = resolveCmsRoute(pathname, config);
-  return { locale, slug };
+async function regionLocale(config) {
+  const published = readRequestLocale();
+  if (published !== undefined) return published;
+  // Only worth saying where the handoff was available and went unused; without
+  // `cache` there is no `<CmsPage>` placement that would have helped.
+  if (requestLocaleSlot && !warnedRegionHeaderRead && process.env.NODE_ENV !== "production") {
+    warnedRegionHeaderRead = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[inscribed] a server <CollectionRegion> is rendering with no <CmsPage> above it, so its " +
+        "language is being read from the request headers, which makes this route dynamic. " +
+        "Render it under <CmsPage>, or pass locale={...} to the region.",
+    );
+  }
+  const { locale } = resolveCmsRoute(await resolvePathnameFromHeaders(), config);
+  return locale;
 }
+
+/** Same once-per-process budget as the warnings above. */
+let warnedRegionHeaderRead = false;

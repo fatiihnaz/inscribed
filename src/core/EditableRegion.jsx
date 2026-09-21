@@ -13,41 +13,29 @@
  *
  * For full control over rendering, pass a function as children: the region
  * declares and wraps the block exactly the same way, but the markup is yours.
+ *
+ * This file is the visitor's half and stops at the rendered value. The ring,
+ * the chip, the in-place editors, the panel's wording and the icon set all live
+ * in `EditableRegionAdmin`, behind a dynamic import: together they are the
+ * larger part of this component's graph and none of it can do anything for
+ * someone who cannot edit.
  */
 
-import { cloneElement, lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useContext } from "react";
 import DOMPurify from "isomorphic-dompurify";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsRoute } from "./hooks/use-cms-route.js";
-import { routeKey } from "../shared/route.js";
-import { useCmsStrings } from "./hooks/use-cms-strings.js";
+import { globalsKey, routeKey } from "../shared/route.js";
 import { useStoreSelector } from "../shared/state/store.js";
-import { isBlockDirty, resolveBlockValue } from "./resolve.js";
-import { useImageOverlayFits } from "../editors/inline/use-image-overlay-fits.js";
-import { useContentRadius } from "./hooks/use-content-radius.js";
+import { resolveBlockValue } from "./resolve.js";
+import { readBlock } from "./blocks.js";
+import { useEditorVisibility } from "./hooks/use-editor-visibility.js";
 import { CmsGroupContext, CmsGroupVisibilityContext, ownVisibility, strongerVisibility } from "../shared/state/group-context.js";
-import { ACCENT } from "../shared/style/tokens.js";
-import { typeIconFor } from "../shared/style/icons.jsx";
 import { safeHref } from "../shared/util/url.js";
-import {
-  BLOCK_TAGS,
-  CHROME_ICON,
-  INK_CHIP_CLASS,
-  ensureInkChromeStyle,
-  haloInset,
-  regionBoxStyle,
-  regionChipStyle,
-  chipDirtyDotStyle,
-} from "./page-region-chrome.js";
-import { InlineTextEditor } from "../editors/inline/InlineTextEditor.jsx";
-import { InlineImageOverlay } from "../editors/inline/InlineImageOverlay.jsx";
-import { InlineImagePlaceholder } from "../editors/inline/InlineImagePlaceholder.jsx";
 
-// Lazy so Tiptap never enters the public bundle: only an admin rendering a
-// RichText region triggers the chunk (already warmed by the drawer's prefetch).
-const InlineRichText = lazy(() =>
-  import("../editors/inline/InlineRichText.jsx").then((m) => ({ default: m.InlineRichText })),
+const EditableRegionAdmin = lazy(() =>
+  import("./EditableRegionAdmin.jsx").then((m) => ({ default: m.EditableRegionAdmin })),
 );
 
 /**
@@ -95,11 +83,6 @@ const InlineRichText = lazy(() =>
 
 const EMPTY_PLACEHOLDER = "-";
 
-// Block types that edit in place as a plain string. Everything else keeps the
-// click-to-drawer flow (structured editors, RichText via Tiptap).
-const INLINE_TEXT_TYPES = new Set(["ShortText", "LongText"]);
-
-
 /**
  * @param {EditableRegionProps & Record<string, *>} props
  */
@@ -107,32 +90,17 @@ const INLINE_TEXT_TYPES = new Set(["ShortText", "LongText"]);
 // they don't leak into ...rest (onto DOM nodes) or shadow the local `blockType`.
 // eslint-disable-next-line no-unused-vars
 export function EditableRegion({ blockPath, as, children, hidden, readOnly, editable, visible, blockType: _bt, defaultValue: _dv, scope: _scope, ...rest }) {
-  const {
-    isAdmin, blocksStore, contentDraftsStore, uiStore, setActiveBlock, setDraft,
-    registerEditorVisibility, unregisterEditorVisibility,
-  } = useCmsContext();
-  const t = useCmsStrings();
+  const { isAdmin, blocksStore, contentDraftsStore } = useCmsContext();
   const groupPrefix = useContext(CmsGroupContext);
   const groupVisibility = useContext(CmsGroupVisibilityContext);
-  const [isHovered, setIsHovered] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  const wrapperRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
 
   const fullPath = groupPrefix ? `${groupPrefix}.${blockPath}` : blockPath;
 
-  // Register the `hidden`/`readOnly` override with the drawer, folding in any
-  // enclosing group mode (most restrictive wins; a region can tighten but not
-  // loosen). Admin-only, so public visitors skip the churn.
-  const visibilityMode = strongerVisibility(groupVisibility, ownVisibility({ hidden, readOnly, visible, editable }));
-  useEffect(() => {
-    if (!isAdmin || !visibilityMode) return undefined;
-    registerEditorVisibility(fullPath, visibilityMode);
-    return () => unregisterEditorVisibility(fullPath);
-  }, [isAdmin, fullPath, visibilityMode, registerEditorVisibility, unregisterEditorVisibility]);
-
-  useEffect(() => {
-    if (isAdmin) ensureInkChromeStyle();
-  }, [isAdmin]);
+  // Fold in any enclosing group mode; most restrictive wins, so a region can
+  // tighten but not loosen. The drawer learns it from the registration below,
+  // since these props are runtime-only and never enter the manifest.
+  const visibility = strongerVisibility(groupVisibility, ownVisibility({ hidden, readOnly, visible, editable }));
+  useEditorVisibility(fullPath, visibility);
 
   // Subscribe to just this block's draft, so a keystroke elsewhere doesn't
   // re-render us. Two selectors (presence + value) so an explicit empty/null
@@ -140,13 +108,13 @@ export function EditableRegion({ blockPath, as, children, hidden, readOnly, edit
   const hasLocalDraft = useStoreSelector(contentDraftsStore, (m) => m.has(fullPath));
   const localDraft = useStoreSelector(contentDraftsStore, (m) => m.get(fullPath));
 
-  // Own block on the current route only, and selection as a boolean: another
-  // block's save or selection leaves this region alone, and a navigation reads
-  // the new route's cached blocks on its very first render.
+  // Own block on the current route only: another block's save leaves this
+  // region alone, and a navigation reads the new route's cached blocks on its
+  // very first render.
   const { slug, locale } = useCmsRoute();
   const key = routeKey(slug, locale);
-  const block = useStoreSelector(blocksStore, (s) => s.get(key)?.get(fullPath));
-  const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === fullPath);
+  const globals = globalsKey(locale);
+  const block = useStoreSelector(blocksStore, (s) => readBlock(s, key, globals, fullPath));
   const blockType = block ? block.blockType : null;
   const value = resolveBlockValue(block, hasLocalDraft, localDraft);
   const empty = isValueEmpty(blockType, value);
@@ -162,217 +130,29 @@ export function EditableRegion({ blockPath, as, children, hidden, readOnly, edit
       ? renderPlaceholder(as, rest, isAdmin)
       : renderBlock(blockType, value, { as, ...rest });
 
-  // Stand the on-image overlay down when the picture is too small to hold the
-  // scrim buttons. Admin + Image only, and never over markup we did not draw.
-  const imageOverlayFits = useImageOverlayFits(wrapperRef, isAdmin && !custom && blockType === "Image");
-
-  // Images are a box the visitor can see, so the ring has to take their shape:
-  // a boxy ring around a circular avatar, or a rounded one cutting across a
-  // square photo's corners, both read as a mistake. Text has no visible box, so
-  // it keeps the house radius.
-  const contentRadius = useContentRadius(wrapperRef, isAdmin && !custom && blockType === "Image");
-
-  if (!isAdmin || visibilityMode) return rendered;
-
-  // Editing focus and drawer selection are decoupled: focusing an in-place text
-  // block highlights the region but does NOT open the drawer. Both drive the
-  // "active" ring/tint; only the label chip opens the drawer.
-  const highlight = isActive || isFocused;
-  // Everything the type switch offers is off once the caller renders: there is
-  // no node we can put a caret in, and no image to hang an overlay on.
-  const canInlineEdit = !custom && INLINE_TEXT_TYPES.has(/** @type {string} */ (blockType));
-  const isImageType = !custom && blockType === "Image";
-
-  const dirty = isBlockDirty(block, hasLocalDraft, localDraft);
-  const TypeBadge = typeIconFor(blockType);
-
-  let inner;
-  let innerTag;
-  // Lift an Image's consumer margin onto the wrapper so the overlay anchors to
-  // the picture, not the margin box (else its buttons float above the image).
-  let wrapperMargin = null;
-  if (custom) {
-    // The children are the caller's, links and buttons included, so the region
-    // takes no click of its own: the chip is the way into the drawer.
-    inner = rendered;
-    innerTag = as ?? "div";
-  } else if (canInlineEdit) {
-    innerTag = as ?? "span";
-    inner = (
-      <InlineTextEditor
-        {...rest}
-        tag={innerTag}
-        value={typeof value === "string" ? value : ""}
-        singleLine={blockType !== "LongText"}
-        placeholder={t("core.text.placeholder")}
-        data-block={fullPath}
-        data-cms-active={highlight || undefined}
-        onInput={(text) => setDraft(fullPath, text)}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
-        style={{ ...rest.style, cursor: "text" }}
-      />
-    );
-  } else if (isImageType && empty) {
-    // No <img> to hover when empty: render a drop-zone so a picture can be
-    // added in place. Margin lifts to the wrapper so the ring hugs the box.
-    const { marginStyle, boxStyle } = liftMargin(rendered.props?.style ?? {});
-    wrapperMargin = marginStyle;
-    inner = (
-      <InlineImagePlaceholder style={boxStyle} onChange={(v) => setDraft(fullPath, v)} />
-    );
-    innerTag = "div";
-  } else if (isImageType) {
-    // Image's quick actions (replace/remove) live in the on-image overlay
-    // below; a click on the bare image opens the drawer for the details (alt,
-    // URL), same as the chip.
-    const childProps = rendered.props ?? {};
-    const { marginStyle, boxStyle } = liftMargin(childProps.style ?? {});
-    wrapperMargin = marginStyle;
-    inner = cloneElement(rendered, {
-      "data-block": fullPath,
-      "data-cms-active": highlight || undefined,
-      /** @param {React.MouseEvent} e */
-      onClick: (e) => {
-        if (childProps.onClick) childProps.onClick(e);
-        if (e.defaultPrevented) return;
-        e.stopPropagation();
-        setActiveBlock(fullPath);
-      },
-      style: {
-        // `display:block` drops the inline-image baseline gap so the wrapper
-        // (and overlay) match the image height exactly.
-        ...(rendered.type === "img" ? { display: "block" } : null),
-        ...boxStyle,
-        cursor: "pointer",
-      },
-    });
-    innerTag = typeof rendered.type === "string" ? rendered.type : "span";
-  } else if (blockType === "RichText") {
-    innerTag = as ?? "div";
-    inner = (
-      <Suspense fallback={rendered}>
-        <InlineRichText
-          value={typeof value === "string" ? value : ""}
-          onChange={(html) => setDraft(fullPath, html)}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          anchorRef={wrapperRef}
-          // The bar rides the ring line, which is painted outside the content
-          // box; without the inset it centres on the box instead and lands on
-          // the first line of prose.
-          ringInset={haloInset(BLOCK_TAGS.has(innerTag))}
-          style={{ cursor: "text" }}
-        />
-      </Suspense>
-    );
-  } else {
-    /** @param {React.MouseEvent} e */
-    const handleClick = (e) => {
-      e.stopPropagation();
-      setActiveBlock(fullPath);
-    };
-    const childProps = rendered.props ?? {};
-    const mergedOnClick = childProps.onClick
-      ? /** @param {React.MouseEvent} e */ (e) => {
-          childProps.onClick(e);
-          if (!e.defaultPrevented) handleClick(e);
-        }
-      : handleClick;
-    inner = cloneElement(rendered, {
-      "data-block": fullPath,
-      "data-cms-active": isActive || undefined,
-      onClick: mergedOnClick,
-      style: {
-        ...(childProps.style ?? {}),
-        cursor: "pointer",
-      },
-    });
-    innerTag = typeof rendered.type === "string" ? rendered.type : "span";
-  }
-
-  const wrapperDisplay = BLOCK_TAGS.has(innerTag) ? "block" : "inline-block";
-  // Full halo only for block-level text/rich; images stay tight (the overlay
-  // anchors to the image) and inline keeps a hair (no mid-sentence crowding).
-  const roomy = wrapperDisplay === "block" && !isImageType;
-  // An image is a box the visitor can see, so its chip rides the ring line the
-  // way a block-level region's does, even though the halo stays tight. Only
-  // inline text keeps clear of the content, where a straddling chip would sit
-  // on the sentence.
-  const straddle = roomy || isImageType;
+  // A locked or hidden region draws no chrome, so it stops here too and never
+  // reaches for the admin chunk.
+  if (!isAdmin || visibility) return rendered;
 
   return (
-    <span
-      ref={wrapperRef}
-      style={{
-        ...regionBoxStyle({
-          display: wrapperDisplay,
-          roomy,
-          highlight,
-          hovered: isHovered,
-          accent: ACCENT,
-          radius: contentRadius,
-        }),
-        ...(wrapperMargin ?? {}),
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {inner}
-      {(isHovered || highlight) && (
-        <button
-          type="button"
-          // preventDefault keeps the caret in the inline editor when the chip is
-          // clicked; stopPropagation keeps the click off the region beneath.
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => {
-            e.stopPropagation();
-            setActiveBlock(fullPath);
-          }}
-          title={t("core.chip.open")}
-          aria-label={t("core.chip.openBlock", { path: fullPath })}
-          className={INK_CHIP_CLASS}
-          style={regionChipStyle({ roomy, straddle, highlight, accent: ACCENT })}
-        >
-          <TypeBadge size={CHROME_ICON} style={{ flexShrink: 0, opacity: 0.8 }} />
-          {fullPath}
-          {dirty && (
-            <span
-              aria-label={t("block.unsavedDot")}
-              style={chipDirtyDotStyle}
-            />
-          )}
-        </button>
-      )}
-      {isImageType && !empty && imageOverlayFits && (isHovered || highlight) && (
-        <InlineImageOverlay
-          value={value && typeof value === "object" ? value : null}
-          onChange={(v) => setDraft(fullPath, v)}
-        />
-      )}
-    </span>
+    // The published render is the fallback, so the region shows its content
+    // from the first frame and the affordances arrive with the chunk.
+    <Suspense fallback={rendered}>
+      <EditableRegionAdmin
+        fullPath={fullPath}
+        block={block ?? null}
+        blockType={blockType}
+        value={value}
+        empty={empty}
+        custom={custom}
+        rendered={rendered}
+        as={as}
+        rest={rest}
+        hasLocalDraft={hasLocalDraft}
+        localDraft={localDraft}
+      />
+    </Suspense>
   );
-}
-
-const MARGIN_PROPS = new Set(["margin", "marginTop", "marginRight", "marginBottom", "marginLeft"]);
-
-/**
- * Split a style object into its margin props and everything else, so the margin
- * can move to the positioned wrapper while the rest stays on the image.
- *
- * @param {Record<string, *>} style
- * @returns {{ marginStyle: Record<string, *>, boxStyle: Record<string, *> }}
- */
-function liftMargin(style) {
-  /** @type {Record<string, *>} */
-  const marginStyle = {};
-  /** @type {Record<string, *>} */
-  const boxStyle = {};
-  for (const [k, v] of Object.entries(style)) {
-    if (MARGIN_PROPS.has(k)) marginStyle[k] = v;
-    else boxStyle[k] = v;
-  }
-  return { marginStyle, boxStyle };
 }
 
 /**
@@ -380,7 +160,7 @@ function liftMargin(style) {
  * @param {*} value
  * @returns {boolean}
  */
-function isValueEmpty(blockType, value) {
+export function isValueEmpty(blockType, value) {
   if (value == null) return true;
   switch (blockType) {
     case "ShortText":
@@ -476,5 +256,3 @@ function renderPlaceholder(as, rest, isAdmin) {
   const Tag = as ?? "span";
   return <Tag {...rest}>{isAdmin ? EMPTY_PLACEHOLDER : null}</Tag>;
 }
-
-

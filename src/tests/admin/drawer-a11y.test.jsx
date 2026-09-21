@@ -36,18 +36,19 @@ const CONFIG = createCmsConfig({ baseUrl: "https://api.test" });
 const jsonRes = (body, status = 200) => new Response(JSON.stringify(body), { status });
 
 /**
- * The drawer fetches the page slug and the global slug separately and stamps
- * `_slug` from whichever response a block arrived in, so a global block has to
- * come back from the global request rather than be labelled one up front.
+ * The editor's read: the whole site in one request, routes and globals apart.
+ * Which list a block arrives in is what makes it a global one, so a global
+ * block has to come back in `global` rather than be labelled one up front.
  *
  * @param {{ page?: *[], global?: *[] }} [scopes]
  */
 function mockFetch({ page = [], global: globals = [] } = {}) {
   globalThis.fetch = vi.fn(async (input) => {
-    const url = String(input);
-    if (url.includes("/cms/collections/me")) return jsonRes([]);
-    if (url.includes("__global")) return jsonRes({ slug: "__global", blocks: globals });
-    return jsonRes({ slug: "/", blocks: page });
+    if (String(input).includes("/cms/collections/me")) return jsonRes([]);
+    return jsonRes({
+      pages: [{ slug: "/", blocks: page }],
+      global: [{ slug: "__global", blocks: globals }],
+    });
   });
 }
 
@@ -154,7 +155,7 @@ describe("a collapsed block card", () => {
   it("takes its editor out of the tab order until it is opened", async () => {
     mockFetch();
     render(
-      <CmsProvider config={CONFIG} isAdmin initialPages={[{ slug: "/", blocks: [imageBlock] }]}>
+      <CmsProvider config={CONFIG} isAdmin initialSite={{ pages: [{ slug: "/", blocks: [imageBlock] }], global: [] }}>
         <BlockCard block={imageBlock} displayPath="hero.image" topLevel isActive={false} itemSchema={null} />
       </CmsProvider>,
     );

@@ -44,7 +44,8 @@ import { collectDirtyBlocks, collectDirtyRecords, dirtyCollectionKeys } from "./
 import { isBlockDirty } from "../core/resolve.js";
 import { useCmsSave } from "../core/hooks/use-cms-save.js";
 import { useCmsRoute } from "../core/hooks/use-cms-route.js";
-import { routeKey } from "../shared/route.js";
+import { globalsKey, routeKey } from "../shared/route.js";
+import { mergeRouteBlocks } from "../core/blocks.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { describeSaveError } from "./save-error.js";
 
@@ -94,6 +95,7 @@ export function Drawer({ panels = null }) {
   // keys the blocks store.
   const { pathname, slug: routeSlug, locale } = useCmsRoute();
   const blocksKey = routeKey(routeSlug, locale);
+  const globalsStoreKey = globalsKey(locale);
   const {
     setActiveBlock,
     setPendingBlock,
@@ -108,7 +110,11 @@ export function Drawer({ panels = null }) {
   // The drawer aggregates over everything, so unlike a page region it selects
   // whole slices. As a single admin surface, re-rendering on each write is fine
   // as long as the memoised card list below can still bail out.
+  // Two entries rather than one map: the tabs are exactly that split, so the
+  // drawer no longer has to re-derive it from each block's `_slug` stamp.
   const blocks = useStoreSelector(blocksStore, (s) => s.get(blocksKey) ?? EMPTY_BLOCKS);
+  const globalBlocks = useStoreSelector(blocksStore, (s) => s.get(globalsStoreKey) ?? EMPTY_BLOCKS);
+  const allBlocks = useMemo(() => mergeRouteBlocks(blocks, globalBlocks), [blocks, globalBlocks]);
   const drafts = useStoreSelector(contentDraftsStore, (m) => m);
   const activeBlock = useStoreSelector(uiStore, (s) => s.activeBlock);
   const pendingBlock = useStoreSelector(uiStore, (s) => s.pendingBlock);
@@ -173,12 +179,12 @@ export function Drawer({ panels = null }) {
     /** @type {BlockResponse[]} */
     const globals = [];
 
+    // `visible={false}` regions register as "hidden": drop them entirely.
     for (const block of blocks.values()) {
-      // `visible={false}` regions register as "hidden": drop them entirely.
-      if (editorVisibility.get(block.blockPath) === "hidden") continue;
-
-      const slug = block._slug ?? routeSlug;
-      (slug === routeSlug ? pages : globals).push(block);
+      if (editorVisibility.get(block.blockPath) !== "hidden") pages.push(block);
+    }
+    for (const block of globalBlocks.values()) {
+      if (editorVisibility.get(block.blockPath) !== "hidden") globals.push(block);
     }
     pages.sort((a, b) => a.sortOrder - b.sortOrder);
     globals.sort((a, b) => a.sortOrder - b.sortOrder);
@@ -209,12 +215,12 @@ export function Drawer({ panels = null }) {
     }
 
     return { pageBlockList: pages, globalBlockList: globals };
-  }, [blocks, routeSlug, collectionBindings, editorVisibility]);
+  }, [blocks, globalBlocks, routeSlug, collectionBindings, editorVisibility]);
 
   // Per-block dirty flag for the rail dot, tab dots and preview counts. Its own
   // memo (rebuilt per keystroke) so it can't drag the block lists with it. Cards
   // don't read it: each one derives its own dirty state from its own draft.
-  const dirtyByPath = useMemo(() => collectDirtyBlocks(blocks, drafts), [blocks, drafts]);
+  const dirtyByPath = useMemo(() => collectDirtyBlocks(allBlocks, drafts), [allBlocks, drafts]);
 
   // Collections this page binds as a region and the user can reach (per /me).
   // These are reference rows in the page list, not tabs: a collection is a

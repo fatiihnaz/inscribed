@@ -24,6 +24,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: () => {} }),
 }));
 
+import { settleAdminChrome } from "../admin-chunk.js";
 import { CmsProvider } from "../../core/CmsProvider.jsx";
 import { EditableList } from "../../core/EditableList.jsx";
 import { RING_RADIUS } from "../../shared/style/tokens.js";
@@ -108,7 +109,7 @@ async function mount(renderItem) {
         config={{ baseUrl: "https://api.test" }}
         transport={/** @type {*} */ (transport)}
         isAdmin
-        initialPages={[{ slug: "/", blocks: [listBlock()] }]}
+        initialSite={{ pages: [{ slug: "/", blocks: [listBlock()] }], global: [] }}
       >
         {/* No add slot: it renders the item shape a second time, and one is
             enough to measure. */}
@@ -118,6 +119,8 @@ async function mount(renderItem) {
       </CmsProvider>,
     ));
   });
+  // The item chrome these tests are about arrives through a dynamic import.
+  await settleAdminChrome();
 }
 
 /** The ring hangs on the item's wrapper, and only measures while hovered. */

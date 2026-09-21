@@ -160,23 +160,27 @@ export async function getCmsContent(config, slug, options) {
 }
 
 /**
- * Every synced slug's blocks in one language, in one request and under one
- * tag. This is what `<CmsPage>` renders a site from: fetched once per language
- * at build, dropped by `revalidateCmsSlug` on publish, and never keyed on the
- * request, which is what lets every route prerender.
+ * The whole site in one language, in one request and under one tag. This is
+ * what `<CmsPage>` renders a site from: fetched once per language at build,
+ * dropped by `revalidateCmsSlug` on publish, and never keyed on the request,
+ * which is what lets every route prerender.
  *
- * The global slug comes back as a page like any other; folding it into each
- * page is the client's job (`CmsProvider`), so the payload carries it once.
+ * Comes back as two lists of the same kind of entry. `pages` are routes;
+ * `global` is everything the backend does not consider one (any slug whose last
+ * segment starts with `__`). They are apart on the wire because they are apart
+ * in the store: a page holds its own blocks and the globals are held once, so
+ * nothing has to recognise the global slug by name or keep copies in step.
  *
  * A backend without the whole-site read (a transport with no `getSiteContent`,
  * or one answering it 404) is read page by page over `config.slugs` instead,
- * each page under its own tag and the site's. Without `slugs` there is nothing
- * to read, and the error names the endpoint rather than rendering an empty
- * site that would look like a sync problem.
+ * each page under its own tag and the site's, and the global slug is split back
+ * out here. Without `slugs` there is nothing to read, and the error names what
+ * is actually missing rather than rendering an empty site that would look like
+ * a sync problem.
  *
  * @param {CmsConfig} config
  * @param {GetCmsContentOptions} [options]
- * @returns {Promise<SitePageContent[]>}
+ * @returns {Promise<import("../core/site-blocks.js").SiteContent>}
  */
 export async function getCmsSiteContent(config, options) {
   const getServiceToken = config.getServiceToken ?? noServiceToken;
@@ -192,55 +196,107 @@ export async function getCmsSiteContent(config, options) {
       tags: [siteTag, ...(options?.tags ?? [])],
     },
   };
+  // A tokenless read against a configured client goes to the public endpoint,
+  // which answers 404 both when it does not exist and when the client has
+  // anonymous content read switched off. The two cases are indistinguishable
+  // from here, so every message below names both rather than guessing.
+  const viaPublicEndpoint = !accessToken && Boolean(config.clientKey);
 
-  /** @type {SitePageContent[] | null} */
-  let pages = null;
   if (transport.getSiteContent) {
     try {
-      pages = (await transport.getSiteContent(request)).pages;
+      const site = await transport.getSiteContent(request);
+      return {
+        pages: withoutPageDrafts(site.pages, options?.includeDrafts),
+        global: withoutPageDrafts(site.global, options?.includeDrafts),
+      };
     } catch (err) {
-      // A 404 is the endpoint missing, on a backend older than this read. Any
-      // other failure is the backend failing, and stays one.
       if (!(err instanceof CmsApiError && err.status === 404)) throw err;
+      if (!config.slugs?.length) throw noSiteReadError(config, viaPublicEndpoint);
     }
   }
 
-  if (!pages) {
-    if (!config.slugs?.length) {
-      throw new Error(
-        "inscribed: the backend has no whole-site read (GET /cms/content/all). " +
-          "Add it, or pass `slugs` to createCmsConfig() to read the site page by page.",
-      );
-    }
-    if (process.env.NODE_ENV !== "production" && !warnedSlugFallback) {
-      warnedSlugFallback = true;
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[inscribed] no whole-site read on the backend; reading ${config.slugs.length} slugs one by one from config.slugs.`,
-      );
-    }
-    const slugs = config.globalSlug && !config.slugs.includes(config.globalSlug)
-      ? [...config.slugs, config.globalSlug]
-      : [...config.slugs];
-    pages = await Promise.all(slugs.map(async (slug) => {
-      try {
-        const content = await transport.getContent(slug, {
-          ...request,
-          cache: { ...request.cache, tags: [cmsCacheTag(slug, locale), ...request.cache.tags] },
-        });
-        return { slug, blocks: content.blocks };
-      } catch (err) {
-        // An unsynced slug is absent content, not a failure, same as a page read.
-        if (err instanceof CmsApiError && err.status === 404) return { slug, blocks: [] };
-        throw err;
+  if (!config.slugs?.length) throw noSiteReadError(config, viaPublicEndpoint);
+
+  if (process.env.NODE_ENV !== "production" && !warnedSlugFallback) {
+    warnedSlugFallback = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[inscribed] no whole-site read on the backend; reading ${config.slugs.length} slugs one by one from config.slugs.`,
+    );
+  }
+
+  const globalSlug = config.globalSlug || null;
+  const slugs = globalSlug && !config.slugs.includes(globalSlug)
+    ? [...config.slugs, globalSlug]
+    : [...config.slugs];
+
+  let missing = 0;
+  const entries = await Promise.all(slugs.map(async (slug) => {
+    try {
+      const content = await transport.getContent(slug, {
+        ...request,
+        cache: { ...request.cache, tags: [cmsCacheTag(slug, locale), ...request.cache.tags] },
+      });
+      return { slug, blocks: content.blocks };
+    } catch (err) {
+      // An unsynced slug is absent content, not a failure, same as a page read.
+      if (err instanceof CmsApiError && err.status === 404) {
+        missing += 1;
+        return { slug, blocks: [] };
       }
-    }));
+      throw err;
+    }
+  }));
+
+  // Every slug missing on the public endpoint is not a site nobody has synced,
+  // it is a door that is shut: that endpoint 404s wholesale when the flag is
+  // off. Rendering an empty site here would cache the blank and report nothing.
+  if (viaPublicEndpoint && missing === slugs.length && slugs.length > 0) {
+    throw noSiteReadError(config, true);
   }
 
-  return pages.map((page) => {
-    const blocks = withoutDrafts(page.blocks, "draftValue", options?.includeDrafts);
-    return blocks === page.blocks ? page : { ...page, blocks };
+  return {
+    pages: withoutPageDrafts(
+      entries.filter((entry) => entry.slug !== globalSlug),
+      options?.includeDrafts,
+    ),
+    global: withoutPageDrafts(
+      entries.filter((entry) => entry.slug === globalSlug),
+      options?.includeDrafts,
+    ),
+  };
+}
+
+/**
+ * @param {SitePageContent[]} entries
+ * @param {boolean | undefined} includeDrafts
+ * @returns {SitePageContent[]}
+ */
+function withoutPageDrafts(entries, includeDrafts) {
+  if (includeDrafts) return entries;
+  return entries.map((entry) => {
+    const blocks = withoutDrafts(entry.blocks, "draftValue", includeDrafts);
+    return blocks === entry.blocks ? entry : { ...entry, blocks };
   });
+}
+
+/**
+ * @param {CmsConfig} config
+ * @param {boolean} viaPublicEndpoint
+ * @returns {Error}
+ */
+function noSiteReadError(config, viaPublicEndpoint) {
+  if (viaPublicEndpoint) {
+    return new Error(
+      `inscribed: GET /cms/public/${config.clientKey}/content/all answered 404. Either the backend ` +
+        "has no whole-site read, or this client has anonymous content read switched off. If it is " +
+        "the second, pass a service key: createCmsPage({ getServiceToken }).",
+    );
+  }
+  return new Error(
+    "inscribed: the backend has no whole-site read (GET /cms/content/all). " +
+      "Add it, or pass `slugs` to createCmsConfig() to read the site page by page.",
+  );
 }
 
 /** Once per process: the fallback would otherwise say so on every render. */

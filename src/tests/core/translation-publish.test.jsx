@@ -425,7 +425,7 @@ describe("without locales configured", () => {
           config={{ baseUrl: "https://api.test" }}
           transport={/** @type {*} */ (transport)}
           isAdmin
-          initialPages={[{ slug: "/", blocks: [seedBlock("tr")] }]}
+          initialSite={{ pages: [{ slug: "/", blocks: [seedBlock("tr")] }], global: [] }}
         >
           <Probe />
         </CmsProvider>,

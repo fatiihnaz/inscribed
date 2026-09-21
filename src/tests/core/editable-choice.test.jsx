@@ -15,6 +15,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: () => {} }),
 }));
 
+import { settleAdminChrome } from "../admin-chunk.js";
 import { CmsProvider } from "../../core/CmsProvider.jsx";
 import { EditableChoice } from "../../core/EditableChoice.jsx";
 import { CmsGroup } from "../../core/CmsGroup.jsx";
@@ -57,7 +58,7 @@ function Options({ blockPath }) {
 
 /** @param {{ isAdmin?: boolean, children: React.ReactNode }} props */
 const App = ({ isAdmin, children }) => (
-  <CmsProvider config={{ baseUrl: BASE }} isAdmin={isAdmin} initialPages={[{ slug: "/", blocks: BLOCKS }]}>
+  <CmsProvider config={{ baseUrl: BASE }} isAdmin={isAdmin} initialSite={{ pages: [{ slug: "/", blocks: BLOCKS }], global: [] }}>
     {children}
   </CmsProvider>
 );
@@ -119,14 +120,14 @@ describe("EditableChoice", () => {
     expect(screen.getByText("yayında")).toBeTruthy();
   });
 
-  it("carries the region chrome, chip and all", () => {
+  it("carries the region chrome, chip and all", async () => {
     const { container } = render(
       <App isAdmin>
         <EditableChoice blockPath="post.durum" defaultValue="" source={{ kind: "static", values: [] }} />
       </App>,
     );
-    const wrapper = container.querySelector("span");
-    fireEvent.mouseEnter(wrapper);
+    await settleAdminChrome();
+    fireEvent.mouseEnter(container.querySelector("span"));
     expect(container.querySelector("button").textContent).toContain("post.durum");
   });
 

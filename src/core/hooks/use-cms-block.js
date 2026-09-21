@@ -2,7 +2,7 @@
 
 /**
  * @file `useCmsBlock(blockPath)`: single-block view over the shared blocks map
- * populated by `useCmsContent`. Returns an `update(value)` callback that
+ * the provider seeds and reads. Returns an `update(value)` callback that
  * handles the version bookkeeping for editors.
  */
 
@@ -10,7 +10,8 @@ import { useCallback } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
-import { routeKey } from "../../shared/route.js";
+import { globalsKey, routeKey } from "../../shared/route.js";
+import { readBlock } from "../blocks.js";
 import { useDeclaredChoiceSource } from "./use-declared-choice-source.js";
 import { resolveBlockValue } from "../resolve.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
@@ -68,12 +69,13 @@ export function useCmsBlock(blockPath, meta) {
   const { save } = useCmsAdmin();
   const { slug, locale } = useCmsRoute();
   const key = routeKey(slug, locale);
+  const globals = globalsKey(locale);
 
   useDeclaredChoiceSource(blockPath, meta?.source, meta?.allowCustom);
 
   // Just this block's entry on this route, so another block's save doesn't
   // re-render us and a navigation resolves against the new page at once.
-  const block = useStoreSelector(blocksStore, (s) => s.get(key)?.get(blockPath) ?? null);
+  const block = useStoreSelector(blocksStore, (s) => readBlock(s, key, globals, blockPath) ?? null);
 
   const update = useCallback(
     /**

@@ -26,10 +26,10 @@ const BASE = "https://api.test";
 
 const block = (blockPath) => ({ blockPath, blockType: "ShortText", value: blockPath, version: 1, sortOrder: 1 });
 
-const pagesFor = (locale) => [
-  { slug: "/", blocks: [block(`hero.title.${locale ?? "single"}`)] },
-  { slug: "__global", blocks: [block("footer.copyright")] },
-];
+const siteFor = (locale) => ({
+  pages: [{ slug: "/", blocks: [block(`hero.title.${locale ?? "single"}`)] }],
+  global: [{ slug: "__global", blocks: [block("footer.copyright")] }],
+});
 
 /** `CmsPage` returns the provider element; its props are what it decided. */
 function Provider() {
@@ -41,7 +41,7 @@ function factory(config, transport = {}) {
     config,
     Provider,
     transport: {
-      getSiteContent: vi.fn(async (opts) => ({ pages: pagesFor(opts?.locale ?? null) })),
+      getSiteContent: vi.fn(async (opts) => siteFor(opts?.locale ?? null)),
       ...transport,
     },
   });
@@ -57,8 +57,9 @@ describe("what CmsPage hands the provider", () => {
     const { CmsPage } = factory(config);
     const { props: providerProps } = await CmsPage({ locale: "en", children: null });
 
-    expect(providerProps.initialPages.map((p) => p.slug)).toEqual(["/", "__global"]);
-    expect(providerProps.initialPages[0].blocks[0].blockPath).toBe("hero.title.en");
+    expect(providerProps.initialSite.pages.map((p) => p.slug)).toEqual(["/"]);
+    expect(providerProps.initialSite.global.map((p) => p.slug)).toEqual(["__global"]);
+    expect(providerProps.initialSite.pages[0].blocks[0].blockPath).toBe("hero.title.en");
     expect(providerProps.config).toBe(config);
     expect(providerProps).not.toHaveProperty("initialBlocks");
   });
@@ -66,7 +67,7 @@ describe("what CmsPage hands the provider", () => {
   it("reads a single-language site with no locale at all", async () => {
     const { CmsPage } = factory(createCmsConfig({ baseUrl: BASE }));
     const { props: providerProps } = await CmsPage({ children: null });
-    expect(providerProps.initialPages[0].blocks[0].blockPath).toBe("hero.title.single");
+    expect(providerProps.initialSite.pages[0].blocks[0].blockPath).toBe("hero.title.single");
   });
 
   it("never reads the request headers", async () => {
@@ -84,7 +85,7 @@ describe("what CmsPage hands the provider", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { props: providerProps } = await CmsPage({ children: null });
     warn.mockRestore();
-    expect(providerProps.initialPages).toEqual([]);
+    expect(providerProps.initialSite).toEqual({ pages: [], global: [] });
   });
 });
 

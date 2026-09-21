@@ -2,7 +2,8 @@
 /**
  * The site arrives with the page, so a navigation is answered by the store: no
  * fetch, no refresh, no frame of placeholders. These pin that down for the
- * visitor, and the one thing that still fetches, an editor's drafts.
+ * visitor, and for the editor, whose drafts are read once for the whole site
+ * rather than once per route.
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import React from "react";
@@ -29,8 +30,8 @@ import { createCmsConfig } from "../../shared/config.js";
 
 const BASE = "https://api.test";
 
-/** @param {string} value @param {string} slug */
-const block = (value, slug, blockPath = "hero.title") => ({
+/** @param {string} value */
+const block = (value, blockPath = "hero.title") => ({
   blockPath,
   blockType: "ShortText",
   value,
@@ -39,12 +40,23 @@ const block = (value, slug, blockPath = "hero.title") => ({
   sortOrder: 1,
 });
 
-const SITE = [
-  { slug: "/", blocks: [block("Ana sayfa", "/")] },
-  { slug: "/about", blocks: [block("Hakkında", "/about")] },
-  { slug: "/news/[id]", blocks: [block("Haber", "/news/[id]")] },
-  { slug: "__global", blocks: [block("© 2026", "__global", "footer.copyright")] },
-];
+const SITE = {
+  pages: [
+    { slug: "/", blocks: [block("Ana sayfa")] },
+    { slug: "/about", blocks: [block("Hakkında")] },
+    { slug: "/news/[id]", blocks: [block("Haber")] },
+  ],
+  global: [{ slug: "__global", blocks: [block("© 2026", "footer.copyright")] }],
+};
+
+/** The same site as the editor sees it: every block carrying a draft. */
+const withDrafts = (site) => ({
+  pages: site.pages.map((p) => ({
+    ...p,
+    blocks: p.blocks.map((b) => ({ ...b, draftValue: `${b.value} (taslak)` })),
+  })),
+  global: site.global,
+});
 
 let refresh;
 
@@ -58,10 +70,14 @@ beforeEach(() => {
   global.fetch = vi.fn(async (input) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith("/cms/collections/me")) return new Response(JSON.stringify([]));
+    if (url.pathname.endsWith("/cms/content/all")) {
+      return new Response(JSON.stringify(withDrafts(SITE)));
+    }
+    // The per-slug fallback, for the transport that answers no whole-site read.
     const slug = url.searchParams.get("slug") ?? "/";
     return new Response(JSON.stringify({
       slug,
-      blocks: [{ ...block(`${slug} (editör)`, slug), draftValue: "taslak" }],
+      blocks: [{ ...block(`${slug} (editör)`), draftValue: "taslak" }],
     }));
   });
 });
@@ -73,7 +89,7 @@ afterEach(() => {
 
 /** A fresh element each time: React bails out of an identical one. */
 const tree = (props = {}, children = null) => (
-  <CmsProvider config={{ baseUrl: BASE }} initialPages={SITE} {...props}>
+  <CmsProvider config={{ baseUrl: BASE }} initialSite={SITE} {...props}>
     {children ?? (
       <>
         <EditableRegion blockPath="hero.title" />
@@ -118,12 +134,13 @@ describe("a visitor's navigation", () => {
     expect(container.textContent).toBe("Haber© 2026");
   });
 
-  it("paints empty, not stale, on a route the site has nothing for", () => {
+  it("keeps the globals on a route the site has nothing else for", () => {
     // A page that declares no regions owns no rows, so the site has no entry
-    // for it and nothing of another page's may show there.
+    // for it. Nothing of another page's may show there, but the header and
+    // footer are nobody's page: they are the same on every one.
     nav.pathname = "/unsynced";
     const { container } = render(tree());
-    expect(container.textContent).toBe("");
+    expect(container.textContent).toBe("© 2026");
   });
 });
 
@@ -148,21 +165,22 @@ describe("the route as the hooks see it", () => {
 });
 
 describe("what still fetches", () => {
-  function Loader() {
-    useCmsContent();
-    return null;
-  }
-
-  it("is the editor's drafts, once per route", async () => {
+  it("is the editor's drafts, once for the whole site", async () => {
     const { container, rerender } = render(tree({ isAdmin: true }));
-    await waitFor(() => expect(contentFetches().length).toBeGreaterThan(0));
-    // The site's copy paints first; the editor's own fetch then lands drafts.
+    // The site's published copy paints first; the editor's read lands drafts.
     await waitFor(() => expect(container.textContent).toContain("taslak"));
+    expect(contentFetches()).toHaveLength(1);
 
-    expect(fetchedSlugs()).not.toContain("/about");
     nav.pathname = "/about";
     rerender(tree({ isAdmin: true }));
-    await waitFor(() => expect(fetchedSlugs()).toContain("/about"));
+    await waitFor(() => expect(container.textContent).toContain("Hakkında (taslak)"));
+
+    nav.pathname = "/news/7";
+    rerender(tree({ isAdmin: true }));
+    await new Promise((r) => setTimeout(r, 25));
+
+    // Navigating cost nothing: the read was keyed on the language, not the route.
+    expect(contentFetches()).toHaveLength(1);
     expect(refresh).not.toHaveBeenCalled();
   });
 
@@ -179,16 +197,23 @@ describe("what still fetches", () => {
     expect(contentFetches()).toEqual([]);
 
     act(() => refetch());
-    // The page and its global slug, one request each.
-    await waitFor(() => expect(fetchedSlugs()).toEqual(["/", "__global"]));
+    await waitFor(() => expect(contentFetches()).toHaveLength(1));
+    expect(String(contentFetches()[0][0])).toContain("/cms/content/all");
   });
 
-  it("fetches the template slug for a dynamic route", async () => {
+  it("falls back to the route's own slug when the backend has no whole-site read", async () => {
+    // And to the template, not the path: `/news/7` has no rows of its own.
     nav.pathname = "/news/7";
-    render(tree({ isAdmin: true }, <Loader />));
-    await waitFor(() => expect(contentFetches().length).toBeGreaterThan(0));
-    expect(fetchedSlugs()).toContain("/news/[id]");
-    expect(fetchedSlugs()).not.toContain("/news/7");
+    const transport = {
+      getContent: vi.fn(async (slug) => ({ slug, blocks: [block(`${slug} (editör)`)] })),
+      getMyCollections: async () => [],
+    };
+    render(tree({ isAdmin: true, transport }));
+    await waitFor(() => expect(transport.getContent.mock.calls.length).toBeGreaterThan(0));
+
+    const slugs = transport.getContent.mock.calls.map(([slug]) => slug);
+    expect(slugs).toContain("/news/[id]");
+    expect(slugs).not.toContain("/news/7");
   });
 });
 
@@ -197,11 +222,11 @@ describe("a new site from the server", () => {
     const { container, rerender } = render(tree());
     expect(container.textContent).toBe("Ana sayfa© 2026");
 
-    const republished = [
-      { slug: "/", blocks: [block("Yeni ana sayfa", "/")] },
-      { slug: "__global", blocks: [block("© 2027", "__global", "footer.copyright")] },
-    ];
-    rerender(tree({ initialPages: republished }));
+    const republished = {
+      pages: [{ slug: "/", blocks: [block("Yeni ana sayfa")] }],
+      global: [{ slug: "__global", blocks: [block("© 2027", "footer.copyright")] }],
+    };
+    rerender(tree({ initialSite: republished }));
     expect(container.textContent).toBe("Yeni ana sayfa© 2027");
   });
 });

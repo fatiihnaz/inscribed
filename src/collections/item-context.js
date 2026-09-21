@@ -12,9 +12,10 @@
 
 import { createContext, useContext } from "react";
 
-// Imported from the editor module rather than the other way round: the editor
-// owns where its values live, this is only a reader.
-import { useEditorValues } from "./hooks/use-collection-editor.js";
+// The reader, not the editor module: pulling the engine in here would put it,
+// and the panel's string catalogs behind it, on every public page that renders
+// a record.
+import { useEditorValues } from "./hooks/use-editor-values.js";
 
 /**
  * @import { CollectionItemResponse } from "../shared/contracts/schemas.js"

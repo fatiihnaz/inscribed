@@ -114,7 +114,7 @@ async function mount() {
         config={{ baseUrl: "https://api.test" }}
         transport={/** @type {*} */ (transport)}
         isAdmin
-        initialPages={[{ slug: "/", blocks: [block()] }]}
+        initialSite={{ pages: [{ slug: "/", blocks: [block()] }], global: [] }}
       >
         <Probe />
       </CmsProvider>,

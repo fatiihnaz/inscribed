@@ -10,7 +10,8 @@ import { useCallback, useState } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { CmsApiError } from "../../shared/contracts/errors.js";
-import { routeKey } from "../../shared/route.js";
+import { globalsKey, routeKey } from "../../shared/route.js";
+import { readBlock } from "../blocks.js";
 import { useCmsRoute } from "./use-cms-route.js";
 
 /**
@@ -43,6 +44,7 @@ export function useCmsAdmin() {
   // `routeSlug` addresses the backend; the store key adds the language.
   const { slug: routeSlug, locale } = useCmsRoute();
   const key = routeKey(routeSlug, locale);
+  const globals = globalsKey(locale);
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(/** @type {Error|null} */ (null));
@@ -70,22 +72,25 @@ export function useCmsAdmin() {
         // they group by the same rule rather than through two code paths.
         /** @type {Map<string, { slug: string, locale: string|null, updates: UpdateBlockItem[] }>} */
         const byTarget = new Map();
-        const blocks = blocksStore.get().get(key) ?? new Map();
+        const blocks = blocksStore.get();
         for (const update of updates) {
-          const block = /** @type {BlockResponse | undefined} */ (blocks.get(update.blockPath));
+          const block = /** @type {BlockResponse | undefined} */ (
+            readBlock(blocks, key, globals, update.blockPath)
+          );
           const slug = block?._slug ?? routeSlug;
           const targetLocale = update.locale ?? locale;
           // JSON rather than a joined string: both halves are free-form, and
-          // this key is only ever compared, never parsed back.
-          const key = JSON.stringify([targetLocale ?? null, slug]);
-          const group = byTarget.get(key) ?? { slug, locale: targetLocale, updates: [] };
+          // this key is only ever compared, never parsed back. Named apart from
+          // the route key above, which the block lookup reads on each pass.
+          const targetKey = JSON.stringify([targetLocale ?? null, slug]);
+          const group = byTarget.get(targetKey) ?? { slug, locale: targetLocale, updates: [] };
           // `locale` addresses the request, so it stays off the body items.
           group.updates.push({
             blockPath: update.blockPath,
             value: update.value,
             version: update.version,
           });
-          byTarget.set(key, group);
+          byTarget.set(targetKey, group);
         }
 
         const groups = [...byTarget.values()];
@@ -148,7 +153,7 @@ export function useCmsAdmin() {
         setIsSaving(false);
       }
     },
-    [isAdmin, config, blocksStore, key, routeSlug, locale, triggerRefetch, onAfterSave, getAccessToken, setBlockConflicts],
+    [isAdmin, config, blocksStore, key, globals, routeSlug, locale, triggerRefetch, onAfterSave, getAccessToken, setBlockConflicts],
   );
 
   const save = useCallback(

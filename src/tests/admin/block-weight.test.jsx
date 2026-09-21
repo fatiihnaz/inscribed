@@ -45,7 +45,7 @@ const makeBlock = (blockType, value) => ({
 function mount(blockType, value = "", density) {
   const block = makeBlock(blockType, value);
   return render(
-    <CmsProvider config={{ baseUrl: BASE }} isAdmin initialPages={[{ slug: "/", blocks: [block] }]}>
+    <CmsProvider config={{ baseUrl: BASE }} isAdmin initialSite={{ pages: [{ slug: "/", blocks: [block] }], global: [] }}>
       <BlockCard
         block={block}
         displayPath="x.y"

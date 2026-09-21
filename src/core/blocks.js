@@ -57,6 +57,47 @@ export function groupBlocksByPrefix(blocks, prefix) {
 }
 
 /**
+ * One block as a page sees it: the route's own, else the language's globals.
+ *
+ * The two live in separate store entries, so this is the lookup every surface
+ * that addresses a block by path goes through. A route the site has no entry
+ * for still resolves its globals, which is what makes a header the same on
+ * every page rather than only on the pages the CMS happens to know.
+ *
+ * A path the page defines wins over a global of the same name. That should not
+ * happen, and the rule exists so it is decided in one place if it does.
+ *
+ * @param {Map<string, Map<string, BlockResponse>>} state
+ * @param {string} routeKey
+ * @param {string} globalsKey
+ * @param {string} blockPath
+ * @returns {BlockResponse|undefined}
+ */
+export function readBlock(state, routeKey, globalsKey, blockPath) {
+  return state.get(routeKey)?.get(blockPath) ?? state.get(globalsKey)?.get(blockPath);
+}
+
+/**
+ * Every block a route renders, its own first and the globals after it.
+ *
+ * Allocates, so it belongs in a `useMemo` over the two entries rather than in a
+ * store selector, which has to return a stable reference.
+ *
+ * @param {Map<string, BlockResponse>} own
+ * @param {Map<string, BlockResponse>} globals
+ * @returns {Map<string, BlockResponse>}
+ */
+export function mergeRouteBlocks(own, globals) {
+  if (globals.size === 0) return own;
+  if (own.size === 0) return globals;
+  const merged = new Map(own);
+  for (const [path, block] of globals) {
+    if (!merged.has(path)) merged.set(path, block);
+  }
+  return merged;
+}
+
+/**
  * Build a Map keyed by `blockPath` from a block array.
  *
  * Every block reaching the runtime passes through here (SSR seed, refetch,

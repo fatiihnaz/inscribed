@@ -41,7 +41,8 @@ import { useCmsContext } from "../shared/state/cms-context.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { useCmsRoute } from "./hooks/use-cms-route.js";
 import { useDeclaredChoiceSource } from "./hooks/use-declared-choice-source.js";
-import { routeKey } from "../shared/route.js";
+import { globalsKey, routeKey } from "../shared/route.js";
+import { readBlock } from "./blocks.js";
 
 /**
  * @import { ChoiceSource } from "../shared/contracts/schemas.js"
@@ -100,14 +101,15 @@ function useResolvedSource(source) {
   const { blocksStore } = useCmsContext();
   const { slug, locale } = useCmsRoute();
   const key = routeKey(slug, locale);
+  const globals = globalsKey(locale);
 
   const from = source?.kind === "block" ? source.blockPath : null;
   const labelField = source?.kind === "block" ? source.labelField : undefined;
-  // Global-scope blocks are folded into every page's entry, so "this page plus
-  // the global ones" is just the current route's map.
+  // A source block can be a global one, so the lookup goes through the same
+  // route-then-globals resolution every other block read does.
   const sourceValue = useStoreSelector(
     blocksStore,
-    (m) => (from ? m.get(key)?.get(from)?.value ?? null : null),
+    (s) => (from ? readBlock(s, key, globals, from)?.value ?? null : null),
   );
 
   return useMemo(

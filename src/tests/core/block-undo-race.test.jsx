@@ -94,7 +94,7 @@ async function mount() {
         config={{ baseUrl: "https://api.test" }}
         transport={/** @type {*} */ (transport)}
         isAdmin
-        initialPages={[{ slug: "/", blocks: [BLOCK] }]}
+        initialSite={{ pages: [{ slug: "/", blocks: [BLOCK] }], global: [] }}
       >
         <Probe />
         <BlockCard

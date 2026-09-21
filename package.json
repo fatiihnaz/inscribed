@@ -43,6 +43,10 @@
       "types": "./dist/panels.d.ts",
       "import": "./dist/panels.js"
     },
+    "./compose": {
+      "types": "./dist/compose.d.ts",
+      "import": "./dist/compose.js"
+    },
     "./server": {
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js"

@@ -5,6 +5,7 @@ export default defineConfig({
     index: "src/index.js",
     collections: "src/collections.js",
     panels: "src/panels.js",
+    compose: "src/compose.js",
     server: "src/server/get-content.js",
     actions: "src/server/actions.js",
     page: "src/server/cms-page.jsx",

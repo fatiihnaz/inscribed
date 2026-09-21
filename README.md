@@ -793,8 +793,8 @@ matter how many places show it, and a card nobody can see (collapsed, or behind
 a shut panel) stops mirroring until it's back in view.
 
 Editing a collection item is schema-driven: the backend's `/schema` describes
-each field's `type`, and the exported `<CollectionFieldsForm>` renders one input
-per type:
+each field's `type`, and `<CollectionFieldsForm>` (from
+[`inscribed/compose`](#which-entry-point)) renders one input per type:
 
 | `type` | Value shape | Editor |
 | ------ | ----------- | ------ |
@@ -823,7 +823,7 @@ than an admin panel:
 ```jsx
 // app/news/new/page.jsx
 "use client";
-import { CollectionComposer } from "inscribed/collections";
+import { CollectionComposer } from "inscribed/compose";
 import { useRouter } from "next/navigation";
 
 export default function NewNews() {
@@ -841,6 +841,11 @@ export default function NewNews() {
 `onCreated` receives the created item (with its backend-assigned `slug`); omit it
 and the form resets with an inline confirmation instead. A single reusable hook,
 `useCollectionCreate`, backs both this form and the drawer's "new item" card.
+
+These live at `inscribed/compose` rather than `inscribed/collections`, because
+every one of them reaches the field editors. A page that only *lists* records
+would otherwise download that weight through the shared entry, with no way for a
+bundler to shake it back out.
 
 > The composer renders **nothing** for visitors without create access, and warns
 > in dev when the `collection` key isn't among the session's accessible
@@ -1770,7 +1775,8 @@ bundle:
 | Import | Side | Highlights |
 | ------ | ---- | ---------- |
 | `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `EditableChoice`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCmsRoute`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
-| `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `CollectionComposer`, `useCollection`, `useCollectionItem`, `useCollectionRecord`, `useMyCollections`, `useCollectionCreate`, `CollectionFieldsForm` (+ `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError`) |
+| `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `useCollection`, `useCollectionItem`, `useCollectionRecord`, `useMyCollections` (reading records) |
+| `inscribed/compose` | client | `CollectionComposer`, `CollectionFieldsForm`, `useCollectionCreate`, `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError` (writing them from your own page) |
 | `inscribed/panels` | client | `useCmsPanel`, `PanelStack` (what a [custom panel](#custom-panels)'s own component reads and renders) |
 | `inscribed/server` | server only | `getCmsSiteContent`, `getCmsContent`, `getCmsPageBlocks`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsSiteTag`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
 | `inscribed/page` | server only | `createCmsPage` (returns `CmsPage`, `localePath`, `getCmsRoute`, and the server collection bindings), `createCmsConfig` |

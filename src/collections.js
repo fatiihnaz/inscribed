@@ -10,6 +10,11 @@
  * you automatically, so apps using only the components/hooks below don't have
  * to render it themselves.
  *
+ * Reading only. The surfaces for *writing* a record from your own page (the
+ * composer, the schema form, the create hook and the payload helpers) live at
+ * `inscribed/compose`: they reach the field editors, and a page that only
+ * lists records has no way to shake that weight back out of a shared barrel.
+ *
  * The top-level `"use client"` is load-bearing, same as in `index.js`: tsup
  * keeps only the entry file's directive, so Next.js needs it here.
  */
@@ -29,18 +34,9 @@ export { CollectionRows } from "./collections/CollectionRegion.jsx";
 // Edits one text field of the enclosing <CollectionItem> in place; anything
 // else about the record stays in the drawer's schema form.
 export { CollectionField } from "./collections/CollectionField.jsx";
-// Chrome-free "add one item" form the host mounts on its own page; renders
-// nothing for visitors without create access.
-export { CollectionComposer } from "./collections/CollectionComposer.jsx";
-export { CollectionFieldsForm } from "./collections/CollectionFieldsForm.jsx";
-export { seedValues, buildPayload, requiredMissing } from "./collections/record-payload.js";
-export { humanizeCollectionError } from "./collections/record-errors.js";
 
 export { useCollection, useCollectionItem } from "./collections/hooks/use-collection.js";
 // Escape hatch for markup that computes with a record instead of rendering one
 // of its fields. Replaces what the removed render-prop used to hand over.
 export { useCollectionRecord } from "./collections/item-context.js";
 export { useMyCollections } from "./collections/hooks/use-my-collections.js";
-// Powers <CollectionComposer> and the drawer's new-item card; exposed for
-// hosts that want to build their own create UI over the same draft/submit flow.
-export { useCollectionCreate } from "./collections/hooks/use-collection-create.js";

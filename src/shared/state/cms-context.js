@@ -170,7 +170,10 @@ import { createContext, useContext } from "react";
  * @property {(blockPath: string, mode: "hidden"|"readonly") => void} registerEditorVisibility
  * @property {(blockPath: string) => void} unregisterEditorVisibility
  *
- * @property {((slug: string) => void | Promise<void>) | null} onAfterSave  Called after a successful save (typically a Server Action that calls `revalidateTag(cmsCacheTag(slug))`).
+ * @property {(slug: string, locale?: string|null) => Promise<void>} onAfterSave
+ *   Called after a successful save, once per slug and language written,
+ *   typically `revalidateCmsSlug`. Always a function: it resolves to nothing
+ *   when the app wired no handler.
  * @property {(key: string, slug?: string) => Promise<void>} onAfterCollectionSave
  *   Called after a collection record is published, typically a Server Action
  *   running `revalidateCmsCollection`. Required once collections are rendered on

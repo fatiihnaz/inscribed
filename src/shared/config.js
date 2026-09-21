@@ -24,8 +24,10 @@ import { DEFAULT_ADMIN_LOCALE } from "./i18n/default-locale.js";
  *   supplies no `getAccessToken`, the built-in browser auth. Not a trust
  *   input: the backend derives identity from credentials, never from this.
  * @property {string} globalSlug
- *   Slug holding `scope="global"` blocks (header/footer/site-wide). Fetched
- *   alongside every page and merged into the same blocks map. Default "__global".
+ *   Slug the manifest scanner writes `scope="global"` blocks to (header,
+ *   footer, site-wide). Default "__global". The whole-site read needs no such
+ *   name (the backend returns every `__*` slug as global); it is what the
+ *   per-page reads (`config.slugs`, `getCmsPageBlocks`) fetch beside a page.
  * @property {string[]} locales
  *   Locale codes this site serves, matched against the leading path segment to
  *   split a route into `{ locale, slug }` (see `route.js`). Empty on a

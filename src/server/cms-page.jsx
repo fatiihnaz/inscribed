@@ -128,6 +128,12 @@ function readRequestLocale() {
  * @property {import("../shared/contracts/auth.js").GetSession} [getSession]
  *   Resolves the server session. Default: `publicAuth.getSession` (always null → public).
  *   Its result stays on the server unless `sessionForClient` says otherwise.
+ *
+ *   Awaited in the root layout, so a resolver that reads the request
+ *   (`cookies()`, `headers()`, which most session libraries do) opts every
+ *   route out of static rendering: the site then renders per request rather
+ *   than at build. Leave it out and decide admin in the browser to keep the
+ *   site static; the built-in browser auth works that way.
  * @property {(session: *) => boolean} [deriveAdmin]
  *   Decides admin from the session. Default: `session != null`.
  * @property {(session: *) => string | null} [deriveUserSub]

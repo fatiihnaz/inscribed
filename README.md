@@ -915,6 +915,16 @@ beat after hydration - the server always renders the public view.
    });
    ```
 
+   > **A session resolver that reads the request makes every route dynamic.**
+   > `<CmsPage>` awaits `getSession` in the root layout, and a resolver that
+   > touches `cookies()` or `headers()` (most do, NextAuth's `auth()` among
+   > them) opts the whole site out of static rendering: nothing prerenders and
+   > every request renders on the server. That is the trade for deciding admin
+   > server-side. To keep the site static, leave `getSession` out and decide
+   > admin in the browser: the built-in auth above does exactly that, and a
+   > wrapper around `CmsProvider` can pass `isAdmin` from a client-side session
+   > the same way.
+
    > **The session stays on the server unless you opt in.** `Provider` is a
    > Client Component, so every prop it receives is serialized into the page
    > payload and shipped to the browser. Sessions routinely carry an access
@@ -1037,8 +1047,10 @@ The default language stays at the root and the others sit behind their prefix:
 `/about` is Turkish, `/en/about` is English. The middleware rewrites the
 unprefixed path onto `app/[locale]/` so `tr` never reaches the address bar; a
 site that prefixes every language needs no middleware at all. It also sets the
-`x-pathname` header the [collection bindings](#fetching-on-the-server) and
-`getCmsRoute()` read.
+`x-pathname` header that `getCmsRoute()`, a record redirect built without
+`path`, and a [collection binding](#fetching-on-the-server) rendered outside
+`<CmsPage>` fall back to; under `<CmsPage>` the bindings take the language from
+it and read no header.
 
 A leading segment counts as a locale only when `locales` lists it, so a page at
 `/en-masse` is not mistaken for English. (Reading also handles a prefix on
@@ -1572,12 +1584,13 @@ except for the one read that changed. Publishing a record always drops the
 windows, reorder a list or change its total, so every window that mentions the
 collection is suspect.
 
-The global slug (header/footer/site-wide blocks) comes back inside the site
-read like any other page and is folded into every page's entry on the client,
-so a shared block edited on any page reflects everywhere. `getCmsPageBlocks`,
-for a server component reading one page, fetches it beside the page and keeps
-caller tags off that shared entry: `__global` backs every page, so one page's
-revalidation must not rebuild everyone's header and footer.
+The global slugs (header/footer/site-wide blocks) come back in the site read's
+own `global` list and are held once on the client, apart from any page, so a
+shared block edited on any page reflects everywhere (see
+[Content delivery](#content-delivery)). `getCmsPageBlocks`, for a server
+component reading one page, fetches `__global` beside the page and keeps caller
+tags off that shared entry: it backs every page, so one page's revalidation
+must not rebuild everyone's header and footer.
 
 On a [multilingual site](#localization), each language of a page is its own tag, so
 publishing the English copy leaves the Turkish render alone. Collections are the

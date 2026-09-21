@@ -5,11 +5,12 @@
  * one block, ready to edit.
  *
  * The fetched blocks land in `blocksStore` under the **other language's own
- * route key** (`routeKey("/haber-lab", "en")`), not a private cache, so a card
- * that opens second reads what the first one already pulled, and `useCmsSave`
- * finds the version it publishes against where every other route's lives. It
- * commits the page + global merge rather than the page alone, so a header
- * block's translation sits beside the page's the way the site seed put them.
+ * keys** (`routeKey("/haber-lab", "en")` for the page, `globalsKey("en")` for
+ * that language's globals), not a private cache, so a card that opens second
+ * reads what the first one already pulled, and `useCmsSave` finds the version
+ * it publishes against where every other route's lives. A header block's
+ * translation is therefore read the way every block is: the route's entry
+ * first, then the language's globals.
  *
  * Drafts typed here are **not** autosaved. They live in
  * `translationDraftsStore` from the moment the drawer offers them until the
@@ -129,11 +130,11 @@ export function useCmsTranslations(block, options) {
 
   const otherLocales = useMemo(() => resolveOtherLocales(config, locale), [config, locale]);
 
-  // The route's slug, never the block's own. `fetchRouteBlocks` already folds
-  // the global slug in, so a header block's other languages arrive inside the
-  // page's entry; addressing the fetch by `_slug` instead would ask for
-  // `__global`, which is not a route, and key the result under an entry
-  // nothing renders from.
+  // The route's slug, never the block's own. A read covers a route (or the
+  // whole language) and brings the globals with it into their own entry, which
+  // `readBlock` below falls through to; addressing the fetch by `_slug` instead
+  // would ask for `__global`, which is not a route, and key the result under an
+  // entry nothing renders from.
   const keys = useMemo(
     () => otherLocales.map((l) => routeKey(routeSlug, l)),
     [otherLocales, routeSlug],

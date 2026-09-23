@@ -493,6 +493,13 @@
  * @property {string} blockPath
  * @property {DeclarableBlockType} blockType
  * @property {*} defaultValue
+ *   Seed for every language `defaultValues` does not name.
+ * @property {Object<string, *>} [defaultValues]
+ *   Per-language seeds, keyed by locale. Absent when the declaration named one
+ *   value for every language, which is the common case. The backend
+ *   materializes a row per locale and seeds it from `defaultValues[locale]`
+ *   when the key is there and `defaultValue` otherwise, so a backend that
+ *   doesn't read this field still seeds every language the way it always did.
  * @property {number} sortOrder
  * @property {ItemSchema} [itemSchema]   List blocks only - shape of one item.
  */

@@ -78,6 +78,7 @@ const UNRESOLVED = Symbol("unresolved");
  * @property {string} blockPath
  * @property {DeclarableBlockType} blockType
  * @property {*} defaultValue
+ * @property {Object<string, *>} [defaultValues]  Per-language seeds, when the declaration named one per language.
  * @property {import("../shared/contracts/schemas.js").ItemSchema} [itemSchema]  List blocks only.
  * @property {string} [scope]
  *   Discovery scope marker. When `"global"`, the region is written to the
@@ -152,7 +153,7 @@ export async function discoverManifests(options = {}) {
   const queued = new Set(queue);
   while (queue.length > 0) {
     const file = /** @type {string} */ (queue.shift());
-    const { analysis, warnings: fileWarnings } = await analyzeFile(file, aliases);
+    const { analysis, warnings: fileWarnings } = await analyzeFile(file, aliases, locales);
     analyses.set(file, analysis);
     warnings.push(...fileWarnings);
     for (const imp of analysis.imports) {
@@ -344,6 +345,7 @@ function regionToEntry(region, sortOrder) {
     defaultValue: region.defaultValue,
     sortOrder,
   };
+  if (region.defaultValues) entry.defaultValues = region.defaultValues;
   if (region.itemSchema) entry.itemSchema = region.itemSchema;
   return entry;
 }
@@ -643,9 +645,10 @@ function isDirectory(p) {
 /**
  * @param {string} filePath
  * @param {PathAliases | null} aliases
+ * @param {string[]} [locales]   Reaches the declaration handlers, which read a per-language `defaultValue` against it.
  * @returns {Promise<{ analysis: FileAnalysis, warnings: DiscoveryWarning[] }>}
  */
-async function analyzeFile(filePath, aliases) {
+async function analyzeFile(filePath, aliases, locales) {
   const source = await readFile(filePath, "utf8");
   const lang = LANG_BY_EXT[path.extname(filePath)] ?? "jsx";
 
@@ -757,7 +760,13 @@ async function analyzeFile(filePath, aliases) {
             analysis.regions.push({
               blockPath,
               blockType: /** @type {BlockType} */ (meta.blockType),
-              defaultValue: meta.defaultValue,
+              ...localeSeeds(meta.defaultValue, "", locales, {
+                declaration: `useCmsBlock("${blockPath}", ...)`,
+                blockType: meta.blockType,
+                filePath,
+                loc: locOf(node, locator),
+                warnings,
+              }),
             });
           }
           return;
@@ -788,11 +797,11 @@ async function analyzeFile(filePath, aliases) {
           const name = node.name;
           if (name.type !== "JSXIdentifier") return;
           if (name.name === "EditableRegion") {
-            handleEditableRegion(node, filePath, analysis, warnings, currentPrefix(), locator);
+            handleEditableRegion(node, filePath, analysis, warnings, currentPrefix(), locator, locales);
           } else if (name.name === "EditableChoice") {
-            handleEditableChoice(node, filePath, analysis, warnings, currentPrefix(), locator);
+            handleEditableChoice(node, filePath, analysis, warnings, currentPrefix(), locator, locales);
           } else if (name.name === "EditableList") {
-            handleEditableList(node, filePath, analysis, warnings, currentPrefix(), locator);
+            handleEditableList(node, filePath, analysis, warnings, currentPrefix(), locator, locales);
           } else if (/^[A-Z]/.test(name.name) && name.name !== "CmsGroup") {
             // Only names bound by a resolved import qualify; package
             // components (bare specifiers) resolve to nothing and can't
@@ -839,8 +848,9 @@ async function analyzeFile(filePath, aliases) {
  * @param {DiscoveryWarning[]} warnings
  * @param {string} groupPrefix
  * @param {Locator} locator
+ * @param {string[]} [locales]
  */
-function handleEditableRegion(openingNode, filePath, analysis, warnings, groupPrefix, locator) {
+function handleEditableRegion(openingNode, filePath, analysis, warnings, groupPrefix, locator, locales) {
   const props = readJsxProps(openingNode);
   const rawBlockPath = props.blockPath;
   const blockType = props.blockType;
@@ -886,7 +896,13 @@ function handleEditableRegion(openingNode, filePath, analysis, warnings, groupPr
   const region = {
     blockPath,
     blockType: /** @type {BlockType} */ (blockType),
-    defaultValue: hasDefault ? props.defaultValue : "",
+    ...localeSeeds(hasDefault ? props.defaultValue : "", "", locales, {
+      declaration: `<EditableRegion blockPath="${blockPath}">`,
+      blockType,
+      filePath,
+      loc: locOf(openingNode, locator),
+      warnings,
+    }),
   };
   const scope = readScopeProp(props, openingNode, blockPath, filePath, warnings, locator);
   if (scope) region.scope = scope;
@@ -907,8 +923,9 @@ function handleEditableRegion(openingNode, filePath, analysis, warnings, groupPr
  * @param {DiscoveryWarning[]} warnings
  * @param {string} groupPrefix
  * @param {Locator} locator
+ * @param {string[]} [locales]
  */
-function handleEditableChoice(openingNode, filePath, analysis, warnings, groupPrefix, locator) {
+function handleEditableChoice(openingNode, filePath, analysis, warnings, groupPrefix, locator, locales) {
   const props = readJsxProps(openingNode);
   const rawBlockPath = props.blockPath;
 
@@ -934,7 +951,13 @@ function handleEditableChoice(openingNode, filePath, analysis, warnings, groupPr
   const region = {
     blockPath,
     blockType: /** @type {DeclarableBlockType} */ ("Select"),
-    defaultValue: hasDefault ? props.defaultValue : "",
+    ...localeSeeds(hasDefault ? props.defaultValue : "", "", locales, {
+      declaration: `<EditableChoice blockPath="${blockPath}">`,
+      blockType: "Select",
+      filePath,
+      loc: locOf(openingNode, locator),
+      warnings,
+    }),
   };
   const scope = readScopeProp(props, openingNode, blockPath, filePath, warnings, locator);
   if (scope) region.scope = scope;
@@ -956,8 +979,9 @@ function handleEditableChoice(openingNode, filePath, analysis, warnings, groupPr
  * @param {DiscoveryWarning[]} warnings
  * @param {string} groupPrefix
  * @param {Locator} locator
+ * @param {string[]} [locales]
  */
-function handleEditableList(openingNode, filePath, analysis, warnings, groupPrefix, locator) {
+function handleEditableList(openingNode, filePath, analysis, warnings, groupPrefix, locator, locales) {
   const props = readJsxProps(openingNode);
   const rawBlockPath = props.blockPath;
   const itemSchema = props.itemSchema;
@@ -981,15 +1005,27 @@ function handleEditableList(openingNode, filePath, analysis, warnings, groupPref
     return;
   }
 
-  const defaultValue = Object.prototype.hasOwnProperty.call(props, "defaultValue")
-    ? props.defaultValue
-    : [];
+  const seeds = localeSeeds(
+    Object.prototype.hasOwnProperty.call(props, "defaultValue") ? props.defaultValue : [],
+    [],
+    locales,
+    {
+      declaration: `<EditableList blockPath="${blockPath}">`,
+      blockType: "ObjectArray",
+      filePath,
+      loc: locOf(openingNode, locator),
+      warnings,
+    },
+  );
 
-  if (!Array.isArray(defaultValue)) {
+  // Every language's seed is a whole list, so a per-language map holds one
+  // array per key rather than one array of per-language rows.
+  const seeded = seeds.defaultValues ? Object.values(seeds.defaultValues) : [seeds.defaultValue];
+  if (!seeded.every(Array.isArray)) {
     warnings.push({
       file: filePath,
       loc: locOf(openingNode, locator),
-      message: `<EditableList blockPath="${blockPath}"> defaultValue must be an array. Skipping.`,
+      message: `<EditableList blockPath="${blockPath}"> defaultValue must be an array, or a per-language map of arrays. Skipping.`,
     });
     return;
   }
@@ -998,12 +1034,98 @@ function handleEditableList(openingNode, filePath, analysis, warnings, groupPref
   const region = {
     blockPath,
     blockType: /** @type {BlockType} */ ("ObjectArray"),
-    defaultValue,
+    ...seeds,
     itemSchema: manifestItemSchema(itemSchema),
   };
   const scope = readScopeProp(props, openingNode, blockPath, filePath, warnings, locator);
   if (scope) region.scope = scope;
   analysis.regions.push(region);
+}
+
+// The declarable types whose value is an object. Every other value is a string,
+// number, boolean or array, so a plain object standing where one of those
+// belongs is a per-language map or a mistake, never the value itself.
+const OBJECT_VALUED_TYPES = new Set(["Image", "File", "Link"]);
+
+/**
+ * Split a declared `defaultValue` into the two seeds the manifest carries.
+ *
+ * One prop takes both forms: a plain object whose keys are all languages seeds
+ * each language on its own, anything else seeds every language alike. The
+ * overlap is narrower than it looks, since the object-valued types have fixed
+ * keys (`src`/`alt`, `href`/`label`, `url`/`name`/...) and none of them is a
+ * language tag. It is still why a half-matching object warns instead of
+ * syncing quietly: a typo in a key is the one way to mean a map and not get one.
+ *
+ * A map that skips a language still has to seed it, and it seeds from the
+ * default locale: that language then gets what it would have got before
+ * per-language seeds existed, and so does a backend that ignores
+ * `defaultValues` entirely.
+ *
+ * @param {*} declared        `defaultValue` as written.
+ * @param {*} emptySeed       Fallback when the map skips the default locale too.
+ * @param {string[]|undefined} locales
+ * @param {{ declaration: string, blockType: string, filePath: string, loc: { line: number, column: number } | null, warnings: DiscoveryWarning[] }} ctx
+ * @returns {{ defaultValue: *, defaultValues?: Record<string, *> }}
+ */
+function localeSeeds(declared, emptySeed, locales, ctx) {
+  const langs = locales ?? [];
+  if (declared == null || typeof declared !== "object" || Array.isArray(declared)) {
+    return { defaultValue: declared };
+  }
+
+  const keys = Object.keys(declared);
+  const stray = keys.filter((key) => !langs.includes(key));
+
+  if (keys.length > 0 && stray.length === 0) {
+    const skipped = langs.filter((lang) => !keys.includes(lang));
+    if (skipped.length > 0) {
+      ctx.warnings.push({
+        file: ctx.filePath,
+        loc: ctx.loc,
+        message:
+          `${ctx.declaration} defaultValue seeds ${quoted(keys)}, and the site also has ${quoted(skipped)}. ` +
+          `What the map leaves out seeds with ${keys.includes(langs[0]) ? `the "${langs[0]}" value` : "an empty value"}.`,
+      });
+    }
+    return {
+      defaultValue: keys.includes(langs[0]) ? declared[langs[0]] : emptySeed,
+      defaultValues: declared,
+    };
+  }
+
+  // Neither branch below changes what syncs. They name the two ways an object
+  // meant as a per-language map fails to read as one, both silent otherwise.
+  if (stray.length < keys.length) {
+    ctx.warnings.push({
+      file: ctx.filePath,
+      loc: ctx.loc,
+      message:
+        `${ctx.declaration} defaultValue names ${quoted(keys.filter((key) => langs.includes(key)))} beside ${quoted(stray)}, ` +
+        `which ${stray.length === 1 ? "is not one of" : "are not among"} the site's languages [${langs.join(", ")}]. ` +
+        "A per-language seed map holds language keys and nothing else, so this syncs as one seed for every language instead.",
+    });
+  } else if (keys.length > 0 && !OBJECT_VALUED_TYPES.has(ctx.blockType)) {
+    ctx.warnings.push({
+      file: ctx.filePath,
+      loc: ctx.loc,
+      message:
+        `${ctx.declaration} defaultValue is an object, which ${ctx.blockType} values never are. ` +
+        (langs.length === 0
+          ? "If it is a per-language seed map, discovery has no language list to read it against: export `locales` from cms.config.js."
+          : `If it is a per-language seed map, none of ${quoted(keys)} is one of the site's languages [${langs.join(", ")}].`) +
+        " Syncing the object as one seed for every language.",
+    });
+  }
+  return { defaultValue: declared };
+}
+
+/**
+ * @param {string[]} values
+ * @returns {string}
+ */
+function quoted(values) {
+  return values.map((value) => `"${value}"`).join(", ");
 }
 
 /**

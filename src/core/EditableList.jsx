@@ -69,8 +69,9 @@ const EditableListAdmin = lazy(() =>
  *   list-level edit affordance. With it, the wrapper renders in public mode
  *   too, so admin and public layout stay identical, and admin mode adds the
  *   ring + label chip. Extra props (`style`, `className`, ...) go to it.
- * @property {*[]} [defaultValue]
- *   Discovery-only seed, default `[]`. Pass an array to pre-seed items.
+ * @property {*[] | Object<string, *[]>} [defaultValue]
+ *   Discovery-only seed, default `[]`. Pass an array to pre-seed items, or one
+ *   array per site language (`{ tr: [...], en: [...] }`) to seed them apart.
  * @property {"global"} [scope]
  *   Discovery-only. `"global"` shares the list across every page.
  * @property {boolean} [readOnly]

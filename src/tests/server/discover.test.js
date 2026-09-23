@@ -22,6 +22,15 @@ function normalizeWarnings(warnings, appRoot) {
   }));
 }
 
+/**
+ * A single-page fixture's blocks, keyed by blockPath.
+ *
+ * @param {Awaited<ReturnType<typeof discoverManifests>>["manifests"]} manifests
+ */
+function byPath(manifests) {
+  return Object.fromEntries(manifests[0].blocks.map((block) => [block.blockPath, block]));
+}
+
 describe("discoverManifests", () => {
   it("discovers blocks, scopes, groups and DFS order across an app tree", async () => {
     const appRoot = path.join(fixturesRoot, "discover-app");
@@ -204,5 +213,73 @@ describe("discoverManifests", () => {
     const parseWarnings = warnings.filter((w) => w.message.startsWith("Failed to parse"));
     expect(parseWarnings).toHaveLength(1);
     expect(parseWarnings[0].file.endsWith("broken.jsx")).toBe(true);
+  });
+
+  it("splits a per-language defaultValue into one seed per language", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-locale-defaults");
+    const { manifests } = await discoverManifests({ appRoot, locales: ["tr", "en"] });
+    const blocks = byPath(manifests);
+
+    // The default locale's value stays on `defaultValue`, so a backend reading
+    // only that field seeds every language the way it did before the map.
+    expect(blocks["hero.title"]).toMatchObject({
+      defaultValue: "Merhaba",
+      defaultValues: { tr: "Merhaba", en: "Hello" },
+    });
+    expect(blocks["hero.poster"].defaultValues).toEqual({
+      tr: { src: "/tr.png", alt: "Afis" },
+      en: { src: "/en.png", alt: "Poster" },
+    });
+    expect(blocks["hero.state"].defaultValues).toEqual({ tr: "taslak", en: "draft" });
+    expect(blocks["hero.cards"].defaultValues).toEqual({
+      tr: [{ title: "Kart" }],
+      en: [{ title: "Card" }],
+    });
+
+    // An Image's own keys are not languages, so its shape syncs as the value.
+    expect(blocks["hero.image"]).toMatchObject({ defaultValue: { src: "/hero.png", alt: "" } });
+    expect(blocks["hero.image"].defaultValues).toBeUndefined();
+  });
+
+  it("warns about the languages a per-language defaultValue leaves out", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-locale-defaults");
+    const { manifests, warnings } = await discoverManifests({ appRoot, locales: ["tr", "en"] });
+    const blocks = byPath(manifests);
+
+    expect(blocks["hero.body"]).toMatchObject({
+      defaultValue: "Uzun metin",
+      defaultValues: { tr: "Uzun metin" },
+    });
+    // Nothing to fall back on: this map skips the default locale as well.
+    expect(blocks["hero.note"]).toMatchObject({ defaultValue: "", defaultValues: { en: "Note" } });
+
+    const skipped = warnings.filter((w) => w.message.includes("the site also has"));
+    expect(skipped).toHaveLength(2);
+    expect(skipped.find((w) => w.message.includes("hero.body")).message).toContain('the "tr" value');
+    expect(skipped.find((w) => w.message.includes("hero.note")).message).toContain("an empty value");
+  });
+
+  it("warns rather than guessing when a seed map key is not a language", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-locale-defaults");
+    const { manifests, warnings } = await discoverManifests({ appRoot, locales: ["tr", "en"] });
+
+    const kicker = byPath(manifests)["hero.kicker"];
+    expect(kicker.defaultValues).toBeUndefined();
+    expect(kicker.defaultValue).toEqual({ tr: "Ust baslik", eng: "Kicker" });
+
+    const warning = warnings.find((w) => w.message.includes("hero.kicker"));
+    expect(warning.message).toContain('"eng"');
+  });
+
+  it("reads no seed map at all when the site declares no locales", async () => {
+    const appRoot = path.join(fixturesRoot, "discover-locale-defaults");
+    const { manifests, warnings } = await discoverManifests({ appRoot });
+    const blocks = byPath(manifests);
+
+    expect(Object.values(blocks).every((b) => b.defaultValues === undefined)).toBe(true);
+    expect(blocks["hero.title"].defaultValue).toEqual({ tr: "Merhaba", en: "Hello" });
+    // A list can't even sync: without the language list its map is not an array.
+    expect(blocks["hero.cards"]).toBeUndefined();
+    expect(warnings.some((w) => w.message.includes("export `locales` from cms.config.js"))).toBe(true);
   });
 });

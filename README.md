@@ -210,7 +210,8 @@ export default function Home() {
 
 `blockType` and `defaultValue` are **discovery-time metadata** read by the sync
 CLI, ignored at runtime. They tell inscribed what kind of editor to show and what to
-seed the database row with.
+seed the database row with. On a localized site `defaultValue` can name one
+value per language; see [Localization](#localization).
 
 There is **no marker to add**: every `page.{js,jsx,ts,tsx}` under `app/` is a
 **discovery root**, and its slug comes from its own path, so `cms-sync` already
@@ -1088,6 +1089,33 @@ is a language once `locales` is set (see [Slugs](#slugs)).
 backend learns which languages exist from the code rather than from a second
 copy someone has to remember to update. It then materializes a row per locale,
 each seeded with the block's `defaultValue`.
+
+**Seeding each language differently.** `defaultValue` also takes a map keyed by
+language, so the English row doesn't start life holding Turkish copy:
+
+```jsx
+<EditableRegion
+  blockPath="hero.title"
+  blockType="ShortText"
+  defaultValue={{ tr: "Hoş geldiniz", en: "Welcome" }}
+/>
+```
+
+An object whose keys are all in `locales` is read that way, including for the
+types whose value is itself an object — those nest under the language,
+`{ tr: { src, alt }, en: { src, alt } }`. Their own keys (`src`, `href`, `name`)
+are not language tags, so an ordinary `defaultValue={{ src: "/hero.png" }}`
+stays one seed for every language.
+
+A language the map leaves out seeds with the first entry of `locales` (what
+every language got before maps existed), and `cms-sync` names it in a warning. A
+key that is *not* a language warns too rather than syncing a half-map as the
+value itself: a typo (`eng`) or a forgotten `locales` export in `cms.config.js`
+is otherwise invisible until someone reads the English page.
+
+This seeds, it does not translate. Rows that already exist keep their content,
+so a map added after the first sync only reaches languages and blocks that
+weren't there yet.
 
 **Adding a language is one step: put it in `locales`, re-run `cms-sync`.**
 Removing one is the same step — its rows fall out of the desired state and are

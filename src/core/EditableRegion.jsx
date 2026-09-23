@@ -62,6 +62,12 @@ const EditableRegionAdmin = lazy(() =>
  * @property {*} [defaultValue]
  *   Discovery-only: the value seeded into the DB on first sync. Must be a static
  *   literal. Omit it and the region still syncs, seeded with "" plus a warning.
+ *
+ *   A plain object whose keys are all site languages seeds each one on its own
+ *   (`{ tr: "Merhaba", en: "Hello" }`), and a language the map leaves out takes
+ *   the first entry of `locales`. The object-valued types nest under the
+ *   language (`{ tr: { src, alt } }`): `src` is not a language tag, so their own
+ *   shape is never read as a map.
  * @property {"global"} [scope]
  *   Discovery-only. `"global"` writes the region to the `globalSlug` manifest
  *   entry (for header/footer/site-wide UI) so one block backs every page.

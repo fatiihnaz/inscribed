@@ -50,6 +50,8 @@ import { useCmsRoute } from "./use-cms-route.js";
  * @typedef {Object} UseCmsBlockMeta
  * @property {import("../../shared/contracts/schemas.js").DeclarableBlockType} blockType
  * @property {*} defaultValue
+ *   One seed for every language, or a map keyed by language
+ *   (`{ tr: "...", en: "..." }`), as on `<EditableRegion>`.
  * @property {import("../../shared/contracts/schemas.js").ChoiceSource} [source]
  *   `Select` and `StringArray` only: where their choices come from. These two
  *   types draw nothing on the page, so there is no region to declare it on and

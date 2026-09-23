@@ -130,11 +130,16 @@
  *   Optional for the same reason `renameCollectionItem` is: a transport with
  *   nothing behind it has nothing to implement, and a panel calling it then
  *   gets a named error rather than a bare `fetch` quietly bypassing the seam.
- * @property {(manifests: SyncManifestRequest[], opts?: CmsRequestOptions & { locales?: string[] }) => Promise<SyncResultResponse>} syncManifests
+ * @property {(manifests: SyncManifestRequest[], opts?: CmsRequestOptions & { locales?: string[], reseed?: boolean }) => Promise<SyncResultResponse>} syncManifests
  *   `locales` is the site's full language list, not one language: sync is where
  *   the app tells the backend which languages exist, so the list has a single
  *   home (your config) instead of one copy per side that can drift. Omit it and
  *   the backend keeps whatever it has.
+ *
+ *   `reseed` also rewrites rows nobody has edited (first version, no pending
+ *   draft) whose content differs from the declared seed, leaving the version as
+ *   it is so the next reseed still finds them. Opt-in: sync runs on every dev
+ *   and build, and rewriting live content has to be asked for.
  */
 
 export {};

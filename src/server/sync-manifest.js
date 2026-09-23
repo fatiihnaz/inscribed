@@ -50,10 +50,11 @@ export function syncCmsManifest(config, manifests, accessToken) {
  * pruned slugs, and throws with a readable message on failure.
  *
  * @param {SyncManifestRequest[]} manifests
- * @param {{ baseUrl?: string, getServiceToken?: ServiceTokenProvider, locales?: string[] }} [options]
+ * @param {{ baseUrl?: string, getServiceToken?: ServiceTokenProvider, locales?: string[], reseed?: boolean }} [options]
  *   `locales` comes from the project's `cms.config.js`, the same list the
  *   middleware routes on, and reaches the backend from here so nobody has to
- *   keep a second copy of it in step by hand.
+ *   keep a second copy of it in step by hand. `reseed` is the CLI's
+ *   `--reseed`; see `CmsTransport.syncManifests`.
  * @returns {Promise<void>}
  */
 export async function syncAll(manifests, options) {
@@ -78,6 +79,7 @@ export async function syncAll(manifests, options) {
     result = await transport.syncManifests(manifests, {
       accessToken: accessToken || undefined,
       locales: config.locales,
+      reseed: options?.reseed,
     });
   } catch (err) {
     const detail =
@@ -93,7 +95,15 @@ export async function syncAll(manifests, options) {
 
   for (const r of result.results ?? []) {
     console.log(
-      `[inscribed-sync] ${r.slug} | created=${r.created} deleted=${r.deleted} unchanged=${r.unchanged}`,
+      `[inscribed-sync] ${r.slug} | created=${r.created} deleted=${r.deleted} unchanged=${r.unchanged}` +
+        (r.reseeded == null ? "" : ` reseeded=${r.reseeded}`),
+    );
+  }
+  // A backend that predates reseeding ignores the flag and answers like any
+  // other sync, which would otherwise read as "nothing needed rewriting".
+  if (options?.reseed && result.results?.length && result.results.every((r) => r.reseeded == null)) {
+    console.warn(
+      "[inscribed-sync] reseed was requested, but the backend reported no reseeded counts. It may not support reseeding yet.",
     );
   }
   if (result.prunedSlugs?.length) {

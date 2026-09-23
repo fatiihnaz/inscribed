@@ -523,6 +523,10 @@
  * @property {number} deleted      Blocks soft-deleted (absent from this slug's manifest).
  * @property {number} unchanged    Blocks already in sync.
  * @property {number} [restored]   Blocks un-soft-deleted because they reappeared.
+ * @property {number} [reseeded]
+ *   Blocks rewritten to their declared seed. Present on every slug when the
+ *   request asked for `reseed`, so its absence means the backend ignored the
+ *   flag rather than found nothing to rewrite.
  */
 
 /**

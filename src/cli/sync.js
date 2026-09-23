@@ -103,7 +103,7 @@ if (args.dryRun) {
 }
 
 try {
-  await syncAll(manifests, { baseUrl: projectConfig.baseUrl, getServiceToken, locales });
+  await syncAll(manifests, { baseUrl: projectConfig.baseUrl, getServiceToken, locales, reseed: args.reseed });
 } catch (err) {
   console.error(err instanceof Error ? err.message : String(err));
   if (onSyncError) await Promise.resolve(onSyncError(err)).catch(() => {});
@@ -114,7 +114,7 @@ try {
  * @param {string[]} argv
  */
 function parseArgs(argv) {
-  /** @type {{ appRoot?: string, env?: string, globalSlug?: string, dryRun?: boolean, allowEmpty?: boolean, help?: boolean }} */
+  /** @type {{ appRoot?: string, env?: string, globalSlug?: string, dryRun?: boolean, allowEmpty?: boolean, reseed?: boolean, help?: boolean }} */
   const out = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -123,6 +123,7 @@ function parseArgs(argv) {
     else if (a === "--global-slug") out.globalSlug = argv[++i];
     else if (a === "--dry-run") out.dryRun = true;
     else if (a === "--allow-empty") out.allowEmpty = true;
+    else if (a === "--reseed") out.reseed = true;
     else if (a === "--help" || a === "-h") out.help = true;
     else {
       console.error(`[inscribed-sync] Unknown argument: ${a}`);
@@ -145,6 +146,8 @@ Options:
   --global-slug <name> Slug for scope="global" blocks (default: __global)
   --dry-run            Print the discovered manifest as JSON without syncing
   --allow-empty        Sync even when discovery finds nothing (soft-deletes every remote slug)
+  --reseed             Also rewrite rows nobody has edited (first version, no pending
+                       draft) to the defaultValue the code declares now
   --help, -h           Show this message
 
 Environment:

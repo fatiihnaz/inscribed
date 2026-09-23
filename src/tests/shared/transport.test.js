@@ -366,6 +366,22 @@ describe("locale", () => {
     expect(lastCall()[0]).toBe(`${BASE}/cms/sync`);
   });
 
+  it("asks /cms/sync for a reseed only when told to", async () => {
+    // Sync runs on every dev and build, so a plain sync must never carry the
+    // flag that rewrites live content.
+    const t = createRestTransport({ baseUrl: BASE });
+    const manifests = [{ slug: "/", blocks: [] }];
+
+    fetchResolves({ results: [], prunedSlugs: [] });
+    await t.syncManifests(manifests, { accessToken: "tok", reseed: true });
+    expect(new URL(lastCall()[0]).searchParams.get("reseed")).toBe("true");
+    expect(JSON.parse(lastCall()[1].body)).toEqual(manifests);
+
+    fetchResolves({ results: [], prunedSlugs: [] });
+    await t.syncManifests(manifests, { accessToken: "tok" });
+    expect(new URL(lastCall()[0]).searchParams.has("reseed")).toBe(false);
+  });
+
   it("comes off params for a collection list, since it narrows the window", async () => {
     const t = createRestTransport({ baseUrl: BASE });
     fetchResolves({ items: [], total: 0, offset: 0, limit: 50 });

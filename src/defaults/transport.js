@@ -423,6 +423,7 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
     async syncManifests(manifests, opts = {}) {
       const target = new URL(`${base}/cms/sync`);
       if (opts.locales?.length) target.searchParams.set("locales", opts.locales.join(","));
+      if (opts.reseed) target.searchParams.set("reseed", "true");
       const res = await fetch(target.toString(), {
         method: "POST",
         headers: headers(opts.accessToken),

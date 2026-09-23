@@ -1115,7 +1115,8 @@ is otherwise invisible until someone reads the English page.
 
 This seeds, it does not translate. Rows that already exist keep their content,
 so a map added after the first sync only reaches languages and blocks that
-weren't there yet.
+weren't there yet, unless `cms-sync --reseed` rewrites the rows nobody has
+edited (see [CLI](#cli-cms-sync)).
 
 **Adding a language is one step: put it in `locales`, re-run `cms-sync`.**
 Removing one is the same step — its rows fall out of the desired state and are
@@ -1868,6 +1869,7 @@ Options:
   --global-slug <name>  Slug for scope="global" blocks (default: __global)
   --dry-run             Print the discovered manifest as JSON without syncing
   --allow-empty         Sync even when discovery finds nothing
+  --reseed              Also rewrite rows nobody has edited to the current defaultValue
   --help, -h            Show help
 
 Environment:
@@ -1881,6 +1883,21 @@ Each discovered slug is printed beside the page file it was derived from, so
 [inscribed-discover] /            6 block(s)  (app/[locale]/page.jsx)
 [inscribed-discover] /haber-lab   1 block(s)  (app/[locale]/haber-lab/page.jsx)
 ```
+
+**Reseeding.** A sync never touches content that already exists, so a changed
+`defaultValue` only reaches rows created after the change. `--reseed` extends it
+to the rows nobody has edited: still on their first version, with no pending
+draft, and holding something other than what the code now declares. Those are
+rewritten in place and keep their version, which is what lets the next
+`--reseed` find them again; anything an editor has published or started on is
+left alone. It is off by default because `cms-sync` runs on every `dev` and
+`build`, where rewriting live content should be a choice. Run it once to clean
+up, or put it in `prebuild` if the blocks nobody edits (`readOnly`, `hidden`)
+should always follow the code.
+
+The CLI can't reach your app's cache, so a rewritten page keeps its old copy
+until something is next published in that language, or until the app
+revalidates `cmsSiteTag(locale)` itself.
 
 The service token for `POST /cms/sync` (and optional failure diagnostics) comes
 from an optional `cms.config.js` in the project root; the CLI is a plain Node

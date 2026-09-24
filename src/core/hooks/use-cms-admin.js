@@ -22,6 +22,9 @@ import { useCmsRoute } from "./use-cms-route.js";
  * @typedef {Object} UseCmsAdminResult
  * @property {(blockPath: string, value: *, version: number) => Promise<UpdatePageResponse>} save
  * @property {(blocks: UpdateBlockItem[]) => Promise<UpdatePageResponse>} savePage
+ *   Each target (slug and language) is its own write, so a batch can land
+ *   partly. It then rejects with the first failure, carrying `landed`: the
+ *   updates that went through, which are live and revalidated already.
  * @property {boolean} isSaving
  * @property {CmsApiError|Error|null} error
  * @property {() => void} clearError
@@ -70,7 +73,7 @@ export function useCmsAdmin() {
         // PUT to its own; a staged translation carries a locale of its own and
         // must PUT to that language's copy. Both are one PUT per target, so
         // they group by the same rule rather than through two code paths.
-        /** @type {Map<string, { slug: string, locale: string|null, updates: UpdateBlockItem[] }>} */
+        /** @type {Map<string, { slug: string, locale: string|null, updates: UpdateBlockItem[], sources: UpdateBlockItem[] }>} */
         const byTarget = new Map();
         const blocks = blocksStore.get();
         for (const update of updates) {
@@ -83,18 +86,22 @@ export function useCmsAdmin() {
           // this key is only ever compared, never parsed back. Named apart from
           // the route key above, which the block lookup reads on each pass.
           const targetKey = JSON.stringify([targetLocale ?? null, slug]);
-          const group = byTarget.get(targetKey) ?? { slug, locale: targetLocale, updates: [] };
+          const group = byTarget.get(targetKey) ?? { slug, locale: targetLocale, updates: [], sources: [] };
           // `locale` addresses the request, so it stays off the body items.
           group.updates.push({
             blockPath: update.blockPath,
             value: update.value,
             version: update.version,
           });
+          // The caller's own objects, handed back as `landed` on a partial failure.
+          group.sources.push(update);
           byTarget.set(targetKey, group);
         }
 
         const groups = [...byTarget.values()];
-        const responses = await Promise.all(
+        // Settled rather than all: one target failing says nothing about the
+        // others, and the ones that landed are live whatever happens next.
+        const settled = await Promise.allSettled(
           groups.map((group) =>
             config.transport.updateContent(
               { slug: group.slug, blocks: group.updates },
@@ -102,28 +109,29 @@ export function useCmsAdmin() {
             ),
           ),
         );
+        const landed = groups.filter((_, i) => settled[i].status === "fulfilled");
+        const failed = settled.flatMap((outcome, i) => (
+          outcome.status === "rejected" ? [{ group: groups[i], error: outcome.reason }] : []
+        ));
 
-        // Aggregate per-slug counts into one totals object, same shape as a
-        // single-PUT response.
-        /** @type {UpdatePageResponse} */
-        const result = responses.reduce(
-          (acc, r) => ({
-            updated: acc.updated + r.updated,
-            unchanged: acc.unchanged + r.unchanged,
-          }),
-          { updated: 0, unchanged: 0 },
-        );
+        // Only this page's own language has cards to light up; a conflict on
+        // another language's copy would flag the card whose path matches and
+        // whose value is fine. Flagged before the refetch, so the cards are
+        // already in conflict state when the other editor's values land.
+        const ownConflict = failed.find((f) =>
+          f.group.locale === locale && f.error instanceof CmsApiError && f.error.isConflict);
+        if (ownConflict) setBlockConflicts((ownConflict.error.conflicts ?? []).map((c) => c.path));
+        const anyConflict = failed.some((f) => f.error instanceof CmsApiError && f.error.isConflict);
+        if (landed.length > 0 || anyConflict) triggerRefetch();
 
-        triggerRefetch();
-
-        // Drop ISR cache for every slug we wrote. Page and global slugs are
-        // independent tags, so a header save must not leave page renders stale.
-        // The locale rides along: each language is cached under its own tag, so
-        // publishing the English copy must not rebuild the Turkish page.
+        // Drop ISR cache for every target that landed. Page and global slugs
+        // are independent tags, so a header save must not leave page renders
+        // stale. The locale rides along: each language is cached under its own
+        // tag, so publishing the English copy must not rebuild the Turkish page.
         // In parallel: each one is its own Server Action round-trip, and the
         // save button waits on all of them.
         await Promise.all(
-          groups.map(async (group) => {
+          landed.map(async (group) => {
             try {
               await onAfterSave(group.slug, group.locale);
             } catch (revalidateErr) {
@@ -132,22 +140,28 @@ export function useCmsAdmin() {
             }
           }),
         );
+
+        if (failed.length > 0) {
+          const { error } = ownConflict ?? failed[0];
+          error.landed = landed.flatMap((group) => group.sources);
+          throw error;
+        }
+
+        // Aggregate per-slug counts into one totals object, same shape as a
+        // single-PUT response.
+        /** @type {UpdatePageResponse} */
+        const result = settled.reduce(
+          (acc, outcome) => (outcome.status === "fulfilled"
+            ? {
+              updated: acc.updated + outcome.value.updated,
+              unchanged: acc.unchanged + outcome.value.unchanged,
+            }
+            : acc),
+          { updated: 0, unchanged: 0 },
+        );
         return result;
       } catch (err) {
         setError(/** @type {Error} */ (err));
-        if (err instanceof CmsApiError && err.isConflict) {
-          // Flag the named blocks before the refetch, so the cards are already
-          // in conflict state when the other editor's values land in them. A
-          // plain write race carries no `conflicts`, and flags nothing.
-          //
-          // Only when the batch went to a single language: `Promise.all` hands
-          // back the first rejection without saying which PUT raised it, and a
-          // conflict on the English copy would light up the Turkish card, whose
-          // path matches and whose value is fine. The banner still reports it.
-          const singleLocale = updates.every((u) => (u.locale ?? locale) === locale);
-          if (singleLocale) setBlockConflicts((err.conflicts ?? []).map((c) => c.path));
-          triggerRefetch();
-        }
         throw err;
       } finally {
         setIsSaving(false);

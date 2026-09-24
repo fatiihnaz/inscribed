@@ -123,11 +123,12 @@ function Probe() {
     { enabled: true },
   ).targets;
 
-  const { save, dirtyUpdates, dirtyCount, translationPreviews } = useCmsSave();
+  const { save, dirtyUpdates, dirtyCount, translationPreviews, error } = useCmsSave();
   probe.save = save;
   probe.dirtyUpdates = dirtyUpdates;
   probe.dirtyCount = dirtyCount;
   probe.translationPreviews = translationPreviews;
+  probe.error = error;
   return null;
 }
 
@@ -435,6 +436,62 @@ describe("publishing", () => {
     // backend has already moved past.
     expect(probe.dirtyCount).toBe(0);
     expect(probe.targets[0].hasDraft).toBe(false);
+  });
+});
+
+describe("a publish that fails halfway", () => {
+  /**
+   * The English PUT fails once, the way a dropped connection or a 5xx would,
+   * while the Turkish one lands.
+   */
+  function flakyEnglish() {
+    let failed = false;
+    return {
+      ...transport,
+      updateContent: async (request, opts) => {
+        if (opts?.locale === "en" && !failed) {
+          failed = true;
+          throw new Error("EN yayınlanamadı");
+        }
+        return transport.updateContent(request, opts);
+      },
+    };
+  }
+
+  /** @param {*} withTransport */
+  async function publishBoth(withTransport) {
+    await mountWith(withTransport);
+    act(() => { probe.setDraft(PATH, "Yeni Türkçe gövde"); });
+    act(() => { probe.targets[0].setValue("Brand new English body"); });
+    await settle();
+    await act(async () => { await probe.save(); });
+    await settle();
+  }
+
+  it("revalidates the language that landed", async () => {
+    await publishBoth(flakyEnglish());
+
+    expect(rows.tr).toEqual({ value: "Yeni Türkçe gövde", version: 5 });
+    // Skipping it left the Turkish page serving the old text from its cache,
+    // although the row behind it had already changed.
+    expect(revalidated).toEqual([["/", "tr"]]);
+  });
+
+  it("keeps only what failed, so the retry does not resend what already landed", async () => {
+    await publishBoth(flakyEnglish());
+
+    expect(probe.error).toBeTruthy();
+    expect(probe.dirtyUpdates.map((u) => u.locale ?? "tr")).toEqual(["en"]);
+
+    await act(async () => { await probe.save(); });
+    await settle();
+
+    // Resending the Turkish block at the version it was drafted against would
+    // be a 409 on the editor's own write.
+    expect(rows.tr.version).toBe(5);
+    expect(rows.en).toEqual({ value: "Brand new English body", version: 10 });
+    expect(probe.dirtyCount).toBe(0);
+    expect(probe.error).toBeNull();
   });
 });
 

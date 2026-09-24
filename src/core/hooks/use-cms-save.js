@@ -94,7 +94,7 @@ export function useCmsSave() {
   // A block is dirty when its effective value (local draft, else server-side
   // `draftValue`) differs from published `block.value`. Local edits win over
   // server drafts; `seen` dedupes when both layers exist for one block.
-  const { dirtyUpdates, translationKeys, translationPreviews } = useMemo(() => {
+  const { dirtyUpdates, translationKeyOf, translationPreviews } = useMemo(() => {
     /** @type {Set<string>} */
     const seen = new Set();
     /** @type {UpdateBlockItem[]} */
@@ -122,8 +122,8 @@ export function useCmsSave() {
     // Staged translations. Each carries the version of the row it will
     // overwrite, read from the language it targets rather than from this route:
     // the two copies of a block version independently.
-    /** @type {string[]} */
-    const keys = [];
+    /** @type {Map<UpdateBlockItem, string>} */
+    const keyOf = new Map();
     /** @type {TranslationPreview[]} */
     const previews = [];
     for (const [key, value] of translationDrafts) {
@@ -138,13 +138,14 @@ export function useCmsSave() {
       );
       if (!target) continue;
       if (deepEqual(value, target.value)) continue;
-      out.push({
+      const update = {
         blockPath: parsed.blockPath,
         value,
         version: target.version,
         locale: targetLocale,
-      });
-      keys.push(key);
+      };
+      out.push(update);
+      keyOf.set(update, key);
       previews.push({
         key,
         locale: targetLocale,
@@ -157,7 +158,7 @@ export function useCmsSave() {
     previews.sort((a, b) => a.blockPath.localeCompare(b.blockPath)
       || a.locale.localeCompare(b.locale));
 
-    return { dirtyUpdates: out, translationKeys: keys, translationPreviews: previews };
+    return { dirtyUpdates: out, translationKeyOf: keyOf, translationPreviews: previews };
   }, [drafts, blocks, translationDrafts, allBlocks, locale]);
 
   // A failure only describes pending edits, so once none are left it has
@@ -170,24 +171,32 @@ export function useCmsSave() {
 
   const save = useCallback(async () => {
     if (dirtyUpdates.length === 0) return;
-    try {
-      await savePage(dirtyUpdates);
-      // Only on success: a failed publish leaves the drafts for a retry, and
-      // standing the lane down would mean nothing reaches the server until the
-      // user happens to type again.
-      const own = dirtyUpdates.filter((u) => u.locale == null);
+    // Only for what landed: a failed write keeps its draft for the retry, and
+    // standing its lane down would mean nothing reaches the server until the
+    // user happens to type again.
+    /** @param {UpdateBlockItem[]} landed */
+    const standDown = (landed) => {
+      const own = landed.filter((u) => u.locale == null);
       // Only this route's own writes: the draft lanes being stood down belong
       // to the language on screen, and no translation was ever drafted into one.
       settleDraftWrites(own.map((u) => u.blockPath));
       for (const u of own) clearDraft(u.blockPath);
-      clearTranslationDrafts(translationKeys);
+      clearTranslationDrafts(landed.flatMap((u) => translationKeyOf.get(u) ?? []));
+    };
+    try {
+      await savePage(dirtyUpdates);
+      standDown(dirtyUpdates);
       // Whatever a previous attempt clashed on is settled now.
       setBlockConflicts([]);
       setActiveBlock(null);
-    } catch {
-      // Error surfaced via useCmsAdmin().error; keep drafts so the user can retry.
+    } catch (err) {
+      // Error surfaced via useCmsAdmin().error. What landed is live, so its
+      // drafts go now; left in place, the retry would resend them at a version
+      // the backend has already moved past.
+      const landed = /** @type {{ landed?: UpdateBlockItem[] }} */ (err)?.landed;
+      if (landed?.length) standDown(landed);
     }
-  }, [dirtyUpdates, translationKeys, savePage, clearDraft, clearTranslationDrafts, setActiveBlock, settleDraftWrites, setBlockConflicts]);
+  }, [dirtyUpdates, translationKeyOf, savePage, clearDraft, clearTranslationDrafts, setActiveBlock, settleDraftWrites, setBlockConflicts]);
 
   const discard = useCallback(() => {
     // Local edits first; emptying the map also cancels any pending autosave

@@ -49,9 +49,10 @@ import { humanizeCollectionError } from "../record-errors.js";
  * @param {string} options.collectionKey
  * @param {import("../../shared/contracts/schemas.js").CollectionSchema} options.schema
  * @param {import("../../shared/contracts/schemas.js").CollectionListParams} [options.listParams]
- *   List window used to find the pending draft row. Any window carries it, so
- *   the drawer passes the page's own to collapse the lookup onto an existing
- *   cache entry; standalone surfaces default to the plain first page.
+ *   List window used to find the pending draft row. Any window in the same
+ *   language carries it, so the drawer passes the page's own to collapse the
+ *   lookup onto an existing cache entry; standalone surfaces default to the
+ *   plain first page. Its locale is replaced by the one being written.
  * @param {boolean} [options.active=true]  Autosave only while true (the
  *   drawer's collapsed card passes its open state), so an untouched closed
  *   form never PUTs.
@@ -95,12 +96,15 @@ export function useCollectionCreate({
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [isPending, startTransition] = useTransition();
 
-  const stableListParams = useMemo(
-    () => listParams ?? { limit: 50 },
+  // The pending slot is per language, so it is looked up in a window of the
+  // language this form writes. A translation composed beside a Turkish list
+  // reads the English window; otherwise the caller's own is shared.
+  const draftWindow = useMemo(
+    () => (locale ? { ...(listParams ?? { limit: 50 }), locale } : listParams ?? { limit: 50 }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stableStringify(listParams ?? null)],
+    [stableStringify(listParams ?? null), locale],
   );
-  const { virtualItems } = useCollection(collectionKey, stableListParams);
+  const { virtualItems } = useCollection(collectionKey, draftWindow);
   const draftEntry = useMemo(
     // `pending` is the collection's single new-item slot; the `derived` rows
     // alongside it are claim-derived slugs, each with a draft slot of its own.
@@ -207,15 +211,12 @@ export function useCollectionCreate({
       try {
         const token = await getAccessToken();
         const payload = { data: buildPayload(schema.fields, values) };
-        // `translationGroup` reaches the POST only: the per-slug PUT carries no
-        // such parameter, so a UserDefined collection cannot link a new record
-        // into an existing translation group yet.
         const created = needsSlug
           ? await config.transport.upsertCollectionItem(
             collectionKey,
             ownSlug,
             { ...payload, version: null },
-            { accessToken: token, locale: locale ?? undefined },
+            { accessToken: token, locale: locale ?? undefined, translationGroup: translationOf },
           )
           : await config.transport.createCollectionItem(
             collectionKey,

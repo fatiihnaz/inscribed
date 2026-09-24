@@ -71,7 +71,9 @@
  * @property {(request: UpdatePageRequest, opts?: CmsRequestOptions) => Promise<UpdatePageResponse>} updateContent
  * @property {(request: UpdatePageRequest, opts?: CmsRequestOptions) => Promise<void>} updateDraft
  * @property {(slug: string, opts?: CmsRequestOptions) => Promise<void>} deleteDraft
- * @property {(key: string, slug: string, payload: { data: *, version: number | null }, opts?: CmsRequestOptions) => Promise<CollectionItemResponse>} upsertCollectionItem
+ * @property {(key: string, slug: string, payload: { data: *, version: number | null }, opts?: CmsRequestOptions & { translationGroup?: string }) => Promise<CollectionItemResponse>} upsertCollectionItem
+ *   `version: null` creates the row at `slug`, and only then are `locale` and
+ *   `translationGroup` read, with the same meaning as on `createCollectionItem`.
  * @property {(key: string, payload: { data: * }, opts?: CmsRequestOptions & { translationGroup?: string }) => Promise<CollectionItemResponse>} createCollectionItem
  *   `translationGroup` joins the new record to an existing one's group, making
  *   the two translations of each other. Omit it and the backend starts a fresh

@@ -390,7 +390,7 @@ describe("locale", () => {
     expect(new URL(lastCall()[0]).searchParams.get("limit")).toBe("5");
   });
 
-  it("carries the translation group on the two create-side endpoints", async () => {
+  it("carries the translation group on every create-side endpoint", async () => {
     // Which group a new record joins qualifies the call rather than describing
     // the record, so it rides beside the locale and leaves the body alone.
     const t = createRestTransport({ baseUrl: BASE });
@@ -409,6 +409,15 @@ describe("locale", () => {
       "News", { data: {} }, { accessToken: "tok", locale: "en", translationGroup: "8f3f" },
     );
     expect(groupOf()).toBe("8f3f");
+
+    // The per-slug PUT creates too: a record at a slug the editor typed is
+    // born there, and it can be a translation like any other.
+    fetchResolves({ id: "1", slug: "new-product", data: {} });
+    await t.upsertCollectionItem(
+      "News", "new-product", { data: {}, version: null }, { accessToken: "tok", locale: "en", translationGroup: "8f3f" },
+    );
+    expect(groupOf()).toBe("8f3f");
+    expect(JSON.parse(lastCall()[1].body)).toEqual({ data: {}, version: null });
 
     // A standalone record names no group; the backend starts a fresh one.
     fetchResolves({ id: "1", slug: "s", data: {} });

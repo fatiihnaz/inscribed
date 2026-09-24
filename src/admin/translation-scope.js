@@ -7,10 +7,8 @@
  * List's fields would need a per-field answer rather than a per-block one.
  */
 
+import { TRANSLATABLE_TYPES } from "../shared/util/translatable.js";
 import { diffWords, stripHtml } from "./word-diff.js";
-
-/** Types whose value is prose an editor would restate in another language. */
-export const TRANSLATABLE_BLOCK_TYPES = new Set(["ShortText", "LongText", "RichText"]);
 
 /**
  * Changed words below this read as a typo fix, a renamed product, a corrected
@@ -61,7 +59,7 @@ function wordCount(text) {
  * @returns {boolean}
  */
 export function isSubstantialChange(blockType, prev, next) {
-  if (!TRANSLATABLE_BLOCK_TYPES.has(blockType)) return false;
+  if (!TRANSLATABLE_TYPES.has(blockType)) return false;
 
   const a = toPlainText(blockType, prev);
   const b = toPlainText(blockType, next);

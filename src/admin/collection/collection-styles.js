@@ -947,3 +947,12 @@ export const errorInlineStyle = /** @type {React.CSSProperties} */ ({
   border: `1px solid color-mix(in srgb, ${STATUS_DANGER} 30%, transparent)`,
   borderRadius: R_SM,
 });
+
+// What one submit will create, under a multilingual create form.
+export const createPlanStyle = /** @type {React.CSSProperties} */ ({
+  margin: 0,
+  color: TEXT_MUTED,
+  fontSize: dynamicSize(11.5),
+  lineHeight: 1.4,
+  fontFamily: FONT_SANS,
+});

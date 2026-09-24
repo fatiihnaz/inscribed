@@ -866,8 +866,21 @@ export default function NewNews() {
 ```
 
 `onCreated` receives the created item (with its backend-assigned `slug`); omit it
-and the form resets with an inline confirmation instead. A single reusable hook,
-`useCollectionCreate`, backs both this form and the drawer's "new item" card.
+and the form resets with an inline confirmation instead. `useCollectionCreate`
+backs the single-language form, here and in the drawer's "new item" card, for
+hosts that want their own markup.
+
+**Several languages at once.** When the collection holds more than one language
+(`locales` in `/me`), the composer opens on the page's language and offers the
+others as chips beside it. Adding one gives each prose field (`ShortText`,
+`LongText`, `RichText`) a row per language; every other field is asked once and
+written into each language's record. One submit creates the languages in order,
+each after the first joined to the first one's translation group, and
+`onCreated` gets the page-language record plus every record created as a second
+argument. If a later language fails, the ones that landed stay created and the
+button retries only the rest. Passing `locale` or `translationOf` keeps the form
+to that one language. The drawer's create pane works the same way, with a slug
+per language for `UserDefined` collections.
 
 These live at `inscribed/compose` rather than `inscribed/collections`, because
 every one of them reaches the field editors. A page that only *lists* records

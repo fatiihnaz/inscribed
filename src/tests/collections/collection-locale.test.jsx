@@ -160,10 +160,23 @@ describe("a collection that declares the route's locale", () => {
 
 describe("a collection localized in other languages", () => {
   it("falls back to its own default rather than sending a language it lacks", async () => {
-    mockFetch({ locales: ["en", "de"] });
+    mockFetch({ locales: ["en"] });
     renderComposer();
     await waitFor(() => expect(listLocale()).not.toBeUndefined());
     expect(listLocale()).toBeNull();
+  });
+
+  it("opens on its own first language when it holds several, never the route's", async () => {
+    // A form that writes several languages names each one, so the default is
+    // named too rather than left for the backend to pick.
+    mockFetch({ locales: ["en", "de"] });
+    renderComposer();
+    await submit();
+    const listLocales = requests
+      .filter(([m, url]) => m === "GET" && url.includes("/cms/collections/news"))
+      .map(([, url]) => new URL(url).searchParams.get("locale"));
+    expect(listLocales).not.toContain("tr");
+    expect(createLocale()).toBe("en");
   });
 });
 

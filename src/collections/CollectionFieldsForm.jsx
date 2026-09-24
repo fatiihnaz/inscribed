@@ -78,7 +78,7 @@ export function CollectionFieldsForm({ fields, values, onChange, disabled, varia
       style={{ display: "flex", flexDirection: "column", gap: 12 }}
     >
       {fields.map((field) => (
-        <FieldInput
+        <CollectionFieldInput
           key={field.name}
           field={field}
           value={values[field.name]}
@@ -92,18 +92,18 @@ export function CollectionFieldsForm({ fields, values, onChange, disabled, varia
 }
 
 /**
+ * A field's caption: its label, the required mark, and what makes it
+ * uneditable when something does.
+ *
  * @param {{
  *   field: CollectionFieldDescriptor,
- *   value: *,
- *   onChange: (next: *) => void,
- *   disabled: boolean,
  *   variant: import("../editors/styles.js").FieldVariantName,
  * }} props
  */
-function FieldInput({ field, value, onChange, disabled, variant }) {
+export function CollectionFieldLabel({ field, variant }) {
   const t = useCmsStrings();
   const palette = fieldVariant(variant);
-  const labelNode = (
+  return (
     <span style={palette.labelRow}>
       <span style={palette.labelText}>{field.label || field.name}</span>
       {field.required ? <span style={requiredMarkStyle} aria-label={t("collections.requiredField")}>*</span> : null}
@@ -117,10 +117,42 @@ function FieldInput({ field, value, onChange, disabled, variant }) {
       ) : null}
     </span>
   );
+}
+
+/**
+ * One field's control, captioned unless `bare`.
+ *
+ * @param {{
+ *   field: CollectionFieldDescriptor,
+ *   value: *,
+ *   onChange: (next: *) => void,
+ *   disabled: boolean,
+ *   variant: import("../editors/styles.js").FieldVariantName,
+ *   bare?: boolean,
+ * }} props
+ *   `bare` drops the caption and help, for a prose field written once per
+ *   language under one shared caption. Only the prose types honour it, since
+ *   they are the only ones written that way.
+ */
+export function CollectionFieldInput({ field, value, onChange, disabled, variant, bare }) {
+  const t = useCmsStrings();
+
+  if (bare && field.type === "RichText") {
+    return (
+      <Suspense fallback={<FieldMessage>{t("collections.editorLoading")}</FieldMessage>}>
+        <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel />
+      </Suspense>
+    );
+  }
+  if (bare && (field.type === "ShortText" || field.type === "LongText")) {
+    return field.type === "LongText"
+      ? <TextEditor value={value} onChange={onChange} disabled={disabled} variant={variant} multiline autoGrow={false} hideLabel />
+      : <TextEditor value={value} onChange={onChange} disabled={disabled} variant={variant} hideLabel />;
+  }
 
   // Caption, help text and palette are the same whichever control this is; only
   // the control differs.
-  const shell = { label: labelNode, help: field.help, variant };
+  const shell = { label: <CollectionFieldLabel field={field} variant={variant} />, help: field.help, variant };
   const common = { ...shell, value, onChange, disabled };
 
   // Only `Select` carries a source, so nothing here has to decide whether a

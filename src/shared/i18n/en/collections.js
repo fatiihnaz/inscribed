@@ -85,6 +85,16 @@ export const collections = Object.freeze({
   "collections.newRecordInLocale": "New {key} · {locale}",
   "collections.slugLabel": "Slug",
   "collections.slugPlaceholder": "spring-festival",
+  "collections.languages": "Languages",
+  "collections.addLanguage": "Add {locale}",
+  "collections.addLanguageDraft": "Add {locale}, which has a draft",
+  "collections.removeLanguage": "Remove {locale}",
+  "collections.languageReady": "{locale} is ready",
+  "collections.languageMissing": "{locale} is missing {field}",
+  "collections.languageCreated": "{locale} was created",
+  "collections.createLocales": "Create · {locales}",
+  "collections.retryLocales": "Retry · {locales}",
+  "collections.createPlan": "{locales} will be created as translations of each other",
 
   // The record form.
   "collections.accessFailed": "Could not load the access list: {message}",
@@ -121,6 +131,9 @@ export const collections = Object.freeze({
 
   // Save and create failures.
   "collections.requiredMissing": "A required field is missing: {field}",
+  "collections.requiredMissingIn": "{locale}: a required field is missing: {field}",
+  "collections.slugMissingIn": "{locale} needs a slug for the new record.",
+  "collections.createdPartly": "{created} was created. {failed} was not: {reason}",
   "collections.invalidData": "Invalid data: {detail}",
   "collections.versionConflict": "Version conflict. The list has been refreshed, check it and try again.",
   "collections.archivedConflict": "This record is archived, so it can't be written to. Restore it first.",

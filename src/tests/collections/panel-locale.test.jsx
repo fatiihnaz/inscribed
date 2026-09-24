@@ -153,12 +153,15 @@ describe("what the switch drives", () => {
   it("composes a new record in the picked language, with no Turkish one to hang it on", async () => {
     mockFetch(["tr", "en"]);
     renderPanel();
-    await waitFor(() => expect(screen.getByText(t("collections.newRecordInLocale", { key: KEY, locale: "TR" }))).toBeTruthy());
+    // No language on the row: on a collection holding several, the pane it
+    // opens can write any of them, starting with the panel's.
+    const createRow = t("collections.newRecordIn", { key: KEY });
+    await waitFor(() => expect(screen.getByText(createRow)).toBeTruthy());
 
     switchTo("EN");
-    const createRow = t("collections.newRecordInLocale", { key: KEY, locale: "EN" });
-    await waitFor(() => expect(screen.getByText(createRow)).toBeTruthy());
     fireEvent.click(screen.getByText(createRow));
+    // English is the one being written; Turkish is only on offer.
+    await waitFor(() => expect(screen.getByLabelText(t("collections.addLanguage", { locale: "TR" }))).toBeTruthy());
 
     await waitFor(() => expect(document.querySelectorAll("input.inscribed-field")).toHaveLength(1));
     fireEvent.change(document.querySelectorAll("input.inscribed-field")[0], { target: { value: "Yeni" } });

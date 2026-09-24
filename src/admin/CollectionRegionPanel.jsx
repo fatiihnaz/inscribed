@@ -262,6 +262,7 @@ export function CollectionRegionPanel({ collectionKey, scope = "page", panelId, 
                 collectionKey={collectionKey}
                 listParams={virtualListParams}
                 locale={locale}
+                languages={meta?.locales}
                 onOpen={() => setPane({ mode: "create" })}
               />
             </motion.div>
@@ -337,6 +338,7 @@ export function CollectionRegionPanel({ collectionKey, scope = "page", panelId, 
             // takes the one the panel is working in, which is how a first
             // English record gets written without a Turkish one to hang it on.
             locale={pane.locale ?? locale ?? undefined}
+            languages={meta?.locales}
             onClose={() => setPane(null)}
           />
         ) : null}

@@ -19,6 +19,7 @@ import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { useCollectionContext } from "../context.js";
 import { itemDraftKey, newDraftKey } from "../../shared/state/draft-keys.js";
+import { localeCodes } from "../../shared/util/locale-codes.js";
 import { stableStringify } from "../../shared/util/stable-stringify.js";
 import { TRANSLATABLE_TYPES } from "../../shared/util/translatable.js";
 import { seedValues, buildPayload, requiredMissing } from "../record-payload.js";
@@ -310,7 +311,7 @@ export function useMultilingualCreate({ collectionKey, schema, languages, primar
           setCreated(done);
           setError(done.size > 0
             ? t("collections.createdPartly", {
-              created: [...done.keys()].map((l) => l.toUpperCase()).join(" + "),
+              created: localeCodes(done.keys()),
               failed: locale.toUpperCase(),
               reason,
             })

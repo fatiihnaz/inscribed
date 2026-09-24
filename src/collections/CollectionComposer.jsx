@@ -17,6 +17,7 @@ import { useId, useState } from "react";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
+import { localeCodes } from "../shared/util/locale-codes.js";
 import { useCollectionMeta, useMyCollections } from "./hooks/use-my-collections.js";
 import { useCollectionCreate } from "./hooks/use-collection-create.js";
 import { useCollectionLocale } from "./hooks/use-collection-locale.js";
@@ -253,11 +254,10 @@ function MultilingualComposerForm({
     collectionKey, schema, languages, primary, active: isDraftWriter,
   });
 
-  const codes = (/** @type {string[]} */ list) => list.map((l) => l.toUpperCase()).join(" + ");
   const open = create.added.filter((l) => create.statusOf(l).state !== "created");
   const retrying = open.length < create.added.length;
   const label = submitLabel ?? (create.added.length > 1
-    ? t(retrying ? "collections.retryLocales" : "collections.createLocales", { locales: codes(open) })
+    ? t(retrying ? "collections.retryLocales" : "collections.createLocales", { locales: localeCodes(open) })
     : t("collections.create"));
 
   const handleSubmit = () => {
@@ -297,7 +297,7 @@ function MultilingualComposerForm({
 
       <div style={footerStyle}>
         <span style={planStyle}>
-          {create.added.length > 1 ? t("collections.createPlan", { locales: codes(create.added) }) : null}
+          {create.added.length > 1 ? t("collections.createPlan", { locales: localeCodes(create.added) }) : null}
         </span>
         <div style={actionsRowStyle}>
           {create.hasServerDraft ? (

@@ -13,6 +13,7 @@ import { useId, useState } from "react";
 import { Plus } from "../../shared/style/icons.jsx";
 
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
+import { localeCodes } from "../../shared/util/locale-codes.js";
 import { useCollection } from "../../collections/hooks/use-collection.js";
 import { useCollectionCreate } from "../../collections/hooks/use-collection-create.js";
 import { useMultilingualCreate } from "../../collections/hooks/use-multilingual-create.js";
@@ -219,11 +220,10 @@ function MultilingualCreatePane({ collectionKey, schema, slugSource, listParams,
     collectionKey, schema, languages, primary, listParams, active: isDraftWriter,
   });
 
-  const codes = (/** @type {string[]} */ list) => list.map((l) => l.toUpperCase()).join(" + ");
   const open = create.added.filter((l) => create.statusOf(l).state !== "created");
   const retrying = open.length < create.added.length;
   const label = create.added.length > 1
-    ? t(retrying ? "collections.retryLocales" : "collections.createLocales", { locales: codes(open) })
+    ? t(retrying ? "collections.retryLocales" : "collections.createLocales", { locales: localeCodes(open) })
     : t("collections.create");
 
   return (
@@ -274,7 +274,7 @@ function MultilingualCreatePane({ collectionKey, schema, slugSource, listParams,
         />
         {create.error ? <div style={errorInlineStyle}>{create.error}</div> : null}
         {create.added.length > 1 ? (
-          <p style={createPlanStyle}>{t("collections.createPlan", { locales: codes(create.added) })}</p>
+          <p style={createPlanStyle}>{t("collections.createPlan", { locales: localeCodes(create.added) })}</p>
         ) : null}
       </div>
     </DetailPane>

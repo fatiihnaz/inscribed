@@ -24,7 +24,8 @@ import { useCmsRoute } from "./use-cms-route.js";
  * @property {(blocks: UpdateBlockItem[]) => Promise<UpdatePageResponse>} savePage
  *   Each target (slug and language) is its own write, so a batch can land
  *   partly. It then rejects with the first failure, carrying `landed`: the
- *   updates that went through, which are live and revalidated already.
+ *   updates that went through, which are live and revalidated already. It also
+ *   carries `publishedLocales` and `failedLocales`.
  * @property {boolean} isSaving
  * @property {CmsApiError|Error|null} error
  * @property {() => void} clearError
@@ -144,6 +145,12 @@ export function useCmsAdmin() {
         if (failed.length > 0) {
           const { error } = ownConflict ?? failed[0];
           error.landed = landed.flatMap((group) => group.sources);
+          // By language, for the banner: a language is live only when every one
+          // of its targets landed.
+          const failedLocales = [...new Set(failed.map((f) => f.group.locale))];
+          error.failedLocales = failedLocales;
+          error.publishedLocales = [...new Set(landed.map((group) => group.locale))]
+            .filter((l) => !failedLocales.includes(l));
           throw error;
         }
 

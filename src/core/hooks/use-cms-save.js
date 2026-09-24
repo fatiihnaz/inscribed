@@ -11,18 +11,22 @@
  * beside, because a translation that could be left behind by its own source
  * edit is the state this feature exists to prevent.
  *
+ * Drafts waiting in the page's other languages are listed too, but join the set
+ * only once the editor includes their language: nothing on this page says they
+ * are finished.
+ *
  * Lives outside `admin/Drawer.jsx` so the drawer stays pure layout and the save
  * flow stays unit-testable.
  */
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { deepEqual } from "../../shared/util/deep-equal.js";
-import { globalsKey, parseRouteKey, routeKey } from "../../shared/route.js";
+import { globalsKey, localizePath, otherLocales, parseRouteKey, routeKey } from "../../shared/route.js";
 import { mergeRouteBlocks, readBlock } from "../blocks.js";
-import { parseTranslationDraftKey } from "../../shared/state/draft-keys.js";
+import { parseTranslationDraftKey, translationDraftKey } from "../../shared/state/draft-keys.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
 import { useCmsRoute } from "./use-cms-route.js";
 
@@ -32,6 +36,11 @@ import { useCmsRoute } from "./use-cms-route.js";
 
 /** @type {Map<string, import("../../shared/contracts/schemas.js").BlockResponse>} */
 const EMPTY_BLOCKS = new Map();
+
+/** @type {string[]} */
+const NO_LOCALES = [];
+
+const NO_INCLUSION = { page: "", locales: NO_LOCALES };
 
 /**
  * One staged translation, in the shape the changes preview diffs.
@@ -46,6 +55,21 @@ const EMPTY_BLOCKS = new Map();
  */
 
 /**
+ * A draft saved in another language, on this page or in that language's
+ * globals.
+ *
+ * @typedef {TranslationPreview & { global: boolean }} PendingDraft
+ */
+
+/**
+ * @typedef {Object} PendingLanguage
+ * @property {string} locale
+ * @property {string} pathname   Where this page lives in that language.
+ * @property {PendingDraft[]} drafts
+ * @property {boolean} included  Whether the next save publishes them.
+ */
+
+/**
  * @typedef {Object} UseCmsSaveResult
  * @property {UpdateBlockItem[]} dirtyUpdates
  * @property {number} dirtyCount
@@ -54,6 +78,13 @@ const EMPTY_BLOCKS = new Map();
  *   sides so the preview can diff them. Kept beside the count rather than
  *   derived from it: the drawer's "N unsaved changes" and the preview's own
  *   tally have to come from one pass, or they drift apart again.
+ * @property {PendingLanguage[]} pending
+ *   Languages with drafts waiting, in config order. Read from the store, so
+ *   empty until something has read those languages in.
+ * @property {(locale: string) => void} toggleLocale
+ *   Include a pending language in the next save, or leave it out again.
+ * @property {string[]} publishLocales
+ *   The languages the next save writes to, the page's own first.
  * @property {boolean} isSaving
  * @property {Error|null} error
  * @property {() => Promise<void>} save     PUT all dirty updates, then clear matching local drafts.
@@ -65,7 +96,7 @@ const EMPTY_BLOCKS = new Map();
  */
 export function useCmsSave() {
   const {
-    blocksStore, contentDraftsStore, setActiveBlock,
+    config, blocksStore, contentDraftsStore, setActiveBlock,
     clearDraft, clearDrafts, discardServerDrafts, settleDraftWrites,
     translationDraftsStore, clearTranslationDrafts,
     setBlockConflicts,
@@ -89,12 +120,19 @@ export function useCmsSave() {
     ),
     [allBlocks, slug, locale],
   );
+  const others = useMemo(() => otherLocales(config, locale), [config, locale]);
   const { savePage, isSaving, error, clearError } = useCmsAdmin();
+
+  // Which pending languages the editor has put in. Tied to the page it was
+  // chosen on: including English here says nothing about the next page's.
+  const page = routeKey(slug, locale);
+  const [inclusion, setInclusion] = useState(NO_INCLUSION);
+  const included = inclusion.page === page ? inclusion.locales : NO_LOCALES;
 
   // A block is dirty when its effective value (local draft, else server-side
   // `draftValue`) differs from published `block.value`. Local edits win over
   // server drafts; `seen` dedupes when both layers exist for one block.
-  const { dirtyUpdates, translationKeyOf, translationPreviews } = useMemo(() => {
+  const { dirtyUpdates, translationKeyOf, translationPreviews, pending } = useMemo(() => {
     /** @type {Set<string>} */
     const seen = new Set();
     /** @type {UpdateBlockItem[]} */
@@ -158,8 +196,90 @@ export function useCmsSave() {
     previews.sort((a, b) => a.blockPath.localeCompare(b.blockPath)
       || a.locale.localeCompare(b.locale));
 
-    return { dirtyUpdates: out, translationKeyOf: keyOf, translationPreviews: previews };
-  }, [drafts, blocks, translationDrafts, allBlocks, locale]);
+    /** @type {PendingLanguage[]} */
+    const waiting = [];
+    for (const other of others) {
+      const route = routeKey(slug, other);
+      /** @type {PendingDraft[]} */
+      const found = [];
+      for (const [entry, global] of /** @type {const} */ ([
+        [allBlocks.get(route), false],
+        [allBlocks.get(globalsKey(other)), true],
+      ])) {
+        if (!entry) continue;
+        const rows = [...entry.values()].sort((a, b) => a.sortOrder - b.sortOrder);
+        for (const block of rows) {
+          if (block.draftValue == null || deepEqual(block.draftValue, block.value)) continue;
+          const key = translationDraftKey(route, block.blockPath);
+          // Written over by a translation staged here, which is what goes out.
+          if (translationDrafts.has(key)) continue;
+          found.push({
+            key,
+            locale: other,
+            blockPath: block.blockPath,
+            blockType: block.blockType,
+            prev: block.value,
+            next: block.draftValue,
+            global,
+          });
+          if (included.includes(other)) {
+            out.push({
+              blockPath: block.blockPath,
+              value: block.draftValue,
+              version: block.version,
+              locale: other,
+            });
+          }
+        }
+      }
+      if (found.length === 0) continue;
+      waiting.push({
+        locale: other,
+        pathname: localizePath(slug, other, config),
+        drafts: found,
+        included: included.includes(other),
+      });
+    }
+
+    return {
+      dirtyUpdates: out,
+      translationKeyOf: keyOf,
+      translationPreviews: previews,
+      pending: waiting,
+    };
+  }, [drafts, blocks, translationDrafts, allBlocks, locale, others, slug, config, included]);
+
+  const publishLocales = useMemo(() => {
+    const targets = new Set(dirtyUpdates.map((u) => u.locale ?? locale));
+    return [locale, ...others].filter((l) => l != null && targets.has(l));
+  }, [dirtyUpdates, locale, others]);
+
+  // A language leaves the publish once nothing of it is waiting, so drafts that
+  // turn up there later are offered again rather than published unseen. Leaving
+  // the page drops the choice too, the way it drops the page's own drafts.
+  useEffect(() => {
+    setInclusion((prev) => {
+      if (prev.page !== page) return prev === NO_INCLUSION ? prev : NO_INCLUSION;
+      const kept = prev.locales.filter((l) => pending.some((p) => p.locale === l));
+      return kept.length === prev.locales.length ? prev : { page, locales: kept };
+    });
+  }, [pending, page]);
+
+  const toggleLocale = useCallback(
+    /** @param {string} target */
+    (target) => {
+      setInclusion((prev) => {
+        const current = prev.page === page ? prev.locales : NO_LOCALES;
+        return {
+          page,
+          locales: current.includes(target)
+            ? current.filter((l) => l !== target)
+            : [...current, target],
+        };
+      });
+    },
+    [page],
+  );
 
   // A failure only describes pending edits, so once none are left it has
   // nothing left to be about: resolving a conflict by taking the other side
@@ -173,7 +293,9 @@ export function useCmsSave() {
     if (dirtyUpdates.length === 0) return;
     // Only for what landed: a failed write keeps its draft for the retry, and
     // standing its lane down would mean nothing reaches the server until the
-    // user happens to type again.
+    // user happens to type again. Another language's drafts need nothing here:
+    // the publish cleared them on the backend, and the refetch it triggers
+    // reads that back.
     /** @param {UpdateBlockItem[]} landed */
     const standDown = (landed) => {
       const own = landed.filter((u) => u.locale == null);
@@ -212,12 +334,18 @@ export function useCmsSave() {
       if (block.draftValue != null) pathsWithServerDraft.push(block.blockPath);
     }
     discardServerDrafts(pathsWithServerDraft);
+    // The other languages' drafts are left where they are, only taken back out
+    // of this publish: they were written on their own pages, not undone here.
+    setInclusion(NO_INCLUSION);
   }, [blocks, clearDrafts, discardServerDrafts]);
 
   return {
     dirtyUpdates,
     dirtyCount: dirtyUpdates.length,
     translationPreviews,
+    pending,
+    toggleLocale,
+    publishLocales,
     isSaving,
     error,
     save,

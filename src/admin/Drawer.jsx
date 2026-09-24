@@ -31,7 +31,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   ChevronsLeft, ChevronsDownUp, ChevronsUpDown, ChevronDown, ChevronLeft, ChevronRight,
-  Check, Undo2, Search, Pencil, FileText, Layers, Folder, LogOut, TypeUnknown, GitMerge,
+  Check, Undo2, Search, Pencil, FileText, Layers, Folder, LogOut, TypeUnknown, GitMerge, Languages,
 } from "../shared/style/icons.jsx";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
@@ -44,20 +44,23 @@ import { collectDirtyBlocks, collectDirtyRecords, dirtyCollectionKeys } from "./
 import { isBlockDirty } from "../core/resolve.js";
 import { useCmsSave } from "../core/hooks/use-cms-save.js";
 import { useCmsRoute } from "../core/hooks/use-cms-route.js";
+import { useLanguageReads } from "../core/hooks/use-language-reads.js";
 import { globalsKey, routeKey } from "../shared/route.js";
 import { mergeRouteBlocks } from "../core/blocks.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
-import { describeSaveError } from "./save-error.js";
+import { describeSaveError, partialSave } from "./save-error.js";
+import { localeCodes } from "../shared/util/locale-codes.js";
 
 import { BlockCard } from "./BlockCard.jsx";
 import { ChangesPanel } from "./ChangesPanel.jsx";
 import { cardTextColStyle, cardLabelStyle, cardValueStyle } from "./block-card-chrome.jsx";
 import { Collapse } from "./Collapse.jsx";
+import { IncludeLanguageButton } from "./IncludeLanguageButton.jsx";
 import { PanelArea } from "./PanelArea.jsx";
 import { readOpenTarget, stripOpenParams } from "./deep-link.js";
 
 import { emptyStateStyle } from "../editors/styles.js";
-import { panelStyle, DRAWER_BODY_CLASS, srOnlyStyle, paneContainerStyle, paneStyle, RAIL_CLASS, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, RAIL_BAR_CLASS, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, toolButtonStyle, toolCountStyle, refRowStyle, rowActionsStyle, typeIconStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, STATUS_COLLAPSE_TRANSITION, statusCollapseStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgEmphasisStyle, statusActionsStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, PANEL_CLASS, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
+import { panelStyle, DRAWER_BODY_CLASS, srOnlyStyle, paneContainerStyle, paneStyle, RAIL_CLASS, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, RAIL_BAR_CLASS, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, toolButtonStyle, toolCountStyle, refRowStyle, rowActionsStyle, typeIconStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, STATUS_COLLAPSE_TRANSITION, statusCollapseStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgEmphasisStyle, statusActionsStyle, laneStyle, laneLabelStyle, laneLabelTextStyle, laneCountStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, PANEL_CLASS, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
 import { DRILL_TRANSITION, DRILL_PARALLAX, DRILL_PANE_TRANSITION, drillLayerStyle, drillPaneStyle, switchMotion, switchLayerStyle } from "../shared/style/drill-motion.js";
 import { COMPACT_QUERY, MOBILE_QUERY, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MUTED, TEXT_FAINT, BORDER, HAIRLINE, SURFACE_1, FONT_SANS, STATUS_OK, STATUS_WARN, STATUS_DANGER, dynamicSize } from "../shared/style/tokens.js";
 
@@ -139,8 +142,13 @@ export function Drawer({ panels = null }) {
   const myCollections = useStoreSelector(collectionStore, (s) => s.meta.order);
   const {
     dirtyCount, isSaving, error, translationPreviews,
+    pending, toggleLocale, publishLocales,
     save: onSaveAll, discard: onDiscardAll,
   } = useCmsSave();
+  // What the editor left in the page's other languages is only found by reading
+  // those languages in, so they are read while the drawer is open: it is the one
+  // place that offers them.
+  useLanguageReads(isDrawerOpen);
   // Header path ancestors navigate the host app; the drawer already follows the
   // route via `usePathname`, so it re-renders into the new page on its own.
   const router = useRouter();
@@ -259,9 +267,11 @@ export function Drawer({ panels = null }) {
   const pageDirty = pageBlockList.some((b) => dirtyByPath.get(b.blockPath));
   const globalDirty = globalBlockList.some((b) => dirtyByPath.get(b.blockPath));
 
-  // Diff-able dirty count for "Önizle": page + global, minus Collection synth
-  // blocks (their dirty state surfaces in the region tab, not the block preview).
-  const previewableCount = useMemo(() => {
+  // This page's own changed rows: page + global, minus Collection synth blocks
+  // (their dirty state surfaces in the region tab, not the block preview). Also
+  // what the changed-only filter narrows the list to, where another language's
+  // changes have no row.
+  const ownChangedCount = useMemo(() => {
     let n = 0;
     for (const b of pageBlockList) {
       if (b.blockType === "Collection") continue;
@@ -270,11 +280,18 @@ export function Drawer({ panels = null }) {
     for (const b of globalBlockList) {
       if (dirtyByPath.get(b.blockPath)) n++;
     }
-    // Staged translations publish with the same button, so a preview that left
-    // them out would review less than Kaydet sends, and the count beside it
-    // would disagree with the status bar's.
-    return n + translationPreviews.length;
-  }, [pageBlockList, globalBlockList, dirtyByPath, translationPreviews]);
+    return n;
+  }, [pageBlockList, globalBlockList, dirtyByPath]);
+
+  // Staged translations publish with the same button, so a preview that left
+  // them out would review less than Kaydet sends, and the count beside it would
+  // disagree with the status bar's. The other languages' drafts count whether
+  // or not they are in: the preview is where they get looked at first.
+  const previewableCount = useMemo(() => {
+    let n = ownChangedCount + translationPreviews.length;
+    for (const language of pending) n += language.drafts.length;
+    return n;
+  }, [ownChangedCount, translationPreviews, pending]);
 
   // Per-collection dirty slug sets (overlay map + cached items with a server
   // draft), for the preview overlay's summary banner. Items never loaded into
@@ -635,7 +652,15 @@ export function Drawer({ panels = null }) {
     if (draftSyncStatus === "saving" || dirtyCount > 0) setPublishedFlash(false);
   }, [draftSyncStatus, dirtyCount]);
 
-  const saveError = describeSaveError(error, t, unresolvedConflicts);
+  const saveError = describeSaveError(error, t, unresolvedConflicts, locale);
+
+  // What the pill names once the publish lands. Read at the click, because by
+  // the time it lands the set it was built from has drained.
+  const [flashLocales, setFlashLocales] = useState(/** @type {string|null} */ (null));
+  const saveAll = () => {
+    setFlashLocales(reachLabel(publishLocales, locale));
+    onSaveAll();
+  };
   const pathSegments = pathnameToSegments(pathname);
 
   const matchSearch = (block) => {
@@ -684,6 +709,7 @@ export function Drawer({ panels = null }) {
       isSaving={isSaving}
       lastSavedAt={lastSavedAt}
       publishedFlash={publishedFlash}
+      publishedLocales={flashLocales}
     />
   );
 
@@ -765,6 +791,9 @@ export function Drawer({ panels = null }) {
                 itemSchemas={itemSchemas}
                 collectionDirtyCounts={collectionDirtyCounts}
                 translationPreviews={translationPreviews}
+                locale={locale}
+                pending={pending}
+                onToggleLocale={toggleLocale}
                 onGoToBlock={(block) => {
                   setPreviewOpen(false);
                   const scope = (block._slug ?? routeSlug) === routeSlug ? "page" : "global";
@@ -784,7 +813,7 @@ export function Drawer({ panels = null }) {
                   onChange={setSearch}
                   changedOnly={changedOnly}
                   onToggleChanged={() => setChangedOnly((v) => !v)}
-                  changedCount={dirtyCount}
+                  changedCount={ownChangedCount}
                   density={density}
                   onToggleDensity={() =>
                     setDensity((d) => (d === "compact" ? "comfortable" : "compact"))}
@@ -855,6 +884,7 @@ export function Drawer({ panels = null }) {
             {/* Its own box, so `StatusBar`'s FLIP on the action buttons keeps
                 measuring against something it owns rather than the panel column. */}
             <div style={{ flexShrink: 0 }}>
+            <OtherLanguagesLane pending={pending} onToggle={toggleLocale} disabled={isSaving} />
             <StatusBar
               dirtyCount={dirtyCount}
               collectionDirtyCount={collectionDirtyTotal}
@@ -874,7 +904,9 @@ export function Drawer({ panels = null }) {
                 // gone, so the timestamp would point at nothing.
                 setLastSavedAt(null);
               }}
-              onSaveAll={onSaveAll}
+              publishLabel={reachLabel(publishLocales, locale)}
+              retry={partialSave(error) != null}
+              onSaveAll={saveAll}
             />
             </div>
 
@@ -1633,9 +1665,10 @@ const crumbWrapStyle = /** @type {React.CSSProperties} */ ({
  *   isSaving: boolean,
  *   lastSavedAt: string | null,
  *   publishedFlash: boolean,
+ *   publishedLocales?: string | null,
  * }} props
  */
-function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publishedFlash }) {
+function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publishedFlash, publishedLocales }) {
   const t = useCmsStrings();
   // Two different things go over the wire, and only one of them is a draft.
   // Folding them into a single "syncing" flag is what had a publish announce
@@ -1663,7 +1696,9 @@ function HeaderStatusPill({ dirty, draftSyncStatus, isSaving, lastSavedAt, publi
       bg: STATUS_OK,
       glow: `0 0 5px ${STATUS_OK}66`,
       pulse: false,
-      label: t("pill.published"),
+      label: publishedLocales
+        ? t("pill.publishedLocales", { locales: publishedLocales })
+        : t("pill.published"),
       title: t("pill.publishedTitle"),
     };
   } else if (isSaving) {
@@ -2558,16 +2593,26 @@ function withCounters(text, slots) {
  *   onGoToCollection: (target: { key: string, slug: string }) => void,
  *   isSaving: boolean,
  *   draftSyncStatus: "idle"|"saving"|"saved"|"failed",
+ *   publishLabel: string | null,
+ *   retry: boolean,
  *   onDiscardAll: () => void,
  *   onSaveAll: () => void,
  * }} props
+ *   `publishLabel` names the languages the save writes when that is more than
+ *   the one on screen; `retry` says the last one landed only partly.
  */
 function StatusBar({
   dirtyCount, collectionDirtyCount, firstDirtyCollectionTarget, onGoToCollection,
-  isSaving, draftSyncStatus,
+  isSaving, draftSyncStatus, publishLabel, retry,
   onDiscardAll, onSaveAll,
 }) {
   const t = useCmsStrings();
+  const saveLabel = retry
+    ? (publishLabel ? t("status.retryLocales", { locales: publishLabel }) : t("status.retry"))
+    : (publishLabel ? t("status.saveLocales", { locales: publishLabel }) : t("status.save"));
+  // The plain label is the one "Save all" describes better; anything more
+  // specific is its own best name.
+  const saveName = publishLabel || retry ? saveLabel : t("drawer.saveAll");
   const isContentDirty = dirtyCount > 0;
   const isCollectionDirty = collectionDirtyCount > 0;
   const isBothDirty = isContentDirty && isCollectionDirty;
@@ -2667,6 +2712,7 @@ function StatusBar({
   const actionsLayoutKey = [
     isContentDirty,
     isOnlyCollectionDirty && Boolean(firstDirtyCollectionTarget),
+    saveLabel,
   ].join("|");
 
   // Only the coarse transitions, never the dirty count: the count moves on
@@ -2741,13 +2787,13 @@ function StatusBar({
               disabled={isSaving}
               className="inscribed-btn-primary"
               style={btnPrimaryStyle}
-              aria-label={t("drawer.saveAll")}
-              title={t("drawer.saveAll")}
+              aria-label={saveName}
+              title={saveName}
               {...statusActionMotion}
               layoutDependency={actionsLayoutKey}
             >
               <Check size={13} />
-              <span>{t("status.save")}</span>
+              <span>{saveLabel}</span>
             </motion.button>
           ) : null}
           {!isContentDirty && isOnlyCollectionDirty && firstDirtyCollectionTarget ? (
@@ -2776,7 +2822,41 @@ function StatusBar({
   );
 }
 
-// ---------------------------------------------------------------------------
+/**
+ * Drafts the editor left in the page's other languages, a switch per language.
+ * Nothing goes in on its own: those drafts were written on their own pages,
+ * and nothing here says they are finished.
+ *
+ * @param {{
+ *   pending: import("../core/hooks/use-cms-save.js").PendingLanguage[],
+ *   onToggle: (locale: string) => void,
+ *   disabled: boolean,
+ * }} props
+ */
+function OtherLanguagesLane({ pending, onToggle, disabled }) {
+  const t = useCmsStrings();
+  return (
+    <Collapse show={pending.length > 0}>
+      <div role="group" aria-label={t("elsewhere.title")} style={laneStyle}>
+        <span style={laneLabelStyle}>
+          <Languages size={12} aria-hidden="true" />
+          <span style={laneLabelTextStyle}>{t("elsewhere.title")}</span>
+        </span>
+        {pending.map((language) => (
+          <IncludeLanguageButton
+            key={language.locale}
+            language={language}
+            onToggle={onToggle}
+            disabled={disabled}
+          >
+            {language.locale.toUpperCase()}
+            <span style={laneCountStyle}>{language.drafts.length}</span>
+          </IncludeLanguageButton>
+        ))}
+      </div>
+    </Collapse>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Footer (user info + sign out)
@@ -2834,6 +2914,19 @@ function PanelFooter({ userInfo, onSignOut }) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * "TR + EN" when a save reaches past the language on screen; null when it
+ * writes that language alone, which the plain label already says.
+ *
+ * @param {string[]} locales
+ * @param {string|null} own
+ * @returns {string|null}
+ */
+function reachLabel(locales, own) {
+  if (locales.length === 0 || (locales.length === 1 && locales[0] === own)) return null;
+  return localeCodes(locales);
+}
 
 /**
  * `/about/team` → `[{label:"about", href:"/about"}, {label:"team",

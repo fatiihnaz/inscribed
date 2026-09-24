@@ -785,6 +785,42 @@ export const statusMsgEmphasisStyle = {
   fontWeight: 600,
 };
 
+// The other languages' drafts, on the status bar's footing just above it.
+export const laneStyle = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: 6,
+  minHeight: 36,
+  padding: "6px 16px",
+  boxSizing: "border-box",
+  borderTop: `1px solid ${HAIRLINE}`,
+  background: BG_RAISED,
+};
+
+export const laneLabelStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  flex: 1,
+  minWidth: 0,
+  color: TEXT_MID,
+};
+
+export const laneLabelTextStyle = {
+  fontSize: dynamicSize(11.5),
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+export const laneCountStyle = {
+  fontWeight: 500,
+  opacity: 0.7,
+  letterSpacing: 0,
+  fontVariantNumeric: "tabular-nums",
+};
+
 export const statusActionsStyle = {
   display: "flex",
   gap: 4,

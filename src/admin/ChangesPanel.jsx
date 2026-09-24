@@ -17,7 +17,10 @@
  *
  * Translations staged from a block card get their own rows, because they
  * publish in the same click and a review that omitted them would be reviewing
- * less than the button sends.
+ * less than the button sends. So do the drafts waiting in the page's other
+ * languages, since this is where they get looked at before being included.
+ * Once another language is involved the rows are grouped by language, the
+ * page's own first.
  */
 
 import { useMemo } from "react";
@@ -27,10 +30,11 @@ import { stableStringify } from "../shared/util/stable-stringify.js";
 import { fileMeta, formatBytes } from "../shared/util/file.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { diffWords, diffLines, stripHtml, lcsIndexPairs } from "./word-diff.js";
+import { IncludeLanguageButton } from "./IncludeLanguageButton.jsx";
 
 import { emptyStateStyle } from "../editors/styles.js";
 import { paneStyle, listStyle, rowContainerStyle, rowHeaderStyle, rowGuideBodyStyle, rowPathStyle, typeIconStyle } from "./drawer-styles.js";
-import { TEXT_MUTED, TEXT_FAINT, TEXT, HAIRLINE, SURFACE_1, RADIUS_SM, R_SM, FONT_MONO, COLLECTION_ACCENT, COLLECTION_LINE, STATUS_OK, STATUS_DANGER, STATUS_WARN, FONT_SANS, dynamicSize } from "../shared/style/tokens.js";
+import { TEXT_HI, TEXT_MUTED, TEXT_FAINT, TEXT, HAIRLINE, BORDER, SURFACE_1, SURFACE_2, RADIUS_SM, R_SM, FONT_MONO, COLLECTION_ACCENT, COLLECTION_LINE, STATUS_OK, STATUS_DANGER, STATUS_WARN, FONT_SANS, dynamicSize } from "../shared/style/tokens.js";
 
 /**
  * @import { BlockResponse, BlockType, ItemSchema } from "../shared/contracts/schemas.js"
@@ -52,13 +56,17 @@ const TEXTY_BLOCK_TYPES = new Set(["ShortText", "LongText"]);
  *   itemSchemas: Map<string, ItemSchema>,
  *   collectionDirtyCounts: Map<string, Set<string>>,
  *   translationPreviews?: import("../core/hooks/use-cms-save.js").TranslationPreview[],
+ *   locale?: string | null,
+ *   pending?: import("../core/hooks/use-cms-save.js").PendingLanguage[],
+ *   onToggleLocale?: (locale: string) => void,
  *   onGoToBlock: (block: BlockResponse) => void,
  *   onGoToCollection: (collectionKey: string) => void,
  * }} props
  */
 export function ChangesPanel({
   blockList, drafts, dirtyByPath, itemSchemas,
-  collectionDirtyCounts, translationPreviews, onGoToBlock, onGoToCollection,
+  collectionDirtyCounts, translationPreviews, locale = null, pending, onToggleLocale,
+  onGoToBlock, onGoToCollection,
 }) {
   const t = useCmsStrings();
   const dirty = useMemo(
@@ -76,9 +84,42 @@ export function ChangesPanel({
   );
 
   const translations = translationPreviews ?? EMPTY_TRANSLATIONS;
+  const waiting = pending ?? EMPTY_PENDING;
+
+  // One group per other language: the translations staged here, which go out
+  // with the block they were written beside, then the drafts saved there,
+  // which go out once that language is included.
+  const elsewhere = useMemo(() => {
+    /** @type {Map<string, LanguageGroup>} */
+    const byLocale = new Map();
+    /** @param {string} l */
+    const groupOf = (l) => {
+      let group = byLocale.get(l);
+      if (!group) {
+        group = { locale: l, staged: [], language: null };
+        byLocale.set(l, group);
+      }
+      return group;
+    };
+    for (const language of waiting) groupOf(language.locale).language = language;
+    for (const preview of translations) groupOf(preview.locale).staged.push(preview);
+    return [...byLocale.values()];
+  }, [waiting, translations]);
+
   const isEmpty = dirty.length === 0
     && collectionEntries.length === 0
-    && translations.length === 0;
+    && elsewhere.length === 0;
+
+  const ownRows = dirty.map((block) => (
+    <li key={block.blockPath} style={{ listStyle: "none" }}>
+      <BlockDiffCard
+        block={block}
+        draft={drafts.get(block.blockPath)}
+        itemSchema={itemSchemas.get(block.blockPath) ?? null}
+        onGoToBlock={onGoToBlock}
+      />
+    </li>
+  ));
 
   return (
     <section style={paneStyle}>
@@ -98,21 +139,55 @@ export function ChangesPanel({
                 />
               </li>
             ))}
-            {dirty.map((block) => (
-              <li key={block.blockPath} style={{ listStyle: "none" }}>
-                <BlockDiffCard
-                  block={block}
-                  draft={drafts.get(block.blockPath)}
-                  itemSchema={itemSchemas.get(block.blockPath) ?? null}
-                  onGoToBlock={onGoToBlock}
-                />
-              </li>
-            ))}
-            {translations.map((preview) => (
-              <li key={preview.key} style={{ listStyle: "none" }}>
-                <TranslationDiffCard preview={preview} />
-              </li>
-            ))}
+            {elsewhere.length === 0 ? ownRows : (
+              <>
+                {dirty.length > 0 ? (
+                  <LanguageGroup
+                    code={(locale ?? "").toUpperCase()}
+                    where={t("changes.thisPage")}
+                    count={dirty.length}
+                    first={collectionEntries.length === 0}
+                    action={<span style={groupStateStyle}>{t("changes.willPublish")}</span>}
+                  >
+                    {ownRows}
+                  </LanguageGroup>
+                ) : null}
+                {elsewhere.map((group, i) => {
+                  const { language } = group;
+                  return (
+                    <LanguageGroup
+                      key={group.locale}
+                      code={group.locale.toUpperCase()}
+                      where={language?.pathname ?? null}
+                      count={group.staged.length + (language?.drafts.length ?? 0)}
+                      first={i === 0 && dirty.length === 0 && collectionEntries.length === 0}
+                      action={language && onToggleLocale ? (
+                        <IncludeLanguageButton language={language} onToggle={onToggleLocale}>
+                          {language.included ? t("changes.included") : t("changes.include")}
+                        </IncludeLanguageButton>
+                      ) : (
+                        <span style={groupStateStyle}>{t("changes.willPublish")}</span>
+                      )}
+                    >
+                      {group.staged.map((preview) => (
+                        <li key={preview.key} style={{ listStyle: "none" }}>
+                          <TranslationDiffCard preview={preview} />
+                        </li>
+                      ))}
+                      {language?.drafts.map((draft) => (
+                        <li key={draft.key} style={{ listStyle: "none" }}>
+                          <TranslationDiffCard
+                            preview={draft}
+                            global={draft.global}
+                            dimmed={!language.included}
+                          />
+                        </li>
+                      ))}
+                    </LanguageGroup>
+                  );
+                })}
+              </>
+            )}
           </ul>
         )}
       </div>
@@ -122,18 +197,63 @@ export function ChangesPanel({
 
 /** Stable, so the default doesn't allocate a new array each render. */
 const EMPTY_TRANSLATIONS = /** @type {import("../core/hooks/use-cms-save.js").TranslationPreview[]} */ ([]);
+const EMPTY_PENDING = /** @type {import("../core/hooks/use-cms-save.js").PendingLanguage[]} */ ([]);
 
 /**
- * One staged translation. Same card shell as a block diff, with the language
- * named in the header and no "edit this" button: the editor for it lives under
- * the block it was written beside, not on a page this drawer can navigate to.
- *
- * @param {{ preview: import("../core/hooks/use-cms-save.js").TranslationPreview }} props
+ * @typedef {Object} LanguageGroup
+ * @property {string} locale
+ * @property {import("../core/hooks/use-cms-save.js").TranslationPreview[]} staged
+ * @property {import("../core/hooks/use-cms-save.js").PendingLanguage | null} language
  */
-function TranslationDiffCard({ preview }) {
+
+/**
+ * One language's rows under a header naming it, where its page lives, how many
+ * rows it holds and whether they go out with the next save.
+ *
+ * @param {{
+ *   code: string,
+ *   where: string | null,
+ *   count: number,
+ *   first: boolean,
+ *   action: React.ReactNode,
+ *   children: React.ReactNode,
+ * }} props
+ */
+function LanguageGroup({ code, where, count, first, action, children }) {
+  return (
+    <li style={{ listStyle: "none" }}>
+      <section aria-label={code}>
+        <div style={first ? { ...groupHeaderStyle, ...groupHeaderFirstStyle } : groupHeaderStyle}>
+          <span style={groupCodeStyle}>{code}</span>
+          {where ? <span style={groupWhereStyle}>{where}</span> : null}
+          <span style={groupCountStyle}>{count}</span>
+          <span style={groupActionStyle}>{action}</span>
+        </div>
+        <ul style={groupListStyle}>{children}</ul>
+      </section>
+    </li>
+  );
+}
+
+/**
+ * A row bound for another language: a translation staged here, or a draft
+ * saved on that language's page. Same card shell as a block diff, with the
+ * language named in the header and no "edit this" button: the editor for it
+ * lives under the block it was written beside, or on a page this drawer does
+ * not navigate to.
+ *
+ * @param {{
+ *   preview: import("../core/hooks/use-cms-save.js").TranslationPreview,
+ *   global?: boolean,
+ *   dimmed?: boolean,
+ * }} props
+ *   `dimmed` marks a draft left out of the next save.
+ */
+function TranslationDiffCard({ preview, global = false, dimmed = false }) {
+  const t = useCmsStrings();
   const TypeBadge = typeIconFor(preview.blockType);
   return (
-    <div style={rowContainerStyle}>
+    <div style={dimmed ? { ...rowContainerStyle, ...dimmedStyle } : { ...rowContainerStyle, ...undimmedStyle }}>
       <div style={rowHeaderStyle}>
         <span aria-hidden="true" style={{ ...typeIconStyle, color: TEXT_MUTED }}>
           <TypeBadge size={13} />
@@ -141,7 +261,11 @@ function TranslationDiffCard({ preview }) {
         <span style={rowPathStyle} title={preview.blockPath}>
           {preview.blockPath}
         </span>
-        <span style={localeBadgeStyle}>{preview.locale.toUpperCase()}</span>
+        {/* The header or footer, which every page of that language shares. */}
+        {global ? <span style={scopeTagStyle}>{t("drawer.global")}</span> : null}
+        <span style={global ? { ...localeBadgeStyle, marginLeft: 0 } : localeBadgeStyle}>
+          {preview.locale.toUpperCase()}
+        </span>
       </div>
       <div style={rowGuideBodyStyle}>
         <DiffContent
@@ -153,6 +277,92 @@ function TranslationDiffCard({ preview }) {
     </div>
   );
 }
+
+// Opacity rather than a grey palette, so each diff keeps its own colours and
+// only reads as further away.
+const dimmedStyle = /** @type {React.CSSProperties} */ ({
+  opacity: 0.42,
+  transition: "opacity 200ms ease",
+});
+
+const undimmedStyle = /** @type {React.CSSProperties} */ ({
+  opacity: 1,
+  transition: "opacity 200ms ease",
+});
+
+const scopeTagStyle = /** @type {React.CSSProperties} */ ({
+  marginLeft: "auto",
+  flexShrink: 0,
+  padding: "3px 6px",
+  borderRadius: 99,
+  boxShadow: `inset 0 0 0 1px ${BORDER}`,
+  color: TEXT_MUTED,
+  fontSize: dynamicSize(10),
+  lineHeight: 1,
+  fontFamily: FONT_SANS,
+});
+
+const groupHeaderStyle = /** @type {React.CSSProperties} */ ({
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  minHeight: 24,
+  padding: "12px 6px 4px",
+  borderTop: `1px solid ${BORDER}`,
+  fontFamily: FONT_SANS,
+});
+
+const groupHeaderFirstStyle = /** @type {React.CSSProperties} */ ({
+  paddingTop: 4,
+  borderTop: 0,
+});
+
+const groupCodeStyle = /** @type {React.CSSProperties} */ ({
+  color: TEXT_HI,
+  fontWeight: 700,
+  fontSize: dynamicSize(10.5),
+  letterSpacing: "0.06em",
+});
+
+const groupWhereStyle = /** @type {React.CSSProperties} */ ({
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  color: TEXT_MUTED,
+  fontSize: dynamicSize(11),
+});
+
+const groupCountStyle = /** @type {React.CSSProperties} */ ({
+  flexShrink: 0,
+  padding: "3px 6px",
+  borderRadius: 99,
+  background: SURFACE_2,
+  color: TEXT_FAINT,
+  fontSize: dynamicSize(10),
+  lineHeight: 1,
+  fontVariantNumeric: "tabular-nums",
+});
+
+const groupActionStyle = /** @type {React.CSSProperties} */ ({
+  marginLeft: "auto",
+  flexShrink: 0,
+  display: "inline-flex",
+  fontSize: dynamicSize(11),
+});
+
+const groupStateStyle = /** @type {React.CSSProperties} */ ({
+  color: TEXT_MUTED,
+});
+
+const groupListStyle = /** @type {React.CSSProperties} */ ({
+  margin: "6px 0 0",
+  padding: 0,
+  listStyle: "none",
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+});
 
 // Same grey the prompt labels its rows with: one language marker across the
 // drawer, not a coloured one here and a plain one there.

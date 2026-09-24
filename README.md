@@ -1182,6 +1182,17 @@ and you write the rest. Staged translations are never autosaved as drafts —
 they live from the moment the prompt opens until you publish, and navigating
 away drops them.
 
+**Drafts left in another language.** Edit the English page, leave without
+publishing, and the Turkish page's drawer still finds them: a row above the save
+bar, *Waiting in other languages*, holds a chip per language (`+ EN 3`). They
+are never included on their own. Click the chip, or *Add to publish* on that
+language's group in the preview, and the next save publishes them as well, each
+against its own row, with the button naming every language it writes
+(`Save · TR + EN`). If one language lands and another does not, the banner says
+which, and the button (`Retry · EN`) resends only what failed. To find them the
+drawer reads the page in each other language while it is open: one request per
+language, shared with the prompt above, and repeated after each publish.
+
 #### Translating a collection record
 
 Collection records are one row per language, and their slugs stay unique across

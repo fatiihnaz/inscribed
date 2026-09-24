@@ -65,3 +65,39 @@ describe("describeSaveError", () => {
     });
   });
 });
+
+describe("a save that reached several languages", () => {
+  /** @param {Error} error @param {string[]} published @param {string[]} failed */
+  const across = (error, published, failed) => Object.assign(error, {
+    publishedLocales: published,
+    failedLocales: failed,
+  });
+
+  it("names what went live and what did not, then why", () => {
+    const out = describeSaveError(across(new Error("sunucu yanıt vermedi"), ["tr"], ["en"]), t, 0, "tr");
+    expect(out).toEqual({
+      tone: "error",
+      text: "TR yayınlandı. EN yayınlanamadı: sunucu yanıt vermedi",
+    });
+  });
+
+  it("says nothing about languages when none of them went live", () => {
+    const out = describeSaveError(across(new Error("sunucu yanıt vermedi"), [], ["tr", "en"]), t, 0, "tr");
+    expect(out.text).toBe("sunucu yanıt vermedi");
+  });
+
+  it("answers another language's named clash as a race, since no card of its own is flagged", () => {
+    const clash = apiError(409, { conflicts: [{ path: "hero.title", expected: 4, provided: 1 }] });
+    // Nothing is flagged on this page, which on its own reads as "all resolved"
+    // and would leave the editor with no banner at all.
+    expect(describeSaveError(across(clash, [], ["en"]), t, 0, "tr")).toEqual({
+      tone: "conflict",
+      text: t("saveError.race"),
+    });
+  });
+
+  it("keeps the flagged wording for a clash on the page's own language", () => {
+    const clash = apiError(409, { conflicts: [{ path: "hero.title", expected: 4, provided: 1 }] });
+    expect(describeSaveError(across(clash, ["en"], ["tr"]), t, 1, "tr").text).toContain("1 blok");
+  });
+});

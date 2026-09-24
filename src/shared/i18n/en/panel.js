@@ -18,6 +18,9 @@ export const panel = Object.freeze({
   "status.collectionDrafts_one": "{count} collection draft",
   "status.collectionDrafts_other": "{count} collection drafts",
   "status.save": "Save",
+  "status.saveLocales": "Save · {locales}",
+  "status.retry": "Retry",
+  "status.retryLocales": "Retry · {locales}",
   "status.discard": "Discard",
   "status.preview": "Preview",
   "status.closePreview": "Close preview",
@@ -26,6 +29,7 @@ export const panel = Object.freeze({
   "pill.failed": "Not saved",
   "pill.failedTitle": "Draft could not be saved",
   "pill.published": "Data saved",
+  "pill.publishedLocales": "Published · {locales}",
   "pill.publishedTitle": "Every change is live",
   "pill.publishing": "Publishing…",
   "pill.publishingTitle": "Publishing your changes",
@@ -102,6 +106,12 @@ export const panel = Object.freeze({
   "translations.missing": "This language has no such block",
   "translations.tooMany": "There are {count} more languages. Editing each on its own page beats fitting them all in here: {list}.",
 
+  // Drafts saved in the page's other languages, offered for the next publish.
+  "elsewhere.title": "Waiting in other languages",
+  "elsewhere.include_one": "Add the {count} change waiting in {locale} to this publish",
+  "elsewhere.include_other": "Add the {count} changes waiting in {locale} to this publish",
+  "elsewhere.includedTitle": "{locale} is in this publish. Click to leave it out.",
+
   // Changes preview.
   "changes.empty": "No changes yet.",
   "changes.drafts": "{count} drafts",
@@ -120,6 +130,10 @@ export const panel = Object.freeze({
   "changes.changed": "Edited",
   "changes.published": "Live",
   "changes.draft": "Draft",
+  "changes.thisPage": "This page",
+  "changes.willPublish": "Will be published",
+  "changes.include": "Add to publish",
+  "changes.included": "In this publish",
 
   // Save failures, as the drawer's banner phrases them.
   "saveError.generic": "Could not be saved",
@@ -127,6 +141,7 @@ export const panel = Object.freeze({
   "saveError.conflict_other": "{count} blocks were updated while you were editing. Each is flagged below: compare the two versions and pick the one to keep.",
   "saveError.race": "Another write landed at the same time. The page has been refreshed, try again.",
   "saveError.forbidden": "Not permitted. You do not have rights to edit this content.",
+  "saveError.partial": "{published} published. {failed} could not be published: {reason}",
 
   // Formatting marks, named when a RichText edit touched only the markup.
   "changes.mark.bold": "bold",

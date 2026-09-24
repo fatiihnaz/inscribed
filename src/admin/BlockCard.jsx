@@ -28,12 +28,15 @@ import { useInert } from "../shared/ui/use-inert.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useStoreSelector } from "../shared/state/store.js";
 import { isBlockDirty, resolveBlockValue } from "../core/resolve.js";
+import { useCmsRoute } from "../core/hooks/use-cms-route.js";
+import { otherLocales } from "../shared/route.js";
 
 import { FieldEditor } from "../editors/FieldEditor.jsx";
 import { FieldMessage } from "../editors/FieldMessage.jsx";
 import { ListEditor } from "../editors/ListEditor.jsx";
 import { BlockConflictNotice } from "./BlockConflictNotice.jsx";
 import { TranslationPrompt } from "./TranslationPrompt.jsx";
+import { canEditInOtherLanguages } from "./translation-scope.js";
 import { CardHeader, disclosureBodyStyle, disclosureRowStyle, rowClassName, rowInsetStyle } from "./block-card-chrome.jsx";
 
 const CollectionLane = dynamic(
@@ -189,6 +192,15 @@ function BlockRow({
   const restingOpen = density === "compact" ? false : defaultOpen;
   const [isOpen, setIsOpen] = useState(restingOpen);
 
+  // The row's other languages, opened from its header. The panel also opens on
+  // its own after a rewrite; this is the way in for everything else.
+  const { config } = useCmsContext();
+  const { locale } = useCmsRoute();
+  const canTranslate = !readOnly
+    && otherLocales(config, locale).length > 0
+    && canEditInOtherLanguages(block.blockType);
+  const [translating, setTranslating] = useState(false);
+
   // Density is a page-wide instruction, so it overrides whatever each row was
   // left at. Adjusted during render rather than in an effect: an effect would
   // also fire on mount, and a `setState` there costs every card an extra render
@@ -238,6 +250,12 @@ function BlockRow({
         preview={blockPreview(block.blockType, value, t)}
         onHeaderClick={handleHeaderClick}
         onReset={onReset}
+        translating={translating}
+        onTranslate={canTranslate ? () => {
+          // The panel lives in the body, so opening it on a shut row opens the row.
+          if (!translating) setIsOpen(true);
+          setTranslating(!translating);
+        } : undefined}
       />
       <div
         ref={bodyRef}
@@ -262,7 +280,13 @@ function BlockRow({
             {/* The padlock in the gutter says the field is locked; this says
                 why, which is the part an editor can act on. */}
             {readOnly ? <FieldMessage>{t("block.readOnlyTitle")}</FieldMessage> : null}
-            <TranslationPrompt block={block} value={value} readOnly={readOnly} />
+            <TranslationPrompt
+              block={block}
+              value={value}
+              readOnly={readOnly}
+              open={translating}
+              onClose={() => setTranslating(false)}
+            />
           </div>
         </div>
       </div>

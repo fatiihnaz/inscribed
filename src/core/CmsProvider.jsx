@@ -24,19 +24,19 @@ import { usePathname } from "next/navigation";
 import { CmsContext, useCmsContext } from "../shared/state/cms-context.js";
 import { ensureCmsConfig } from "../shared/config.js";
 import { normalizePanels } from "../shared/panels.js";
-import { globalsKey, matchCmsRoute, resolveCmsRoute, routeKey } from "../shared/route.js";
+import { globalsKey, matchCmsRoute, parseRouteKey, resolveCmsRoute, routeKey } from "../shared/route.js";
 import { buildThemeCss } from "../shared/style/theme.js";
 import { PAGE_SHELL_CLASS } from "../shared/style/layout-css.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
 import { EMPTY_SITE, reseedSite, seedSite, siteSlugs } from "./site-blocks.js";
-import { mergeRouteBlocks } from "./blocks.js";
+import { mergeRouteBlocks, readBlock } from "./blocks.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
 import { stableStringify } from "../shared/util/stable-stringify.js";
 import { CmsApiError } from "../shared/contracts/errors.js";
 import { createStore, useStoreSelector } from "../shared/state/store.js";
 import { createDraftQueue } from "../shared/state/draft-queue.js";
-import { contentDraftKey } from "../shared/state/draft-keys.js";
+import { contentDraftKey, parseTranslationDraftKey } from "../shared/state/draft-keys.js";
 import { resolveBlockValue } from "./resolve.js";
 import { useSiteBlocks } from "./hooks/use-site-blocks.js";
 
@@ -76,6 +76,9 @@ const UNSET = Symbol("unset");
  */
 /** Shared empty map for the "route not fetched yet" reads below. */
 const EMPTY_BLOCKS = new Map();
+
+/** Stable, so resetting it to empty is a no-op when it already is. */
+const NO_LOCALES = /** @type {string[]} */ ([]);
 
 function useConstant(create) {
   const ref = useRef(/** @type {T | typeof UNSET} */ (UNSET));
@@ -334,11 +337,11 @@ export function CmsProvider({
   const contentDraftsStore = useConstant(() =>
     createStore(/** @type {Map<string, *>} */ (new Map())),
   );
-  // Edits staged for a block in a language the editor is not currently reading,
-  // keyed by `translationDraftKey`. A separate map from `contentDraftsStore`
-  // because everything subscribed to that one assumes a bare blockPath on the
-  // current route: the autosave collector would try to PUT these into the
-  // wrong locale's draft slot.
+  // Edits typed into a block's copy in a language the editor is not reading,
+  // keyed by `translationDraftKey`, until their autosave lands. A separate map
+  // from `contentDraftsStore` because everything subscribed to that one assumes
+  // a bare blockPath on the current route: its autosave collector would PUT
+  // these into the wrong locale's draft slot.
   const translationDraftsStore = useConstant(() =>
     createStore(/** @type {Map<string, *>} */ (new Map())),
   );
@@ -350,6 +353,7 @@ export function CmsProvider({
       isDrawerOpen: false,
       draftSyncStatus: "idle",
       conflictBlocks: new Set(),
+      includedLocales: NO_LOCALES,
       refetchToken: 0,
       siteLoading: false,
       siteError: null,
@@ -572,13 +576,13 @@ export function CmsProvider({
     // Conflicts go with the drafts they were raised against. `pendingBlock` is
     // deliberately left alone: it names a block on the route being navigated
     // *to*, so clearing it here would cancel the very jump this navigation is.
-    patchUi({ activeBlock: null, conflictBlocks: new Set() });
+    //
+    // Unsaved translations are left for their autosave, which writes them to
+    // their own language's draft whichever page is on screen. Which languages
+    // the next publish includes is a choice made about the page being left.
+    patchUi({ activeBlock: null, conflictBlocks: new Set(), includedLocales: NO_LOCALES });
     setDraftsState(new Map());
-    // Staged translations go with the page they were typed against, same as
-    // the drafts above: they are only publishable from the route that offered
-    // them, so surviving a navigation would leave an edit nothing can reach.
-    setTranslationDraftsState(new Map());
-  }, [pathname, setDraftsState, setTranslationDraftsState, patchUi]);
+  }, [pathname, setDraftsState, patchUi]);
 
   // Drop drafts for blocks that no longer exist (e.g. after a manifest sync
   // removed one). Subscribed rather than keyed on a render value, since blocks
@@ -686,6 +690,17 @@ export function CmsProvider({
       });
     },
     [setTranslationDraftsState],
+  );
+
+  const setIncludedLocales = useCallback(
+    /** @param {(prev: string[]) => string[]} update */
+    (update) => {
+      uiStore.set((s) => {
+        const includedLocales = update(s.includedLocales);
+        return includedLocales === s.includedLocales ? s : { ...s, includedLocales };
+      });
+    },
+    [uiStore],
   );
 
   const setSiteStatus = useCallback(
@@ -1012,6 +1027,109 @@ export function CmsProvider({
     stableGetAccessToken, flashDraftStatus, setDraftSyncStatus, triggerRefetch,
   ]);
 
+  // Translations autosave as their own language's draft, on the lane that
+  // language's page writes on: an edit made there later queues behind this one
+  // rather than racing it. Nothing is flashed on the status pill, which speaks
+  // for the page on screen.
+  useEffect(() => {
+    /**
+     * Where one typed translation is written, and the row it overwrites.
+     *
+     * @param {string} key
+     */
+    const targetOf = (key) => {
+      const parsed = parseTranslationDraftKey(key);
+      if (!parsed) return null;
+      const { slug: pageSlug, locale: target } = parseRouteKey(parsed.routeKey);
+      if (!target) return null;
+      const block = readBlock(blocksStore.get(), parsed.routeKey, globalsKey(target), parsed.blockPath);
+      if (!block) return null;
+      return {
+        lane: contentDraftKey(block._slug ?? pageSlug, target),
+        slug: block._slug ?? pageSlug,
+        locale: target,
+        route: parsed.routeKey,
+        block,
+      };
+    };
+
+    const arm = () => {
+      if (!isAdminRef.current) return;
+      /** @type {Map<string, { slug: string, locale: string }>} */
+      const lanes = new Map();
+      for (const key of translationDraftsStore.get().keys()) {
+        const target = targetOf(key);
+        if (target) lanes.set(target.lane, target);
+      }
+
+      for (const [lane, { slug, locale: target }] of lanes) {
+        draftQueue.schedule(lane, async (ctx) => {
+          /** @type {import("../shared/contracts/schemas.js").UpdateBlockItem[]} */
+          const items = [];
+          /** @type {Map<string, { route: string, blockPath: string, value: * }>} */
+          const sent = new Map();
+          for (const [key, value] of translationDraftsStore.get()) {
+            const found = targetOf(key);
+            if (!found || found.lane !== lane) continue;
+            items.push({ blockPath: found.block.blockPath, value, version: found.block.version });
+            sent.set(key, { route: found.route, blockPath: found.block.blockPath, value });
+          }
+          if (items.length === 0) return;
+
+          try {
+            const accessToken = (await stableGetAccessToken()) || undefined;
+            await draftConfigRef.current.transport.updateDraft(
+              { slug, blocks: items },
+              { accessToken, locale: target },
+            );
+          } catch (err) {
+            // Kept in the map: it still publishes from there, and the next edit
+            // to that language tries the write again.
+            // eslint-disable-next-line no-console
+            console.warn("[inscribed] translation autosave failed:", err);
+            return;
+          }
+          // A publish stood this lane down while the write was out, so what it
+          // carried is already live, or already discarded.
+          if (ctx.isStale()) return;
+
+          // Mirror the backend, as the page's own lane does: the draft is the
+          // value sent, or nothing when that is what is published.
+          blocksStore.set((s) => {
+            let next = s;
+            for (const { route, blockPath, value } of sent.values()) {
+              for (const entryKey of [route, globalsKey(target)]) {
+                const entry = next.get(entryKey);
+                const block = entry?.get(blockPath);
+                if (!block) continue;
+                const draftValue = deepEqual(value, block.value) ? null : value;
+                if (!deepEqual(block.draftValue ?? null, draftValue)) {
+                  if (next === s) next = new Map(s);
+                  next.set(entryKey, new Map(entry).set(blockPath, { ...block, draftValue }));
+                }
+                break;
+              }
+            }
+            return next;
+          });
+          // Only what is still the value sent: anything typed since has its own
+          // write coming.
+          setTranslationDraftsState((prev) => {
+            let next = prev;
+            for (const [key, { value }] of sent) {
+              if (!prev.has(key) || !deepEqual(prev.get(key), value)) continue;
+              if (next === prev) next = new Map(prev);
+              next.delete(key);
+            }
+            return next;
+          });
+        });
+      }
+    };
+
+    return translationDraftsStore.subscribe(arm);
+  }, [translationDraftsStore, blocksStore, draftQueue, setTranslationDraftsState, stableGetAccessToken]);
+
   // Stand these blocks' slug lanes down once a publish has landed, the same
   // `cancel` + `enqueue` shape `useCollectionEditor.undoDraft` uses.
   //
@@ -1026,21 +1144,23 @@ export function CmsProvider({
   // the same lane is what orders them: the chain runs this only once that write's
   // response is back, so the backend has provably already seen it.
   const settleDraftWrites = useCallback(
-    /** @param {string[]} blockPaths */
-    (blockPaths) => {
+    /** @param {string[]} blockPaths @param {string|null} [lane]  The language, when not the one on screen. */
+    (blockPaths, lane) => {
       if (blockPaths.length === 0) return;
-      const currentBlocks = readRouteBlocks();
+      const currentLocale = lane ?? draftLocaleRef.current;
+      const state = blocksStore.get();
+      const route = routeKey(draftSlugRef.current, currentLocale);
+      const globals = globalsKey(currentLocale);
       /** @type {Set<string>} */
       const slugs = new Set();
       for (const blockPath of blockPaths) {
         // A block missing from the map still resolves to a slug rather than
         // being skipped: this exists to stop a write, and skipping one would
         // leave behind exactly the write it is here to stop.
-        slugs.add(currentBlocks.get(blockPath)?._slug ?? draftSlugRef.current);
+        slugs.add(readBlock(state, route, globals, blockPath)?._slug ?? draftSlugRef.current);
       }
 
       const currentConfig = draftConfigRef.current;
-      const currentLocale = draftLocaleRef.current;
       for (const slug of slugs) {
         draftQueue.cancel(contentDraftKey(slug, currentLocale));
         // Deliberately without `discardServerDrafts`' `draftValue != null`
@@ -1059,7 +1179,7 @@ export function CmsProvider({
         });
       }
     },
-    [stableGetAccessToken, readRouteBlocks, draftQueue],
+    [stableGetAccessToken, blocksStore, draftQueue],
   );
 
   // Silent server-draft cleanup for discard. DELETEs each affected slug's
@@ -1143,6 +1263,7 @@ export function CmsProvider({
       translationDraftsStore,
       setTranslationDraft,
       clearTranslationDrafts,
+      setIncludedLocales,
 
       uiStore,
       setBlockConflicts,
@@ -1187,6 +1308,7 @@ export function CmsProvider({
       translationDraftsStore,
       setTranslationDraft,
       clearTranslationDrafts,
+      setIncludedLocales,
       uiStore,
       setBlockConflicts,
       clearBlockConflict,

@@ -1,21 +1,22 @@
 "use client";
 
 /**
- * @file The offer to restate a block in the site's other languages, shown under
- * the block that was just rewritten.
+ * @file A block's copies in the site's other languages, under the block.
  *
- * It appears on its own, off the diff the drawer already computes: rewriting a
- * sentence is the moment an editor knows what the other languages should say,
- * and asking then costs one glance, while a banner at publish time asks after
- * the thought is gone. Small edits stay silent (see `translation-scope.js`) so
- * the offer keeps meaning something.
+ * It opens two ways. On its own, off the diff the drawer already computes:
+ * rewriting a sentence is the moment an editor knows what the other languages
+ * should say, and asking then costs one glance, while a banner at publish time
+ * asks after the thought is gone. Small edits stay silent (see
+ * `translation-scope.js`) so the offer keeps meaning something. And on request,
+ * from the row's languages button, for any field the panel has an editor for.
  *
  * Past `TRANSLATION_INLINE_MAX` languages the editors would dwarf the block
  * they hang off, so it degrades to a line of text the editor can dismiss.
  * Nothing here is machine translation: the field is prefilled with what that
- * language currently says, and the editor writes the rest.
+ * language says now, its draft included, and the editor writes the rest.
  *
- * Whatever is typed publishes with the block itself, one PUT per language.
+ * Whatever is typed is saved as that language's draft and puts the language
+ * into the next publish (see `useCmsTranslations`).
  *
  * The panel itself is `BlockNotice`, shared with the conflict notice.
  */
@@ -25,6 +26,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Languages, Undo2 } from "../shared/style/icons.jsx";
 import { useCmsContext } from "../shared/state/cms-context.js";
 import { otherLocales as resolveOtherLocales } from "../shared/route.js";
+import { localeCodes } from "../shared/util/locale-codes.js";
 import { useCmsRoute } from "../core/hooks/use-cms-route.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useCmsTranslations } from "../core/hooks/use-cms-translations.js";
@@ -45,11 +47,18 @@ import { TEXT_MUTED, TEXT_FAINT, FONT_SANS, dynamicSize } from "../shared/style/
 const SETTLE_MS = 600;
 
 /**
- * @param {{ block: BlockResponse, value: *, readOnly?: boolean }} props
+ * @param {{
+ *   block: BlockResponse,
+ *   value: *,
+ *   readOnly?: boolean,
+ *   open?: boolean,
+ *   onClose?: () => void,
+ * }} props
+ *   `open` is the row's languages button: the panel shows whatever the diff says.
  */
-export function TranslationPrompt({ block, value, readOnly }) {
+export function TranslationPrompt({ block, value, readOnly, open = false, onClose }) {
   const t = useCmsStrings();
-  const { config, clearTranslationDrafts } = useCmsContext();
+  const { config } = useCmsContext();
   const { locale } = useCmsRoute();
   const others = resolveOtherLocales(config, locale);
   const tooMany = others.length > TRANSLATION_INLINE_MAX;
@@ -70,14 +79,12 @@ export function TranslationPrompt({ block, value, readOnly }) {
   );
 
   const { targets, isReady } = useCmsTranslations(block, {
-    enabled: substantial && !tooMany && !readOnly,
+    enabled: (substantial || open) && !tooMany && !readOnly,
   });
 
-  // Once something is typed the prompt stays, whatever the diff says next:
-  // trimming the edit back under the threshold must not take a written
-  // translation down with it.
-  const stagedKeys = targets.filter((x) => x.hasDraft).map((x) => x.key);
-  const engaged = stagedKeys.length > 0;
+  const edited = targets.filter((x) => x.edited);
+  const engaged = edited.length > 0;
+  const saving = targets.some((x) => x.saving);
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
     if (!substantial) setDismissed(false);
@@ -85,46 +92,45 @@ export function TranslationPrompt({ block, value, readOnly }) {
 
   if (readOnly || others.length === 0) return null;
 
+  const offered = open || (substantial && !dismissed);
+  const close = () => {
+    setDismissed(true);
+    onClose?.();
+  };
+
   return (
     <BlockNotice
       // `isReady` gates the opening, not the contents: a panel that grows while
       // its rows are still empty has to grow a second time when they fill, and
       // that second step is the twitch. It is trivially true in the `tooMany`
-      // case, which fetches nothing, and for anything already typed, whose
-      // answer is by definition already in.
-      show={engaged || (substantial && !dismissed && isReady)}
+      // case, which fetches nothing. Once something is typed the panel stays
+      // until it is closed: trimming the edit back under the threshold must
+      // not take the translation off screen mid-thought.
+      show={(offered && isReady) || (engaged && (open || !dismissed))}
       tone="neutral"
       // Below the editor, unlike the conflict panel: that one is a decision
       // standing between the editor and their text, this one is the next thing
       // to do once the text is written.
       placement="below"
       icon={<Languages size={12} />}
-      title={t("translations.title")}
+      title={substantial && !open ? t("translations.title") : t("translations.label")}
       label={t("translations.label")}
-      aside={
-        // One slot, holding whichever way out applies. With nothing typed the
-        // panel is a reminder and closing it costs nothing; once something is
-        // typed, closing would strand it, so the exit becomes discarding it.
-        // Leaving the slot empty in the second case is what put the undo out
-        // beside the field, unaligned with the only other control here.
-        engaged ? (
-          <NoticeButton
-            onClick={() => clearTranslationDrafts(stagedKeys)}
-            tone="neutral"
-            aria-label={t("translations.undoAllLabel")}
-          >
-            {t("translations.undoAll")}
-          </NoticeButton>
-        ) : (
-          <NoticeButton
-            onClick={() => setDismissed(true)}
-            tone="neutral"
-            aria-label={t("translations.dismissLabel")}
-          >
+      aside={(
+        <>
+          {engaged ? (
+            <NoticeButton
+              onClick={() => { for (const target of edited) target.reset(); }}
+              tone="neutral"
+              aria-label={t("translations.undoAllLabel")}
+            >
+              {t("translations.undoAll")}
+            </NoticeButton>
+          ) : null}
+          <NoticeButton onClick={close} tone="neutral" aria-label={t("translations.dismissLabel")}>
             {t("translations.dismiss")}
           </NoticeButton>
-        )
-      }
+        </>
+      )}
     >
       {tooMany ? (
         <p style={noteStyle}>
@@ -143,6 +149,13 @@ export function TranslationPrompt({ block, value, readOnly }) {
               showReset={targets.length > 1}
             />
           ))}
+          {engaged ? (
+            <p role="status" style={statusStyle}>
+              {saving
+                ? t("translations.saving")
+                : t("translations.saved", { locales: localeCodes(edited.map((x) => x.locale)) })}
+            </p>
+          ) : null}
         </div>
       )}
     </BlockNotice>
@@ -188,7 +201,7 @@ function TranslationRow({ target, blockType, showReset }) {
           hideLabel
         />
       </div>
-      {showReset && target.hasDraft ? (
+      {showReset && target.edited ? (
         <button
           type="button"
           onClick={target.reset}
@@ -246,6 +259,13 @@ const listStyle = /** @type {React.CSSProperties} */ ({
   display: "flex",
   flexDirection: "column",
   gap: 8,
+});
+
+const statusStyle = /** @type {React.CSSProperties} */ ({
+  margin: 0,
+  color: TEXT_FAINT,
+  fontFamily: FONT_SANS,
+  fontSize: dynamicSize(11),
 });
 
 /**

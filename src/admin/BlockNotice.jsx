@@ -160,6 +160,7 @@ const headingStyle = /** @type {React.CSSProperties} */ ({
 const asideStyle = /** @type {React.CSSProperties} */ ({
   marginLeft: "auto",
   display: "inline-flex",
+  gap: 4,
 });
 
 const actionsStyle = /** @type {React.CSSProperties} */ ({

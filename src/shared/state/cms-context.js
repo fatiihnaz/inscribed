@@ -51,6 +51,10 @@ import { createContext, useContext } from "react";
  *   names. The refetch that follows the 409 puts the other editor's value back
  *   in `block.value` while the local draft still holds the user's, which is
  *   what the card's resolve panel diffs.
+ * @property {string[]} includedLocales
+ *   Other languages whose drafts on this page the next publish carries. Here
+ *   rather than in the save hook because writing a translation, in a block
+ *   card, is one of the ways a language gets in. Cleared on navigation.
  * @property {number} refetchToken   Bumped to force the site read to run again.
  * @property {boolean} siteLoading
  *   Whether that read is in flight. On the ui store rather than in the hook
@@ -132,8 +136,9 @@ import { createContext, useContext } from "react";
  * @property {(blockPath: string, value: *) => void} setDraft
  * @property {(blockPath: string) => void} clearDraft
  * @property {() => void} clearDrafts
- * @property {(blockPaths: string[]) => void} settleDraftWrites
- *   Stand these blocks' slug lanes down after a publish: mark an in-flight
+ * @property {(blockPaths: string[], locale?: string|null) => void} settleDraftWrites
+ *   Stand these blocks' slug lanes down after a publish, in `locale` when it is
+ *   not the language on screen: mark an in-flight
  *   autosave stale so it can't mirror a `draftValue` back over what was just
  *   published, and queue a cleanup DELETE behind it. The DELETE is chained, so
  *   it goes out only once a draft PUT already on the wire has come back, which
@@ -144,12 +149,14 @@ import { createContext, useContext } from "react";
  *   background without touching `draftSyncStatus`, so discard doesn't flash a
  *   save pulse.
  * @property {Store<Map<string, *>>} translationDraftsStore
- *   Edits staged for another language's copy of a block, keyed by
- *   `translationDraftKey(routeKey, blockPath)`. Never autosaved: they exist
- *   from the moment the drawer offers the translation until the next publish
- *   carries them, and a navigation drops them.
+ *   Edits typed into another language's copy of a block, keyed by
+ *   `translationDraftKey(routeKey, blockPath)`, until their autosave lands as
+ *   that language's draft. The same live overlay `contentDraftsStore` is for
+ *   the page's own language.
  * @property {(key: string, value: *) => void} setTranslationDraft
  * @property {(keys?: string[]) => void} clearTranslationDrafts
+ * @property {(update: (prev: string[]) => string[]) => void} setIncludedLocales
+ *   See `CmsUiState.includedLocales`.
  * @property {Store<CmsUiState>} uiStore
  * @property {(paths: string[]) => void} setBlockConflicts
  *   Replace the conflicting-block set, from a 409's `conflicts` extension.

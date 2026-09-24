@@ -11,6 +11,24 @@ import { TRANSLATABLE_TYPES } from "../shared/util/translatable.js";
 import { diffWords, stripHtml } from "./word-diff.js";
 
 /**
+ * Types the other-languages panel has no editor for: a list needs its item
+ * schema and a select its choices, and neither travels with the block.
+ */
+const NO_PANEL_EDITOR = new Set(["ObjectArray", "Select"]);
+
+/**
+ * Whether a row offers its other languages on request. Wider than the automatic
+ * offer: an image or a link is worth changing per language, just never worth
+ * prompting about.
+ *
+ * @param {string} blockType
+ * @returns {boolean}
+ */
+export function canEditInOtherLanguages(blockType) {
+  return !NO_PANEL_EDITOR.has(blockType);
+}
+
+/**
  * Changed words below this read as a typo fix, a renamed product, a corrected
  * date: things whose translation the editor either already handled or does not
  * need prompting about. Above it the sentence has been rewritten.

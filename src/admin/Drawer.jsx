@@ -141,7 +141,7 @@ export function Drawer({ panels = null }) {
   const collectionDrafts = useStoreSelector(collectionStore, (s) => s.drafts);
   const myCollections = useStoreSelector(collectionStore, (s) => s.meta.order);
   const {
-    dirtyCount, isSaving, error, translationPreviews,
+    dirtyCount, isSaving, error,
     pending, toggleLocale, publishLocales,
     save: onSaveAll, discard: onDiscardAll,
   } = useCmsSave();
@@ -283,15 +283,13 @@ export function Drawer({ panels = null }) {
     return n;
   }, [pageBlockList, globalBlockList, dirtyByPath]);
 
-  // Staged translations publish with the same button, so a preview that left
-  // them out would review less than Kaydet sends, and the count beside it would
-  // disagree with the status bar's. The other languages' drafts count whether
-  // or not they are in: the preview is where they get looked at first.
+  // The other languages' changes count whether or not they are in: the
+  // preview is where they get looked at first.
   const previewableCount = useMemo(() => {
-    let n = ownChangedCount + translationPreviews.length;
+    let n = ownChangedCount;
     for (const language of pending) n += language.drafts.length;
     return n;
-  }, [ownChangedCount, translationPreviews, pending]);
+  }, [ownChangedCount, pending]);
 
   // Per-collection dirty slug sets (overlay map + cached items with a server
   // draft), for the preview overlay's summary banner. Items never loaded into
@@ -790,7 +788,6 @@ export function Drawer({ panels = null }) {
                 dirtyByPath={dirtyByPath}
                 itemSchemas={itemSchemas}
                 collectionDirtyCounts={collectionDirtyCounts}
-                translationPreviews={translationPreviews}
                 locale={locale}
                 pending={pending}
                 onToggleLocale={toggleLocale}

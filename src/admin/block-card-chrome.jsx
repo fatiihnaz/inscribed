@@ -7,7 +7,7 @@
  * behind `next/dynamic`, and importing back into its loader would be a cycle.
  */
 
-import { ChevronDown, Undo2, Lock, typeIconFor } from "../shared/style/icons.jsx";
+import { ChevronDown, Undo2, Lock, Languages, typeIconFor } from "../shared/style/icons.jsx";
 
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { blockResetStyle, rowActionsStyle, rowContainerStyle, rowHeaderStyle, rowGuideBodyStyle, srOnlyStyle, typeIconStyle, groupIconStyle } from "./drawer-styles.js";
@@ -199,7 +199,7 @@ export function rowClassName({ isActive, isCollection }) {
  */
 export function CardHeader({
   block, isOpen, isDirty, isCollection, readOnly, preview,
-  topLevel, displayPath, onHeaderClick, onReset,
+  topLevel, displayPath, onHeaderClick, onReset, translating = false, onTranslate,
 }) {
   const t = useCmsStrings();
   return (
@@ -239,6 +239,29 @@ export function CardHeader({
       </span>
 
       <span style={rowActionsStyle}>
+        {onTranslate ? (
+          // Quiet until the row is hovered or it is on, since every row carries
+          // one (see `.inscribed-translate-btn`).
+          <span
+            role="button"
+            tabIndex={0}
+            aria-pressed={translating}
+            onClick={(e) => { e.stopPropagation(); onTranslate(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                onTranslate();
+              }
+            }}
+            className="inscribed-icon-button inscribed-translate-btn"
+            style={translating ? { ...blockResetStyle, color: ACCENT } : blockResetStyle}
+            aria-label={t("translations.editOthersLabel", { path: block.blockPath })}
+            title={t("translations.editOthers")}
+          >
+            <Languages size={13} />
+          </span>
+        ) : null}
         {isDirty ? (
           <span
             role="button"

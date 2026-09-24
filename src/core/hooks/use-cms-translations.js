@@ -11,17 +11,17 @@
  * block's translation is therefore read the way every block is: the route's
  * entry first, then the language's globals.
  *
- * Drafts typed here are **not** autosaved. They live in
- * `translationDraftsStore` from the moment the drawer offers them until the
- * next publish carries them, and a navigation drops them. A half-typed
- * translation has no business becoming a server draft another editor sees in a
- * language nobody is reviewing.
+ * An edit here is that language's draft. It autosaves as one, exactly as an
+ * edit on that language's own page would, so it outlives a navigation and is
+ * waiting on that page too. Writing one also puts the language into the next
+ * publish: a translation written beside a block means to go out with it.
  */
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
+import { deepEqual } from "../../shared/util/deep-equal.js";
 import { globalsKey, localizePath, otherLocales as resolveOtherLocales, routeKey } from "../../shared/route.js";
 import { translationDraftKey } from "../../shared/state/draft-keys.js";
 import { readBlock } from "../blocks.js";
@@ -39,10 +39,12 @@ import { useLanguageReads } from "./use-language-reads.js";
  * @property {string} key        `translationDraftKey(routeKey(slug, locale), blockPath)`.
  * @property {BlockResponse|null} block  Null until the fetch lands, or when
  *   this language has no row for the path.
- * @property {*} value           The staged edit, else the published value.
- * @property {boolean} hasDraft
+ * @property {*} value           What was typed, else that language's draft, else what it publishes.
+ * @property {boolean} hasDraft  Whether that language has a change to this block waiting.
+ * @property {boolean} edited    Whether it was changed here since this card first wrote to it.
+ * @property {boolean} saving    Typed and not yet saved as a draft.
  * @property {(value: *) => void} setValue
- * @property {() => void} reset  Drop the staged edit.
+ * @property {() => void} reset  Back to what it said before this card first wrote to it.
  */
 
 /**
@@ -64,7 +66,7 @@ export function useCmsTranslations(block, options) {
   const enabled = options?.enabled ?? false;
   const {
     config, blocksStore,
-    translationDraftsStore, setTranslationDraft, clearTranslationDrafts,
+    translationDraftsStore, setTranslationDraft, setIncludedLocales,
   } = useCmsContext();
   const { slug: routeSlug, locale } = useCmsRoute();
 
@@ -74,7 +76,7 @@ export function useCmsTranslations(block, options) {
 
   // Built from the route's slug, never the block's own: a global block was read
   // into its language's globals entry, which `readBlock` below falls through
-  // to, and a staged edit is keyed by the route it was offered on.
+  // to, and a typed edit is keyed by the route it was offered on.
   const keys = useMemo(
     () => otherLocales.map((l) => routeKey(routeSlug, l)),
     [otherLocales, routeSlug],
@@ -92,25 +94,40 @@ export function useCmsTranslations(block, options) {
     ),
     sameEntries,
   );
-  const drafts = useStoreSelector(translationDraftsStore, (m) => m);
+  const typed = useStoreSelector(translationDraftsStore, (m) => m);
+
+  // What each language said before this card first wrote to it. Undo goes back
+  // there rather than to the published text, which would also throw away a
+  // draft written on that language's own page.
+  const baselines = useRef(/** @type {Map<string, *>} */ (new Map()));
 
   const targets = useMemo(
     () => otherLocales.map((targetLocale, i) => {
       const key = translationDraftKey(keys[i], blockPath);
       const target = targetBlocks[i];
-      const hasDraft = drafts.has(key);
+      const saving = typed.has(key);
+      const value = saving ? typed.get(key) : (target?.draftValue ?? target?.value);
+      const before = baselines.current;
       return {
         locale: targetLocale,
         pathname: localizePath(routeSlug, targetLocale, config),
         key,
         block: target,
-        value: hasDraft ? drafts.get(key) : target?.value,
-        hasDraft,
-        setValue: (/** @type {*} */ value) => setTranslationDraft(key, value),
-        reset: () => clearTranslationDrafts([key]),
+        value,
+        hasDraft: target != null && !deepEqual(value, target.value),
+        edited: before.has(key) && !deepEqual(value, before.get(key)),
+        saving,
+        setValue: (/** @type {*} */ next) => {
+          if (!before.has(key)) before.set(key, value);
+          setTranslationDraft(key, next);
+          setIncludedLocales((prev) => (prev.includes(targetLocale) ? prev : [...prev, targetLocale]));
+        },
+        reset: () => {
+          if (before.has(key)) setTranslationDraft(key, before.get(key));
+        },
       };
     }),
-    [otherLocales, keys, routeSlug, config, blockPath, targetBlocks, drafts, setTranslationDraft, clearTranslationDrafts],
+    [otherLocales, keys, routeSlug, config, blockPath, targetBlocks, typed, setTranslationDraft, setIncludedLocales],
   );
 
   return { targets, isReady, error };

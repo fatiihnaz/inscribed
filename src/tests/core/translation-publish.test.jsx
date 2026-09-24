@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Translations staged from the drawer, and the publish that carries them.
+ * Translations typed in the drawer, and the publish that carries them.
  *
  * The claim under test is that one click writes every language: the block on
  * screen and each translation typed beside it go out as one PUT per target,
@@ -123,11 +123,11 @@ function Probe() {
     { enabled: true },
   ).targets;
 
-  const { save, dirtyUpdates, dirtyCount, translationPreviews, error } = useCmsSave();
+  const { save, dirtyUpdates, dirtyCount, pending, error } = useCmsSave();
   probe.save = save;
   probe.dirtyUpdates = dirtyUpdates;
   probe.dirtyCount = dirtyCount;
-  probe.translationPreviews = translationPreviews;
+  probe.pending = pending;
   probe.error = error;
   return null;
 }
@@ -205,7 +205,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("staging a translation", () => {
+describe("typing a translation", () => {
   it("reads the other language off its own route, and only that language", async () => {
     await mount();
 
@@ -282,7 +282,7 @@ describe("staging a translation", () => {
     expect(siteReads).toEqual(["tr", "en"]);
   });
 
-  it("counts a staged translation as an unpublished change", async () => {
+  it("counts a translation as an unpublished change", async () => {
     await mount();
     expect(probe.dirtyCount).toBe(0);
 
@@ -307,8 +307,8 @@ describe("staging a translation", () => {
     // One pass builds the count and the preview, because the drawer's status
     // bar and its Önizle tally reading different sources is how they drifted
     // apart the last time.
-    expect(probe.translationPreviews).toHaveLength(probe.dirtyCount);
-    expect(probe.translationPreviews[0]).toMatchObject({
+    expect(probe.pending[0].drafts).toHaveLength(probe.dirtyCount);
+    expect(probe.pending[0].drafts[0]).toMatchObject({
       locale: "en",
       blockPath: PATH,
       blockType: "LongText",
@@ -317,7 +317,7 @@ describe("staging a translation", () => {
     });
   });
 
-  it("ignores a staged value identical to what that language already says", async () => {
+  it("ignores a value identical to what that language already says", async () => {
     await mount();
     act(() => { probe.targets[0].setValue("English body copy"); });
     await settle();
@@ -380,7 +380,7 @@ describe("publishing", () => {
     const target = probe.globalTargets[0];
     // The route it is offered from, because that is where the merged fetch put
     // it. `__global` is a slug, not a page, so a pathname built from it would
-    // be one no locale could be read back out of, and the staged edit would be
+    // be one no locale could be read back out of, and the typed edit would be
     // dropped at publish time without a word.
     expect(target.pathname).toBe("/en");
     expect(target.value).toBe("Footer tagline");
@@ -425,7 +425,7 @@ describe("publishing", () => {
     expect(rows.tr.version).toBe(4);
   });
 
-  it("drops the staged translation once it has landed", async () => {
+  it("drops the typed translation once it has landed", async () => {
     await mount();
     act(() => { probe.targets[0].setValue("Brand new English body"); });
     await settle();

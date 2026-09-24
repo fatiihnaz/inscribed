@@ -96,6 +96,10 @@ export const panel = Object.freeze({
   "translations.undoAllLabel": "Yazılan çevirileri geri al",
   "translations.undoOne": "{locale} çevirisini geri al",
   "translations.missing": "Bu dilde bu blok yok",
+  "translations.editOthers": "Diğer dillerde düzenle",
+  "translations.editOthersLabel": "{path} bloğunu diğer dillerde düzenle",
+  "translations.saving": "Taslak olarak kaydediliyor…",
+  "translations.saved": "{locales} taslağı olarak kaydedildi.",
   "translations.tooMany": "{count} dil daha var. Her birini kendi sayfasında düzenlemek, hepsini buraya sığdırmaktan kolay: {list}.",
 
   "elsewhere.title": "Diğer dillerde bekleyen",

@@ -15,12 +15,10 @@
  * Collection blocks are excluded: their drafts are per-item and surface in the
  * collection's own region tab.
  *
- * Translations staged from a block card get their own rows, because they
- * publish in the same click and a review that omitted them would be reviewing
- * less than the button sends. So do the drafts waiting in the page's other
- * languages, since this is where they get looked at before being included.
- * Once another language is involved the rows are grouped by language, the
- * page's own first.
+ * Changes waiting in the page's other languages get rows too, whether they were
+ * written on their own pages or typed here as translations: this is where they
+ * get looked at before being included. Once another language is involved the
+ * rows are grouped by language, the page's own first.
  */
 
 import { useMemo } from "react";
@@ -55,7 +53,6 @@ const TEXTY_BLOCK_TYPES = new Set(["ShortText", "LongText"]);
  *   dirtyByPath: Map<string, boolean>,
  *   itemSchemas: Map<string, ItemSchema>,
  *   collectionDirtyCounts: Map<string, Set<string>>,
- *   translationPreviews?: import("../core/hooks/use-cms-save.js").TranslationPreview[],
  *   locale?: string | null,
  *   pending?: import("../core/hooks/use-cms-save.js").PendingLanguage[],
  *   onToggleLocale?: (locale: string) => void,
@@ -65,7 +62,7 @@ const TEXTY_BLOCK_TYPES = new Set(["ShortText", "LongText"]);
  */
 export function ChangesPanel({
   blockList, drafts, dirtyByPath, itemSchemas,
-  collectionDirtyCounts, translationPreviews, locale = null, pending, onToggleLocale,
+  collectionDirtyCounts, locale = null, pending, onToggleLocale,
   onGoToBlock, onGoToCollection,
 }) {
   const t = useCmsStrings();
@@ -83,28 +80,7 @@ export function ChangesPanel({
     [collectionDirtyCounts],
   );
 
-  const translations = translationPreviews ?? EMPTY_TRANSLATIONS;
-  const waiting = pending ?? EMPTY_PENDING;
-
-  // One group per other language: the translations staged here, which go out
-  // with the block they were written beside, then the drafts saved there,
-  // which go out once that language is included.
-  const elsewhere = useMemo(() => {
-    /** @type {Map<string, LanguageGroup>} */
-    const byLocale = new Map();
-    /** @param {string} l */
-    const groupOf = (l) => {
-      let group = byLocale.get(l);
-      if (!group) {
-        group = { locale: l, staged: [], language: null };
-        byLocale.set(l, group);
-      }
-      return group;
-    };
-    for (const language of waiting) groupOf(language.locale).language = language;
-    for (const preview of translations) groupOf(preview.locale).staged.push(preview);
-    return [...byLocale.values()];
-  }, [waiting, translations]);
+  const elsewhere = pending ?? EMPTY_PENDING;
 
   const isEmpty = dirty.length === 0
     && collectionEntries.length === 0
@@ -152,40 +128,26 @@ export function ChangesPanel({
                     {ownRows}
                   </LanguageGroup>
                 ) : null}
-                {elsewhere.map((group, i) => {
-                  const { language } = group;
-                  return (
-                    <LanguageGroup
-                      key={group.locale}
-                      code={group.locale.toUpperCase()}
-                      where={language?.pathname ?? null}
-                      count={group.staged.length + (language?.drafts.length ?? 0)}
-                      first={i === 0 && dirty.length === 0 && collectionEntries.length === 0}
-                      action={language && onToggleLocale ? (
-                        <IncludeLanguageButton language={language} onToggle={onToggleLocale}>
-                          {language.included ? t("changes.included") : t("changes.include")}
-                        </IncludeLanguageButton>
-                      ) : (
-                        <span style={groupStateStyle}>{t("changes.willPublish")}</span>
-                      )}
-                    >
-                      {group.staged.map((preview) => (
-                        <li key={preview.key} style={{ listStyle: "none" }}>
-                          <TranslationDiffCard preview={preview} />
-                        </li>
-                      ))}
-                      {language?.drafts.map((draft) => (
-                        <li key={draft.key} style={{ listStyle: "none" }}>
-                          <TranslationDiffCard
-                            preview={draft}
-                            global={draft.global}
-                            dimmed={!language.included}
-                          />
-                        </li>
-                      ))}
-                    </LanguageGroup>
-                  );
-                })}
+                {elsewhere.map((language, i) => (
+                  <LanguageGroup
+                    key={language.locale}
+                    code={language.locale.toUpperCase()}
+                    where={language.pathname}
+                    count={language.drafts.length}
+                    first={i === 0 && dirty.length === 0 && collectionEntries.length === 0}
+                    action={onToggleLocale ? (
+                      <IncludeLanguageButton language={language} onToggle={onToggleLocale}>
+                        {language.included ? t("changes.included") : t("changes.include")}
+                      </IncludeLanguageButton>
+                    ) : null}
+                  >
+                    {language.drafts.map((draft) => (
+                      <li key={draft.key} style={{ listStyle: "none" }}>
+                        <TranslationDiffCard draft={draft} dimmed={!language.included} />
+                      </li>
+                    ))}
+                  </LanguageGroup>
+                ))}
               </>
             )}
           </ul>
@@ -196,15 +158,7 @@ export function ChangesPanel({
 }
 
 /** Stable, so the default doesn't allocate a new array each render. */
-const EMPTY_TRANSLATIONS = /** @type {import("../core/hooks/use-cms-save.js").TranslationPreview[]} */ ([]);
 const EMPTY_PENDING = /** @type {import("../core/hooks/use-cms-save.js").PendingLanguage[]} */ ([]);
-
-/**
- * @typedef {Object} LanguageGroup
- * @property {string} locale
- * @property {import("../core/hooks/use-cms-save.js").TranslationPreview[]} staged
- * @property {import("../core/hooks/use-cms-save.js").PendingLanguage | null} language
- */
 
 /**
  * One language's rows under a header naming it, where its page lives, how many
@@ -236,42 +190,39 @@ function LanguageGroup({ code, where, count, first, action, children }) {
 }
 
 /**
- * A row bound for another language: a translation staged here, or a draft
- * saved on that language's page. Same card shell as a block diff, with the
+ * A row bound for another language. Same card shell as a block diff, with the
  * language named in the header and no "edit this" button: the editor for it
- * lives under the block it was written beside, or on a page this drawer does
- * not navigate to.
+ * is the block's own "other languages" panel, or that language's page.
  *
  * @param {{
- *   preview: import("../core/hooks/use-cms-save.js").TranslationPreview,
- *   global?: boolean,
- *   dimmed?: boolean,
+ *   draft: import("../core/hooks/use-cms-save.js").PendingDraft,
+ *   dimmed: boolean,
  * }} props
- *   `dimmed` marks a draft left out of the next save.
+ *   `dimmed` marks a change left out of the next save.
  */
-function TranslationDiffCard({ preview, global = false, dimmed = false }) {
+function TranslationDiffCard({ draft, dimmed }) {
   const t = useCmsStrings();
-  const TypeBadge = typeIconFor(preview.blockType);
+  const TypeBadge = typeIconFor(draft.blockType);
   return (
     <div style={dimmed ? { ...rowContainerStyle, ...dimmedStyle } : { ...rowContainerStyle, ...undimmedStyle }}>
       <div style={rowHeaderStyle}>
         <span aria-hidden="true" style={{ ...typeIconStyle, color: TEXT_MUTED }}>
           <TypeBadge size={13} />
         </span>
-        <span style={rowPathStyle} title={preview.blockPath}>
-          {preview.blockPath}
+        <span style={rowPathStyle} title={draft.blockPath}>
+          {draft.blockPath}
         </span>
         {/* The header or footer, which every page of that language shares. */}
-        {global ? <span style={scopeTagStyle}>{t("drawer.global")}</span> : null}
-        <span style={global ? { ...localeBadgeStyle, marginLeft: 0 } : localeBadgeStyle}>
-          {preview.locale.toUpperCase()}
+        {draft.global ? <span style={scopeTagStyle}>{t("drawer.global")}</span> : null}
+        <span style={draft.global ? { ...localeBadgeStyle, marginLeft: 0 } : localeBadgeStyle}>
+          {draft.locale.toUpperCase()}
         </span>
       </div>
       <div style={rowGuideBodyStyle}>
         <DiffContent
-          blockType={preview.blockType}
-          prev={preview.prev}
-          next={preview.next}
+          blockType={draft.blockType}
+          prev={draft.prev}
+          next={draft.next}
         />
       </div>
     </div>

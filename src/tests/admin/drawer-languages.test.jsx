@@ -204,3 +204,22 @@ describe("the preview", () => {
     expect(include.textContent).toBe(t("changes.included"));
   });
 });
+
+describe("a row's other languages", () => {
+  it("open from the row on request, on that language's draft, and writing puts it in", async () => {
+    renderDrawer();
+    await waitFor(() => expect(lane()).toBeTruthy());
+
+    // Nothing was rewritten, so nothing offered itself: the row's button is the
+    // way in.
+    fireEvent.click(screen.getByRole("button", { name: t("translations.editOthersLabel", { path: "hero.title" }) }));
+    const panel = await screen.findByRole("group", { name: t("translations.label") });
+    const field = /** @type {HTMLInputElement} */ (within(panel).getByRole("textbox"));
+    expect(field.value).toBe("Title, reworded");
+
+    fireEvent.change(field, { target: { value: "Title, rewritten here" } });
+
+    expect(englishChip().getAttribute("aria-pressed")).toBe("true");
+    expect(await screen.findByRole("button", { name: t("status.saveLocales", { locales: "EN" }) })).toBeTruthy();
+  });
+});

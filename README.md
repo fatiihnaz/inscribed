@@ -1166,9 +1166,10 @@ hero.body   [ Şirketimiz 1998'den beri… ]
             └───────────────────────────────────────┘
 ```
 
-Type into it and it publishes with the block it sits under — one `PUT` per
-language, each versioned against its own row, each revalidating its own tag. So
-"publish" means the same thing it always did: everything you have pending.
+Type into it and that language joins the next publish, so the translation goes
+out with the block it sits under: one `PUT` per language, each versioned
+against its own row, each revalidating its own tag. So "publish" means the same
+thing it always did: everything you have pending.
 
 The prompt is deliberately quiet. It only appears for `ShortText`, `LongText`
 and `RichText` (translating a date or an image URL is not a thing), only once
@@ -1177,10 +1178,17 @@ bolded word never triggers it. `RichText` is compared on its text, so
 reformatting is not a rewrite. Past three other languages the editors would
 dwarf the block they hang off, so it degrades to a dismissible line naming them.
 
-This is not machine translation: the field is prefilled with the current copy
-and you write the rest. Staged translations are never autosaved as drafts —
-they live from the moment the prompt opens until you publish, and navigating
-away drops them.
+This is not machine translation: the field is prefilled with what that language
+says now, its draft included, and you write the rest. What you type is that
+language's draft: it autosaves the way an edit on that language's own page
+would, so leaving the page loses nothing and the English page shows it too.
+*Undo* goes back to what the field said before you started, not to the
+published text.
+
+The prompt only offers itself for prose. Every row also has an *Edit in other
+languages* button, shown on hover, that opens the same panel on request, for an
+image or a link that should differ per language. Lists and selects are the
+exceptions: the panel has no editor for them.
 
 **Drafts left in another language.** Edit the English page, leave without
 publishing, and the Turkish page's drawer still finds them: a row above the save
@@ -1188,7 +1196,9 @@ bar, *Waiting in other languages*, holds a chip per language (`+ EN 3`). They
 are never included on their own. Click the chip, or *Add to publish* on that
 language's group in the preview, and the next save publishes them as well, each
 against its own row, with the button naming every language it writes
-(`Save · TR + EN`). If one language lands and another does not, the banner says
+(`Save · TR + EN`). A language goes in whole: writing a translation into it
+includes its other drafts on this page too, because the backend clears a
+language's whole draft on a page when it publishes there. If one language lands and another does not, the banner says
 which, and the button (`Retry · EN`) resends only what failed. To find them the
 drawer reads the page in each other language while it is open: one request per
 language, shared with the prompt above, and repeated after each publish.

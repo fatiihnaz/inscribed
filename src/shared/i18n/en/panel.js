@@ -104,6 +104,10 @@ export const panel = Object.freeze({
   "translations.undoAllLabel": "Undo the translations written here",
   "translations.undoOne": "Undo the {locale} translation",
   "translations.missing": "This language has no such block",
+  "translations.editOthers": "Edit in other languages",
+  "translations.editOthersLabel": "Edit {path} in the other languages",
+  "translations.saving": "Saving as a draft…",
+  "translations.saved": "Saved as the {locales} draft.",
   "translations.tooMany": "There are {count} more languages. Editing each on its own page beats fitting them all in here: {list}.",
 
   // Drafts saved in the page's other languages, offered for the next publish.

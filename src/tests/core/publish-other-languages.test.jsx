@@ -268,17 +268,25 @@ describe("drafts waiting in another language", () => {
     expect(probe.dirtyUpdates).toEqual([]);
   });
 
-  it("give way to a translation staged here for the same block", async () => {
+  it("take a translation typed here in place of that block's draft, and go out with it", async () => {
     await mount();
     act(() => { probe.bodyTargets[0].setValue("Translated beside the Turkish"); });
     await settle();
 
-    // The staged text is what goes out for that block, so its draft is not
-    // offered beside it as a second, different English body.
-    expect(probe.pending[0].drafts.map((d) => d.blockPath)).toEqual([TITLE, FOOTER]);
-    expect(probe.dirtyUpdates).toEqual([
-      expect.objectContaining({ blockPath: BODY, locale: "en", value: "Translated beside the Turkish", version: 9 }),
+    // One row per block: the typed text is that block's English draft now, not
+    // a second English body offered beside the first.
+    const [en] = probe.pending;
+    expect(en.drafts.map((d) => [d.blockPath, d.next])).toEqual([
+      [BODY, "Translated beside the Turkish"],
+      [TITLE, "English title, reworded"],
+      [FOOTER, "Footer, reworded"],
     ]);
+    // Writing into English is what put English in, drafts and all: the backend
+    // clears a language's whole draft on a slug when it publishes there.
+    expect(en.included).toBe(true);
+    expect(probe.dirtyUpdates).toContainEqual(
+      expect.objectContaining({ blockPath: BODY, locale: "en", value: "Translated beside the Turkish", version: 9 }),
+    );
     expect(probe.publishLocales).toEqual(["en"]);
   });
 

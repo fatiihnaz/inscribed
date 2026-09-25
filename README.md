@@ -1242,6 +1242,24 @@ open), and the ones missing (click to compose). Which is also why the chips
 matter: without them an editor can write a whole record before the backend
 rejects it as a duplicate, and the rejection can't say where the existing one is.
 
+A record placed on a page with `<CollectionItem>` does the same from its card
+on the page tab. The card's *Edit in other languages* button opens the record's
+prose in each other language:
+- **The translation exists:** the button opens that record, on its draft, with
+  a link to open the whole record in the collections area.
+- **The translation is missing:** the button opens an empty form, and the
+  record's other fields (an image, a date) are copied into the new record.
+
+The card's save then goes out as one click (`Save · TR + EN`):
+- It publishes the record first, then every language written from the card.
+- It creates the missing ones in the record's translation group.
+- It checks every language before sending anything.
+- If a language fails, the card names it and the button retries only that one.
+
+A draft that record already had from elsewhere is shown but stays out until it
+is written here. Text typed for a missing language waits in the browser, so it
+survives a navigation but not a reload.
+
 None of this decides what language the *panel itself* speaks. That is
 [`adminLocale`](#panel-language), and it is a separate setting on purpose:
 these locales are your content's, and are arbitrary, while the panel speaks

@@ -56,6 +56,7 @@ import { ChangesPanel } from "./ChangesPanel.jsx";
 import { cardTextColStyle, cardLabelStyle, cardValueStyle } from "./block-card-chrome.jsx";
 import { Collapse } from "./Collapse.jsx";
 import { IncludeLanguageButton } from "./IncludeLanguageButton.jsx";
+import { DrawerNavContext } from "./drawer-nav.js";
 import { PanelArea } from "./PanelArea.jsx";
 import { readOpenTarget, stripOpenParams } from "./deep-link.js";
 
@@ -650,6 +651,17 @@ export function Drawer({ panels = null }) {
     if (draftSyncStatus === "saving" || dirtyCount > 0) setPublishedFlash(false);
   }, [draftSyncStatus, dirtyCount]);
 
+  const drawerNav = useMemo(() => ({
+    /** @param {string} key @param {string} slug */
+    openRecord: (key, slug) => {
+      setPreviewOpen(false);
+      setModeState("collections");
+      setSelectedCollection({ key, scope: "global" });
+      // The panel opens the record's detail pane once it mounts.
+      setActiveCollectionItem({ key, slug });
+    },
+  }), [setActiveCollectionItem]);
+
   const saveError = describeSaveError(error, t, unresolvedConflicts, locale);
 
   // What the pill names once the publish lands. Read at the click, because by
@@ -712,6 +724,7 @@ export function Drawer({ panels = null }) {
   );
 
   return (
+    <DrawerNavContext.Provider value={drawerNav}>
     <MotionConfig reducedMotion="user">
       <style>{panelCss}</style>
       <motion.aside
@@ -939,6 +952,7 @@ export function Drawer({ panels = null }) {
         </button>
       </motion.aside>
     </MotionConfig>
+    </DrawerNavContext.Provider>
   );
 }
 

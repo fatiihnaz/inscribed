@@ -56,7 +56,10 @@ function isVirtualItem(item) {
  * @property {() => Record<string, *> | null} readValues
  *   The current values without subscribing, for handlers that patch one key.
  * @property {(next: Record<string, *>) => void} setValues
- * @property {() => void} save
+ * @property {() => Promise<string | null>} save
+ *   Publish. Resolves with the line the form shows when it was refused, or
+ *   null once the record is live, so a caller publishing several records in a
+ *   row can tell where it stopped.
  * @property {() => void} undoDraft
  * @property {() => void} archive
  *   Take the record out of every default view, keeping its slug and content.
@@ -469,13 +472,21 @@ export function useCollectionEditor(
   // Absent means live: the backend sends the flag only on an archived row.
   const isArchived = item?.isArchived === true;
 
-  const save = useCallback(() => {
+  const save = useCallback(() => new Promise((resolve) => {
     setError(null);
     const values = readValues();
-    if (!schema || !values) return;
+    if (!schema || !values) {
+      resolve(null);
+      return;
+    }
+    /** @param {string} message */
+    const fail = (message) => {
+      setError(message);
+      resolve(message);
+    };
     const missing = requiredMissing(schema.fields, values);
     if (missing) {
-      setError(t("collections.requiredMissing", { field: missing }));
+      fail(t("collections.requiredMissing", { field: missing }));
       return;
     }
     const queueKey = itemDraftKey(collection, slug);
@@ -533,12 +544,13 @@ export function useCollectionEditor(
           // eslint-disable-next-line no-console
           console.warn("[inscribed] onAfterCollectionSave failed:", revalidateErr);
         }
+        resolve(null);
       } catch (err) {
         // Checked before the plain conflict: an archived row is not a race, and
         // "the list has been refreshed, try again" would send the user round a
         // loop that cannot end until someone restores it.
         if (err instanceof CmsApiError && err.isArchivedConflict) {
-          setError(t("collections.archivedConflict"));
+          fail(t("collections.archivedConflict"));
           await refetch();
         } else if (err instanceof CmsApiError && err.isMovedConflict && err.conflictingSlug) {
           // Repointed but deliberately not re-sent: this tab's version is as
@@ -546,25 +558,25 @@ export function useCollectionEditor(
           // overwrite whatever landed there. The user gets the current record
           // and their own edits side by side, and decides.
           repointToCanonical(err.conflictingSlug);
-          setError(t("collections.recordMoved", { slug: err.conflictingSlug }));
+          fail(t("collections.recordMoved", { slug: err.conflictingSlug }));
         } else if (err instanceof CmsApiError && err.isConflict) {
-          setError(t("collections.versionConflict"));
+          fail(t("collections.versionConflict"));
           await refetch();
         } else if (err instanceof CmsApiError && err.isForbidden) {
-          setError(t("collections.editForbidden"));
+          fail(t("collections.editForbidden"));
         } else if (err instanceof CmsApiError && err.status === 400) {
           // Map the backend's `works[0].title` path notation onto schema
           // labels so the banner reads "Çalışmalar #1 → Başlık".
-          setError(
+          fail(
             humanizeCollectionError(err.detail, schema.fields, t)
             ?? t("collections.invalidData", { detail: err.message }),
           );
         } else {
-          setError(/** @type {Error} */ (err).message);
+          fail(/** @type {Error} */ (err).message);
         }
       }
     });
-  }, [
+  }), [
     schema, collection, slug, locale, readValues, getAccessToken, config, draftQueue,
     updateCollectionItem, clearCollectionDraft, onAfterCollectionSave, refetch,
     repointToCanonical, t,

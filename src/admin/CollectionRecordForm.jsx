@@ -36,6 +36,8 @@ import { TEXT_MUTED, TEXT_FAINT, FONT_SANS, STATUS_OK, STATUS_WARN, STATUS_DANGE
  *   showActions?: boolean,
  *   readOnly?: boolean,
  *   variant?: import("../editors/styles.js").FieldVariantName,
+ *   publish?: { label: string, onPublish: () => void, pending: boolean, busy: boolean, notice: string | null },
+ *   children?: React.ReactNode,
  * }} props
  *   `readOnly` locks the form from outside the record's own permissions: an
  *   enclosing `<CmsGroup editable={false}>` covers its collection rows too.
@@ -43,9 +45,14 @@ import { TEXT_MUTED, TEXT_FAINT, FONT_SANS, STATUS_OK, STATUS_WARN, STATUS_DANGE
  *   `variant` defaults to the drawer's palette because every caller of this
  *   component is a drawer surface. The portable one is `CollectionFieldsForm`'s
  *   default instead, which is what a host page reaches directly.
+ *
+ *   `publish` hands the save button to a caller that publishes more than this
+ *   record: `pending` says something of its own is waiting even when this
+ *   record is clean. `children` render between the fields and the actions.
  */
 export function CollectionRecordForm({
   editor, showMetaRow = true, showActions = true, readOnly = false, variant = "drawer",
+  publish, children,
 }) {
   const t = useCmsStrings();
   const {
@@ -84,8 +91,8 @@ export function CollectionRecordForm({
 
   // A group-level lock is as final as the record's own permissions here.
   const editable = canEdit && !readOnly;
-  const disabled = isPending || !editable;
-  const nothingToSave = !isDirty && !isVirtual;
+  const disabled = isPending || Boolean(publish?.busy) || !editable;
+  const nothingToSave = !isDirty && !isVirtual && !publish?.pending;
 
   return (
     <div style={containerStyle}>
@@ -118,7 +125,10 @@ export function CollectionRecordForm({
         variant={variant}
       />
 
+      {children}
+
       {error ? <div style={errorStyle}>{error}</div> : null}
+      {publish?.notice ? <div role="alert" style={errorStyle}>{publish.notice}</div> : null}
 
       {editable && showActions ? (
         <div style={actionsRowStyle}>
@@ -130,12 +140,12 @@ export function CollectionRecordForm({
           />
           <button
             type="button"
-            onClick={save}
+            onClick={publish ? publish.onPublish : save}
             disabled={disabled || nothingToSave}
             className="inscribed-btn-collection"
             style={saveButtonStyle}
           >
-            {isPending ? t("collections.saving") : t("status.save")}
+            {isPending || publish?.busy ? t("collections.saving") : publish?.label ?? t("status.save")}
           </button>
         </div>
       ) : null}

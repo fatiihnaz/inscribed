@@ -34,10 +34,13 @@ export const DEFAULT_SORT = "slug:asc";
  * defaults are `slug:asc` and live rows, so spelling either one out would fork
  * the cache key away from the plain window that asks for the same thing.
  *
- * @param {{ filter?: Record<string, *>, limit?: number, offset?: number, locale?: string|null, sort?: string|null, archived?: boolean }} [input]
+ * `q` is trimmed for the same reason: `" kedi"` and `"kedi"` ask the backend
+ * the same question and should share one entry.
+ *
+ * @param {{ filter?: Record<string, *>, limit?: number, offset?: number, locale?: string|null, sort?: string|null, archived?: boolean, q?: string|null }} [input]
  * @returns {CollectionListParams | undefined}
  */
-export function buildListParams({ filter, limit, offset, locale, sort, archived } = {}) {
+export function buildListParams({ filter, limit, offset, locale, sort, archived, q } = {}) {
   /** @type {CollectionListParams} */
   const params = {};
   if (filter) params.filter = filter;
@@ -46,5 +49,6 @@ export function buildListParams({ filter, limit, offset, locale, sort, archived 
   if (locale) params.locale = locale;
   if (sort && sort !== DEFAULT_SORT) params.sort = sort;
   if (archived) params.archived = true;
+  if (q?.trim()) params.q = q.trim();
   return Object.keys(params).length > 0 ? params : undefined;
 }

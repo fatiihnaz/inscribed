@@ -1,7 +1,7 @@
 /**
  * @file The collection panel's pure helpers: which field headlines a row, which
- * columns the collection can be sorted by, how old a record reads, and how a
- * `sort` string splits.
+ * columns the collection can be sorted by, how old a record reads, where a
+ * search hits it, and how a `sort` string splits.
  *
  * They lived inside the panel component and had no coverage of their own. The
  * interesting cases are all edge ones (a schema with nothing textual, a clock
@@ -12,7 +12,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   titleFieldOf, sortableColumns, shortAge, itemTitle, splitSort,
-  imageFieldName, itemImage,
+  imageFieldName, itemImage, searchTerms, matchesSearch, matchRanges,
 } from "../../admin/collection/collection-format.js";
 
 /**
@@ -191,5 +191,68 @@ describe("itemImage", () => {
 
   it("has nothing to read without a field", () => {
     expect(itemImage(item, null)).toBeNull();
+  });
+});
+
+describe("searchTerms", () => {
+  it("splits on any run of whitespace and drops the ends", () => {
+    expect(searchTerms("  köpek 	 orman  ")).toEqual(["köpek", "orman"]);
+    expect(searchTerms("   ")).toEqual([]);
+  });
+});
+
+// The rule the backend applies to `?q=`, for the rows that never go through it.
+// Folding has to agree with `unaccent(lower(…))`, or a derived row and a record
+// with the same title would answer the same query differently.
+describe("matchesSearch", () => {
+  it("ignores case and diacritics, the dotted and dotless i included", () => {
+    for (const q of ["isik", "ışık", "IŞIK", "Işık", "İŞİK"]) {
+      expect(matchesSearch(["Işık Sınavı"], [q])).toBe(true);
+    }
+    expect(matchesSearch(["İstanbul"], ["istanbul"])).toBe(true);
+    expect(matchesSearch(["Café"], ["cafe"])).toBe(true);
+  });
+
+  it("wants every word, in any order, each from any field", () => {
+    expect(matchesSearch(["Işık Sınavı"], ["sinav", "isik"])).toBe(true);
+    expect(matchesSearch(["Işık Sınavı", "2024-guz"], ["sinav", "guz"])).toBe(true);
+    expect(matchesSearch(["Işık Sınavı"], ["sinav", "bahar"])).toBe(false);
+  });
+
+  it("skips a missing field rather than matching on it", () => {
+    expect(matchesSearch([null, "alfa"], ["alf"])).toBe(true);
+    expect(matchesSearch([null, undefined], ["alf"])).toBe(false);
+  });
+
+  it("lets everything through when there is nothing to search for", () => {
+    expect(matchesSearch(["alfa"], [])).toBe(true);
+  });
+});
+
+describe("matchRanges", () => {
+  it("marks the original text wherever a folded term occurs", () => {
+    const text = "Işık Sınavı";
+    const ranges = matchRanges(text, ["isik"]);
+    expect(ranges.map(([a, b]) => text.slice(a, b))).toEqual(["Işık"]);
+  });
+
+  // A decomposed accent (e + U+0301) folds to nothing, which shifts every later
+  // position; the mark still has to land on the characters the row prints, and
+  // take the accent along with its letter.
+  it("keeps positions honest when folding shortens the text", () => {
+    const text = "Café Noir";
+    expect(matchRanges(text, ["noir"]).map(([a, b]) => text.slice(a, b))).toEqual(["Noir"]);
+    expect(matchRanges(text, ["cafe"]).map(([a, b]) => text.slice(a, b))).toEqual(["Café"]);
+  });
+
+  it("finds every occurrence of every term, merging overlaps", () => {
+    const text = "kedi köpek köpek";
+    expect(matchRanges(text, ["kopek"]).map(([a, b]) => text.slice(a, b))).toEqual(["köpek", "köpek"]);
+    expect(matchRanges("köpekbalığı", ["kopek", "pekba"])).toEqual([[0, 7]]);
+  });
+
+  it("marks nothing when nothing occurs", () => {
+    expect(matchRanges("alfa", ["beta"])).toEqual([]);
+    expect(matchRanges("alfa", [])).toEqual([]);
   });
 });

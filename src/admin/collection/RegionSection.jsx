@@ -6,8 +6,9 @@
  * "Load more") and `DerivedRows` (claim-derived slugs that have no record yet).
  *
  * They are one module because they are the same list twice: both turn a window
- * of the shared cache into `RegionItemRow`s, and both filter it by the panel's
- * search over the loaded rows only.
+ * of the shared cache into `RegionItemRow`s under the panel's search. A section
+ * asks the backend for its matches; derived rows arrive whole in every window,
+ * so they are narrowed here by the same rule.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -17,15 +18,15 @@ import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
 import { buildListParams } from "../../collections/params.js";
 import { useCollection } from "../../collections/hooks/use-collection.js";
 import { stableStringify } from "../../shared/util/stable-stringify.js";
-import { itemImage, itemTitle } from "./collection-format.js";
+import { itemImage, itemTitle, matchesSearch, searchTerms } from "./collection-format.js";
 
 import { RegionItemRow } from "./RegionItemRow.jsx";
 import { SkeletonRows } from "../Skeleton.jsx";
 import { emptyStateStyle } from "../../editors/styles.js";
 import {
   listArrival,
-  sectionWrapStyle, rowGroupStyle, searchScopeNoteStyle, errorBoxStyle,
-  retryTextStyle, loadMoreStyle, regionHeaderStyle, regionAllLabelStyle,
+  sectionWrapStyle, rowGroupStyle, listSettledStyle, listStaleStyle, searchNoteStyle,
+  errorBoxStyle, retryTextStyle, loadMoreStyle, regionHeaderStyle, regionAllLabelStyle,
   filterChipStyle, filterChipKeyStyle, filterChipValueStyle, regionCountStyle,
 } from "./collection-styles.js";
 
@@ -51,25 +52,21 @@ const DEFAULT_DRAWER_PAGE_SIZE = 50;
  *   activeSlug: string | null,
  *   imageField: string | null,
  *   titleField: string | null,
- *   query: string,
+ *   search: string,
  *   onOpenItem: (slug: string) => void,
  * }} props
  */
 export function DerivedRows({
-  collectionKey, listParams, dirtySlugs, activeSlug, titleField, imageField, query, onOpenItem,
+  collectionKey, listParams, dirtySlugs, activeSlug, titleField, imageField, search, onOpenItem,
 }) {
   const { virtualItems } = useCollection(collectionKey, listParams);
+  const terms = useMemo(() => searchTerms(search), [search]);
 
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return virtualItems.filter((row) => {
-      if (row.origin !== "derived" || row.slug == null) return false;
-      if (!q) return true;
-      if (row.slug.toLowerCase().includes(q)) return true;
-      const title = itemTitle(row, titleField);
-      return title != null && title.toLowerCase().includes(q);
-    });
-  }, [virtualItems, query, titleField]);
+  const rows = useMemo(
+    () => virtualItems.filter((row) => row.origin === "derived" && row.slug != null
+      && matchesSearch([row.slug, itemTitle(row, titleField)], terms)),
+    [virtualItems, terms, titleField],
+  );
 
   if (rows.length === 0) return null;
 
@@ -86,6 +83,7 @@ export function DerivedRows({
             isActive={row.slug === activeSlug}
             image={itemImage(row, imageField)}
             showThumb={imageField != null}
+            highlight={terms}
             updatedAt={row.updatedAt}
             onOpen={() => onOpenItem(/** @type {string} */ (row.slug))}
           />
@@ -108,71 +106,86 @@ export function DerivedRows({
  *   showHeader: boolean,
  *   dirtySlugs: Set<string>,
  *   activeSlug: string | null,
+ *   titleField: string | null,
  *   imageField: string | null,
+ *   search: string,
  *   sort: string,
  *   archived: boolean,
+ *   locale: string | null,
  *   onOpenItem: (slug: string) => void,
  * }} props
+ *   `search` is the panel's search box once typing has paused, trimmed: every
+ *   value it takes is a request.
  */
 export function RegionSection({
   collectionKey, filter, pageLimit, pageOffset, showHeader, dirtySlugs, activeSlug,
-  titleField, imageField, query, sort, archived, locale, onOpenItem,
+  titleField, imageField, search, sort, archived, locale, onOpenItem,
 }) {
   const t = useCmsStrings();
-  const initialLimit = pageLimit ?? DEFAULT_DRAWER_PAGE_SIZE;
   const initialOffset = pageOffset ?? 0;
-  const [offset, setOffset] = useState(initialOffset);
-  const [limit] = useState(initialLimit);
+  const [limit] = useState(pageLimit ?? DEFAULT_DRAWER_PAGE_SIZE);
 
   // Anything that changes which rows come back, and in what order, has to
   // restart the accumulation: pages gathered under the old ordering would
-  // otherwise interleave with pages under the new one.
+  // otherwise interleave with pages under the new one. The search restarts it
+  // too, but is kept out of this key because it restarts differently: a new
+  // window starts from a skeleton, a new search keeps the last answer up until
+  // the next one lands.
   const windowKey = `${stableStringify(filter ?? null)}|${sort}|${archived}|${locale ?? ""}`;
-  const [accumulated, setAccumulated] = useState(
-    /** @type {import("../../shared/contracts/schemas.js").CollectionItemResponse[]} */ ([]),
-  );
+
+  // Pages past the first, counted for one window and search and ignored under
+  // any other. Resetting them in an effect instead would run a render late, and
+  // that render would fetch the new search at the old offset.
+  const pagingKey = `${windowKey}|${search}`;
+  const [extra, setExtra] = useState({ key: pagingKey, pages: 0 });
+  const pages = extra.key === pagingKey ? extra.pages : 0;
+  const offset = initialOffset + pages * limit;
 
   const params = useMemo(
-    () => buildListParams({ filter, offset, limit, sort, archived, locale }),
-    [filter, offset, limit, sort, archived, locale],
+    () => buildListParams({ filter, offset, limit, sort, archived, locale, q: search }),
+    [filter, offset, limit, sort, archived, locale, search],
   );
-  const { items, total, isLoading, error, refetch } = useCollection(collectionKey, params);
+  const { items, total, approximate, isLoading, error, refetch } = useCollection(collectionKey, params);
 
-  useEffect(() => {
-    setOffset(initialOffset);
-    setAccumulated([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowKey]);
+  // The rows on screen and the question they answer, tagged rather than reset,
+  // so a search in flight can leave the previous answer showing. The question
+  // is null until the first answer lands.
+  const [shown, setShown] = useState({
+    windowKey: /** @type {string | null} */ (null),
+    search: /** @type {string | null} */ (null),
+    total: 0,
+    approximate: false,
+    items: /** @type {import("../../shared/contracts/schemas.js").CollectionItemResponse[]} */ ([]),
+  });
 
   useEffect(() => {
     if (isLoading || error) return;
-    if (offset === initialOffset) {
-      setAccumulated(items);
-    } else {
-      setAccumulated((prev) => {
-        const seen = new Set(prev.map((row) => row.slug));
-        return [...prev, ...items.filter((row) => !seen.has(row.slug))];
-      });
-    }
-  }, [items, isLoading, error, offset, initialOffset]);
-
-  const canLoadMore = accumulated.length < total;
-  const loadMore = () => setOffset((o) => o + limit);
-  const remaining = Math.max(0, total - accumulated.length);
-
-  // Client-side over the loaded window only: the list endpoint filters by the
-  // region's declared fields, not by free text, so searching cannot be pushed
-  // to the server without changing the contract.
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return accumulated;
-    return accumulated.filter((item) => {
-      if (item.slug.toLowerCase().includes(q)) return true;
-      const title = itemTitle(item, titleField);
-      return title != null && title.toLowerCase().includes(q);
+    setShown((prev) => {
+      if (offset === initialOffset || prev.windowKey !== windowKey || prev.search !== search) {
+        return { windowKey, search, total, approximate, items };
+      }
+      const seen = new Set(prev.items.map((row) => row.slug));
+      return { ...prev, total, items: [...prev.items, ...items.filter((row) => !seen.has(row.slug))] };
     });
-  }, [accumulated, query, titleField]);
-  const isSearching = query.trim().length > 0;
+  }, [items, total, approximate, isLoading, error, offset, initialOffset, windowKey, search]);
+
+  const current = shown.windowKey === windowKey && shown.search === search;
+  // The same window under another search: its rows stay, dimmed, until the
+  // answer arrives. A different window has nothing worth keeping.
+  const stale = !current && shown.windowKey === windowKey;
+  const answer = current || stale ? shown : null;
+  const accumulated = answer?.items ?? [];
+  const answerTotal = answer?.total ?? 0;
+
+  const canLoadMore = current && accumulated.length < answerTotal;
+  const loadMore = () => setExtra({ key: pagingKey, pages: pages + 1 });
+  const remaining = Math.max(0, answerTotal - accumulated.length);
+  // Near misses are there because the words do not occur in them, so there is
+  // nothing to mark.
+  const highlight = useMemo(
+    () => (shown.approximate || !shown.search ? undefined : searchTerms(shown.search)),
+    [shown.approximate, shown.search],
+  );
 
   // Which of the five bodies the section is showing. Named rather than left as
   // a chain of ternaries because the cross-fade above keys off it: the identity
@@ -180,26 +193,28 @@ export function RegionSection({
   // that no name to key on.
   const branch = error
     ? "error"
-    : isLoading && accumulated.length === 0
+    : accumulated.length === 0 && (isLoading || !current)
       ? "loading"
       : accumulated.length === 0
-        ? "empty"
-        : visible.length === 0
-          ? "searchEmpty"
-          : "rows";
+        ? search ? "searchEmpty" : "empty"
+        : "rows";
 
   // The window, not just the branch. Switching language (or the archive, or the
   // sort) replaces every row with different content, and when the new window is
   // already cached the branch never leaves "rows", so the list would swap
-  // silently. Search is deliberately not in here: it narrows the same list a
-  // letter at a time, and re-landing it on every keystroke would fight the
-  // immediacy that makes typing feel like filtering rather than navigating.
+  // silently. Search is deliberately not in here: a new answer takes the place
+  // of the dimmed one, and landing the whole list again at every pause in
+  // typing would make searching feel like navigating away.
   const arrivalKey = branch === "rows" ? `rows:${windowKey}` : branch;
 
   return (
     <div style={sectionWrapStyle}>
       {showHeader ? (
-        <RegionHeader filter={filter} loaded={accumulated.length} total={total} />
+        <RegionHeader filter={filter} loaded={accumulated.length} total={answerTotal} />
+      ) : null}
+
+      {current && shown.approximate && accumulated.length > 0 ? (
+        <div style={searchNoteStyle}>{t("collections.searchApproximate")}</div>
       ) : null}
 
       {/* Keyed on which of the five the section is showing, never on what is
@@ -237,11 +252,15 @@ export function RegionSection({
             </div>
           ) : branch === "searchEmpty" ? (
             <div style={emptyStateStyle}>
-              {t("collections.searchEmpty", { query })}
+              {t("collections.searchEmpty", { query: search })}
             </div>
           ) : (
-            <ul style={rowGroupStyle} data-cms-list>
-              {visible.map((item) => (
+            <ul
+              style={{ ...rowGroupStyle, ...(stale ? listStaleStyle : listSettledStyle) }}
+              aria-busy={stale || undefined}
+              data-cms-list
+            >
+              {accumulated.map((item) => (
                 <li key={item.slug} style={{ listStyle: "none" }}>
                   <RegionItemRow
                     slug={item.slug}
@@ -250,8 +269,9 @@ export function RegionSection({
                     archived={item.isArchived === true}
                     dirty={dirtySlugs.has(item.slug)}
                     isActive={item.slug === activeSlug}
-                image={itemImage(item, imageField)}
-                showThumb={imageField != null}
+                    image={itemImage(item, imageField)}
+                    showThumb={imageField != null}
+                    highlight={highlight}
                     updatedAt={item.updatedAt ?? item.createdAt}
                     onOpen={() => onOpenItem(item.slug)}
                   />
@@ -261,14 +281,6 @@ export function RegionSection({
           )}
         </motion.div>
       </AnimatePresence>
-
-      {/* Search only sees the loaded window, so say so rather than letting a
-          short result list read as "that's everything". */}
-      {isSearching && canLoadMore ? (
-        <div style={searchScopeNoteStyle}>
-          {t("collections.searchScope", { loaded: accumulated.length, remaining })}
-        </div>
-      ) : null}
 
       {canLoadMore ? (
         <button

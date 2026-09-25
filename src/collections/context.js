@@ -77,6 +77,7 @@ export function collectionRegionBindingId(collection, filter) {
  *   the same array to every window: the alternative, one collection-level slot,
  *   would need its own invalidation path and could go stale against the window
  *   that last fetched it.
+ * @property {boolean} approximate  The response's flag, normalised to false.
  * @property {boolean} isLoading
  * @property {Error | null} error
  */

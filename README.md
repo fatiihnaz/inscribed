@@ -743,9 +743,11 @@ export function NewsCardLink({ children }) {
 `data` on that record is draft-overlaid, so an editor sees what they are typing
 and a visitor sees what is published.
 
-> **Interactive windows stay on the client.** A filter or pagination driven by
-> user input can't be resolved on the server, so build those with `useCollection`
-> / `useCollectionItem` in your own component. Those hooks remain the full
+> **Interactive windows stay on the client.** A filter, a search or pagination
+> driven by user input can't be resolved on the server, so build those with
+> `useCollection` / `useCollectionItem` in your own component.
+> `useCollection(key, { q })` searches the `displayField` and the slug on the
+> backend, ignoring case and diacritics. Those hooks remain the full
 > client-side API, and `refetch` (which needs a callback, and so no longer
 > crosses the children boundary) lives there too.
 

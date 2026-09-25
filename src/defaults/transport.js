@@ -195,6 +195,7 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
         if (typeof params.archived === "boolean") {
           u.searchParams.set("archived", String(params.archived));
         }
+        if (params.q) u.searchParams.set("q", params.q);
       }
       const res = await fetch(u.toString(), {
         method: "GET",

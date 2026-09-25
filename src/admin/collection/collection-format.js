@@ -1,7 +1,7 @@
 /**
  * @file What the collection panel has to work out about a record before it can
  * draw a row: which field headlines it, which columns it can be sorted by, how
- * old it is, and how a `sort` string splits.
+ * old it is, where a search hits it, and how a `sort` string splits.
  *
  * Pure and React-free, so they are unit-testable without a render and reusable
  * by any surface that lists records.
@@ -126,6 +126,107 @@ export function itemImage(item, field) {
   if (!raw || typeof raw !== "object") return null;
   const src = /** @type {{ src?: unknown }} */ (raw).src;
   return typeof src === "string" && src.trim() ? src : null;
+}
+
+/**
+ * The words of a search box, the way the backend splits `?q=`.
+ *
+ * @param {string} query
+ * @returns {string[]}
+ */
+export function searchTerms(query) {
+  return query.trim().split(/\s+/).filter(Boolean);
+}
+
+/**
+ * One character as the backend's `unaccent(lower(…))` sees it: `İ`, `I`, `ı`
+ * and `i` all become `i`, `ş` becomes `s`. The dotless `ı` needs its own rule
+ * because Unicode gives it no decomposition to strip.
+ *
+ * @param {string} ch
+ */
+function foldChar(ch) {
+  return ch.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/ı/g, "i");
+}
+
+/** @param {string} text */
+function fold(text) {
+  return Array.from(text, foldChar).join("");
+}
+
+/**
+ * `fold`, keeping where in the original each folded character came from.
+ * Folding does not preserve positions (a combining mark disappears, a Hangul
+ * syllable decomposes into three letters), and a highlight has to land on the
+ * text the row prints, not on the folded copy.
+ *
+ * @param {string} text
+ * @returns {{ folded: string, starts: number[], ends: number[] }}
+ */
+function foldWithOrigin(text) {
+  let folded = "";
+  /** @type {number[]} */ const starts = [];
+  /** @type {number[]} */ const ends = [];
+  let at = 0;
+  for (const ch of text) {
+    const f = foldChar(ch);
+    // A combining mark folds to nothing. It still belongs to the letter before
+    // it, or a highlight would end between the two and split the glyph.
+    if (!f && ends.length) ends[ends.length - 1] = at + ch.length;
+    for (let i = 0; i < f.length; i++) {
+      starts.push(at);
+      ends.push(at + ch.length);
+    }
+    folded += f;
+    at += ch.length;
+  }
+  return { folded, starts, ends };
+}
+
+/**
+ * Whether every term turns up in at least one of `fields`, folded. The same
+ * rule the backend applies to `?q=`, for rows that are filtered locally because
+ * they never went through it.
+ *
+ * @param {(string | null | undefined)[]} fields
+ * @param {string[]} terms
+ */
+export function matchesSearch(fields, terms) {
+  const haystacks = fields.filter((f) => typeof f === "string").map(fold);
+  return terms.every((term) => {
+    const needle = fold(term);
+    return haystacks.some((h) => h.includes(needle));
+  });
+}
+
+/**
+ * Where the terms occur in `text`, as merged `[start, end)` ranges of the
+ * original string, for marking a search hit inside a row.
+ *
+ * @param {string} text
+ * @param {string[]} terms
+ * @returns {[number, number][]}
+ */
+export function matchRanges(text, terms) {
+  const { folded, starts, ends } = foldWithOrigin(text);
+  /** @type {[number, number][]} */
+  const hits = [];
+  for (const term of terms) {
+    const needle = fold(term);
+    if (!needle) continue;
+    for (let at = folded.indexOf(needle); at >= 0; at = folded.indexOf(needle, at + needle.length)) {
+      hits.push([starts[at], ends[at + needle.length - 1]]);
+    }
+  }
+  hits.sort((a, b) => a[0] - b[0]);
+  /** @type {[number, number][]} */
+  const merged = [];
+  for (const [start, end] of hits) {
+    const last = merged[merged.length - 1];
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  }
+  return merged;
 }
 
 /**

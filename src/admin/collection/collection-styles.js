@@ -464,12 +464,36 @@ export const localeMenuTriggerStyle = /** @type {React.CSSProperties} */ ({
   letterSpacing: "0.04em",
 });
 
-export const searchScopeNoteStyle = /** @type {React.CSSProperties} */ ({
-  padding: "2px 16px 0",
+export const searchNoteStyle = /** @type {React.CSSProperties} */ ({
+  padding: "0 16px",
   fontSize: dynamicSize(10.5),
   lineHeight: 1.4,
   fontFamily: FONT_SANS,
   color: TEXT_MUTED,
+});
+
+// A search hit inside a row. Tinted rather than bold: bold widens the run, so
+// the title's ellipsis would jump about as the query changes. Full-strength
+// text, because inherited from the slug's muted line the hit was the least
+// legible part of the row instead of the most.
+export const matchMarkStyle = /** @type {React.CSSProperties} */ ({
+  color: TEXT_HI,
+  background: COLLECTION_LINE,
+  borderRadius: 2,
+});
+
+// The rows of the last answer while the next one is on its way. They stay put
+// (emptying the list at every pause in typing reads as flicker) but step back,
+// so they aren't taken for the answer; opacity rather than grey, as the
+// changes panel dims, so the rows keep their own colours.
+export const listSettledStyle = /** @type {React.CSSProperties} */ ({
+  opacity: 1,
+  transition: "opacity 200ms ease",
+});
+
+export const listStaleStyle = /** @type {React.CSSProperties} */ ({
+  ...listSettledStyle,
+  opacity: 0.42,
 });
 
 export const rowChevronStyle = /** @type {React.CSSProperties} */ ({

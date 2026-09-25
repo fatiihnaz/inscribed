@@ -16,7 +16,8 @@
  *
  * Each filter section owns its offset/limit and accumulates pages via "Load
  * more", using exactly the filter the region declared (filter parity). Search
- * runs over that loaded window only, and says so when more rows remain.
+ * is the backend's `?q=`: every section asks for its own matches, so a record
+ * past the first page is found without paging down to it.
  *
  * Only the orchestration is here: which sections exist, which pane is open, and
  * what the panel is sorted and localized by. The surfaces it composes live in
@@ -51,6 +52,9 @@ import {
 import { emptyStateStyle } from "../editors/styles.js";
 import { paneStyle, searchWrapStyle, searchInputStyle, searchClearStyle } from "./drawer-styles.js";
 import { TEXT_FAINT } from "../shared/style/tokens.js";
+
+// The reference picker's pause, so the two searches answer at the same pace.
+const SEARCH_DEBOUNCE_MS = 200;
 
 /**
  * @typedef {{ mode: "edit", slug: string }
@@ -90,6 +94,15 @@ export function CollectionRegionPanel({ collectionKey, scope = "page", panelId, 
 
   const [pane, setPane] = useState(/** @type {PaneState} */ (null));
   const [query, setQuery] = useState("");
+  // What the lists search for: the box once typing pauses, so a word costs one
+  // request rather than one per letter. Emptying it is not delayed; the full
+  // list is usually cached, and there is nothing to wait for.
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    const next = query.trim();
+    const id = setTimeout(() => setSearch(next), next ? SEARCH_DEBOUNCE_MS : 0);
+    return () => clearTimeout(id);
+  }, [query]);
   // Sort and archive sit at panel level rather than per section: the search box
   // above them already scopes the whole panel, and a page binding three regions
   // wants one answer to "what am I looking at", not three.
@@ -280,7 +293,7 @@ export function CollectionRegionPanel({ collectionKey, scope = "page", panelId, 
               activeSlug={activeSlug}
               titleField={titleField}
               imageField={imageField}
-              query={query}
+              search={search}
               onOpenItem={(slug) => setPane({ mode: "edit", slug })}
             />
           )}
@@ -302,7 +315,7 @@ export function CollectionRegionPanel({ collectionKey, scope = "page", panelId, 
                 activeSlug={activeSlug}
                 titleField={titleField}
                 imageField={imageField}
-                query={query}
+                search={search}
                 sort={sort}
                 archived={showArchived}
                 locale={locale}

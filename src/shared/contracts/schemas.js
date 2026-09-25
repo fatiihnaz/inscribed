@@ -233,6 +233,12 @@
  *   `true` returns the archive in place of the live rows, and only to editors
  *   (403 otherwise). No `virtualItems` come back in this mode: a row that was
  *   never created does not belong in an archive view.
+ * @property {string} [q]
+ *   Text search over the `displayField` and the slug. Every word has to match,
+ *   in any order, ignoring case and diacritics (`isik` finds "Işık"), and the
+ *   closest titles come first with `sort` ordering the rest. Filters, `locale`,
+ *   `archived` and paging still apply; `total` counts matches. Published data
+ *   only: a title changed just in a draft is found under its published name.
  */
 
 /**
@@ -250,6 +256,9 @@
  * @property {number} limit
  * @property {CollectionVirtualItem[]} [virtualItems]
  *   Editor listings only, and absent rather than empty when there are none.
+ * @property {boolean} [approximate]
+ *   `true` when `q` matched nothing exactly and `items` are similar titles
+ *   instead (`kopke` finding "köpek"). Absent on an exact answer.
  */
 
 /**

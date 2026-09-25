@@ -72,4 +72,12 @@ describe("buildListParams", () => {
     expect(buildListParams({ archived: false })).toBeUndefined();
     expect(buildListParams({ archived: true })).toEqual({ archived: true });
   });
+
+  // Two spellings of one question are one cache entry, and a box holding
+  // nothing but spaces is not a question at all.
+  it("carries a search trimmed, and drops a blank one", () => {
+    expect(buildListParams({ q: "  kedi " })).toEqual({ q: "kedi" });
+    expect(buildListParams({ q: "   " })).toBeUndefined();
+    expect(buildListParams({ q: null, limit: 5 })).toEqual({ limit: 5 });
+  });
 });

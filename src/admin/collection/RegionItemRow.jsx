@@ -8,11 +8,11 @@
 import { ChevronRight, Image as ImageGlyph } from "../../shared/style/icons.jsx";
 
 import { useCmsStrings } from "../../core/hooks/use-cms-strings.js";
-import { shortAge } from "./collection-format.js";
+import { matchRanges, shortAge } from "./collection-format.js";
 import {
   rowStyle, rowBodyStyle, rowTitleStyle, rowSlugHeadlineStyle, rowMetaStyle,
   rowSlugStyle, rowSepStyle, rowAgeStyle, rowSideStyle, rowChevronStyle,
-  thumbStyle, thumbImgStyle, thumbEmptyStyle, rowMarkStyle,
+  thumbStyle, thumbImgStyle, thumbEmptyStyle, rowMarkStyle, matchMarkStyle,
   draftChipStyle, readonlyChipStyle, archivedChipStyle,
 } from "./collection-styles.js";
 
@@ -28,7 +28,8 @@ import {
  * @param {{
  *   slug: string, title: string | null, canEdit: boolean, archived?: boolean,
  *   dirty: boolean, isActive?: boolean, updatedAt?: string,
- *   image?: string | null, showThumb?: boolean, onOpen: () => void,
+ *   image?: string | null, showThumb?: boolean, highlight?: string[],
+ *   onOpen: () => void,
  * }} props
  *   `isActive` is the page's own selection: this row addresses the record the
  *   editor last clicked on the page. It is passed in rather than read here so a
@@ -38,9 +39,12 @@ import {
  *   `showThumb` is the schema's answer, not this record's: the column is either
  *   there for every row or for none, so a collection that declares an `Image`
  *   keeps its rows aligned whether or not each one filled it in.
+ *
+ *   `highlight` is the search the row was found by, marked wherever it occurs
+ *   in the title and the slug.
  */
 export function RegionItemRow({
-  slug, title, canEdit, archived, dirty, isActive, updatedAt, image, showThumb, onOpen,
+  slug, title, canEdit, archived, dirty, isActive, updatedAt, image, showThumb, highlight, onOpen,
 }) {
   const t = useCmsStrings();
   // No title resolves when the schema has no textual field: the slug then takes
@@ -88,12 +92,14 @@ export function RegionItemRow({
           style={title ? { ...rowTitleStyle, ...dim } : { ...rowSlugHeadlineStyle, ...dim }}
           title={headline}
         >
-          {headline}
+          <Marked text={headline} terms={highlight} />
         </span>
 
         <span style={rowMetaStyle}>
           {title ? (
-            <span className="inscribed-row-slug" style={rowSlugStyle} title={slug}>{slug}</span>
+            <span className="inscribed-row-slug" style={rowSlugStyle} title={slug}>
+              <Marked text={slug} terms={highlight} />
+            </span>
           ) : null}
           {title && age ? <span style={rowSepStyle} aria-hidden="true">·</span> : null}
           {age ? (
@@ -122,4 +128,23 @@ export function RegionItemRow({
       </span>
     </button>
   );
+}
+
+/**
+ * @param {{ text: string, terms?: string[] }} props
+ */
+function Marked({ text, terms }) {
+  const ranges = terms?.length ? matchRanges(text, terms) : [];
+  if (ranges.length === 0) return text;
+
+  /** @type {React.ReactNode[]} */
+  const parts = [];
+  let at = 0;
+  for (const [start, end] of ranges) {
+    if (start > at) parts.push(text.slice(at, start));
+    parts.push(<mark key={start} style={matchMarkStyle}>{text.slice(start, end)}</mark>);
+    at = end;
+  }
+  if (at < text.length) parts.push(text.slice(at));
+  return <>{parts}</>;
 }

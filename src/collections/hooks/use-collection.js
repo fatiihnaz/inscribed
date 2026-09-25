@@ -37,6 +37,9 @@ import { useCollectionLocale } from "./use-collection-locale.js";
  *   readers. Outside `items` and outside `total`, and not paginated: the same
  *   array comes back at every offset, so a list paging through windows
  *   accumulates `items` but replaces this.
+ * @property {boolean} approximate
+ *   A `q` window whose rows are similar titles rather than matches, because
+ *   nothing matched exactly. Always false without `q`.
  * @property {boolean} isLoading
  * @property {CmsApiError|Error|null} error
  * @property {() => Promise<void>} refetch
@@ -146,6 +149,7 @@ export function useCollection(key, params) {
     offset: entry?.offset ?? params?.offset ?? 0,
     limit: entry?.limit ?? params?.limit ?? 0,
     virtualItems,
+    approximate: entry?.approximate ?? false,
     // No entry yet = fetch about to fire; treat as loading.
     isLoading: entry ? entry.isLoading : true,
     error: entry?.error ?? null,

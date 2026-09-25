@@ -134,6 +134,13 @@ describe("getCollection", () => {
     expect(lastCall()[0]).toContain("/cms/collections/My%20Teams");
   });
 
+  it("sends a search as q, encoded", async () => {
+    const t = createRestTransport({ baseUrl: BASE });
+    fetchResolves({ items: [], total: 0, offset: 0, limit: 50 });
+    await t.getCollection("News", { q: "ışık & gölge" });
+    expect(new URL(lastCall()[0]).searchParams.get("q")).toBe("ışık & gölge");
+  });
+
   it("skips null/undefined filter values", async () => {
     const t = createRestTransport({ baseUrl: BASE });
     fetchResolves({ items: [], total: 0, offset: 0, limit: 0 });

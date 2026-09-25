@@ -884,6 +884,49 @@ button retries only the rest. Passing `locale` or `translationOf` keeps the form
 to that one language. The drawer's create pane works the same way, with a slug
 per language for `UserDefined` collections.
 
+**Your own markup.** A host that needs more than the composer (a live preview
+beside the form, say) builds it from the same parts. `useMultilingualCreate`
+holds a value set per language, `<LanguageChips>` adds and drops languages, and
+`<MultilingualFields>` renders the form. Claim the new-item draft slot with
+`useCreateDraftRole`, or your form and the drawer's create pane both autosave
+into it:
+
+```jsx
+"use client";
+import { useId } from "react";
+import {
+  LanguageChips, MultilingualFields, useCreateDraftRole, useMultilingualCreate,
+} from "inscribed/compose";
+
+// `meta` is the collection's entry from `useMyCollections()`, once it has loaded.
+function NewsForm({ meta, locale, onCreated }) {
+  const languages = meta.locales;
+  const primary = languages.includes(locale) ? locale : languages[0];
+  const scopeId = useId();
+  const active = useCreateDraftRole("News", scopeId);
+  const create = useMultilingualCreate({
+    collectionKey: "News", schema: meta.schema, languages, primary, active,
+  });
+
+  return (
+    <>
+      <LanguageChips
+        languages={languages} added={create.added} statusOf={create.statusOf}
+        hasDraft={create.hasDraft} onAdd={create.add} onRemove={create.remove}
+        disabled={create.isPending}
+      />
+      <MultilingualFields fields={meta.schema.fields} create={create} needsSlug={false} />
+      <Preview values={create.valuesFor(primary)} />
+      <button onClick={() => create.submit(onCreated)} disabled={create.isPending}>
+        Publish
+      </button>
+    </>
+  );
+}
+```
+
+`needsSlug` is for `UserDefined` collections, which take a slug per language.
+
 These live at `inscribed/compose` rather than `inscribed/collections`, because
 every one of them reaches the field editors. A page that only *lists* records
 would otherwise download that weight through the shared entry, with no way for a
@@ -1900,7 +1943,7 @@ bundle:
 | ------ | ---- | ---------- |
 | `inscribed` | client | `CmsProvider`, `EditableRegion`, `EditableList`, `EditableChoice`, `CmsGroup`, `useCmsContent`, `useCmsBlock`, `useCmsAdmin`, `useCmsRoute`, `useCountdown`, `createCmsConfig`, `CmsApiError`, block helpers (`getBlock`, `getBlockValue`, `groupBlocksByPrefix`, `indexBlocksByPath`) |
 | `inscribed/collections` | client | `CollectionProvider`, `CollectionRegion`, `CollectionItem`, `CollectionField`, `useCollection`, `useCollectionItem`, `useCollectionRecord`, `useMyCollections` (reading records) |
-| `inscribed/compose` | client | `CollectionComposer`, `CollectionFieldsForm`, `useCollectionCreate`, `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError` (writing them from your own page) |
+| `inscribed/compose` | client | `CollectionComposer`, `CollectionFieldsForm`, `useCollectionCreate`, `useMultilingualCreate`, `LanguageChips`, `MultilingualFields`, `useCreateDraftRole`, `seedValues`, `buildPayload`, `requiredMissing`, `humanizeCollectionError` (writing them from your own page) |
 | `inscribed/panels` | client | `useCmsPanel`, `PanelStack` (what a [custom panel](#custom-panels)'s own component reads and renders) |
 | `inscribed/server` | server only | `getCmsSiteContent`, `getCmsContent`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsSiteTag`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
 | `inscribed/page` | server only | `createCmsPage` (returns `CmsPage`, `localePath`, `getCmsRoute`, and the server collection bindings), `createCmsConfig` |

@@ -17,7 +17,8 @@
  * from, for a host that wants its own markup: `<CollectionFieldsForm>` renders
  * a schema, `useCollectionCreate` drives the draft and submit flow, and the
  * three payload helpers plus the error humaniser are the pure parts between
- * them.
+ * them. A collection holding several languages swaps the first two for
+ * `useMultilingualCreate`, `<LanguageChips>` and `<MultilingualFields>`.
  *
  * The top-level `"use client"` is load-bearing, same as in `index.js`: tsup
  * keeps only the entry file's directive.
@@ -30,5 +31,11 @@ export { CollectionFieldsForm } from "./collections/CollectionFieldsForm.jsx";
 // Powers <CollectionComposer> and the drawer's new-item card; exposed for
 // hosts that want to build their own create UI over the same draft/submit flow.
 export { useCollectionCreate } from "./collections/hooks/use-collection-create.js";
+export { useMultilingualCreate } from "./collections/hooks/use-multilingual-create.js";
+export { LanguageChips } from "./collections/LanguageChips.jsx";
+export { MultilingualFields } from "./collections/MultilingualFields.jsx";
+// A collection has one new-item draft slot; a host composer passes this as the
+// create hook's `active`, or it and the drawer's create lane both write it.
+export { useCreateDraftRole } from "./collections/hooks/use-draft-driver.js";
 export { seedValues, buildPayload, requiredMissing } from "./collections/record-payload.js";
 export { humanizeCollectionError } from "./collections/record-errors.js";

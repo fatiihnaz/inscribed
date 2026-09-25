@@ -28,6 +28,10 @@ import { CmsProvider } from "../../core/CmsProvider.jsx";
 import { CollectionProvider } from "../../collections/CollectionProvider.jsx";
 import { CollectionComposer } from "../../collections/CollectionComposer.jsx";
 import { CollectionRegionPanel } from "../../admin/CollectionRegionPanel.jsx";
+import { useMyCollections } from "../../collections.js";
+import {
+  LanguageChips, MultilingualFields, useCreateDraftRole, useMultilingualCreate,
+} from "../../compose.js";
 import { createCmsConfig } from "../../shared/config.js";
 import { createTranslator, resolveStrings } from "../../shared/i18n/translate.js";
 
@@ -122,6 +126,36 @@ function renderComposer(props = {}) {
     <CmsProvider collections={CollectionProvider} config={CONFIG} isAdmin getAccessToken={async () => "tok"}>
       <CollectionComposer collection={KEY} {...props} />
     </CmsProvider>,
+  );
+}
+
+/**
+ * A host's own create UI with a preview beside the form, built only from the
+ * public entries: the shape the README shows.
+ */
+function HostComposer({ onCreated }) {
+  const { collections } = useMyCollections();
+  const entry = collections.find((c) => c.collectionKey === KEY);
+  return entry ? <HostForm meta={entry} onCreated={onCreated} /> : null;
+}
+
+function HostForm({ meta: entry, onCreated }) {
+  const languages = entry.locales;
+  const scopeId = React.useId();
+  const active = useCreateDraftRole(KEY, scopeId);
+  const create = useMultilingualCreate({
+    collectionKey: KEY, schema: entry.schema, languages, primary: "tr", active,
+  });
+  return (
+    <>
+      <LanguageChips
+        languages={languages} added={create.added} statusOf={create.statusOf}
+        hasDraft={create.hasDraft} onAdd={create.add} onRemove={create.remove}
+      />
+      <MultilingualFields fields={entry.schema.fields} create={create} needsSlug={false} />
+      <output data-testid="preview">{create.valuesFor("tr").title}</output>
+      <button type="button" onClick={() => create.submit(onCreated)}>publish</button>
+    </>
   );
 }
 
@@ -244,6 +278,29 @@ describe("the composer on a collection that holds several languages", () => {
 
     await waitFor(() => expect(document.querySelector("input.inscribed-field")).toBeTruthy());
     expect(screen.queryByRole("group", { name: t("collections.languages") })).toBeNull();
+  });
+});
+
+describe("a host's own composer from inscribed/compose", () => {
+  it("previews the page language and creates every language into one group", async () => {
+    mockFetch();
+    const onCreated = vi.fn();
+    render(
+      <CmsProvider collections={CollectionProvider} config={CONFIG} isAdmin getAccessToken={async () => "tok"}>
+        <HostComposer onCreated={onCreated} />
+      </CmsProvider>,
+    );
+    await addEnglish();
+    type(screen.getByLabelText("Başlık TR"), "Tanıtım günü");
+    type(screen.getByLabelText("Başlık EN"), "Open day");
+    expect(screen.getByTestId("preview").textContent).toBe("Tanıtım günü");
+
+    fireEvent.click(screen.getByText("publish"));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    const [tr, en] = creates();
+    expect(tr.body.data).toMatchObject({ title: "Tanıtım günü" });
+    expect(en.body.data).toMatchObject({ title: "Open day" });
+    expect(en.url.searchParams.get("translationGroup")).toBe("group-tr");
   });
 });
 

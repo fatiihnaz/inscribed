@@ -10,7 +10,7 @@
  * is asked once and written into each language's record: a cover image or a
  * date is the same news in both.
  *
- * `useCollectionCreate` stays the single-language flow, and the public one.
+ * `useCollectionCreate` stays the single-language flow.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";

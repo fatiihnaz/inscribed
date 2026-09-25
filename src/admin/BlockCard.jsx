@@ -200,6 +200,10 @@ function BlockRow({
     && otherLocales(config, locale).length > 0
     && canEditInOtherLanguages(block.blockType);
   const [translating, setTranslating] = useState(false);
+  // Undoing the row undoes it in every language written from it. The panel
+  // owns what those were before, so it hands its undo up through this.
+  const undoTranslations = useRef(/** @type {(() => void) | null} */ (null));
+  const [translationsEdited, setTranslationsEdited] = useState(false);
 
   // Density is a page-wide instruction, so it overrides whatever each row was
   // left at. Adjusted during render rather than in an effect: an effect would
@@ -243,13 +247,16 @@ function BlockRow({
       <CardHeader
         block={block}
         isOpen={isOpen}
-        isDirty={isDirty}
+        isDirty={isDirty || translationsEdited}
         readOnly={readOnly}
         topLevel={topLevel}
         displayPath={displayPath}
         preview={blockPreview(block.blockType, value, t)}
         onHeaderClick={handleHeaderClick}
-        onReset={onReset}
+        onReset={() => {
+          if (isDirty) onReset();
+          undoTranslations.current?.();
+        }}
         translating={translating}
         onTranslate={canTranslate ? () => {
           // The panel lives in the body, so opening it on a shut row opens the row.
@@ -286,6 +293,8 @@ function BlockRow({
               readOnly={readOnly}
               open={translating}
               onClose={() => setTranslating(false)}
+              undoRef={undoTranslations}
+              onEditedChange={setTranslationsEdited}
             />
           </div>
         </div>

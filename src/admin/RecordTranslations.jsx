@@ -42,6 +42,7 @@ import { TEXT_MUTED, TEXT_FAINT, FONT_SANS, COLLECTION_ACCENT, dynamicSize } fro
  * @typedef {Object} TranslationEntry
  * @property {() => string | null} validate  The refusal, checked before anything is sent.
  * @property {() => Promise<string | null>} publish  Resolves with the refusal, or null once live.
+ * @property {() => void} undo  Back to what it was before the card first wrote to it.
  */
 
 /** Where the slug typed for a record that does not exist yet is kept. */
@@ -178,6 +179,9 @@ function SiblingRow({ collection, slug, locale, prose, visible, register }) {
   // Read at publish time, so the entry registered once still sends the latest.
   const editorRef = useRef(editor);
   editorRef.current = editor;
+  // What the record said before the card first wrote to it. Undo goes back
+  // there rather than dropping the draft, which may have been written elsewhere.
+  const baselineRef = useRef(/** @type {Record<string, *> | null} */ (null));
 
   useEffect(() => {
     if (!pending) return undefined;
@@ -189,6 +193,12 @@ function SiblingRow({ collection, slug, locale, prose, visible, register }) {
         return missing ? t("collections.requiredMissingIn", { locale: code, field: missing }) : null;
       },
       publish: () => editorRef.current.save(),
+      undo: () => {
+        const before = baselineRef.current;
+        if (before) editorRef.current.setValues(before);
+        baselineRef.current = null;
+        setWritten(false);
+      },
     });
     return () => register(locale, null);
   }, [pending, locale, code, register, t]);
@@ -203,6 +213,7 @@ function SiblingRow({ collection, slug, locale, prose, visible, register }) {
             field={field}
             value={values[field.name]}
             onChange={(next) => {
+              baselineRef.current ??= editor.readValues();
               setWritten(true);
               editor.setValues({ ...editor.readValues(), [field.name]: next });
             }}
@@ -314,6 +325,7 @@ function NewSiblingRow({ collection, source, locale, prose, fields, needsSlug, c
           return createErrorMessage(err, { fields, needsSlug, t });
         }
       },
+      undo: () => clearEditorValues(key),
     });
     return () => register(locale, null);
   }, [

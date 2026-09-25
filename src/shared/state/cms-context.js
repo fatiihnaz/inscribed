@@ -52,9 +52,16 @@ import { createContext, useContext } from "react";
  *   in `block.value` while the local draft still holds the user's, which is
  *   what the card's resolve panel diffs.
  * @property {string[]} includedLocales
- *   Other languages whose drafts on this page the next publish carries. Here
- *   rather than in the save hook because writing a translation, in a block
- *   card, is one of the ways a language gets in. Cleared on navigation.
+ *   Other languages the editor chose to put in the next publish, with the
+ *   switch in the lane or the preview. Cleared on navigation.
+ * @property {Map<string, { before: *, pulls: boolean }>} translations
+ *   Translations written on this page, by `translationDraftKey`. `before` is
+ *   what that language said before the page first wrote to it, which every undo
+ *   goes back to. `pulls` puts the language into the next publish without it
+ *   being chosen, since a translation written beside a block means to go out
+ *   with it; leaving the language out in the lane turns it off. Page-wide rather
+ *   than per row, so an undo outlives the row being remounted. Cleared on
+ *   navigation.
  * @property {number} refetchToken   Bumped to force the site read to run again.
  * @property {boolean} siteLoading
  *   Whether that read is in flight. On the ui store rather than in the hook
@@ -157,6 +164,8 @@ import { createContext, useContext } from "react";
  * @property {(keys?: string[]) => void} clearTranslationDrafts
  * @property {(update: (prev: string[]) => string[]) => void} setIncludedLocales
  *   See `CmsUiState.includedLocales`.
+ * @property {(update: (prev: Map<string, { before: *, pulls: boolean }>) => Map<string, { before: *, pulls: boolean }>) => void} setTranslations
+ *   See `CmsUiState.translations`.
  * @property {Store<CmsUiState>} uiStore
  * @property {(paths: string[]) => void} setBlockConflicts
  *   Replace the conflicting-block set, from a 409's `conflicts` extension.

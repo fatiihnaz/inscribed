@@ -600,6 +600,13 @@ export const fieldCss = `
     line-height: 1.4;
     transition: background-color ${DUR_FAST} ${EASE};
   }
+  /* A chip that is a button (the "more" chip, a language to add) takes the
+     text colour around it. Left alone it gets the UA's button text, which is
+     near black and all but vanishes on the drawer. Below the hover rules in
+     specificity, so those still recolour it. */
+  button.inscribed-chip {
+    color: inherit;
+  }
   .inscribed-chip:hover {
     background: ${HOVER};
   }

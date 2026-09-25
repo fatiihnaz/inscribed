@@ -240,6 +240,20 @@ describe("a sibling the record already has", () => {
     await waitFor(() => expect(publishes()).toHaveLength(1));
     expect(publishes()[0].url.pathname).toBe("/cms/collections/news/bahar");
   });
+
+  it("undoes the record in every language written from the card", async () => {
+    mockFetch({ withEnglish: true });
+    render(tree());
+    await openLanguages();
+    await waitFor(() => expect(englishTitle().value).toBe("Spring"));
+
+    type(englishTitle(), "Spring Festival");
+    expect(saveButton(t("status.saveLocales", { locales: "EN" }))).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: t("block.undoThis") }));
+
+    await waitFor(() => expect(englishTitle().value).toBe("Spring"));
+    await waitFor(() => expect(/** @type {HTMLButtonElement} */ (saveButton(t("status.save"))).disabled).toBe(true));
+  });
 });
 
 describe("a language the record lacks", () => {

@@ -1183,11 +1183,15 @@ says now, its draft included, and you write the rest. What you type is that
 language's draft: it autosaves the way an edit on that language's own page
 would, so leaving the page loses nothing and the English page shows it too.
 *Undo* goes back to what the field said before you started, not to the
-published text.
+published text, and the row's own undo reverts the row in every language
+written from it. Discarding every change on the page puts those translations
+back too. A language pulled into the publish by a translation leaves it again
+when that translation is undone.
 
 The prompt only offers itself for prose. Every row also has an *Edit in other
-languages* button, shown on hover, that opens the same panel on request, for an
-image or a link that should differ per language. Lists and selects are the
+languages* button, shown on hover and on its own once the row holds a change,
+that opens the same panel on request, for an image or a link that should differ
+per language. Lists and selects are the
 exceptions: the panel has no editor for them.
 
 **Drafts left in another language.** Edit the English page, leave without

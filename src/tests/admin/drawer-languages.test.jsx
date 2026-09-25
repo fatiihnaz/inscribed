@@ -222,4 +222,34 @@ describe("a row's other languages", () => {
     expect(englishChip().getAttribute("aria-pressed")).toBe("true");
     expect(await screen.findByRole("button", { name: t("status.saveLocales", { locales: "EN" }) })).toBeTruthy();
   });
+
+  it("shows the row's button once the row holds a change, without a hover", async () => {
+    renderDrawer();
+    await waitFor(() => expect(lane()).toBeTruthy());
+    const button = (path) => screen.getByRole("button", { name: t("translations.editOthersLabel", { path }) });
+    expect(button("hero.title").classList.contains("is-shown")).toBe(false);
+
+    act(() => { ctx.setDraft("hero.title", "Yeni başlık"); });
+
+    await waitFor(() => expect(button("hero.title").classList.contains("is-shown")).toBe(true));
+    expect(button("hero.body").classList.contains("is-shown")).toBe(false);
+  });
+
+  it("undoes the row in every language written from it", async () => {
+    renderDrawer();
+    await waitFor(() => expect(lane()).toBeTruthy());
+    act(() => { ctx.setDraft("hero.title", "Yeni başlık"); });
+    fireEvent.click(screen.getByRole("button", { name: t("translations.editOthersLabel", { path: "hero.title" }) }));
+    const panel = await screen.findByRole("group", { name: t("translations.label") });
+    fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "Title, rewritten here" } });
+    expect(await screen.findByRole("button", { name: t("status.saveLocales", { locales: "TR + EN" }) })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: t("block.undoThis") }));
+
+    // English is back to the draft it had before, and out of the publish; the
+    // Turkish edit is gone, so the row has nothing left to undo.
+    await waitFor(() => expect(within(panel).getByRole("textbox").value).toBe("Title, reworded"));
+    await waitFor(() => expect(englishChip().getAttribute("aria-pressed")).toBe("false"));
+    await waitFor(() => expect(screen.queryByRole("button", { name: t("block.undoThis") })).toBeNull());
+  });
 });

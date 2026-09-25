@@ -8,9 +8,9 @@
  *
  * Changes waiting in the page's other languages are listed too: drafts saved
  * on their own pages and translations typed here, which are drafts of theirs
- * as well. A language joins the set as a whole once it is included, whether by
- * its switch or by writing a translation into it, and never on its own: a
- * draft nobody chose to publish may be half done.
+ * as well. A language joins the set as a whole once it is included, by its
+ * switch or while a translation written here waits in it, and never on its
+ * own: a draft nobody chose to publish may be half done.
  *
  * Lives outside `admin/Drawer.jsx` so the drawer stays pure layout and the save
  * flow stays unit-testable.
@@ -21,9 +21,9 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { deepEqual } from "../../shared/util/deep-equal.js";
-import { globalsKey, localizePath, otherLocales, routeKey } from "../../shared/route.js";
+import { globalsKey, localizePath, otherLocales, parseRouteKey, routeKey } from "../../shared/route.js";
 import { mergeRouteBlocks } from "../blocks.js";
-import { translationDraftKey } from "../../shared/state/draft-keys.js";
+import { parseTranslationDraftKey, translationDraftKey } from "../../shared/state/draft-keys.js";
 import { useCmsAdmin } from "./use-cms-admin.js";
 import { useCmsRoute } from "./use-cms-route.js";
 
@@ -70,8 +70,19 @@ const EMPTY_BLOCKS = new Map();
  * @property {boolean} isSaving
  * @property {Error|null} error
  * @property {() => Promise<void>} save     PUT all dirty updates, then clear matching local drafts.
- * @property {() => void} discard           Wipe local edits + silently clean any server-side draft slots (no autosave pulse).
+ * @property {() => void} discard
+ *   Wipe local edits, silently clean any server-side draft slots (no autosave
+ *   pulse), and put the translations written here back where they were.
  */
+
+/**
+ * @param {string} key  A `translationDraftKey`.
+ * @returns {string | null}
+ */
+function localeOfKey(key) {
+  const parsed = parseTranslationDraftKey(key);
+  return parsed ? parseRouteKey(parsed.routeKey).locale : null;
+}
 
 /**
  * @returns {UseCmsSaveResult}
@@ -80,7 +91,7 @@ export function useCmsSave() {
   const {
     config, blocksStore, contentDraftsStore, uiStore, setActiveBlock,
     clearDraft, clearDrafts, discardServerDrafts, settleDraftWrites,
-    translationDraftsStore, clearTranslationDrafts, setIncludedLocales,
+    translationDraftsStore, setTranslationDraft, clearTranslationDrafts, setIncludedLocales, setTranslations,
     setBlockConflicts,
   } = useCmsContext();
   // Whole-map subscriptions: this aggregates every dirty blockPath for the
@@ -89,6 +100,7 @@ export function useCmsSave() {
   const drafts = useStoreSelector(contentDraftsStore, (m) => m);
   const typed = useStoreSelector(translationDraftsStore, (m) => m);
   const included = useStoreSelector(uiStore, (s) => s.includedLocales);
+  const written = useStoreSelector(uiStore, (s) => s.translations);
   const { slug, locale } = useCmsRoute();
   // The whole store, not this route's slice: another language's change is
   // versioned against that language's row, which lives under its own key.
@@ -141,9 +153,10 @@ export function useCmsSave() {
     const waiting = [];
     for (const other of others) {
       const route = routeKey(slug, other);
-      const isIn = included.includes(other);
       /** @type {PendingDraft[]} */
       const found = [];
+      /** @type {number[]} */
+      const versions = [];
       for (const [entry, global] of /** @type {const} */ ([
         [allBlocks.get(route), false],
         [allBlocks.get(globalsKey(other)), true],
@@ -163,15 +176,20 @@ export function useCmsSave() {
             next,
             global,
           });
-          if (!isIn) continue;
-          // Versioned against that language's row, not this route's: the two
-          // copies of a block version independently.
-          const update = { blockPath: block.blockPath, value: next, version: block.version, locale: other };
-          out.push(update);
-          keys.set(update, key);
+          versions.push(block.version);
         }
       }
       if (found.length === 0) continue;
+      const isIn = included.includes(other) || found.some((d) => written.get(d.key)?.pulls);
+      if (isIn) {
+        found.forEach((d, i) => {
+          // Versioned against that language's row, not this route's: the two
+          // copies of a block version independently.
+          const update = { blockPath: d.blockPath, value: d.next, version: versions[i], locale: other };
+          out.push(update);
+          keys.set(update, d.key);
+        });
+      }
       waiting.push({
         locale: other,
         pathname: localizePath(slug, other, config),
@@ -181,7 +199,7 @@ export function useCmsSave() {
     }
 
     return { dirtyUpdates: out, keyOf: keys, pending: waiting };
-  }, [drafts, blocks, typed, allBlocks, others, slug, config, included]);
+  }, [drafts, blocks, typed, allBlocks, others, slug, config, included, written]);
 
   const publishLocales = useMemo(() => {
     const targets = new Set(dirtyUpdates.map((u) => u.locale ?? locale));
@@ -200,11 +218,26 @@ export function useCmsSave() {
   const toggleLocale = useCallback(
     /** @param {string} target */
     (target) => {
-      setIncludedLocales((prev) => (
-        prev.includes(target) ? prev.filter((l) => l !== target) : [...prev, target]
-      ));
+      const isIn = pending.find((p) => p.locale === target)?.included ?? false;
+      if (!isIn) {
+        setIncludedLocales((prev) => (prev.includes(target) ? prev : [...prev, target]));
+        return;
+      }
+      setIncludedLocales((prev) => prev.filter((l) => l !== target));
+      // Its translations written here stop pulling it in too. They stay its
+      // drafts, as they would be if written on its own page, and undo still
+      // reaches them.
+      setTranslations((prev) => {
+        let next = prev;
+        for (const [key, entry] of prev) {
+          if (!entry.pulls || localeOfKey(key) !== target) continue;
+          if (next === prev) next = new Map(prev);
+          next.set(key, { ...entry, pulls: false });
+        }
+        return next;
+      });
     },
-    [setIncludedLocales],
+    [pending, setIncludedLocales, setTranslations],
   );
 
   // A failure only describes pending edits, so once none are left it has
@@ -236,6 +269,14 @@ export function useCmsSave() {
         const key = keyOf.get(u);
         return key && now.has(key) && deepEqual(now.get(key), u.value) ? [key] : [];
       }));
+      // Published, so there is nothing left to undo them back to.
+      const settled = landed.flatMap((u) => keyOf.get(u) ?? []);
+      setTranslations((prev) => {
+        if (!settled.some((key) => prev.has(key))) return prev;
+        const next = new Map(prev);
+        for (const key of settled) next.delete(key);
+        return next;
+      });
     };
     try {
       await savePage(dirtyUpdates);
@@ -250,9 +291,10 @@ export function useCmsSave() {
       const landed = /** @type {{ landed?: UpdateBlockItem[] }} */ (err)?.landed;
       if (landed?.length) standDown(landed);
     }
-  }, [dirtyUpdates, keyOf, savePage, clearDraft, clearTranslationDrafts, translationDraftsStore, setActiveBlock, settleDraftWrites, setBlockConflicts]);
+  }, [dirtyUpdates, keyOf, savePage, clearDraft, clearTranslationDrafts, translationDraftsStore, setTranslations, setActiveBlock, settleDraftWrites, setBlockConflicts]);
 
   const discard = useCallback(() => {
+    const translations = uiStore.get().translations;
     // Local edits first; emptying the map also cancels any pending autosave
     // debounce (the effect depends on `drafts`).
     clearDrafts();
@@ -266,10 +308,14 @@ export function useCmsSave() {
       if (block.draftValue != null) pathsWithServerDraft.push(block.blockPath);
     }
     discardServerDrafts(pathsWithServerDraft);
-    // The other languages' drafts stay where they are, only taken back out of
-    // this publish: they are that language's work, not this page's.
+    // Translations written here go back to what their languages said before,
+    // the way the page's own edits go back to what is published. The drafts
+    // other languages had of their own stay, only taken back out of this
+    // publish: they are that language's work, not this page's.
+    for (const [key, entry] of translations) setTranslationDraft(key, entry.before);
+    setTranslations((prev) => (prev.size === 0 ? prev : new Map()));
     setIncludedLocales((prev) => (prev.length === 0 ? prev : []));
-  }, [blocks, clearDrafts, discardServerDrafts, setIncludedLocales]);
+  }, [blocks, clearDrafts, discardServerDrafts, setIncludedLocales, setTranslations, setTranslationDraft, uiStore]);
 
   return {
     dirtyUpdates,

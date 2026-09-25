@@ -14,10 +14,10 @@
  * An edit here is that language's draft. It autosaves as one, exactly as an
  * edit on that language's own page would, so it outlives a navigation and is
  * waiting on that page too. Writing one also puts the language into the next
- * publish: a translation written beside a block means to go out with it.
+ * publish (see `CmsUiState.translations`), and undoing it takes it out again.
  */
 
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
@@ -66,7 +66,7 @@ export function useCmsTranslations(block, options) {
   const enabled = options?.enabled ?? false;
   const {
     config, blocksStore,
-    translationDraftsStore, setTranslationDraft, setIncludedLocales,
+    uiStore, translationDraftsStore, setTranslationDraft, setTranslations,
   } = useCmsContext();
   const { slug: routeSlug, locale } = useCmsRoute();
 
@@ -95,11 +95,10 @@ export function useCmsTranslations(block, options) {
     sameEntries,
   );
   const typed = useStoreSelector(translationDraftsStore, (m) => m);
-
-  // What each language said before this card first wrote to it. Undo goes back
+  // What each language said before the page first wrote to it. Undo goes back
   // there rather than to the published text, which would also throw away a
   // draft written on that language's own page.
-  const baselines = useRef(/** @type {Map<string, *>} */ (new Map()));
+  const written = useStoreSelector(uiStore, (s) => s.translations);
 
   const targets = useMemo(
     () => otherLocales.map((targetLocale, i) => {
@@ -107,7 +106,7 @@ export function useCmsTranslations(block, options) {
       const target = targetBlocks[i];
       const saving = typed.has(key);
       const value = saving ? typed.get(key) : (target?.draftValue ?? target?.value);
-      const before = baselines.current;
+      const entry = written.get(key);
       return {
         locale: targetLocale,
         pathname: localizePath(routeSlug, targetLocale, config),
@@ -115,19 +114,29 @@ export function useCmsTranslations(block, options) {
         block: target,
         value,
         hasDraft: target != null && !deepEqual(value, target.value),
-        edited: before.has(key) && !deepEqual(value, before.get(key)),
+        edited: entry != null && !deepEqual(value, entry.before),
         saving,
         setValue: (/** @type {*} */ next) => {
-          if (!before.has(key)) before.set(key, value);
+          setTranslations((prev) => {
+            const current = prev.get(key);
+            if (current?.pulls) return prev;
+            return new Map(prev).set(key, { before: current ? current.before : value, pulls: true });
+          });
           setTranslationDraft(key, next);
-          setIncludedLocales((prev) => (prev.includes(targetLocale) ? prev : [...prev, targetLocale]));
         },
         reset: () => {
-          if (before.has(key)) setTranslationDraft(key, before.get(key));
+          const current = uiStore.get().translations.get(key);
+          if (!current) return;
+          setTranslationDraft(key, current.before);
+          setTranslations((prev) => {
+            const next = new Map(prev);
+            next.delete(key);
+            return next;
+          });
         },
       };
     }),
-    [otherLocales, keys, routeSlug, config, blockPath, targetBlocks, typed, setTranslationDraft, setIncludedLocales],
+    [otherLocales, keys, routeSlug, config, blockPath, targetBlocks, typed, written, uiStore, setTranslationDraft, setTranslations],
   );
 
   return { targets, isReady, error };

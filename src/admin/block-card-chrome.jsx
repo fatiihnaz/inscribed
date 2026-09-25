@@ -240,8 +240,8 @@ export function CardHeader({
 
       <span style={rowActionsStyle}>
         {onTranslate ? (
-          // Quiet until the row is hovered or it is on, since every row carries
-          // one (see `.inscribed-translate-btn`).
+          // Quiet until the row is hovered, holds a change or has the panel
+          // open, since every row carries one (see `.inscribed-translate-btn`).
           <span
             role="button"
             tabIndex={0}
@@ -254,7 +254,7 @@ export function CardHeader({
                 onTranslate();
               }
             }}
-            className="inscribed-icon-button inscribed-translate-btn"
+            className={`inscribed-icon-button inscribed-translate-btn${isDirty ? " is-shown" : ""}`}
             style={translating ? { ...blockResetStyle, color: ACCENT } : blockResetStyle}
             aria-label={t("translations.editOthersLabel", { path: block.blockPath })}
             title={t("translations.editOthers")}

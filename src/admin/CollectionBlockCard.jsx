@@ -247,13 +247,18 @@ function CollectionBlockCard({ block, collection, slug, isActive, readOnly, topL
       <CardHeader
         block={block}
         isOpen={isOpen}
-        isDirty={isDirty}
+        isDirty={isDirty || pendingLocales.length > 0}
         isCollection
         topLevel={topLevel}
         displayPath={displayPath}
         preview={displayPath === record ? null : record}
         onHeaderClick={handleHeaderClick}
-        onReset={editor.undoDraft}
+        onReset={() => {
+          // The record in every language written from this card, not only
+          // the one on screen.
+          editor.undoDraft();
+          for (const entry of entriesRef.current.values()) entry.undo();
+        }}
         translating={showTranslations}
         onTranslate={canTranslate ? () => {
           // The languages live in the body, so asking for them opens a shut card.

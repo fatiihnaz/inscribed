@@ -79,6 +79,8 @@ const EMPTY_BLOCKS = new Map();
 
 /** Stable, so resetting it to empty is a no-op when it already is. */
 const NO_LOCALES = /** @type {string[]} */ ([]);
+/** Same, for the translations written on the page. */
+const NO_TRANSLATIONS = /** @type {Map<string, { before: *, pulls: boolean }>} */ (new Map());
 
 function useConstant(create) {
   const ref = useRef(/** @type {T | typeof UNSET} */ (UNSET));
@@ -354,6 +356,7 @@ export function CmsProvider({
       draftSyncStatus: "idle",
       conflictBlocks: new Set(),
       includedLocales: NO_LOCALES,
+      translations: NO_TRANSLATIONS,
       refetchToken: 0,
       siteLoading: false,
       siteError: null,
@@ -580,7 +583,12 @@ export function CmsProvider({
     // Unsaved translations are left for their autosave, which writes them to
     // their own language's draft whichever page is on screen. Which languages
     // the next publish includes is a choice made about the page being left.
-    patchUi({ activeBlock: null, conflictBlocks: new Set(), includedLocales: NO_LOCALES });
+    patchUi({
+      activeBlock: null,
+      conflictBlocks: new Set(),
+      includedLocales: NO_LOCALES,
+      translations: NO_TRANSLATIONS,
+    });
     setDraftsState(new Map());
   }, [pathname, setDraftsState, patchUi]);
 
@@ -698,6 +706,17 @@ export function CmsProvider({
       uiStore.set((s) => {
         const includedLocales = update(s.includedLocales);
         return includedLocales === s.includedLocales ? s : { ...s, includedLocales };
+      });
+    },
+    [uiStore],
+  );
+
+  const setTranslations = useCallback(
+    /** @param {(prev: Map<string, { before: *, pulls: boolean }>) => Map<string, { before: *, pulls: boolean }>} update */
+    (update) => {
+      uiStore.set((s) => {
+        const translations = update(s.translations);
+        return translations === s.translations ? s : { ...s, translations };
       });
     },
     [uiStore],
@@ -1264,6 +1283,7 @@ export function CmsProvider({
       setTranslationDraft,
       clearTranslationDrafts,
       setIncludedLocales,
+      setTranslations,
 
       uiStore,
       setBlockConflicts,
@@ -1309,6 +1329,7 @@ export function CmsProvider({
       setTranslationDraft,
       clearTranslationDrafts,
       setIncludedLocales,
+      setTranslations,
       uiStore,
       setBlockConflicts,
       clearBlockConflict,

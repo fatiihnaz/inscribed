@@ -129,10 +129,11 @@ const english = () => probe.targets[0];
 
 let site;
 
-function tree() {
+/** @param {boolean} [withProbe]  False takes the card away with the provider left standing. */
+function tree(withProbe = true) {
   return (
     <CmsProvider config={CONFIG} transport={/** @type {*} */ (transport)} isAdmin initialSite={site}>
-      <Probe />
+      {withProbe ? <Probe /> : null}
     </CmsProvider>
   );
 }
@@ -247,6 +248,54 @@ describe("the other language's copy", () => {
     // was written on the English page before any of this.
     expect(english()).toMatchObject({ value: "Half-written English", edited: false });
     expect(drafts.get(draftKey("/", "en")).get(BODY)).toBe("Half-written English");
+  });
+
+  it("keeps its undo when the card that wrote it is taken away and comes back", async () => {
+    drafts.set(draftKey("/", "en"), new Map([[BODY, "Half-written English"]]));
+    const view = await mount();
+    await type("Something else entirely");
+
+    // What switching the drawer's tab does to a row.
+    await act(async () => { view.rerender(tree(false)); });
+    await act(async () => { view.rerender(tree()); });
+    await settle();
+    expect(english().edited).toBe(true);
+
+    act(() => { english().reset(); });
+    await tick();
+    expect(english()).toMatchObject({ value: "Half-written English", edited: false });
+  });
+
+  it("goes back to what it said before when every change on the page is discarded", async () => {
+    drafts.set(draftKey("/", "en"), new Map([[BODY, "Half-written English"]]));
+    await mount();
+    await type("Something else entirely");
+    await tick();
+    expect(drafts.get(draftKey("/", "en")).get(BODY)).toBe("Something else entirely");
+
+    act(() => { probe.discard(); });
+    await tick();
+
+    // Not to the published text: the draft written on the English page before
+    // any of this is English's own, and stays, out of the publish.
+    expect(english()).toMatchObject({ value: "Half-written English", edited: false });
+    expect(drafts.get(draftKey("/", "en")).get(BODY)).toBe("Half-written English");
+    expect(probe.pending[0]).toMatchObject({ locale: "en", included: false });
+  });
+
+  it("takes the language back out of the publish when undone, drafts of its own and all", async () => {
+    drafts.set(draftKey("/", "en"), new Map([[BODY, "Half-written English"]]));
+    await mount();
+    await type("Something else entirely");
+    expect(probe.pending[0].included).toBe(true);
+
+    act(() => { english().reset(); });
+    await tick();
+
+    // What waits in English now is only the draft written on the English page,
+    // which nobody here chose to publish.
+    expect(probe.pending[0]).toMatchObject({ locale: "en", included: false });
+    expect(probe.dirtyUpdates).toEqual([]);
   });
 });
 

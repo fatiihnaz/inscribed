@@ -21,7 +21,7 @@
  * The panel itself is `BlockNotice`, shared with the conflict notice.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Languages, Undo2 } from "../shared/style/icons.jsx";
 import { useCmsContext } from "../shared/state/cms-context.js";
@@ -53,10 +53,15 @@ const SETTLE_MS = 600;
  *   readOnly?: boolean,
  *   open?: boolean,
  *   onClose?: () => void,
+ *   undoRef?: { current: (() => void) | null },
+ *   onEditedChange?: (edited: boolean) => void,
  * }} props
  *   `open` is the row's languages button: the panel shows whatever the diff says.
+ *   `undoRef` and `onEditedChange` let the row's own undo cover what was
+ *   written here: the panel fills the one, and reports through the other
+ *   whether there is anything for it to undo.
  */
-export function TranslationPrompt({ block, value, readOnly, open = false, onClose }) {
+export function TranslationPrompt({ block, value, readOnly, open = false, onClose, undoRef, onEditedChange }) {
   const t = useCmsStrings();
   const { config } = useCmsContext();
   const { locale } = useCmsRoute();
@@ -89,6 +94,24 @@ export function TranslationPrompt({ block, value, readOnly, open = false, onClos
   useEffect(() => {
     if (!substantial) setDismissed(false);
   }, [substantial]);
+
+  const editedRef = useRef(edited);
+  editedRef.current = edited;
+  useEffect(() => {
+    if (!undoRef) return undefined;
+    undoRef.current = () => {
+      for (const target of editedRef.current) target.reset();
+    };
+    return () => { undoRef.current = null; };
+  }, [undoRef]);
+  // Only a change is reported: the row starts out assuming nothing was
+  // written, and a report of that on mount costs every row a render.
+  const reportedRef = useRef(false);
+  useEffect(() => {
+    if (reportedRef.current === engaged) return;
+    reportedRef.current = engaged;
+    onEditedChange?.(engaged);
+  }, [engaged, onEditedChange]);
 
   if (readOnly || others.length === 0) return null;
 

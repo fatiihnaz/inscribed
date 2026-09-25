@@ -1581,12 +1581,14 @@ export const panelCss = `
   .inscribed-disclosure-header:hover .inscribed-row-label { color: ${TEXT}; }
   .inscribed-disclosure-header:hover .inscribed-row-chevron { color: ${TEXT}; }
   /* One per row, so it waits for the row's hover where there is hover to wait
-     for; a touch screen shows it throughout. */
+     for, unless the row holds a change: that is when another language is worth
+     writing. A touch screen shows it throughout. */
   @media (hover: hover) {
     .inscribed-translate-btn { opacity: 0; transition: opacity 140ms ease, color 140ms ease; }
     .inscribed-disclosure-header:hover .inscribed-translate-btn,
     .inscribed-disclosure-header:focus-visible .inscribed-translate-btn,
     .inscribed-translate-btn:focus-visible,
+    .inscribed-translate-btn.is-shown,
     .inscribed-translate-btn[aria-pressed="true"] { opacity: 1; }
   }
 

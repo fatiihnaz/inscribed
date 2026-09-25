@@ -3,7 +3,7 @@
 /**
  * @file `<CollectionItem>`: one collection record, rendered by element children.
  *
- * Public visitors get the children as-is. Admins with `item.canEdit` also get a
+ * Public visitors get the children as-is. Admins who can edit the record also get a
  * click-to-focus wrapper (like EditableRegion) that opens the matching drawer
  * card, plus publish/revert on the ring once the page carries fields.
  *
@@ -120,7 +120,7 @@ export function CollectionItem({
 export function CollectionRecord({ collection, slug, item, group, label, fromRegion, children }) {
   const { isAdmin, uiStore, setActiveBlock } = useCmsContext();
   const {
-    registerCollectionBinding, unregisterCollectionBinding, collectionStore,
+    registerCollectionBinding, unregisterCollectionBinding, collectionStore, requestCollectionItem,
   } = useCollectionContext();
   const groupPrefix = useContext(CmsGroupContext);
   // Distinguishes this element from any other bound to the same record, which
@@ -173,8 +173,23 @@ export function CollectionRecord({ collection, slug, item, group, label, fromReg
   const groupVisibility = useContext(CmsGroupVisibilityContext);
   useEditorVisibility(bindingId, groupVisibility);
 
+  // Whether this admin may edit the record, and whether they left a draft on it,
+  // come from their own read: a server-rendered `item` was read with the service
+  // key, which gets neither. The editor below works from the same cache entry,
+  // so this costs no request of its own. Visitors never read.
+  const cacheKey = `${collection}:${recordSlug}`;
+  const adminItem = useStoreSelector(
+    collectionStore,
+    (st) => (isAdmin ? st.itemCache.get(cacheKey)?.item ?? null : null),
+  );
+  // Refills after `invalidateCollectionItem` drops the entry, as `useCollectionItem` does.
+  const hasEntry = useStoreSelector(collectionStore, (st) => st.itemCache.has(cacheKey));
+  useEffect(() => {
+    if (isAdmin) requestCollectionItem(collection, recordSlug);
+  }, [isAdmin, collection, recordSlug, hasEntry, requestCollectionItem]);
+
   // Booleans, not the maps: editing another record leaves this binding alone.
-  const hasDraft = useStoreSelector(collectionStore, (st) => st.drafts.has(`${collection}:${recordSlug}`));
+  const hasDraft = useStoreSelector(collectionStore, (st) => st.drafts.has(cacheKey));
   const isActive = useStoreSelector(uiStore, (s) => s.activeBlock === bindingId);
 
   // Readers still get a scope: `<CollectionField>` renders the value for them,
@@ -190,7 +205,7 @@ export function CollectionRecord({ collection, slug, item, group, label, fromReg
     </CollectionItemContext.Provider>
   );
 
-  if (!isAdmin || !item.canEdit || groupVisibility) return readOnly;
+  if (!isAdmin || !adminItem?.canEdit || groupVisibility) return readOnly;
 
   return (
     // The published record is the fallback, so the page reads correctly from
@@ -204,7 +219,7 @@ export function CollectionRecord({ collection, slug, item, group, label, fromReg
       bindingId={bindingId}
       label={cardLabel}
       tag={elementTag(children)}
-      dirty={hasDraft || item.draftData != null}
+      dirty={hasDraft || adminItem.draftData != null}
       isActive={isActive}
       setActiveBlock={setActiveBlock}
     >

@@ -17,7 +17,7 @@
  * whole layer out of its bundle.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 
@@ -29,6 +29,7 @@ import { buildThemeCss } from "../shared/style/theme.js";
 import { PAGE_SHELL_CLASS } from "../shared/style/layout-css.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
+import { browserSessionStore, NO_SESSION } from "./browser-session.js";
 import { EMPTY_SITE, reseedSite, seedSite, siteSlugs } from "./site-blocks.js";
 import { mergeRouteBlocks, readBlock } from "./blocks.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
@@ -174,83 +175,19 @@ export function CmsProvider({
         : null,
     [hasConsumerAuth, baseConfig.baseUrl, baseConfig.clientKey],
   );
-  const [browserSession, setBrowserSession] = useState(
-    /** @type {{ userSub: string|null, userInfo: { name: string|null, email: string|null, image: null } } | null} */ (null),
+  const sessionStore = useMemo(
+    () => browserSessionStore(browserAuth, baseConfig.clientKey),
+    [browserAuth, baseConfig.clientKey],
   );
-  // Raised when the session dies underneath an active admin (refresh → 401:
-  // revoked, reuse-detection, or 30-day expiry) so the editor learns why the
-  // drawer vanished. Deliberate logouts (this tab or another) stay silent.
-  const [sessionExpired, setSessionExpired] = useState(false);
-  const browserSessionRef = useRef(browserSession);
-  browserSessionRef.current = browserSession;
+  const browserSession = useStoreSelector(sessionStore, (s) => s);
+  const browserUser = browserSession.user;
+  const sessionExpired = browserSession.status === "expired";
 
-  // Adopt the held token's identity if it passes the role gate. Also serves
-  // another tab's sign-in, where this tab holds no token yet: refresh first.
-  const adoptBrowserSession = useCallback(async () => {
-    const auth = browserAuth;
-    if (!auth) return;
-    let claims = auth.claims();
-    if (!claims) {
-      if (!(await auth.refresh())) return;
-      claims = auth.claims();
-      if (!claims) return;
-    }
-    if (browserSessionRef.current?.userSub === (claims.sub ?? null)) {
-      setSessionExpired(false);
-      return;
-    }
-    // The backend renamed roles to capabilities in its admin API, but the JWT
-    // still carries them under the legacy `roles` claim.
-    const capabilities = Array.isArray(claims.roles) ? claims.roles : [];
-    // `azp` must match this site's clientKey: on a shared API origin the cookie
-    // may belong to another client, whose capabilities say nothing here.
-    const mayEdit =
-      claims.azp === baseConfig.clientKey && capabilities.includes("content:write");
-    if (!mayEdit) {
-      if (process.env.NODE_ENV !== "production") {
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[inscribed] no content:write for "${baseConfig.clientKey}" (azp "${claims.azp}", roles ${JSON.stringify(capabilities)}) - add an editor membership.`,
-        );
-      }
-      return;
-    }
-    setSessionExpired(false);
-    setBrowserSession({
-      userSub: claims.sub ?? null,
-      userInfo: {
-        name: claims.name ?? null,
-        email: claims.email ?? null,
-        image: null,
-      },
-    });
-  }, [browserAuth, baseConfig.clientKey]);
-
-  // Session lifecycle: every adoption/teardown flows through auth transitions,
-  // so our own refresh, another tab's login/logout, and mid-edit expiry all
-  // land in one handler. Must subscribe before the entry probe below fires.
-  useEffect(() => {
-    if (!browserAuth) return;
-    return browserAuth.onChange((authenticated, reason) => {
-      if (authenticated) {
-        void adoptBrowserSession();
-        return;
-      }
-      if (reason === "expired" && browserSessionRef.current) setSessionExpired(true);
-      setBrowserSession(null);
-    });
-  }, [browserAuth, adoptBrowserSession]);
-
-  // Entry probe on mount: ?cms-logout → sign out, ?cms-login → interactive
-  // login, ?cms-auth=done → back from the backend callback, session hint →
-  // silent resume. Anonymous visitors (none of these) trigger zero auth
-  // requests. Adoption happens in the onChange handler above, not here.
+  // A visitor carries none of these markers and must cost no auth request.
   useEffect(() => {
     if (!browserAuth) return;
     (async () => {
       const params = new URLSearchParams(window.location.search);
-      // A ?cms-logout link kills the session before any resume probe: strip the
-      // marker and return so it never falls through into a silent re-adoption.
       if (params.has("cms-logout")) {
         await browserAuth.logout();
         stripAuthParams();
@@ -258,16 +195,14 @@ export function CmsProvider({
       }
       const explicitLogin = params.has("cms-login");
       const returning = params.get("cms-auth") === "done";
-      if (!explicitLogin && !returning && !browserAuth.hasSessionHint()) return;
+      const resuming = browserAuth.hasSessionHint() && sessionStore.get().status !== "connected";
+      if (!explicitLogin && !returning && !resuming) return;
 
       const ok = await browserAuth.refresh();
       if (explicitLogin && !ok) {
         browserAuth.login(); // full-page redirect; comes back with ?cms-auth=done
         return;
       }
-      // Landing with the marker but failing refresh means the backend's login
-      // succeeded and the token exchange broke: almost always the cookie was
-      // dropped (Secure cookie on http) or CORS blocked the call.
       if (returning && !ok && process.env.NODE_ENV !== "production") {
         // eslint-disable-next-line no-console
         console.warn(
@@ -276,18 +211,16 @@ export function CmsProvider({
       }
       if (explicitLogin || returning) stripAuthParams();
     })();
-  }, [browserAuth]);
+  }, [browserAuth, sessionStore]);
 
   const browserSignOut = useCallback(async () => {
-    if (!browserAuth) return;
-    await browserAuth.logout();
-    setBrowserSession(null);
+    await browserAuth?.logout();
   }, [browserAuth]);
 
   // Browser session wins over the (always-public) SSR props when active.
-  const isAdmin = browserSession != null || isAdminProp;
-  const userSub = browserSession ? browserSession.userSub : userSubProp;
-  const userInfo = browserSession ? browserSession.userInfo : userInfoProp;
+  const isAdmin = browserUser != null || isAdminProp;
+  const userSub = browserUser ? browserUser.userSub : userSubProp;
+  const userInfo = browserUser ? browserUser.userInfo : userInfoProp;
 
   // ---- Stores ------------------------------------------------------------
   //
@@ -1266,7 +1199,7 @@ export function CmsProvider({
       isAdmin,
       userSub,
       userInfo,
-      onSignOut: onSignOut ? stableOnSignOut : browserSession ? browserSignOut : null,
+      onSignOut: onSignOut ? stableOnSignOut : browserUser ? browserSignOut : null,
 
       slugsStore,
       blocksStore,
@@ -1313,7 +1246,7 @@ export function CmsProvider({
       userInfo,
       onSignOut,
       stableOnSignOut,
-      browserSession,
+      browserUser,
       browserSignOut,
       blocksStore,
       commitSite,
@@ -1367,7 +1300,7 @@ export function CmsProvider({
         <Suspense fallback={null}>
           <SessionExpiredNotice
             onSignIn={() => browserAuth.login()}
-            onDismiss={() => setSessionExpired(false)}
+            onDismiss={() => sessionStore.set(NO_SESSION)}
           />
         </Suspense>
       ) : null}

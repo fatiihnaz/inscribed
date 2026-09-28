@@ -231,6 +231,18 @@ describe("session lifecycle", () => {
     expect(screen.queryByText(en["core.session.expired"])).toBeNull();
   });
 
+  it("keeps the session when the provider remounts, as it does on a language switch", async () => {
+    const key = nextKey();
+    await signIn(key);
+    cleanup();
+
+    renderCms({ baseUrl: BASE, clientKey: key });
+    expect(adminText()).toBe("true");
+    expect(screen.getByTestId("email").textContent).toBe("f@x.test");
+    await settle();
+    expect(refreshCalls()).toBe(1);
+  });
+
   it("adopts the session when another tab signs in", async () => {
     const key = nextKey();
     refreshImpl = () => jsonRes(goodRefreshBody(key));

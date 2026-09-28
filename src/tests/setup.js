@@ -17,4 +17,9 @@
 if (typeof window !== "undefined") {
   const { configure } = await import("@testing-library/dom");
   configure({ asyncUtilTimeout: 5000 });
+
+  // The drawer restores itself from sessionStorage, and one jsdom window
+  // serves every test in a file.
+  const { beforeEach } = await import("vitest");
+  beforeEach(() => sessionStorage.clear());
 }

@@ -37,6 +37,7 @@ import { stableStringify } from "../shared/util/stable-stringify.js";
 import { CmsApiError } from "../shared/contracts/errors.js";
 import { createStore, useStoreSelector } from "../shared/state/store.js";
 import { createDraftQueue } from "../shared/state/draft-queue.js";
+import { drawerSnapshotKey, readDrawerSnapshot } from "../shared/state/drawer-snapshot.js";
 import { contentDraftKey, parseTranslationDraftKey } from "../shared/state/draft-keys.js";
 import { resolveBlockValue } from "./resolve.js";
 import { useSiteBlocks } from "./hooks/use-site-blocks.js";
@@ -77,6 +78,11 @@ const EMPTY_BLOCKS = new Map();
 const NO_LOCALES = /** @type {string[]} */ ([]);
 /** Same, for the translations written on the page. */
 const NO_TRANSLATIONS = /** @type {Map<string, { before: *, pulls: boolean }>} */ (new Map());
+
+// Set once a provider has mounted. A later mount (a remount under a new
+// `[locale]`) renders on the client only, so it may start from what the tab
+// stored; the first one has to render what the server did.
+let hydrated = false;
 
 /**
  * A block as the backend holds it after a draft write of `items`: the value
@@ -304,7 +310,7 @@ export function CmsProvider({
       activeBlock: null,
       pendingBlock: null,
       activeListItem: null,
-      isDrawerOpen: false,
+      isDrawerOpen: hydrated && isAdmin && (readDrawerSnapshot(drawerSnapshotKey(baseConfig))?.open ?? false),
       draftSyncStatus: "idle",
       conflictBlocks: new Set(),
       includedLocales: NO_LOCALES,
@@ -317,6 +323,9 @@ export function CmsProvider({
   // One lane per slug for block-draft writes. Pinned for the same reason the
   // stores are: a queue React could drop would strand in-flight requests.
   const draftQueue = useConstant(() => createDraftQueue());
+  useEffect(() => {
+    hydrated = true;
+  }, []);
   useEffect(() => () => {
     draftQueue.flushPending();
     draftQueue.dispose();

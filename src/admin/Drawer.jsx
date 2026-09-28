@@ -59,6 +59,7 @@ import { IncludeLanguageButton } from "./IncludeLanguageButton.jsx";
 import { DrawerNavContext } from "./drawer-nav.js";
 import { PanelArea } from "./PanelArea.jsx";
 import { readOpenTarget, stripOpenParams } from "./deep-link.js";
+import { clearDrawerSnapshot, drawerSnapshotKey, readDrawerSnapshot, writeDrawerSnapshot } from "../shared/state/drawer-snapshot.js";
 
 import { emptyStateStyle } from "../editors/styles.js";
 import { panelStyle, DRAWER_BODY_CLASS, srOnlyStyle, paneContainerStyle, paneStyle, RAIL_CLASS, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, RAIL_BAR_CLASS, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, toolButtonStyle, toolCountStyle, refRowStyle, rowActionsStyle, typeIconStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, STATUS_COLLAPSE_TRANSITION, statusCollapseStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgEmphasisStyle, statusActionsStyle, laneStyle, laneLabelStyle, laneLabelTextStyle, laneCountStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, PANEL_CLASS, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
@@ -101,6 +102,7 @@ export function Drawer({ panels = null }) {
   const blocksKey = routeKey(routeSlug, locale);
   const globalsStoreKey = globalsKey(locale);
   const {
+    config,
     setActiveBlock,
     setPendingBlock,
     setDrawerOpen,
@@ -111,6 +113,15 @@ export function Drawer({ panels = null }) {
     userInfo,
     onSignOut,
   } = useCmsContext();
+  const snapshotKey = drawerSnapshotKey(config);
+  const [restored] = useState(() => readDrawerSnapshot(snapshotKey));
+  const signOut = useMemo(
+    () => (onSignOut ? () => {
+      clearDrawerSnapshot(snapshotKey);
+      onSignOut();
+    } : null),
+    [onSignOut, snapshotKey],
+  );
   // The drawer aggregates over everything, so unlike a page region it selects
   // whole slices. As a single admin surface, re-rendering on each write is fine
   // as long as the memoised card list below can still bail out.
@@ -168,15 +179,13 @@ export function Drawer({ panels = null }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // Search filter (path + type), Page/Global tabs only; Collection lanes
-  // filter inside their own panel.
-  const [search, setSearch] = useState("");
-  // Narrow the list to blocks holding unsaved work.
-  const [changedOnly, setChangedOnly] = useState(false);
-  // How much of each field is on screen at rest. "compact" shuts every row down
-  // to its label and its one-line value, which is the only way a page carrying
-  // thirty fields can be scanned rather than scrolled.
-  const [density, setDensity] = useState(/** @type {"comfortable" | "compact"} */ ("comfortable"));
+  // Page/Global tabs only; collection lanes filter inside their own panel.
+  const [search, setSearch] = useState(restored?.search ?? "");
+  const [changedOnly, setChangedOnly] = useState(restored?.changedOnly ?? false);
+  // "compact" shows each row as its label and one-line value, for pages too long to scroll.
+  const [density, setDensity] = useState(
+    /** @type {"comfortable" | "compact"} */ (restored?.density ?? "comfortable"),
+  );
 
   // Split blocks into page/global lists. Deliberately independent of `drafts`:
   // the drawer re-renders on every keystroke, and if these arrays were rebuilt
@@ -354,16 +363,16 @@ export function Drawer({ panels = null }) {
   //
   // An open string rather than a union: a custom panel's mode is its own `id`,
   // which is why `normalizePanels` refuses "page" and "collections".
-  const [mode, setModeState] = useState(/** @type {string} */ ("page"));
+  const [mode, setModeState] = useState(/** @type {string} */ (restored?.mode ?? "page"));
   const activePanel = panels?.find((panel) => panel.id === mode) ?? null;
   const [selectedCollection, setSelectedCollection] = useState(
-    /** @type {{ key: string, scope: "page"|"global" } | null} */ (null),
+    /** @type {{ key: string, scope: "page"|"global" } | null} */ (restored?.collection ?? null),
   );
 
-  const [activeTab, setActiveTabState] = useState(/** @type {string} */ ("page"));
+  const [activeTab, setActiveTabState] = useState(/** @type {string} */ (restored?.tab ?? "page"));
   // Preview overlay: renders `ChangesPanel` in the body slot instead of the
   // active tab. Auto-closes when dirty drains to 0 or the user switches tabs.
-  const [isPreviewOpen, setPreviewOpen] = useState(false);
+  const [isPreviewOpen, setPreviewOpen] = useState(restored?.preview ?? false);
   useEffect(() => {
     if (isPreviewOpen && !anyPreviewable) setPreviewOpen(false);
   }, [isPreviewOpen, anyPreviewable]);
@@ -422,6 +431,16 @@ export function Drawer({ panels = null }) {
     },
     [],
   );
+
+  // Once, and before the link below strips its marker: a link wins over a restore.
+  useEffect(() => {
+    if (restored?.open) setDrawerOpen(true);
+    const block = restored?.activeBlock;
+    if (block?.slug === routeSlug && restored.mode === "page" && !readOpenTarget(window.location.search).target) {
+      setPendingBlock(block.path);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // A link into the admin surface (see `deep-link.js`). Read once on mount:
   // everything it can address is known by then, and in the built-in auth flow
@@ -526,7 +545,9 @@ export function Drawer({ panels = null }) {
 
   // Per-group collapse state. Storing the *closed* set means new groups from
   // discovery default to expanded.
-  const [closedGroups, setClosedGroups] = useState(/** @type {Set<string>} */ (new Set()));
+  const [closedGroups, setClosedGroups] = useState(
+    () => /** @type {Set<string>} */ (new Set(Array.isArray(restored?.closedGroups) ? restored.closedGroups : [])),
+  );
 
   // Read through refs so `toggleGroup` keeps a stable identity: it is a prop of
   // the memoised block list, which a keystroke-driven shell re-render must not
@@ -703,6 +724,43 @@ export function Drawer({ panels = null }) {
 
   const bodyRef = useInert(!isDrawerOpen);
 
+  useLayoutEffect(() => {
+    const scroll = restored?.scroll;
+    if (!scroll || scroll.slug !== routeSlug) return;
+    const list = bodyRef.current?.querySelector("[data-cms-list]");
+    if (list) list.scrollTop = scroll.top;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    writeDrawerSnapshot(snapshotKey, {
+      open: isDrawerOpen,
+      mode,
+      collection: selectedCollection,
+      tab: activeTab,
+      preview: isPreviewOpen,
+      search,
+      changedOnly,
+      density,
+      closedGroups: [...closedGroups],
+      activeBlock: activeBlock ? { slug: routeSlug, path: activeBlock } : null,
+      scroll: readDrawerSnapshot(snapshotKey)?.scroll ?? null,
+    });
+  }, [
+    snapshotKey, isDrawerOpen, mode, selectedCollection, activeTab, isPreviewOpen,
+    search, changedOnly, density, closedGroups, activeBlock, routeSlug,
+  ]);
+
+  /** @param {React.UIEvent} event */
+  const recordListScroll = (event) => {
+    const list = event.target;
+    if (!(list instanceof Element) || !list.matches("[data-cms-list]")) return;
+    const current = readDrawerSnapshot(snapshotKey);
+    if (current) {
+      writeDrawerSnapshot(snapshotKey, /** @type {*} */ ({ ...current, scroll: { slug: routeSlug, top: list.scrollTop } }));
+    }
+  };
+
   const tabsId = useId();
   const blockPanelId = `${tabsId}-blocks`;
 
@@ -738,7 +796,12 @@ export function Drawer({ panels = null }) {
       >
         {/* The handle is deliberately outside: it is what reopens the panel, so
             it must stay reachable while everything else is inert. */}
-        <div ref={bodyRef} className={DRAWER_BODY_CLASS} aria-hidden={!isDrawerOpen}>
+        <div
+          ref={bodyRef}
+          className={DRAWER_BODY_CLASS}
+          aria-hidden={!isDrawerOpen}
+          onScrollCapture={recordListScroll}
+        >
           <ModeRail
             mode={mode}
             onChange={setMode}
@@ -752,7 +815,7 @@ export function Drawer({ panels = null }) {
             onTogglePreview={() => setPreviewOpen((v) => !v)}
             previewableCount={previewableCount + collectionDirtyTotal}
             userInfo={userInfo}
-            onSignOut={onSignOut}
+            onSignOut={signOut}
           />
   
           <div style={paneContainerStyle}>
@@ -921,7 +984,7 @@ export function Drawer({ panels = null }) {
             </div>
 
             {userInfo ? (
-              <PanelFooter userInfo={userInfo} onSignOut={onSignOut} />
+              <PanelFooter userInfo={userInfo} onSignOut={signOut} />
             ) : null}
   
           </div>

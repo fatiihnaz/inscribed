@@ -70,11 +70,6 @@ const SessionExpiredNotice = lazy(() =>
 // for a store would swap the object every subscriber holds. A ref pins it.
 const UNSET = Symbol("unset");
 
-/**
- * @template T
- * @param {() => T} create
- * @returns {T}
- */
 /** Shared empty map for the "route not fetched yet" reads below. */
 const EMPTY_BLOCKS = new Map();
 
@@ -83,6 +78,30 @@ const NO_LOCALES = /** @type {string[]} */ ([]);
 /** Same, for the translations written on the page. */
 const NO_TRANSLATIONS = /** @type {Map<string, { before: *, pulls: boolean }>} */ (new Map());
 
+/**
+ * A block as the backend holds it after a draft write of `items`: the value
+ * sent, or no draft when that is what is published. Without the mirror an undo
+ * keeps `draftValue` until the next refetch, and the dirty count with it.
+ *
+ * @param {import("../shared/contracts/schemas.js").UpdateBlockItem[]} items
+ */
+function mirrorDraftWrite(items) {
+  const sent = new Map(items.map((item) => [item.blockPath, item.value]));
+  return {
+    paths: [...sent.keys()],
+    /** @param {BlockResponse} block @param {string} path @returns {BlockResponse | null} */
+    mapBlock: (block, path) => {
+      const draftValue = deepEqual(sent.get(path), block.value) ? null : sent.get(path);
+      return deepEqual(block.draftValue ?? null, draftValue) ? null : { ...block, draftValue };
+    },
+  };
+}
+
+/**
+ * @template T
+ * @param {() => T} create
+ * @returns {T}
+ */
 function useConstant(create) {
   const ref = useRef(/** @type {T | typeof UNSET} */ (UNSET));
   if (ref.current === UNSET) ref.current = create();
@@ -298,7 +317,10 @@ export function CmsProvider({
   // One lane per slug for block-draft writes. Pinned for the same reason the
   // stores are: a queue React could drop would strand in-flight requests.
   const draftQueue = useConstant(() => createDraftQueue());
-  useEffect(() => () => draftQueue.dispose(), [draftQueue]);
+  useEffect(() => () => {
+    draftQueue.flushPending();
+    draftQueue.dispose();
+  }, [draftQueue]);
 
   const registryStore = useConstant(() =>
     createStore(/** @type {import("../shared/state/cms-context.js").CmsRegistryState} */ ({
@@ -348,9 +370,9 @@ export function CmsProvider({
     /**
      * @param {string[]} paths
      * @param {(block: BlockResponse, path: string) => BlockResponse | null} mapBlock
+     * @param {string[]} [keys]   The route on screen and its globals unless given.
      */
-    (paths, mapBlock) => {
-      const keys = [draftKeyRef.current, globalsKeyRef.current];
+    (paths, mapBlock, keys = [draftKeyRef.current, globalsKeyRef.current]) => {
       blocksStore.set((s) => {
         /** @type {Map<string, Map<string, BlockResponse>> | null} */
         let next = null;
@@ -505,10 +527,13 @@ export function CmsProvider({
 
   // What a navigation leaves behind. Nothing is fetched: the store already
   // holds every route, so the new page renders on the same commit.
-  const lastPathnameRef = useRef(pathname);
+  const writeLeftDraftsRef = useRef(/** @type {(left: import("../shared/route.js").CmsRoute) => void} */ (() => {}));
+  const lastRouteRef = useRef(route);
   useEffect(() => {
-    if (pathname === lastPathnameRef.current) return;
-    lastPathnameRef.current = pathname;
+    const left = lastRouteRef.current;
+    lastRouteRef.current = route;
+    if (route.pathname === left.pathname) return;
+    writeLeftDraftsRef.current(left);
     // Conflicts go with the drafts they were raised against. `pendingBlock` is
     // deliberately left alone: it names a block on the route being navigated
     // *to*, so clearing it here would cancel the very jump this navigation is.
@@ -523,7 +548,7 @@ export function CmsProvider({
       translations: NO_TRANSLATIONS,
     });
     setDraftsState(new Map());
-  }, [pathname, setDraftsState, patchUi]);
+  }, [route, setDraftsState, patchUi]);
 
   // Drop drafts for blocks that no longer exist (e.g. after a manifest sync
   // removed one). Subscribed rather than keyed on a render value, since blocks
@@ -871,20 +896,25 @@ export function CmsProvider({
       });
     };
 
-    const arm = () => {
-      if (!isAdminRef.current) return;
-      const drafts = contentDraftsStore.get();
-      if (drafts.size === 0) return;
-
-      const blocks = readRouteBlocks();
+    /**
+     * @param {Map<string, import("../shared/contracts/schemas.js").BlockResponse>} blocks
+     * @param {string} fallbackSlug
+     */
+    const draftedSlugs = (blocks, fallbackSlug) => {
       /** @type {Set<string>} */
       const slugs = new Set();
-      for (const blockPath of drafts.keys()) {
+      for (const blockPath of contentDraftsStore.get().keys()) {
         const block = blocks.get(blockPath);
-        if (block) slugs.add(block._slug ?? draftSlugRef.current);
+        if (block) slugs.add(block._slug ?? fallbackSlug);
       }
+      return slugs;
+    };
 
-      for (const slug of slugs) {
+    const arm = () => {
+      if (!isAdminRef.current) return;
+      if (contentDraftsStore.get().size === 0) return;
+
+      for (const slug of draftedSlugs(readRouteBlocks(), draftSlugRef.current)) {
         draftQueue.schedule(contentDraftKey(slug, draftLocaleRef.current), async (ctx) => {
           const currentSlug = draftSlugRef.current;
           const currentLocale = draftLocaleRef.current;
@@ -948,21 +978,39 @@ export function CmsProvider({
             return;
           }
 
-          // Mirror the backend's post-write state: each block gets
-          // draftValue = the value sent, or null when that equals published
-          // (the backend auto-cleans). Without it an undo would keep
-          // `draftValue` set until the next refetch, leaving a stale dirty count.
-          const sentByPath = new Map(items.map((item) => [item.blockPath, item.value]));
-          patchBlocks([...sentByPath.keys()], (block, path) => {
-            const sent = sentByPath.get(path);
-            const draftValue = deepEqual(sent, block.value) ? null : sent;
-            if (deepEqual(block.draftValue ?? null, draftValue)) return null;
-            return { ...block, draftValue };
-          });
+          const { paths, mapBlock } = mirrorDraftWrite(items);
+          patchBlocks(paths, mapBlock);
           pruneSettledDrafts(slug, currentSlug);
 
           if (isAllReset) setDraftSyncStatus("idle");
           else flashDraftStatus("saved");
+        });
+      }
+    };
+
+    writeLeftDraftsRef.current = (left) => {
+      if (contentDraftsStore.get().size === 0) return;
+      const keys = [routeKey(left.slug, left.locale), globalsKey(left.locale)];
+      const state = blocksStore.get();
+      const blocks = mergeRouteBlocks(state.get(keys[0]) ?? EMPTY_BLOCKS, state.get(keys[1]) ?? EMPTY_BLOCKS);
+
+      for (const slug of draftedSlugs(blocks, left.slug)) {
+        const items = collectForSlug(slug, left.slug, blocks);
+        if (items.length === 0) continue;
+        draftQueue.enqueue(contentDraftKey(slug, left.locale), async () => {
+          try {
+            const accessToken = (await stableGetAccessToken()) || undefined;
+            await draftConfigRef.current.transport.updateDraft(
+              { slug, blocks: items },
+              { accessToken, locale: left.locale ?? undefined },
+            );
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn("[inscribed] draft autosave failed:", err);
+            return;
+          }
+          const { paths, mapBlock } = mirrorDraftWrite(items);
+          patchBlocks(paths, mapBlock, keys);
         });
       }
     };

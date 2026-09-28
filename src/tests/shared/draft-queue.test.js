@@ -253,6 +253,53 @@ describe("rename", () => {
   });
 });
 
+describe("flushPending", () => {
+  it("runs every waiting write at once, and not again when its timer would have fired", async () => {
+    const queue = createDraftQueue();
+    const a = vi.fn();
+    const b = vi.fn();
+
+    queue.schedule("a", a);
+    queue.schedule("b", b);
+    queue.flushPending();
+    await settle();
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).toHaveBeenCalledTimes(1);
+  });
+
+  it("still orders the write behind one in flight on the same key", async () => {
+    const queue = createDraftQueue();
+    const { make, calls } = deferredFlushes();
+
+    queue.schedule("a", make("a"));
+    await vi.advanceTimersByTimeAsync(1000);
+    queue.schedule("a", make("a"));
+    queue.flushPending();
+    await settle();
+    expect(calls).toHaveLength(1);
+
+    calls[0].settle();
+    await settle();
+    expect(calls).toHaveLength(2);
+  });
+
+  it("sends a write flushed just before dispose", async () => {
+    const queue = createDraftQueue();
+    const flush = vi.fn();
+
+    queue.schedule("a", flush);
+    queue.flushPending();
+    queue.dispose();
+    await settle();
+
+    expect(flush).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("dispose", () => {
   it("drops pending writes and marks in-flight ones stale", async () => {
     const queue = createDraftQueue();

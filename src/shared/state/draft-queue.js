@@ -22,6 +22,7 @@
  * @property {(key: string) => void} cancel
  * @property {() => void} cancelAll
  * @property {(from: string, to: string) => void} rename
+ * @property {() => void} flushPending   Runs every write still waiting on its debounce, now.
  * @property {() => void} dispose
  */
 
@@ -32,8 +33,8 @@ const noop = () => {};
  * @returns {DraftQueue}
  */
 export function createDraftQueue({ delay = 1000 } = {}) {
-  /** @type {Map<string, ReturnType<typeof setTimeout>>} */
-  const timers = new Map();
+  /** @type {Map<string, { timer: ReturnType<typeof setTimeout>, fire: () => void }>} */
+  const pending = new Map();
   /** Tail of each key's request chain, so writes to one key never overlap. */
   /** @type {Map<string, Promise<void>>} */
   const chains = new Map();
@@ -44,6 +45,14 @@ export function createDraftQueue({ delay = 1000 } = {}) {
 
   /** @param {string} key */
   const epochOf = (key) => epochs.get(key) ?? 0;
+
+  /** @param {string} key */
+  function drop(key) {
+    const entry = pending.get(key);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    pending.delete(key);
+  }
 
   /**
    * Append to the key's chain. The `catch` is what keeps a failed write from
@@ -65,21 +74,17 @@ export function createDraftQueue({ delay = 1000 } = {}) {
 
   return {
     schedule(key, flush) {
-      const existing = timers.get(key);
-      if (existing) clearTimeout(existing);
-
-      const timer = setTimeout(() => {
-        timers.delete(key);
-        // Captured at fire time, not at schedule time: a cancel between the two
-        // already dropped this timer, so what matters is staleness from here on.
+      drop(key);
+      const fire = () => {
+        pending.delete(key);
+        // Captured at fire time: a cancel before it already dropped this entry.
         const keyEpoch = epochOf(key);
         const startEpoch = globalEpoch;
         chain(key, () =>
           flush({ isStale: () => epochOf(key) !== keyEpoch || globalEpoch !== startEpoch }),
         );
-      }, delay);
-
-      timers.set(key, timer);
+      };
+      pending.set(key, { timer: setTimeout(fire, delay), fire });
     },
 
     enqueue(key, run) {
@@ -87,17 +92,12 @@ export function createDraftQueue({ delay = 1000 } = {}) {
     },
 
     cancel(key) {
-      const timer = timers.get(key);
-      if (timer) {
-        clearTimeout(timer);
-        timers.delete(key);
-      }
+      drop(key);
       epochs.set(key, epochOf(key) + 1);
     },
 
     cancelAll() {
-      for (const timer of timers.values()) clearTimeout(timer);
-      timers.clear();
+      for (const key of [...pending.keys()]) drop(key);
       globalEpoch += 1;
     },
 
@@ -105,11 +105,7 @@ export function createDraftQueue({ delay = 1000 } = {}) {
       // A pending write against the old key is dropped rather than re-aimed:
       // after a create the new-item slot no longer describes anything, so
       // firing it would stash a draft the next composer mount seeds from.
-      const timer = timers.get(from);
-      if (timer) {
-        clearTimeout(timer);
-        timers.delete(from);
-      }
+      drop(from);
       // An in-flight write is left to finish, and the new key queues behind it,
       // so the record's first write can't overtake the create it depends on.
       const inFlight = chains.get(from);
@@ -120,9 +116,15 @@ export function createDraftQueue({ delay = 1000 } = {}) {
       epochs.delete(from);
     },
 
+    flushPending() {
+      for (const { timer, fire } of [...pending.values()]) {
+        clearTimeout(timer);
+        fire();
+      }
+    },
+
     dispose() {
-      for (const timer of timers.values()) clearTimeout(timer);
-      timers.clear();
+      for (const key of [...pending.keys()]) drop(key);
       chains.clear();
       globalEpoch += 1;
     },

@@ -17,14 +17,22 @@ import { createStore } from "../shared/state/store.js";
  */
 
 /**
- * @typedef {{ status: "none" | "expired", user: null }
- *   | { status: "connected", user: BrowserUser }} BrowserSession
+ * `offline` keeps the user it had: a refresh that never reached the backend
+ * says nothing about the session itself.
+ *
+ * @typedef {{ status: "none" | "connecting" | "expired", user: null }
+ *   | { status: "connected", user: BrowserUser }
+ *   | { status: "offline", user: BrowserUser | null }} BrowserSession
  */
 
 /** @type {BrowserSession} */
 export const NO_SESSION = Object.freeze({ status: "none", user: null });
 /** @type {BrowserSession} */
+const CONNECTING = Object.freeze({ status: "connecting", user: null });
+/** @type {BrowserSession} */
 const EXPIRED = Object.freeze({ status: "expired", user: null });
+
+const RETRY_MS = 5000;
 
 const withoutAuth = createStore(NO_SESSION);
 
@@ -49,7 +57,45 @@ export function browserSessionStore(auth, clientKey) {
     else store.set(reason === "expired" && store.get().user ? EXPIRED : NO_SESSION);
   });
 
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let retry = null;
+  const attempt = () => {
+    if (retry) clearTimeout(retry);
+    retry = null;
+    window.removeEventListener("online", attempt);
+    void auth.refresh();
+  };
+
+  auth.onReachability((reached) => {
+    const { status, user } = store.get();
+    if (reached) {
+      if (status === "offline") store.set(user ? { status: "connected", user } : NO_SESSION);
+      return;
+    }
+    if (status === "none" || status === "expired") return;
+    if (status !== "offline") store.set({ status: "offline", user });
+    if (retry || typeof window === "undefined") return;
+    retry = setTimeout(attempt, RETRY_MS);
+    window.addEventListener("online", attempt);
+  });
+
   return store;
+}
+
+/**
+ * Resume a session the tab believes it has, showing it as connecting until the
+ * backend answers.
+ *
+ * @param {BrowserAuth} auth
+ * @param {string} clientKey
+ * @returns {Promise<boolean>}
+ */
+export async function resumeBrowserSession(auth, clientKey) {
+  const store = browserSessionStore(auth, clientKey);
+  if (store.get().status === "none") store.set(CONNECTING);
+  const ok = await auth.refresh();
+  if (store.get().status === "connecting") store.set(NO_SESSION);
+  return ok;
 }
 
 /**

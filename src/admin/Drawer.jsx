@@ -62,7 +62,7 @@ import { readOpenTarget, stripOpenParams } from "./deep-link.js";
 import { clearDrawerSnapshot, drawerSnapshotKey, readDrawerSnapshot, writeDrawerSnapshot } from "../shared/state/drawer-snapshot.js";
 
 import { emptyStateStyle } from "../editors/styles.js";
-import { panelStyle, DRAWER_BODY_CLASS, srOnlyStyle, paneContainerStyle, paneStyle, RAIL_CLASS, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, RAIL_BAR_CLASS, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, toolButtonStyle, toolCountStyle, refRowStyle, rowActionsStyle, typeIconStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, STATUS_COLLAPSE_TRANSITION, statusCollapseStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgEmphasisStyle, statusActionsStyle, laneStyle, laneLabelStyle, laneLabelTextStyle, laneCountStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, PANEL_CLASS, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
+import { panelStyle, DRAWER_BODY_CLASS, srOnlyStyle, paneContainerStyle, paneStyle, RAIL_CLASS, railButtonStyle, railDirtyDotStyle, railBadgeStyle, panelIconStyle, RAIL_BAR_CLASS, headerStyle, headerBadgeStyle, headerBadgeCollectionStyle, headerPathStyle, headerCrumbStyle, headerCrumbCurrentStyle, headerSepStyle, tabBarStyle, tabBarScrollStyle, tabBarChevronStyle, tabButtonStyle, tabButtonActiveStyle, tabLabelStyle, tabCountBadgeStyle, tabCountBadgeActiveStyle, tabDirtyDotStyle, toolbarStyle, searchWrapStyle, searchInputStyle, searchClearStyle, toolButtonStyle, toolCountStyle, refRowStyle, rowActionsStyle, typeIconStyle, groupCardStyle, groupHeaderStyle, groupNameStyle, groupIconStyle, groupCountStyle, groupDirtyDotStyle, groupBodyStyle, groupRailStyle, groupDividerStyle, listStyle, statusBarStyle, STATUS_COLLAPSE_TRANSITION, statusCollapseStyle, statusSignalStyle, statusDotStyle, statusMsgStyle, statusMsgEmphasisStyle, statusActionsStyle, laneStyle, laneLabelStyle, laneLabelTextStyle, laneCountStyle, btnPrimaryStyle, btnGhostStyle, handleButtonStyle, handleIconStyle, handleStatusDotStyle, connectionStyle, connectionLostStyle, PANEL_CLASS, footerStyle, avatarStyle, avatarImgStyle, avatarInitialsStyle, userMetaStyle, userNameStyle, userEmailStyle, signOutButtonStyle, errorStyle, conflictStyle, panelCss } from "./drawer-styles.js";
 import { DRILL_TRANSITION, DRILL_PARALLAX, DRILL_PANE_TRANSITION, drillLayerStyle, drillPaneStyle, switchMotion, switchLayerStyle } from "../shared/style/drill-motion.js";
 import { COMPACT_QUERY, MOBILE_QUERY, PANEL_TRANSITION, ACCENT, COLLECTION_ACCENT, TEXT, TEXT_MUTED, TEXT_FAINT, BORDER, HAIRLINE, SURFACE_1, FONT_SANS, STATUS_OK, STATUS_WARN, STATUS_DANGER, dynamicSize } from "../shared/style/tokens.js";
 
@@ -91,9 +91,12 @@ const EMPTY_BLOCKS = new Map();
 function noop() {}
 
 /**
- * @param {{ panels?: readonly import("../shared/panels.js").CmsPanel[] | null }} props
+ * @param {{
+ *   panels?: readonly import("../shared/panels.js").CmsPanel[] | null,
+ *   connection?: "connecting" | "offline" | null,
+ * }} props
  */
-export function Drawer({ panels = null }) {
+export function Drawer({ panels = null, connection = null }) {
   const t = useCmsStrings();
   // `pathname` labels the breadcrumb; `routeSlug` is what `_slug` stamps carry,
   // so it (not the pathname) decides page vs global, and with the locale it
@@ -103,6 +106,7 @@ export function Drawer({ panels = null }) {
   const globalsStoreKey = globalsKey(locale);
   const {
     config,
+    isAdmin,
     setActiveBlock,
     setPendingBlock,
     setDrawerOpen,
@@ -159,8 +163,9 @@ export function Drawer({ panels = null }) {
   } = useCmsSave();
   // What the editor left in the page's other languages is only found by reading
   // those languages in, so they are read while the drawer is open: it is the one
-  // place that offers them.
-  useLanguageReads(isDrawerOpen);
+  // place that offers them. Not before the session is back, or the read goes
+  // out without a token and is not asked again.
+  useLanguageReads(isDrawerOpen && isAdmin);
   // Header path ancestors navigate the host app; the drawer already follows the
   // route via `usePathname`, so it re-renders into the new page on its own.
   const router = useRouter();
@@ -722,7 +727,10 @@ export function Drawer({ panels = null }) {
     [globalBlockList, search, changedOnly, changedOnly ? drafts : null],
   );
 
-  const bodyRef = useInert(!isDrawerOpen);
+  // No session yet: the drawer is shown the way it was left, but nothing in it
+  // can act until the backend answers.
+  const locked = !isAdmin;
+  const bodyRef = useInert(!isDrawerOpen || locked);
 
   useLayoutEffect(() => {
     const scroll = restored?.scroll;
@@ -800,6 +808,7 @@ export function Drawer({ panels = null }) {
           ref={bodyRef}
           className={DRAWER_BODY_CLASS}
           aria-hidden={!isDrawerOpen}
+          data-locked={locked ? "" : undefined}
           onScrollCapture={recordListScroll}
         >
           <ModeRail
@@ -983,8 +992,8 @@ export function Drawer({ panels = null }) {
             />
             </div>
 
-            {userInfo ? (
-              <PanelFooter userInfo={userInfo} onSignOut={signOut} />
+            {userInfo || connection ? (
+              <PanelFooter userInfo={userInfo} onSignOut={signOut} connection={connection} />
             ) : null}
   
           </div>
@@ -1012,6 +1021,7 @@ export function Drawer({ panels = null }) {
               <ChevronsLeft size={14} />
             </motion.span>
           </span>
+          {connection && !isDrawerOpen ? <span style={handleStatusDotStyle} aria-hidden="true" /> : null}
         </button>
       </motion.aside>
     </MotionConfig>
@@ -2938,12 +2948,26 @@ function OtherLanguagesLane({ pending, onToggle, disabled }) {
 
 /**
  * @param {{
- *   userInfo: { name: string|null, email: string|null, image: string|null },
+ *   userInfo: { name: string|null, email: string|null, image: string|null } | null,
  *   onSignOut: (() => void) | null,
+ *   connection?: "connecting" | "offline" | null,
  * }} props
  */
-function PanelFooter({ userInfo, onSignOut }) {
+function PanelFooter({ userInfo, onSignOut, connection = null }) {
   const t = useCmsStrings();
+  const status = connection ? (
+    <div role="status" style={connection === "offline" ? connectionLostStyle : connectionStyle}>
+      {t(connection === "offline" ? "drawer.reconnecting" : "drawer.connecting")}
+    </div>
+  ) : null;
+  if (!userInfo) {
+    return (
+      <footer style={footerStyle}>
+        <div style={userMetaStyle}>{status}</div>
+      </footer>
+    );
+  }
+
   const initials = (userInfo.name ?? userInfo.email ?? "?")
     .split(/\s+/)
     .map((s) => s[0])
@@ -2964,11 +2988,11 @@ function PanelFooter({ userInfo, onSignOut }) {
       </div>
       <div style={userMetaStyle}>
         <div style={userNameStyle}>{userInfo.name ?? t("drawer.anonymous")}</div>
-        {userInfo.email ? (
+        {status ?? (userInfo.email ? (
           <div style={userEmailStyle} title={userInfo.email}>
             {userInfo.email}
           </div>
-        ) : null}
+        ) : null)}
       </div>
       <button
         type="button"

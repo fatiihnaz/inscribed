@@ -44,6 +44,8 @@ const REFRESH_LOCK = "inscribed-refresh";
  * @property {(cb: (authenticated: boolean, reason: AuthChangeReason) => void) => () => void} onChange
  *   Subscribe to auth transitions (only transitions: token renewals don't fire).
  *   The first subscriber arms the cross-tab storage watcher. Returns unsubscribe.
+ * @property {(cb: (reached: boolean) => void) => () => void} onReachability
+ *   Called after every refresh with whether the backend answered it at all.
  */
 
 /** @type {Map<string, BrowserAuth>} */
@@ -141,6 +143,13 @@ export function createBrowserAuth({ baseUrl, clientKey }) {
     for (const cb of [...listeners]) cb(authenticated, reason);
   };
 
+  /** @type {Set<(reached: boolean) => void>} */
+  const reachListeners = new Set();
+  /** @param {boolean} reached */
+  const reportReached = (reached) => {
+    for (const cb of [...reachListeners]) cb(reached);
+  };
+
   // Cross-tab sync rides on the hint key: `storage` fires only in OTHER tabs,
   // so a logout (hint removed) or a first login (hint set) elsewhere reaches
   // this tab without polling.
@@ -181,6 +190,7 @@ export function createBrowserAuth({ baseUrl, clientKey }) {
             err,
           );
         }
+        reportReached(false);
         return false;
       }
       if (!res.ok) {
@@ -192,6 +202,7 @@ export function createBrowserAuth({ baseUrl, clientKey }) {
           setSessionHint(false);
           if (hadToken) emit(false, "expired");
         }
+        reportReached(true);
         return false;
       }
       const body = await res.json();
@@ -199,6 +210,7 @@ export function createBrowserAuth({ baseUrl, clientKey }) {
       expiresAt = computeExpiry(body);
       setSessionHint(true);
       if (!hadToken) emit(true, "signed-in");
+      reportReached(true);
       return true;
     };
     return typeof navigator !== "undefined" && "locks" in navigator
@@ -253,6 +265,11 @@ export function createBrowserAuth({ baseUrl, clientKey }) {
       expiresAt = 0;
       setSessionHint(false);
       emit(false, "logout");
+    },
+
+    onReachability(cb) {
+      reachListeners.add(cb);
+      return () => reachListeners.delete(cb);
     },
 
     onChange(cb) {

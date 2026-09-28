@@ -263,6 +263,24 @@ describe("onChange", () => {
   });
 });
 
+describe("onReachability", () => {
+  it("reports every refresh: unreachable on a network failure, reached on any answer", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const auth = makeAuth();
+    const seen = [];
+    auth.onReachability((reached) => seen.push(reached));
+
+    global.fetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await auth.refresh();
+    fetchResolves(undefined, 401);
+    await auth.refresh();
+    fetchResolves(refreshBody());
+    await auth.refresh();
+
+    expect(seen).toEqual([false, true, true]);
+  });
+});
+
 describe("getBrowserAuth", () => {
   it("returns one shared instance per baseUrl+clientKey", () => {
     const a = getBrowserAuth({ baseUrl: BASE, clientKey: "cache-a" });

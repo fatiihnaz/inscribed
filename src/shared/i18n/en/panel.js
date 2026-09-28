@@ -77,6 +77,8 @@ export const panel = Object.freeze({
   "drawer.openRecord": "Open the {key} / {slug} record",
   "drawer.anonymous": "Anonymous",
   "drawer.signOut": "Sign out",
+  "drawer.connecting": "Connecting…",
+  "drawer.reconnecting": "Connection lost, retrying…",
 
   // Block cards.
   "block.unsavedDot": "Unsaved change",

@@ -72,6 +72,8 @@ export const panel = Object.freeze({
   "drawer.openRecord": "{key} / {slug} kaydını aç",
   "drawer.anonymous": "Anonim",
   "drawer.signOut": "Çıkış yap",
+  "drawer.connecting": "Bağlanıyor…",
+  "drawer.reconnecting": "Bağlantı koptu, yeniden deneniyor…",
 
   "block.unsavedDot": "Kaydedilmemiş değişiklik",
   "block.undo": "Geri al",

@@ -29,7 +29,7 @@ import { buildThemeCss } from "../shared/style/theme.js";
 import { PAGE_SHELL_CLASS } from "../shared/style/layout-css.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
-import { browserSessionStore, NO_SESSION } from "./browser-session.js";
+import { browserSessionStore, NO_SESSION, resumeBrowserSession } from "./browser-session.js";
 import { EMPTY_SITE, reseedSite, seedSite, siteSlugs } from "./site-blocks.js";
 import { mergeRouteBlocks, readBlock } from "./blocks.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
@@ -223,7 +223,9 @@ export function CmsProvider({
       const resuming = browserAuth.hasSessionHint() && sessionStore.get().status !== "connected";
       if (!explicitLogin && !returning && !resuming) return;
 
-      const ok = await browserAuth.refresh();
+      const ok = await (resuming || returning
+        ? resumeBrowserSession(browserAuth, baseConfig.clientKey)
+        : browserAuth.refresh());
       if (explicitLogin && !ok) {
         browserAuth.login(); // full-page redirect; comes back with ?cms-auth=done
         return;
@@ -236,7 +238,7 @@ export function CmsProvider({
       }
       if (explicitLogin || returning) stripAuthParams();
     })();
-  }, [browserAuth, sessionStore]);
+  }, [browserAuth, sessionStore, baseConfig.clientKey]);
 
   const browserSignOut = useCallback(async () => {
     await browserAuth?.logout();
@@ -244,6 +246,11 @@ export function CmsProvider({
 
   // Browser session wins over the (always-public) SSR props when active.
   const isAdmin = browserUser != null || isAdminProp;
+  const connection = browserSession.status === "connecting" || browserSession.status === "offline"
+    ? browserSession.status
+    : null;
+  // Only the drawer shows a session still resolving; the page waits for it.
+  const drawerShown = isAdmin || connection != null;
   const userSub = browserUser ? browserUser.userSub : userSubProp;
   const userInfo = browserUser ? browserUser.userInfo : userInfoProp;
 
@@ -1348,11 +1355,11 @@ export function CmsProvider({
           a save needs. Mounted for everyone because a visitor's `refetch()` has
           to reach the backend too; for them it sits idle until they ask. */}
       <SiteLoader />
-      <PageShell isAdmin={isAdmin}>{children}</PageShell>
+      <PageShell withDrawer={drawerShown}>{children}</PageShell>
       {/* A prop rather than context: the drawer is the only reader, and an
           inline array literal on the context value would wake every consumer
           on each host render. */}
-      {isAdmin ? <AdminDrawer panels={normalizedPanels} /> : null}
+      {drawerShown ? <AdminDrawer panels={normalizedPanels} connection={connection} /> : null}
       {sessionExpired && browserAuth ? (
         <Suspense fallback={null}>
           <SessionExpiredNotice
@@ -1367,10 +1374,9 @@ export function CmsProvider({
   return (
     <CmsContext.Provider value={value}>
       {themeCss ? <style>{themeCss}</style> : null}
-      {/* The editor and layout rules, gated on `isAdmin` because every surface
-          they style is, so a visitor's page downloads neither the rules nor the
-          editors they would style. */}
-      {isAdmin ? <Suspense fallback={null}><AdminStyles /></Suspense> : null}
+      {/* Gated with the drawer, so a visitor's page downloads neither the rules
+          nor the editors they would style. */}
+      {drawerShown ? <Suspense fallback={null}><AdminStyles /></Suspense> : null}
       {/* A prop rather than something the app nests itself, because it must
           wrap the drawer too, and the drawer is a sibling of `children`. It
           reads `config`/`isAdmin`/`getAccessToken`, so it sits inside here. */}
@@ -1388,14 +1394,14 @@ export function CmsProvider({
  * Which way it moves and by how much is `layoutCss`'s business; this only
  * reports whether the drawer is open.
  *
- * @param {{ isAdmin: boolean, children: React.ReactNode }} props
+ * @param {{ withDrawer: boolean, children: React.ReactNode }} props
  */
-function PageShell({ isAdmin, children }) {
+function PageShell({ withDrawer, children }) {
   const { uiStore } = useCmsContext();
   const isDrawerOpen = useStoreSelector(uiStore, (s) => s.isDrawerOpen);
   return (
     <div
-      className={isAdmin ? PAGE_SHELL_CLASS : undefined}
+      className={withDrawer ? PAGE_SHELL_CLASS : undefined}
       data-drawer-open={isDrawerOpen ? "true" : undefined}
     >
       {children}

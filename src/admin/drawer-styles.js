@@ -981,6 +981,30 @@ export const handleIconStyle = {
   justifyContent: "center",
 };
 
+// The panel's own status line is out of sight while it is shut.
+export const handleStatusDotStyle = {
+  position: "absolute",
+  top: 10,
+  left: "50%",
+  width: 6,
+  height: 6,
+  marginLeft: -3,
+  borderRadius: "50%",
+  background: STATUS_WARN,
+};
+
+export const connectionStyle = {
+  fontSize: dynamicSize(11),
+  lineHeight: 1.2,
+  fontFamily: FONT_SANS,
+  color: TEXT_MUTED,
+};
+
+export const connectionLostStyle = {
+  ...connectionStyle,
+  color: STATUS_WARN,
+};
+
 // ---------------------------------------------------------------------------
 // Inline CSS: hover/focus states, scrollbar styling, status pulse,
 // dirty/active card variants, animation interpolation for height: auto.
@@ -1019,6 +1043,12 @@ export const panelCss = `
     min-width: 0;
     height: 100%;
     display: flex;
+  }
+
+  /* Everything but the footer, which is where the panel says why. */
+  .${DRAWER_BODY_CLASS}[data-locked] > nav,
+  .${DRAWER_BODY_CLASS}[data-locked] > div > :not(footer) {
+    opacity: 0.55;
   }
 
   .${RAIL_CLASS} {

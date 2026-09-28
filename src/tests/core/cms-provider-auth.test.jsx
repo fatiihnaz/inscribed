@@ -243,6 +243,25 @@ describe("session lifecycle", () => {
     expect(refreshCalls()).toBe(1);
   });
 
+  it("keeps the editor through a lost connection and picks up again once back online", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const key = nextKey();
+    const auth = await signIn(key);
+
+    refreshImpl = () => Promise.reject(new TypeError("Failed to fetch"));
+    await act(async () => {
+      await auth.refresh();
+    });
+    expect(adminText()).toBe("true");
+
+    refreshImpl = () => jsonRes(goodRefreshBody(key));
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+    await waitFor(() => expect(refreshCalls()).toBe(3));
+    expect(adminText()).toBe("true");
+  });
+
   it("adopts the session when another tab signs in", async () => {
     const key = nextKey();
     refreshImpl = () => jsonRes(goodRefreshBody(key));
@@ -254,6 +273,67 @@ describe("session lifecycle", () => {
       window.dispatchEvent(new StorageEvent("storage", { key: hintKey(key), newValue: "1" }));
     });
 
+    await waitFor(() => expect(adminText()).toBe("true"));
+  });
+});
+
+describe("while a returning editor's session resolves", () => {
+  const shell = () => document.querySelector(".inscribed-page-shell");
+
+  /** Holds the refresh open until the test answers it. */
+  function holdRefresh() {
+    let answer;
+    refreshImpl = () => new Promise((resolve) => { answer = resolve; });
+    return (res) => answer(res);
+  }
+
+  it("makes room for the drawer, then hands the page to the editor", async () => {
+    const key = nextKey();
+    localStorage.setItem(hintKey(key), "1");
+    const answer = holdRefresh();
+
+    renderCms({ baseUrl: BASE, clientKey: key });
+    await waitFor(() => expect(shell()).toBeTruthy());
+    expect(adminText()).toBe("false");
+
+    await act(async () => {
+      answer(jsonRes(goodRefreshBody(key)));
+    });
+    await waitFor(() => expect(adminText()).toBe("true"));
+    expect(shell()).toBeTruthy();
+  });
+
+  it("gives the room back when there turns out to be no session", async () => {
+    const key = nextKey();
+    localStorage.setItem(hintKey(key), "1");
+    const answer = holdRefresh();
+
+    renderCms({ baseUrl: BASE, clientKey: key });
+    await waitFor(() => expect(shell()).toBeTruthy());
+
+    await act(async () => {
+      answer(jsonRes(undefined, 401));
+    });
+    await waitFor(() => expect(shell()).toBeNull());
+    expect(adminText()).toBe("false");
+  });
+
+  it("stays while the backend is unreachable and resumes once it answers", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const key = nextKey();
+    localStorage.setItem(hintKey(key), "1");
+    refreshImpl = () => Promise.reject(new TypeError("Failed to fetch"));
+
+    renderCms({ baseUrl: BASE, clientKey: key });
+    await waitFor(() => expect(refreshCalls()).toBe(1));
+    await settle();
+    expect(shell()).toBeTruthy();
+    expect(adminText()).toBe("false");
+
+    refreshImpl = () => jsonRes(goodRefreshBody(key));
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
     await waitFor(() => expect(adminText()).toBe("true"));
   });
 });

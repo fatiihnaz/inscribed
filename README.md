@@ -1121,11 +1121,12 @@ copy of the list:
 
 ```jsx
 "use client";
+import Link from "next/link";
 import { useCmsRoute } from "inscribed";
 
 const { locale, slug, localePath } = useCmsRoute();
-<a href={localePath("/about")}>…</a>          // stays in the current language
-<a href={localePath(slug, "en")}>English</a>  // a language switcher
+<Link href={localePath("/about")}>…</Link>          // stays in the current language
+<Link href={localePath(slug, "en")}>English</Link>  // a language switcher
 ```
 
 Server Components can't call hooks, so `createCmsPage` hands back the same
@@ -1136,6 +1137,9 @@ export const { CmsPage, localePath } = createCmsPage({ /* … */ });
 
 <Link href={localePath("/about", locale)}>…</Link>
 ```
+
+Link with `next/link` rather than a plain `<a>`: a plain anchor reloads the
+whole document, and an editor's drawer with it.
 
 **Your manifest does not change.** The slug is what a page is; the locale is which
 language of it you are looking at. So a localized app still syncs one entry per

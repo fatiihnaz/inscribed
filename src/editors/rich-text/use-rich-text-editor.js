@@ -77,9 +77,11 @@ export function useRichTextEditor({ value, onChange, disabled, contentClass = "i
   }, [editor, value]);
 
   // `editable` is only read at init, so toggle it imperatively on change.
+  // Without `false` Tiptap emits `update`, and this runs on mount: the HTML it
+  // rewrote on load would reach onChange as an edit.
   useEffect(() => {
     if (!editor) return;
-    editor.setEditable(!disabled);
+    editor.setEditable(!disabled, false);
   }, [editor, disabled]);
 
   return editor;

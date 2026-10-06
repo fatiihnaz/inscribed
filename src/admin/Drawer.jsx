@@ -25,7 +25,7 @@
  * layout + state only.
  */
 
-import { forwardRef, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, startTransition, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -58,6 +58,7 @@ import { Collapse } from "./Collapse.jsx";
 import { IncludeLanguageButton } from "./IncludeLanguageButton.jsx";
 import { DrawerNavContext } from "./drawer-nav.js";
 import { PanelArea } from "./PanelArea.jsx";
+import { SkeletonRows } from "./Skeleton.jsx";
 import { readOpenTarget, stripOpenParams } from "./deep-link.js";
 import { clearDrawerSnapshot, drawerSnapshotKey, readDrawerSnapshot, writeDrawerSnapshot } from "../shared/state/drawer-snapshot.js";
 
@@ -732,13 +733,40 @@ export function Drawer({ panels = null, connection = null }) {
   const locked = !isAdmin;
   const bodyRef = useInert(!isDrawerOpen || locked);
 
+  // The route whose cards are drawn. Mounting a page's cards is most of what a
+  // navigation costs an editor, open drawer or not, so the new page paints
+  // first and the list follows in a transition of its own: straight away while
+  // the drawer is open, once the browser is idle while it is shut, so opening
+  // it later finds the list ready.
+  const [drawnKey, setDrawnKey] = useState(/** @type {string|null} */ (null));
+  const listReady = drawnKey === blocksKey;
+  useEffect(() => {
+    if (listReady) return undefined;
+    const draw = () => startTransition(() => setDrawnKey(blocksKey));
+    if (isDrawerOpen) {
+      draw();
+      return undefined;
+    }
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(draw, { timeout: 2000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    // Safari has no idle callback.
+    const timer = setTimeout(draw, 200);
+    return () => clearTimeout(timer);
+  }, [listReady, blocksKey, isDrawerOpen]);
+
+  // Restored on the list's first draw, which no longer happens on mount.
+  const pendingScrollRef = useRef(restored?.scroll ?? null);
   useLayoutEffect(() => {
-    const scroll = restored?.scroll;
-    if (!scroll || scroll.slug !== routeSlug) return;
+    const scroll = pendingScrollRef.current;
+    if (!listReady || !scroll) return;
+    pendingScrollRef.current = null;
+    if (scroll.slug !== routeSlug) return;
     const list = bodyRef.current?.querySelector("[data-cms-list]");
     if (list) list.scrollTop = scroll.top;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [listReady]);
 
   useEffect(() => {
     writeDrawerSnapshot(snapshotKey, {
@@ -913,26 +941,38 @@ export function Drawer({ panels = null, connection = null }) {
                     }}
                   />
                 ) : null}
-                <GroupedBlockList
-                  panelId={blockPanelId}
-                  labelledBy={`${tabsId}-${activeTab}`}
-                  blockList={activeTab === "page" ? filteredPage : filteredGlobal}
-                  activeBlockPath={activeBlock}
-                  density={density}
-                  itemSchemas={itemSchemas}
-                  editorVisibility={editorVisibility}
-                  closedGroups={closedGroups}
-                  onToggleGroup={toggleGroup}
-                  emptyHint={
-                    search
-                      ? t("drawer.emptySearch", { query: search })
-                      : changedOnly
-                        ? t("drawer.emptyChanged")
-                        : activeTab === "page"
-                          ? t("drawer.emptyPage")
-                          : t("drawer.emptyGlobal")
-                  }
-                />
+                {!listReady ? (
+                  <section
+                    style={paneStyle}
+                    id={blockPanelId}
+                    role="tabpanel"
+                    aria-labelledby={`${tabsId}-${activeTab}`}
+                    aria-busy="true"
+                  >
+                    <SkeletonRows count={6} lines={2} height={44} />
+                  </section>
+                ) : (
+                  <GroupedBlockList
+                    panelId={blockPanelId}
+                    labelledBy={`${tabsId}-${activeTab}`}
+                    blockList={activeTab === "page" ? filteredPage : filteredGlobal}
+                    activeBlockPath={activeBlock}
+                    density={density}
+                    itemSchemas={itemSchemas}
+                    editorVisibility={editorVisibility}
+                    closedGroups={closedGroups}
+                    onToggleGroup={toggleGroup}
+                    emptyHint={
+                      search
+                        ? t("drawer.emptySearch", { query: search })
+                        : changedOnly
+                          ? t("drawer.emptyChanged")
+                          : activeTab === "page"
+                            ? t("drawer.emptyPage")
+                            : t("drawer.emptyGlobal")
+                    }
+                  />
+                )}
               </>
             )}
   

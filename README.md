@@ -1084,7 +1084,6 @@ import { locales } from "../../cms.config.js";
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
 }
-export const dynamicParams = false;
 
 export default async function RootLayout({ children, params }) {
   const { locale } = await params;
@@ -1100,6 +1099,12 @@ export default async function RootLayout({ children, params }) {
 that language, and `generateStaticParams` is what builds every language ahead
 of time. A localized site that omits the prop fails at build with the line to
 add; a segment value outside `locales` is not found.
+
+Leave `dynamicParams` out of this layout. Next applies `false` to every route
+under it, not just the language: a collection detail route would then know only
+the records `generateStaticParams` listed at build, and a record created or
+renamed later would answer 404 until the next build. An unknown language needs
+no help from it; `<CmsPage>` and the collection bindings answer it with a 404.
 
 The provider remounts when the language changes, since a layout instance
 belongs to its segment's value. The editor's session survives it (the built-in
@@ -1744,12 +1749,14 @@ a route nobody visited between a publish and the restart keeps the version it
 has on disk until the next publish of its language.
 
 > **Mark these tags stale, never expire them.** `updateTag`, and `revalidateTag`
-> with one argument or `{ expire: 0 }`, drop the cached page outright, and
-> Next 16 then answers every prerendered page of that language with a 404 under
-> the layout's `dynamicParams = false`; with `next start` that lasts until it
-> restarts, which brings back the pre-publish pages. From a Route Handler (say,
-> a webhook for writes that bypass the drawer), call `revalidateTag(tag, "max")`
-> with the tag helpers from `inscribed/server`, as the actions do.
+> with one argument or `{ expire: 0 }`, drop the cached page outright, so
+> Next 16 has nothing to serve while it renders the page again: with the backend
+> down every request is a 500, and under a layout that sets
+> `dynamicParams = false` every prerendered page of that language answers 404
+> (with `next start` until it restarts, which brings back the pre-publish
+> pages). From a Route Handler (say, a webhook for writes that bypass the
+> drawer), call `revalidateTag(tag, "max")` with the tag helpers from
+> `inscribed/server`, as the actions do.
 
 The global slugs (header/footer/site-wide blocks) come back in the site read's
 own `global` list and are held once on the client, apart from any page, so a

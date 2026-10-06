@@ -234,8 +234,8 @@ into your scripts so it stays in sync with the code:
 ```
 
 That's the full read path: every route is built with its content in place, a
-publish drops the cache and the next request regenerates the route, and moving
-between pages renders from what the page already brought (see
+publish marks the cache stale and the next request regenerates the route, and
+moving between pages renders from what the page already brought (see
 [Content delivery](#content-delivery)). Editing is the same components plus an
 auth adapter covered next.
 
@@ -1709,14 +1709,31 @@ invalidates:
 | `getCmsCollection` | `cms-collection-{key}` | `revalidateCmsCollection` as `onAfterCollectionSave` |
 | `getCmsCollectionItem` | `cms-collection-{key}-{slug}` (plus the collection's) | the same, which drops both |
 
-Pass those two Server Actions and stale visitor content is gone on the next
-request; omit one and the page keeps serving the pre-publish version. Every
-route renders from the site read, so a publish anywhere marks every route of
-that language stale; each regenerates on its next request, from the Data Cache
-except for the one read that changed. Publishing a record always drops the
-**whole** collection, not just the record: a write can move rows between filter
-windows, reorder a list or change its total, so every window that mentions the
-collection is suspect.
+Pass those two Server Actions and each route serves a publish from its second
+request on: the actions mark the tags stale with `revalidateTag(tag, "max")`, so
+a route's first request after a publish still gets the previous version while
+the new one renders behind it. That includes the editor who published: a record
+they create shows up in a server-rendered region once the route has
+regenerated, while the drawer and client-side regions show it at once. Omit one
+and the page keeps serving the pre-publish version. Every route renders from
+the site read, so a publish anywhere marks every route of that language stale;
+each regenerates on its next request, from the Data Cache except for the one
+read that changed. Publishing a record always drops the **whole** collection,
+not just the record: a write can move rows between filter windows, reorder a
+list or change its total, so every window that mentions the collection is
+suspect.
+
+`next start` keeps the record of stale tags in memory, so a restart forgets it:
+a route nobody visited between a publish and the restart keeps the version it
+has on disk until the next publish of its language.
+
+> **Mark these tags stale, never expire them.** `updateTag`, and `revalidateTag`
+> with one argument or `{ expire: 0 }`, drop the cached page outright, and
+> Next 16 then answers every prerendered page of that language with a 404 under
+> the layout's `dynamicParams = false`; with `next start` that lasts until it
+> restarts, which brings back the pre-publish pages. From a Route Handler (say,
+> a webhook for writes that bypass the drawer), call `revalidateTag(tag, "max")`
+> with the tag helpers from `inscribed/server`, as the actions do.
 
 The global slugs (header/footer/site-wide blocks) come back in the site read's
 own `global` list and are held once on the client, apart from any page, so a
@@ -1748,6 +1765,10 @@ The last row is the one that matters. Cached content is written with
 `revalidate: false`, so without this an empty render taken during a
 seconds-long outage would sit in the cache until someone published that exact
 slug. It stays out of the cache instead, and the next request tries again.
+
+A prerendered page regenerating after a publish never shows that empty render:
+Next throws the failed render away and keeps serving the previous version, and
+a later request renders the new one once the backend answers.
 
 Failing the build is the other half: an unreachable backend during `next build`
 would otherwise bake empty content into every prerendered page and ship it as a

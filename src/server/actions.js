@@ -5,6 +5,9 @@
  * `"use server"` makes every export a Server Action callable from the client.
  */
 
+// Stale, not expired: on Next 16 an expired prerendered page 404s under
+// `dynamicParams = false` and 500s while the backend is down, where a stale one
+// is served once more and kept if its re-render fails.
 import { revalidateTag } from "next/cache";
 
 import { cmsCacheTag, cmsCollectionItemTag, cmsCollectionTag, cmsSiteTag } from "./get-content.js";
@@ -22,8 +25,8 @@ import { cmsCacheTag, cmsCollectionItemTag, cmsCollectionTag, cmsSiteTag } from 
  * @param {string} [locale]  Omitted on a single-language site.
  */
 export async function revalidateCmsSlug(slug, locale) {
-  revalidateTag(cmsCacheTag(slug, locale));
-  revalidateTag(cmsSiteTag(locale));
+  revalidateTag(cmsCacheTag(slug, locale), "max");
+  revalidateTag(cmsSiteTag(locale), "max");
 }
 
 /**
@@ -39,6 +42,6 @@ export async function revalidateCmsSlug(slug, locale) {
  * @param {string} [slug]
  */
 export async function revalidateCmsCollection(key, slug) {
-  revalidateTag(cmsCollectionTag(key));
-  if (slug) revalidateTag(cmsCollectionItemTag(key, slug));
+  revalidateTag(cmsCollectionTag(key), "max");
+  if (slug) revalidateTag(cmsCollectionItemTag(key, slug), "max");
 }

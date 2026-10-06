@@ -37,8 +37,8 @@ export function cmsCacheTag(slug, locale) {
 
 /**
  * Cache tag for the whole site's blocks in one language: what every route
- * renders from, so a publish anywhere drops it and each route regenerates on
- * its next request. Per locale for the same reason the page tag is.
+ * renders from, so a publish anywhere marks it stale and each route
+ * regenerates on its next request. Per locale for the same reason the page tag is.
  *
  * @param {string|null} [locale]
  * @returns {string}

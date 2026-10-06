@@ -25,6 +25,65 @@ import { editorSessionKey, keepEditorSession, readEditorSession } from "../share
  */
 
 /**
+ * The window with `item` in place of the row at `slug`, or the window itself
+ * when it has no such row. A claim-derived slug lives in `virtualItems` until
+ * its first publish, and its editor writes it like any other row. There it
+ * keeps its `origin`: the record a publish answers with has none, and the
+ * drawer lists derived rows by it until the refetch.
+ *
+ * @param {CollectionListCacheEntry} entry
+ * @param {string} slug
+ * @param {import("../shared/contracts/schemas.js").CollectionItemResponse} item
+ * @returns {CollectionListCacheEntry}
+ */
+function withRow(entry, slug, item) {
+  const idx = entry.items.findIndex((r) => r.slug === slug);
+  if (idx >= 0) {
+    const items = entry.items.slice();
+    items[idx] = item;
+    return { ...entry, items };
+  }
+  const vIdx = entry.virtualItems.findIndex((r) => r.slug === slug);
+  if (vIdx < 0) return entry;
+  const virtualItems = entry.virtualItems.slice();
+  virtualItems[vIdx] = { ...item, origin: virtualItems[vIdx].origin };
+  return { ...entry, virtualItems };
+}
+
+/**
+ * Every list window of one collection marked stale, with the saved row patched
+ * in. Kept rather than dropped: a dropped window reads as loading, so a page
+ * region fell back to its loading state until the refetch landed and its rows,
+ * with their editors, unmounted. A stale one keeps its rows on screen while
+ * `requestCollectionList` refreshes it behind them, the saved one showing what
+ * was published rather than what it had. A window whose last fetch failed is
+ * dropped instead: it shows its error, and a stale flag that is already set
+ * would never ask again.
+ *
+ * @param {Map<string, CollectionListCacheEntry>} cache
+ * @param {string} key
+ * @param {import("../shared/contracts/schemas.js").CollectionItemResponse} [item]
+ */
+function markListsStale(cache, key, item) {
+  const prefix = `${key}|`;
+  /** @type {Map<string, CollectionListCacheEntry> | null} */
+  let next = null;
+  for (const [k, entry] of cache) {
+    if (!k.startsWith(prefix)) continue;
+    if (entry.error) {
+      next ??= new Map(cache);
+      next.delete(k);
+      continue;
+    }
+    const patched = item ? withRow(entry, item.slug, item) : entry;
+    if (patched === entry && entry.stale) continue;
+    next ??= new Map(cache);
+    next.set(k, { ...patched, stale: true });
+  }
+  return next ?? cache;
+}
+
+/**
  * `/me`, indexed for the per-card lookup and kept in server order for the
  * drawer's rail, which lists them as they come back. Null without an answer.
  *
@@ -467,21 +526,10 @@ export function CollectionProvider({ children }) {
         next.set(cacheKey, { item, isLoading: false, error: null });
         return next;
       });
-      // Invalidate every list window for this collection: a save can change a
+      // Every list window of this collection refetches: a save can change a
       // filtered view's row set in ways we can't patch (membership, total, page
-      // boundaries), so subscribers re-fetch their window on next render.
-      const listPrefix = `${key}|`;
-      setCollectionListCache((prev) => {
-        let mutated = false;
-        const next = new Map(prev);
-        for (const k of prev.keys()) {
-          if (k.startsWith(listPrefix)) {
-            next.delete(k);
-            mutated = true;
-          }
-        }
-        return mutated ? next : prev;
-      });
+      // boundaries).
+      setCollectionListCache((prev) => markListsStale(prev, key, item));
     },
     [],
   );
@@ -505,23 +553,9 @@ export function CollectionProvider({ children }) {
         const next = new Map(prev);
         for (const [k, entry] of prev.entries()) {
           if (!k.startsWith(listPrefix)) continue;
-          const idx = entry.items.findIndex((r) => r.slug === slug);
-          if (idx >= 0) {
-            const items = entry.items.slice();
-            items[idx] = item;
-            next.set(k, { ...entry, items });
-            mutated = true;
-            continue;
-          }
-          // A claim-derived slug lives in `virtualItems` until its first
-          // publish, and its editor patches drafts through here like any other
-          // row, so skipping this list would leave the row's draft state stale
-          // until the next fetch.
-          const vIdx = entry.virtualItems.findIndex((r) => r.slug === slug);
-          if (vIdx < 0) continue;
-          const virtualItems = entry.virtualItems.slice();
-          virtualItems[vIdx] = item;
-          next.set(k, { ...entry, virtualItems });
+          const patched = withRow(entry, slug, item);
+          if (patched === entry) continue;
+          next.set(k, patched);
           mutated = true;
         }
         return mutated ? next : prev;
@@ -594,17 +628,7 @@ export function CollectionProvider({ children }) {
           next.delete(cacheKey);
           return next;
         }
-        // No params: drop every window for this collection.
-        const prefix = `${key}|`;
-        let mutated = false;
-        const next = new Map(prev);
-        for (const k of prev.keys()) {
-          if (k.startsWith(prefix)) {
-            next.delete(k);
-            mutated = true;
-          }
-        }
-        return mutated ? next : prev;
+        return markListsStale(prev, key);
       });
     },
     [],
@@ -688,12 +712,13 @@ export function CollectionProvider({ children }) {
       const paramsKey = stableStringify(params ?? {});
       const cacheKey = `${key}|${paramsKey}`;
       const cached = collectionStore.get().listCache.get(cacheKey);
-      if (!force && cached && !cached.error) return;
+      if (!force && cached && !cached.error && !cached.stale) return;
 
       const existing = inFlightCollectionLists.current.get(cacheKey);
       if (existing && !force) return existing;
 
-      setCollectionListCache((prev) => {
+      // A stale window refreshes behind the rows it has; the answer replaces it.
+      if (!(cached?.stale && !force)) setCollectionListCache((prev) => {
         const next = new Map(prev);
         const prior = prev.get(cacheKey);
         next.set(cacheKey, {
@@ -749,6 +774,8 @@ export function CollectionProvider({ children }) {
             const prior = prev.get(cacheKey);
             // Keep the last good page on a failed (re)fetch so a transient error
             // doesn't empty an already-rendered list; only the error flag changes.
+            // A stale window stays stale: clearing the flag re-fired every
+            // consumer's fetch effect, which asked again through the loading state.
             next.set(cacheKey, {
               items: prior?.items ?? [],
               total: prior?.total ?? 0,
@@ -756,6 +783,7 @@ export function CollectionProvider({ children }) {
               limit: prior?.limit ?? params?.limit ?? 0,
               virtualItems: prior?.virtualItems ?? [],
               approximate: prior?.approximate ?? false,
+              ...(prior?.stale ? { stale: true } : {}),
               isLoading: false,
               error: /** @type {Error} */ (err),
             });

@@ -83,6 +83,8 @@ export function useCollection(key, params) {
   // Separate boolean selector so the fetch effect re-fires only on a present
   // <-> absent transition (invalidate/refill), not on every loading->loaded change.
   const hasEntry = useStoreSelector(collectionStore, (s) => s.listCache.has(cacheKey));
+  // A save marks the window stale rather than dropping it; that refetches too.
+  const stale = useStoreSelector(collectionStore, (s) => s.listCache.get(cacheKey)?.stale === true);
   // Wait for /me before the first request: it decides whether this collection
   // takes a locale at all, and guessing early fetches the window twice, once
   // under a locale-keyed entry and again under the one every language shares.
@@ -91,7 +93,7 @@ export function useCollection(key, params) {
   useEffect(() => {
     if (metaLoading) return;
     requestCollectionList(key, stableParams);
-  }, [key, stableParams, hasEntry, metaLoading, requestCollectionList]);
+  }, [key, stableParams, hasEntry, stale, metaLoading, requestCollectionList]);
 
   const refetch = useCallback(async () => {
     await requestCollectionList(key, stableParams, true);

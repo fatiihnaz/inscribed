@@ -69,8 +69,8 @@ let seen;
 
 function Probe() {
   const result = useCollection("teams");
-  const { setCollectionDraft } = useCollectionContext();
-  seen = { ...result, setCollectionDraft };
+  const { setCollectionDraft, updateCollectionItem } = useCollectionContext();
+  seen = { ...result, setCollectionDraft, updateCollectionItem };
   return null;
 }
 
@@ -155,5 +155,39 @@ describe("virtualItems in the list envelope", () => {
       expect(seen.virtualItems[1].data).toEqual({ name: "Web ekibi" });
     });
     expect(seen.virtualItems[0].data).toEqual({ name: "Yarım takım" });
+  });
+
+  it("keeps a derived row derived, with its published values, until the refetch moves it", async () => {
+    renderProbe({ items: [], total: 0, offset: 0, limit: 50, virtualItems: [derived] });
+    await waitFor(() => expect(seen.isLoading).toBe(false));
+
+    act(() => {
+      seen.updateCollectionItem("teams", "web", {
+        id: "row-web", collectionKey: "teams", slug: "web", data: { name: "Web ekibi" }, version: 1, canEdit: true,
+      });
+    });
+
+    const row = seen.virtualItems.find((r) => r.slug === "web");
+    expect(row?.origin).toBe("derived");
+    expect(row?.data).toEqual({ name: "Web ekibi" });
+  });
+
+  it("takes everything but origin from the record a restore answers with", async () => {
+    renderProbe({
+      items: [], total: 0, offset: 0, limit: 50,
+      virtualItems: [{ ...derived, id: "row-web", isArchived: true, version: 2 }],
+    });
+    await waitFor(() => expect(seen.isLoading).toBe(false));
+
+    // The backend leaves isArchived out of a live record rather than sending false.
+    act(() => {
+      seen.updateCollectionItem("teams", "web", {
+        id: "row-web", collectionKey: "teams", slug: "web", data: { memberCount: 12 }, version: 3, canEdit: true,
+      });
+    });
+
+    const row = seen.virtualItems.find((r) => r.slug === "web");
+    expect(row?.origin).toBe("derived");
+    expect(row?.isArchived).toBeUndefined();
   });
 });

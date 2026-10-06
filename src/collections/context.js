@@ -78,6 +78,9 @@ export function collectionRegionBindingId(collection, filter) {
  *   would need its own invalidation path and could go stale against the window
  *   that last fetched it.
  * @property {boolean} approximate  The response's flag, normalised to false.
+ * @property {boolean} [stale]
+ *   A write in the collection may have changed this window; it is refetched
+ *   while its rows stay on screen.
  * @property {boolean} isLoading
  * @property {Error | null} error
  */

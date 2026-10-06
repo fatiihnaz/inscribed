@@ -43,11 +43,14 @@ export function usePendingDrafts(collectionKey, languages, baseParams) {
   );
 
   // The same waits as `useCollection`: not before /me has said which languages
-  // the collection takes, and again whenever a save drops a window.
+  // the collection takes, and again whenever a save marks a window stale.
   const metaLoading = useStoreSelector(collectionStore, (s) => s.meta.isLoading);
   const present = useStoreSelector(
     collectionStore,
-    (s) => windows.map((w) => (s.listCache.has(w.cacheKey) ? "1" : "0")).join(""),
+    (s) => windows.map((w) => {
+      const entry = s.listCache.get(w.cacheKey);
+      return !entry ? "0" : entry.stale ? "s" : "1";
+    }).join(""),
   );
   useEffect(() => {
     if (metaLoading) return;

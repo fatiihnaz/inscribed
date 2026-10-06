@@ -98,7 +98,12 @@ export function CollectionProvider({ children }) {
     draftQueueRef.current = createDraftQueue();
   }
   const draftQueue = draftQueueRef.current;
-  useEffect(() => () => draftQueue.dispose(), [draftQueue]);
+  // Flushed rather than dropped: a language switch unmounts this provider with
+  // a record's last edit still inside the debounce.
+  useEffect(() => () => {
+    draftQueue.flushPending();
+    draftQueue.dispose();
+  }, [draftQueue]);
 
   // Drawer-side "open this row" signal: set by the StatusBar's "Aç" jump, read
   // once by the matching RegionItemCard to auto-expand.

@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import React from "react";
-import { render, cleanup } from "@testing-library/react";
+import { render, cleanup, fireEvent } from "@testing-library/react";
 
 vi.mock("../../editors/FieldEditor.jsx", () => ({
   FieldEditor: (/** @type {*} */ props) => <div data-testid="editor">{props.blockType}</div>,
@@ -58,8 +58,8 @@ function mount(blockType, value = "", density) {
   );
 }
 
-// The body is mounted either way; `.is-open` is what puts it on screen, and
-// `aria-hidden` is what the row tells assistive tech.
+// The body's box is mounted either way; `.is-open` is what puts it on screen,
+// and `aria-hidden` is what the row tells assistive tech.
 const isOpen = (/** @type {HTMLElement} */ c) =>
   Boolean(c.querySelector(".inscribed-collapse.is-open"));
 
@@ -109,5 +109,18 @@ describe("block weight", () => {
   it("lets the density switch shut a light field that would otherwise be open", () => {
     const { container } = mount("ShortText", "", "compact");
     expect(isOpen(container)).toBe(false);
+  });
+
+  it("builds a shut row's editor on its first opening and keeps it", () => {
+    const { container } = mount("RichText");
+    const header = () => container.querySelector(".inscribed-disclosure-header");
+    expect(container.querySelector("[data-testid=editor]")).toBeNull();
+
+    fireEvent.click(header());
+    expect(container.querySelector("[data-testid=editor]")).toBeTruthy();
+
+    fireEvent.click(header());
+    expect(isOpen(container)).toBe(false);
+    expect(container.querySelector("[data-testid=editor]")).toBeTruthy();
   });
 });

@@ -191,6 +191,11 @@ function BlockRow({
 
   const restingOpen = density === "compact" ? false : defaultOpen;
   const [isOpen, setIsOpen] = useState(restingOpen);
+  // The editor waits for the row's first opening and then stays: a shut rich
+  // text, image or list row would otherwise build its whole editor (a Tiptap
+  // instance for rich text) on every page the drawer lists it.
+  const [editorMounted, setEditorMounted] = useState(restingOpen);
+  if (isOpen && !editorMounted) setEditorMounted(true);
 
   // The row's other languages, opened from its header. The panel also opens on
   // its own after a rewrite; this is the way in for everything else.
@@ -283,7 +288,7 @@ function BlockRow({
             onKeepMine={onKeepMine}
           />
           <div style={editorSlotStyle}>
-            {renderEditor(block, value, onChange, itemSchema, readOnly, t, choices)}
+            {editorMounted ? renderEditor(block, value, onChange, itemSchema, readOnly, t, choices) : null}
             {/* The padlock in the gutter says the field is locked; this says
                 why, which is the part an editor can act on. */}
             {readOnly ? <FieldMessage>{t("block.readOnlyTitle")}</FieldMessage> : null}

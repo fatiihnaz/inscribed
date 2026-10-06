@@ -1064,8 +1064,13 @@ import { createCmsMiddleware } from "inscribed/middleware";
 import * as cms from "./cms.config.js";
 
 export const proxy = createCmsMiddleware(cms);
-export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"] };
+export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"] };
 ```
+
+The matcher leaves out paths with a dot in them, so `public/` files such as
+`robots.txt` or an image are served as they are instead of being rewritten under
+the default language and answered with a 404. A page whose slug has a dot in it
+would be left out the same way; spell those out in the matcher if you have any.
 
 Then move your routes under `app/[locale]/` and make that folder's layout the
 **root layout**, so the language is a segment param and nothing has to read the

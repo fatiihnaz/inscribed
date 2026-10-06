@@ -43,7 +43,7 @@ const PATHNAME_HEADER = "x-pathname";
  *
  * export const proxy = createCmsMiddleware(cms);
  * export const config = {
- *   matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+ *   matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
  * };
  */
 export function createCmsMiddleware(config = {}) {

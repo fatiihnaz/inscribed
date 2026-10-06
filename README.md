@@ -1131,10 +1131,14 @@ copy of the list:
 import Link from "next/link";
 import { useCmsRoute } from "inscribed";
 
-const { locale, slug, localePath } = useCmsRoute();
+const { locale, path, localePath } = useCmsRoute();
 <Link href={localePath("/about")}>…</Link>          // stays in the current language
-<Link href={localePath(slug, "en")}>English</Link>  // a language switcher
+<Link href={localePath(path, "en")}>English</Link>  // a language switcher
 ```
+
+`path` is the page on screen with its language prefix stripped. `slug` is where
+its content is stored, which on a dynamic route is the template (`/news/[id]`),
+so a switcher built from it would link there.
 
 Server Components can't call hooks, so `createCmsPage` hands back the same
 helper already bound to your config:

@@ -18,6 +18,8 @@
  * @typedef {Object} CmsRoute
  * @property {string} pathname   The route as Next.js sees it. Client cache key.
  * @property {string} slug       The manifest slug, locale prefix stripped. Wire identity.
+ * @property {string} path       The pathname, locale prefix stripped: the page on screen, which
+ *   is what a language switch links to. Equals `slug` unless that is a template (`/news/[id]`).
  * @property {string|null} locale
  *   Null on a single-language site (`locales` unconfigured), which is what
  *   makes it send no locale at all and keep the pre-i18n wire shape.
@@ -42,17 +44,17 @@ export function resolveCmsRoute(pathname, config) {
   const path = pathname || "/";
   const locales = config?.locales;
   if (!locales || locales.length === 0) {
-    return { pathname: path, slug: path, locale: null };
+    return { pathname: path, slug: path, path, locale: null };
   }
 
   const nextSlash = path.indexOf("/", 1);
   const head = nextSlash === -1 ? path.slice(1) : path.slice(1, nextSlash);
   if (!locales.includes(head)) {
-    return { pathname: path, slug: path, locale: config?.defaultLocale ?? locales[0] };
+    return { pathname: path, slug: path, path, locale: config?.defaultLocale ?? locales[0] };
   }
 
   const rest = nextSlash === -1 ? "" : path.slice(nextSlash);
-  return { pathname: path, slug: rest || "/", locale: head };
+  return { pathname: path, slug: rest || "/", path: rest || "/", locale: head };
 }
 
 /**

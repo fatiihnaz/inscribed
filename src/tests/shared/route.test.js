@@ -16,6 +16,7 @@ describe("resolveCmsRoute", () => {
     expect(resolveCmsRoute("/en/about", multi)).toEqual({
       pathname: "/en/about",
       slug: "/about",
+      path: "/about",
       locale: "en",
     });
   });
@@ -24,6 +25,7 @@ describe("resolveCmsRoute", () => {
     expect(resolveCmsRoute("/about", multi)).toEqual({
       pathname: "/about",
       slug: "/about",
+      path: "/about",
       locale: "tr",
     });
   });
@@ -32,6 +34,7 @@ describe("resolveCmsRoute", () => {
     expect(resolveCmsRoute("/en", multi)).toEqual({
       pathname: "/en",
       slug: "/",
+      path: "/",
       locale: "en",
     });
   });
@@ -42,6 +45,7 @@ describe("resolveCmsRoute", () => {
     expect(resolveCmsRoute("/xx/about", multi)).toEqual({
       pathname: "/xx/about",
       slug: "/xx/about",
+      path: "/xx/about",
       locale: "tr",
     });
   });
@@ -57,6 +61,7 @@ describe("resolveCmsRoute", () => {
     expect(resolveCmsRoute("/en/about", single)).toEqual({
       pathname: "/en/about",
       slug: "/en/about",
+      path: "/en/about",
       locale: null,
     });
   });
@@ -67,6 +72,7 @@ describe("resolveCmsRoute", () => {
     expect(resolveCmsRoute("/", multi)).toEqual({
       pathname: "/",
       slug: "/",
+      path: "/",
       locale: "tr",
     });
   });

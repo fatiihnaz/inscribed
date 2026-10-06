@@ -151,6 +151,17 @@ describe("the route as the hooks see it", () => {
     return <span>{`${slug}|${locale}`}</span>;
   }
 
+  it("links a language switch to the page on screen, not to its template", () => {
+    function Switch() {
+      const { path, localePath } = useCmsRoute();
+      return <span>{localePath(path, "tr")}</span>;
+    }
+    const config = createCmsConfig({ baseUrl: BASE, locales: ["tr", "en"] });
+    nav.pathname = "/en/news/42";
+    const { container } = render(tree({ config }, <Switch />));
+    expect(container.textContent).toBe("/news/42");
+  });
+
   it("matches the slug the backend stores, in the site's language", () => {
     const config = createCmsConfig({ baseUrl: BASE, locales: ["tr", "en"] });
     nav.pathname = "/en/news/42";

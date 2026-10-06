@@ -27,9 +27,10 @@ import { localizePath, matchCmsRoute } from "../../shared/route.js";
  *   localePath: (slug: string, locale?: string) => string,
  * }} UseCmsRouteResult
  *
- * `localePath` builds an href for `slug`, in the current language unless you
+ * `localePath` builds an href for a path, in the current language unless you
  * name another: `localePath("/about")` keeps the reader where they are,
- * `localePath(slug, "en")` is a language switcher.
+ * `localePath(path, "en")` is a language switcher. `path`, not `slug`: on a
+ * dynamic route the slug is the template the content is stored under.
  */
 
 /**

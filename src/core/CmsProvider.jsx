@@ -78,6 +78,8 @@ const EMPTY_BLOCKS = new Map();
 const NO_LOCALES = /** @type {string[]} */ ([]);
 /** Same, for the translations written on the page. */
 const NO_TRANSLATIONS = /** @type {Map<string, { before: *, pulls: boolean }>} */ (new Map());
+/** Same, for the blocks with an unresolved conflict. */
+const NO_CONFLICTS = /** @type {Set<string>} */ (new Set());
 
 // Set once a provider has mounted. A later mount (a remount under a new
 // `[locale]`) renders on the client only, so it may start from what the tab
@@ -319,7 +321,7 @@ export function CmsProvider({
       activeListItem: null,
       isDrawerOpen: hydrated && isAdmin && (readDrawerSnapshot(drawerSnapshotKey(baseConfig))?.open ?? false),
       draftSyncStatus: "idle",
-      conflictBlocks: new Set(),
+      conflictBlocks: NO_CONFLICTS,
       includedLocales: NO_LOCALES,
       translations: NO_TRANSLATIONS,
       refetchToken: 0,
@@ -559,11 +561,11 @@ export function CmsProvider({
     // the next publish includes is a choice made about the page being left.
     patchUi({
       activeBlock: null,
-      conflictBlocks: new Set(),
+      conflictBlocks: NO_CONFLICTS,
       includedLocales: NO_LOCALES,
       translations: NO_TRANSLATIONS,
     });
-    setDraftsState(new Map());
+    setDraftsState((prev) => (prev.size === 0 ? prev : new Map()));
   }, [route, setDraftsState, patchUi]);
 
   // Drop drafts for blocks that no longer exist (e.g. after a manifest sync

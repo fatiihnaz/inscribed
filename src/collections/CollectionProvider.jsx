@@ -802,7 +802,7 @@ export function CollectionProvider({ children }) {
   useEffect(() => {
     if (pathname === lastPathnameRef.current) return;
     lastPathnameRef.current = pathname;
-    setCollectionDraftsState(new Map());
+    setCollectionDraftsState((prev) => (prev.size === 0 ? prev : new Map()));
   }, [pathname, setCollectionDraftsState]);
 
   // Seams only. Every entry below is identity-stable for the life of the

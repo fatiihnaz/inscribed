@@ -342,10 +342,12 @@ export function createCmsPage(options) {
    * The active route, split into `{ pathname, slug, locale }`, for a Server
    * Component that has no `params` of its own to read the language from.
    *
-   * Reads the `x-pathname` header the middleware sets, and reading a header
-   * opts the route out of static rendering. A layout under `app/[locale]/`
-   * has `params.locale` and should use that instead; this is for the odd
-   * component with no segment to read. Client Components use `useCmsRoute()`.
+   * Reads the `x-pathname` header the proxy sets, and reading a header opts the
+   * route out of static rendering; called from a root layout or `not-found.js`,
+   * which every route renders, it makes the whole site dynamic. A layout under
+   * `app/[locale]/` has `params.locale` and should use that instead, and a
+   * component with no segment of its own can read it from `next/root-params`.
+   * Client Components use `useCmsRoute()`.
    *
    * @returns {Promise<import("../shared/route.js").CmsRoute>}
    */

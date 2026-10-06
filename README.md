@@ -1104,7 +1104,11 @@ language's blocks arrive with the new layout, so the switch paints complete.
 `getCmsRoute()` comes back from `createCmsPage` for a Server Component with no
 `params` of its own. It reads the request header, and a header read opts that
 route out of static rendering, so anything under `app/[locale]/` should take
-`params.locale` instead.
+`params.locale` instead. Called from a root layout or `not-found.js`, which
+every route renders, it makes the whole site dynamic. A component deep in the
+tree that has no `params` can read the segment with Next's `next/root-params`
+(`import { locale } from "next/root-params"`, then `await locale()`), which
+keeps the route static.
 
 The default language stays at the root and the others sit behind their prefix:
 `/about` is Turkish, `/en/about` is English. The proxy rewrites the

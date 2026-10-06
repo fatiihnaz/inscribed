@@ -67,11 +67,12 @@ const PATHNAME_HEADER = "x-pathname";
  * bindings further down the same request to read.
  *
  * `cache()` gives one object per request, so this is a handoff between two
- * components of one render rather than shared mutable state: the layout body
- * has to return before anything it wraps is rendered, so the write always
- * precedes the reads. Outside a Server Component render `cache()` memoizes
- * nothing, so each call gets a fresh slot and the readers fall back to the
- * request.
+ * components of one render rather than shared mutable state. It is not ordered,
+ * though: Next renders a page beside its layout, not inside it, so a page that
+ * renders synchronously under a layout that awaits `params` reads before
+ * `<CmsPage>` writes (see `regionLocale`). Outside a Server Component render
+ * `cache()` memoizes nothing, so each call gets a fresh slot and the readers
+ * fall back to the request.
  *
  * It exists because that fallback is `headers()`, and reading a header opts the
  * whole route out of static rendering. A page carrying one
@@ -673,9 +674,9 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
  *
  * Reading it makes the route dynamic, so the callers are the ones that have no
  * other source for what they need: `getCmsRoute`, the canonical-path builder
- * behind a record redirect, and a collection region rendered outside
- * `<CmsPage>`. `<CmsPage>` itself never reads it, which is what keeps the
- * routes under it static.
+ * behind a record redirect, and a collection region that renders before
+ * `<CmsPage>` has published the language. `<CmsPage>` itself never reads it,
+ * which is what keeps the routes under it static.
  *
  * @returns {Promise<string>}
  */
@@ -803,25 +804,29 @@ async function canonicalAddress(slug, options, routeLocale) {
  * The language a collection region should read, for a region that was not
  * given one.
  *
- * `<CmsPage>` publishes it (see `requestLocaleSlot`), which covers every page under
- * the layout and costs nothing. The header read below is the fallback for a
- * region rendered outside one, and it is what makes that route dynamic, so it
- * says so once in development rather than leaving the deopt to be discovered
- * in a build log.
+ * `<CmsPage>` publishes it (see `requestLocaleSlot`), which costs nothing when
+ * it got there first. The header read below is the fallback for a region that
+ * rendered before it, or outside one, and it is what makes the route dynamic,
+ * so it says so once, during the build too, since that is where a route turns
+ * dynamic.
  *
  * @param {CmsConfig} config
  * @returns {Promise<string|null>}
  */
 async function regionLocale(config) {
+  // A single-language site has no language to find, so the order never matters.
+  if (!config.locales?.length) return null;
   const published = readRequestLocale();
   if (published !== undefined) return published;
-  if (!warnedRegionHeaderRead && process.env.NODE_ENV !== "production") {
+  const building = process.env.NEXT_PHASE === "phase-production-build";
+  if (!warnedRegionHeaderRead && (building || process.env.NODE_ENV !== "production")) {
     warnedRegionHeaderRead = true;
     // eslint-disable-next-line no-console
     console.warn(
-      "[inscribed] a server <CollectionRegion> is rendering with no <CmsPage> above it, so its " +
-        "language is being read from the request headers, which makes this route dynamic. " +
-        "Render it under <CmsPage>, or pass locale={...} to the region.",
+      "[inscribed] a server <CollectionRegion> rendered before <CmsPage> had published the route's " +
+        "language, so it is read from the request headers, which makes this route dynamic. A page " +
+        "that renders synchronously under a layout that awaits params does this: make the page " +
+        "async and await its params, or pass locale={...} to the region.",
     );
   }
   const { locale } = resolveCmsRoute(await resolvePathnameFromHeaders(), config);

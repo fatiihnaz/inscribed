@@ -631,10 +631,14 @@ you import decides where the data is fetched:
 | your `createCmsPage` factory | server, streamed | the default: content reaches the HTML a crawler sees |
 | `inscribed/collections` | client, on mount | you are already inside a `"use client"` component |
 
-The server form reads the route's language off the request header the
-proxy sets, so a page rendering one is served per request rather than
-prerendered. That suits records that change constantly; the page's own blocks
-still come from the static site read either way.
+The server form takes the route's language from `<CmsPage>`. Next renders a page
+beside its layout rather than inside it, though, so a region can ask before
+`<CmsPage>` has published the language; it then reads the request header the
+proxy sets, which makes the route dynamic, and `next build` warns about it.
+Passing `locale` to the region rules that out. Without it, an `async` page that
+awaits its `params` comes late enough while the layout awaits nothing slower
+than `params` before `<CmsPage>`; a synchronous page does not. A
+single-language site has no language to find and reads nothing.
 
 Opt in with the `collections` option; the factory then returns the components
 beside `CmsPage`:
@@ -1107,9 +1111,8 @@ The default language stays at the root and the others sit behind their prefix:
 unprefixed path onto `app/[locale]/` so `tr` never reaches the address bar; a
 site that prefixes every language needs no proxy at all. It also sets the
 `x-pathname` header that `getCmsRoute()`, a record redirect built without
-`path`, and a [collection binding](#fetching-on-the-server) rendered outside
-`<CmsPage>` fall back to; under `<CmsPage>` the bindings take the language from
-it and read no header.
+`path`, and a [collection binding](#fetching-on-the-server) that renders before
+`<CmsPage>` has published the language fall back to.
 
 A leading segment counts as a locale only when `locales` lists it, so a page at
 `/en-masse` is not mistaken for English. (Reading also handles a prefix on

@@ -292,14 +292,15 @@ export function createCmsPage(options) {
           "and pass the segment through: <CmsPage locale={locale}>.",
       );
     }
-    // An unknown segment value is not a language the site has, so it is not a
-    // page either. `generateStaticParams` keeps this off the built routes; this
-    // is for the request-time miss.
-    if (localized && !normalizedConfig.locales.includes(/** @type {string} */ (locale))) notFound();
     const resolvedLocale = localized ? /** @type {string} */ (locale) : null;
     // Published for the collection bindings below, which would otherwise have
     // to read the request to learn the same thing. See `requestLocaleSlot`.
+    // Ahead of the check that follows, so a binding on an unknown language
+    // answers the same 404 instead of reading the request.
     publishRequestLocale(resolvedLocale);
+    // An unknown segment value is not a language the site has, so it is not a
+    // page either. A path with a dot skips the proxy and arrives here as it is.
+    if (localized && !normalizedConfig.locales.includes(/** @type {string} */ (locale))) notFound();
 
     // The session and the content are independent, so they overlap rather than
     // queue: a session that hits a database or decrypts a JWT would otherwise
@@ -819,7 +820,11 @@ async function regionLocale(config) {
   // A single-language site has no language to find, so the order never matters.
   if (!config.locales?.length) return null;
   const published = readRequestLocale();
-  if (published !== undefined) return published;
+  if (published !== undefined) {
+    // `<CmsPage>` publishes an unknown language too, then answers it with a 404.
+    if (published !== null && !config.locales.includes(published)) notFound();
+    return published;
+  }
   const building = process.env.NEXT_PHASE === "phase-production-build";
   if (!warnedRegionHeaderRead && (building || process.env.NODE_ENV !== "production")) {
     warnedRegionHeaderRead = true;

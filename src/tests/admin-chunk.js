@@ -18,6 +18,10 @@
 
 import { act } from "@testing-library/react";
 
+// Taken at import, before a test file installs fake timers: React's own reveal
+// timer runs on the real clock, so the wait for it has to as well.
+const realSetTimeout = globalThis.setTimeout;
+
 /**
  * Resolve once every page-side admin chunk is loaded and React has re-rendered
  * the boundaries that were waiting on them.
@@ -32,5 +36,7 @@ export async function settleAdminChrome() {
     import("../collections/CollectionEditScope.jsx"),
     import("../collections/CollectionFieldAdmin.jsx"),
   ]);
-  await act(async () => {});
+  // React 19 holds a boundary's resolved content back for up to 300 ms after
+  // its fallback showed (FALLBACK_THROTTLE_MS), on a timer act() doesn't flush.
+  await act(() => new Promise((resolve) => realSetTimeout(resolve, 300)));
 }

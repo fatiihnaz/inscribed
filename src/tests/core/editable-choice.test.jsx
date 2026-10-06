@@ -10,6 +10,13 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import React from "react";
 import { render, cleanup, screen, fireEvent } from "@testing-library/react";
 
+// The drawer is not what this file is about, and it needs DOM APIs jsdom lacks.
+vi.mock("next/dynamic", () => ({
+  default: () => {
+    const Noop = () => null;
+    return Noop;
+  },
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
   useRouter: () => ({ refresh: () => {} }),

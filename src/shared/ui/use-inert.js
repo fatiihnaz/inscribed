@@ -19,9 +19,6 @@ import { useEffect, useRef } from "react";
 /**
  * Ref for the element to switch on and off.
  *
- * Written as a DOM attribute rather than a JSX prop because React 18 and 19
- * type `inert` differently and the SDK builds against both.
- *
  * @param {boolean} inert
  * @returns {React.RefObject<*>}
  */

@@ -86,9 +86,9 @@ inscribed is a peer of your app's framework runtime:
 
 | Peer dependency | Supported range             |
 | --------------- | --------------------------- |
-| `next`          | `^14.0 \|\| ^15.0 \|\| ^16.0` |
-| `react`         | `^18.0 \|\| ^19.0`            |
-| `react-dom`     | `^18.0 \|\| ^19.0`            |
+| `next`          | `^16.0`                     |
+| `react`         | `^19.2`                     |
+| `react-dom`     | `^19.2`                     |
 
 Node 18+ for the `cms-sync` CLI. The package is ESM-only.
 

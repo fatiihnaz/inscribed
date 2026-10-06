@@ -334,7 +334,7 @@ describe("a language the record lacks", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain(t("saveError.partial", { published: "TR", failed: "EN", reason: "" }).trim());
 
-    fireEvent.click(saveButton(t("status.retryLocales", { locales: "EN" })));
+    fireEvent.click(await screen.findByRole("button", { name: t("status.retryLocales", { locales: "EN" }) }));
     await waitFor(() => expect(publishes().filter((w) => w.method === "POST")).toHaveLength(2));
     // The record went out once; only English was sent again.
     expect(publishes().filter((w) => w.url.pathname === "/cms/collections/news/bahar")).toHaveLength(1);

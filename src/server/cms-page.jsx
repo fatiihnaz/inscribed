@@ -41,12 +41,7 @@
  * survives bundling (tsup doesn't preserve the directive across entries).
  */
 
-import { Suspense } from "react";
-// Namespace import so `cache` can be feature-detected. It is exported only from
-// React's `react-server` build, which is the one a Server Component actually
-// runs against, but this module is also loaded by plain Node (tests, a consumer
-// on React 18) where a named import of it would be a link error.
-import * as ReactExports from "react";
+import { Suspense, cache } from "react";
 import { headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 
@@ -74,29 +69,27 @@ const PATHNAME_HEADER = "x-pathname";
  * `cache()` gives one object per request, so this is a handoff between two
  * components of one render rather than shared mutable state: the layout body
  * has to return before anything it wraps is rendered, so the write always
- * precedes the reads. Null when React has no `cache` to offer, which is any
- * environment that is not rendering Server Components, and there the readers
- * fall back to the request exactly as they used to.
+ * precedes the reads. Outside a Server Component render `cache()` memoizes
+ * nothing, so each call gets a fresh slot and the readers fall back to the
+ * request.
  *
  * It exists because that fallback is `headers()`, and reading a header opts the
  * whole route out of static rendering. A page carrying one
  * `<CollectionRegion>` was therefore dynamic, which is the one thing
  * `<CmsPage>` goes out of its way not to be.
  *
- * @type {(() => { current: string | null | undefined }) | null}
+ * @type {() => { current: string | null | undefined }}
  */
-const requestLocaleSlot = typeof ReactExports.cache === "function"
-  ? ReactExports.cache(() => ({ current: /** @type {string | null | undefined} */ (undefined) }))
-  : null;
+const requestLocaleSlot = cache(() => ({ current: /** @type {string | null | undefined} */ (undefined) }));
 
 /** @param {string|null} locale */
 function publishRequestLocale(locale) {
-  if (requestLocaleSlot) requestLocaleSlot().current = locale;
+  requestLocaleSlot().current = locale;
 }
 
 /** @returns {string | null | undefined} `undefined` when nothing published one. */
 function readRequestLocale() {
-  return requestLocaleSlot ? requestLocaleSlot().current : undefined;
+  return requestLocaleSlot().current;
 }
 
 /**
@@ -676,8 +669,7 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
 
 /**
  * Read the pathname from the `x-pathname` header set by `inscribed/middleware`,
- * falling back to `/` without it. `await` covers both Next 14 (sync `headers()`)
- * and Next 15 (async).
+ * falling back to `/` without it.
  *
  * Reading it makes the route dynamic, so the callers are the ones that have no
  * other source for what they need: `getCmsRoute`, the canonical-path builder
@@ -823,9 +815,7 @@ async function canonicalAddress(slug, options, routeLocale) {
 async function regionLocale(config) {
   const published = readRequestLocale();
   if (published !== undefined) return published;
-  // Only worth saying where the handoff was available and went unused; without
-  // `cache` there is no `<CmsPage>` placement that would have helped.
-  if (requestLocaleSlot && !warnedRegionHeaderRead && process.env.NODE_ENV !== "production") {
+  if (!warnedRegionHeaderRead && process.env.NODE_ENV !== "production") {
     warnedRegionHeaderRead = true;
     // eslint-disable-next-line no-console
     console.warn(

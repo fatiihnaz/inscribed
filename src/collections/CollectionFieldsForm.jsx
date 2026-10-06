@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 
 import { itemSummary, singularize } from "../shared/util/text.js";
 import { seedValues } from "./record-payload.js";
@@ -20,15 +20,11 @@ import { LinkEditor } from "../editors/fields/LinkEditor.jsx";
 import { ImageEditor } from "../editors/fields/ImageEditor.jsx";
 import { FileEditor } from "../editors/fields/FileEditor.jsx";
 import { FIELD_HOVER } from "../editors/field-css.js";
+// Loaded on first need: a consumer using only page-side pieces shouldn't pay
+// ~50KB of Tiptap for an editor they never open.
+import { LazyRichTextEditor } from "../editors/rich-text/lazy-rich-text-editor.jsx";
 import { COLLECTION_ACCENT, FS_XS, FS_SM, R_BADGE, dynamicSize } from "../shared/style/tokens.js";
 
-// Lazy so the heavy TipTap dep stays out of the main bundle: a consumer using
-// only page-side pieces shouldn't pay ~50KB for an editor they never open. A
-// static import would pull it into index.js's eager graph (no `sideEffects`, so
-// tree-shaking wouldn't drop it). Fetched the first time a RichText field renders.
-const RichTextEditor = lazy(() =>
-  import("../editors/rich-text/RichTextEditor.jsx").then((m) => ({ default: m.RichTextEditor })),
-);
 
 /**
  * @file `CollectionFieldsForm`: schema-driven form renderer for collection
@@ -140,7 +136,7 @@ export function CollectionFieldInput({ field, value, onChange, disabled, variant
   if (bare && field.type === "RichText") {
     return (
       <Suspense fallback={<FieldMessage>{t("collections.editorLoading")}</FieldMessage>}>
-        <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel />
+        <LazyRichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel />
       </Suspense>
     );
   }
@@ -236,7 +232,7 @@ export function CollectionFieldInput({ field, value, onChange, disabled, variant
       return (
         <FieldShell {...shell} as="div">
           <Suspense fallback={<FieldMessage>{t("collections.editorLoading")}</FieldMessage>}>
-            <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel />
+            <LazyRichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel />
           </Suspense>
         </FieldShell>
       );

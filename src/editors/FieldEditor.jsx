@@ -9,7 +9,7 @@
  * `hideLabel` is forwarded; editors that ignore it just drop it.
  */
 
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 
 import { TextEditor } from "./fields/TextEditor.jsx";
 import { ImageEditor } from "./fields/ImageEditor.jsx";
@@ -23,12 +23,8 @@ import { SelectEditor } from "./fields/SelectEditor.jsx";
 import { StringArrayEditor } from "./fields/StringArrayEditor.jsx";
 import { FieldMessage } from "./FieldMessage.jsx";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
+import { LazyRichTextEditor } from "./rich-text/lazy-rich-text-editor.jsx";
 
-// Lazy so the heavy TipTap dep stays out of the eager drawer chunk; fetched the
-// first time a RichText field renders. Same pattern as `CollectionFieldsForm`.
-const RichTextEditor = lazy(() =>
-  import("./rich-text/RichTextEditor.jsx").then((m) => ({ default: m.RichTextEditor })),
-);
 
 /**
  * @import { BlockType, ChoiceSource } from "../shared/contracts/schemas.js"
@@ -60,7 +56,7 @@ export function FieldEditor({ blockType, value, onChange, disabled, hideLabel, s
     case "LongText":  return <TextEditor value={value ?? ""} onChange={onChange} disabled={disabled} multiline hideLabel={hideLabel} />;
     case "RichText":  return (
       <Suspense fallback={<RichTextLoading />}>
-        <RichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />
+        <LazyRichTextEditor value={value ?? ""} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />
       </Suspense>
     );
     case "Number":    return <NumberEditor value={value} onChange={onChange} disabled={disabled} hideLabel={hideLabel} />;

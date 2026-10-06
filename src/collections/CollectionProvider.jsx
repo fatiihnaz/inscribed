@@ -17,11 +17,23 @@ import { createStore } from "../shared/state/store.js";
 import { createDraftQueue } from "../shared/state/draft-queue.js";
 import { stableStringify } from "../shared/util/stable-stringify.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
+import { editorSessionKey, keepEditorSession, readEditorSession } from "../shared/state/editor-session-cache.js";
 
 /**
  * @import { CollectionItemCacheEntry, CollectionListCacheEntry } from "./context.js"
- * @import { CollectionBinding } from "../shared/contracts/schemas.js"
+ * @import { CollectionBinding, MyCollectionResponse } from "../shared/contracts/schemas.js"
  */
+
+/**
+ * `/me`, indexed for the per-card lookup and kept in server order for the
+ * drawer's rail, which lists them as they come back. Null without an answer.
+ *
+ * @param {MyCollectionResponse[] | undefined} data
+ */
+function metaFromMine(data) {
+  if (!data) return null;
+  return { byKey: new Map(data.map((c) => [c.collectionKey, c])), order: data, isLoading: false, error: null };
+}
 
 /**
  * The language a list cache key's params name, or null for a window that names
@@ -41,7 +53,8 @@ function windowLocale(serializedParams) {
 export function CollectionProvider({ children }) {
   // Seams from CmsContext: transport, the admin gate (drives the /me fetch),
   // and the access-token getter (forwarded as Bearer on every request).
-  const { config, isAdmin, getAccessToken } = useCmsContext();
+  const { config, isAdmin, userSub, getAccessToken } = useCmsContext();
+  const editorKey = isAdmin ? editorSessionKey(config, userSub) : null;
 
   // Read through refs inside the request handlers so those keep one identity
   // for the life of the provider. They are published on the context value, and
@@ -80,8 +93,11 @@ export function CollectionProvider({ children }) {
       // Loading from the first render of an admin session, not from the effect
       // that fetches: child effects run before this provider's, so a list
       // mounted below would otherwise see "loaded, empty" and request its
-      // window before /me could say which locale that collection takes.
-      meta: { byKey: new Map(), order: [], isLoading: isAdmin, error: null },
+      // window before /me could say which locale that collection takes. After
+      // a language switch the last provider's answer stands in until the new
+      // one lands.
+      meta: metaFromMine(readEditorSession(editorKey)?.myCollections)
+        ?? { byKey: new Map(), order: [], isLoading: isAdmin, error: null },
     });
   }
   const collectionStore = collectionStoreRef.current;
@@ -767,33 +783,32 @@ export function CollectionProvider({ children }) {
       return undefined;
     }
     let cancelled = false;
-    setCollectionMeta({
-      ...collectionStore.get().meta, isLoading: true, error: null,
-    });
+    // An answer already on screen is refreshed quietly: flipping to loading
+    // would send every list below back to waiting for the one it has.
+    const shown = collectionStore.get().meta.order.length > 0;
+    if (!shown) {
+      setCollectionMeta({
+        ...collectionStore.get().meta, isLoading: true, error: null,
+      });
+    }
     (async () => {
       try {
         const token = await getAccessToken();
         const data = await config.transport.getMyCollections({ accessToken: token });
         if (cancelled) return;
-        // Indexed for the per-card lookup and kept in server order for the
-        // drawer's rail, which lists them as they come back.
-        setCollectionMeta({
-          byKey: new Map(data.map((c) => [c.collectionKey, c])),
-          order: data,
-          isLoading: false,
-          error: null,
-        });
+        keepEditorSession(editorKey, { myCollections: data });
+        setCollectionMeta(/** @type {*} */ (metaFromMine(data)));
       } catch (err) {
         if (cancelled) return;
         // eslint-disable-next-line no-console
         console.error("[inscribed] fetchMyCollections failed:", err);
-        setCollectionMeta({
-          byKey: new Map(), order: [], isLoading: false, error: /** @type {Error} */ (err),
-        });
+        setCollectionMeta(shown
+          ? { ...collectionStore.get().meta, error: /** @type {Error} */ (err) }
+          : { byKey: new Map(), order: [], isLoading: false, error: /** @type {Error} */ (err) });
       }
     })();
     return () => { cancelled = true; };
-  }, [config, isAdmin, getAccessToken, myCollectionsToken, setCollectionMeta, collectionStore]);
+  }, [config, isAdmin, editorKey, getAccessToken, myCollectionsToken, setCollectionMeta, collectionStore]);
 
   // Soft-nav cleanup: drop draft overlays on route change so a stale one
   // doesn't leak onto another page's rows.

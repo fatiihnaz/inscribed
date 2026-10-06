@@ -30,7 +30,7 @@ import { PAGE_SHELL_CLASS } from "../shared/style/layout-css.js";
 import { createRestTransport } from "../defaults/transport.js";
 import { getBrowserAuth } from "../defaults/browser-auth.js";
 import { browserSessionStore, NO_SESSION, resumeBrowserSession } from "./browser-session.js";
-import { EMPTY_SITE, reseedSite, seedSite, siteSlugs } from "./site-blocks.js";
+import { EMPTY_SITE, reseedSite, seedSite, siteSlugs, withPendingDrafts } from "./site-blocks.js";
 import { mergeRouteBlocks, readBlock } from "./blocks.js";
 import { deepEqual } from "../shared/util/deep-equal.js";
 import { stableStringify } from "../shared/util/stable-stringify.js";
@@ -38,6 +38,7 @@ import { CmsApiError } from "../shared/contracts/errors.js";
 import { createStore, useStoreSelector } from "../shared/state/store.js";
 import { createDraftQueue } from "../shared/state/draft-queue.js";
 import { drawerSnapshotKey, readDrawerSnapshot } from "../shared/state/drawer-snapshot.js";
+import { dropEditorSession, editorSessionKey, keepEditorSession, readEditorSession } from "../shared/state/editor-session-cache.js";
 import { contentDraftKey, parseTranslationDraftKey } from "../shared/state/draft-keys.js";
 import { resolveBlockValue } from "./resolve.js";
 import { useSiteBlocks } from "./hooks/use-site-blocks.js";
@@ -242,7 +243,12 @@ export function CmsProvider({
     })();
   }, [browserAuth, sessionStore, baseConfig.clientKey]);
 
+  // Assigned once the session is known, below; read by the sign-outs, which
+  // must reach the same key the store was seeded from.
+  const editorKeyRef = useRef(/** @type {string|null} */ (null));
+
   const browserSignOut = useCallback(async () => {
+    dropEditorSession(editorKeyRef.current);
     await browserAuth?.logout();
   }, [browserAuth]);
 
@@ -255,6 +261,8 @@ export function CmsProvider({
   const drawerShown = isAdmin || connection != null;
   const userSub = browserUser ? browserUser.userSub : userSubProp;
   const userInfo = browserUser ? browserUser.userInfo : userInfoProp;
+  const editorKey = isAdmin ? editorSessionKey(baseConfig, userSub) : null;
+  editorKeyRef.current = editorKey;
 
   // ---- Stores ------------------------------------------------------------
   //
@@ -298,9 +306,14 @@ export function CmsProvider({
   // no entry for still has a header.
   const blocksStore = useConstant(() =>
     createStore(
-      /** @type {Map<string, Map<string, BlockResponse>>} */ (
-        seedSite(initialSite, resolveCmsRoute(pathname, normalizedConfig).locale)
-      ),
+      /** @type {Map<string, Map<string, BlockResponse>>} */ ((() => {
+        const locale = resolveCmsRoute(pathname, normalizedConfig).locale;
+        // An editor back from another language finds what the last provider
+        // showed, drafts included, rather than the published site; the read
+        // below still runs and has the last word.
+        const carried = readEditorSession(editorKey)?.carry?.();
+        return carried ? reseedSite(carried, initialSite, locale) : seedSite(initialSite, locale);
+      })()),
     ),
   );
   const contentDraftsStore = useConstant(() =>
@@ -568,6 +581,22 @@ export function CmsProvider({
     setDraftsState((prev) => (prev.size === 0 ? prev : new Map()));
   }, [route, setDraftsState, patchUi]);
 
+  // Left for the next provider. A language switch renders the new one before
+  // this one unmounts, so it reads these stores as they are at that moment
+  // rather than a snapshot taken on the way out. Drafts still inside the
+  // debounce ride along: they are written as this provider goes.
+  useEffect(() => {
+    keepEditorSession(editorKey, {
+      carry: () => {
+        const left = lastRouteRef.current;
+        return withPendingDrafts(
+          blocksStore.get(), contentDraftsStore.get(), translationDraftsStore.get(),
+          routeKey(left.slug, left.locale), left.locale,
+        );
+      },
+    });
+  }, [editorKey, blocksStore, contentDraftsStore, translationDraftsStore]);
+
   // Drop drafts for blocks that no longer exist (e.g. after a manifest sync
   // removed one). Subscribed rather than keyed on a render value, since blocks
   // now change without re-rendering the provider. Pathname-change drafts are
@@ -793,6 +822,7 @@ export function CmsProvider({
   );
 
   const stableOnSignOut = useCallback(() => {
+    dropEditorSession(editorKeyRef.current);
     const fn = onSignOutRef.current;
     if (fn) fn();
   }, []);

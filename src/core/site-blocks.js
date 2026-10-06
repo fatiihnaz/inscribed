@@ -11,7 +11,9 @@
  */
 
 import { indexBlocksByPath } from "./blocks.js";
-import { globalsKey, routeKey } from "../shared/route.js";
+import { globalsKey, parseRouteKey, routeKey } from "../shared/route.js";
+import { parseTranslationDraftKey } from "../shared/state/draft-keys.js";
+import { deepEqual } from "../shared/util/deep-equal.js";
 
 /**
  * @import { BlockResponse, SitePageContent } from "../shared/contracts/schemas.js"
@@ -113,6 +115,45 @@ function carryServerDrafts(before, after) {
     carried.set(path, { ...block, draftValue: prior.draftValue });
   }
   return carried ?? after;
+}
+
+/**
+ * The store with the drafts still on their way to the server written in as
+ * `draftValue`, which is what the backend will hold once they land. For the
+ * next provider after a remount: the writes are flushed as this one unmounts,
+ * and its own read may answer before they do.
+ *
+ * Local drafts are bare blockPaths on the route on screen, looked for on the
+ * page and then in its language's globals. Translations carry their own route.
+ *
+ * @param {Map<string, Map<string, BlockResponse>>} store
+ * @param {Map<string, *>} drafts            `contentDraftsStore`
+ * @param {Map<string, *>} translationDrafts `translationDraftsStore`
+ * @param {string} pageKey                   `routeKey` of the route on screen
+ * @param {string|null} locale               Its language.
+ * @returns {Map<string, Map<string, BlockResponse>>}
+ */
+export function withPendingDrafts(store, drafts, translationDrafts, pageKey, locale) {
+  if (drafts.size === 0 && translationDrafts.size === 0) return store;
+  const next = new Map(store);
+  /** @param {string[]} entryKeys @param {string} blockPath @param {*} value */
+  const put = (entryKeys, blockPath, value) => {
+    for (const entryKey of entryKeys) {
+      const entry = next.get(entryKey);
+      const block = entry?.get(blockPath);
+      if (!block) continue;
+      const draftValue = deepEqual(value, block.value) ? null : value;
+      next.set(entryKey, new Map(entry).set(blockPath, { ...block, draftValue }));
+      return;
+    }
+  };
+  for (const [blockPath, value] of drafts) put([pageKey, globalsKey(locale)], blockPath, value);
+  for (const [key, value] of translationDrafts) {
+    const parsed = parseTranslationDraftKey(key);
+    const target = parsed && parseRouteKey(parsed.routeKey).locale;
+    if (target) put([parsed.routeKey, globalsKey(target)], parsed.blockPath, value);
+  }
+  return next;
 }
 
 /**

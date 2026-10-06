@@ -55,6 +55,10 @@
       "types": "./dist/actions.d.ts",
       "import": "./dist/actions.js"
     },
+    "./revalidate": {
+      "types": "./dist/revalidate.d.ts",
+      "import": "./dist/revalidate.js"
+    },
     "./page": {
       "types": "./dist/page.d.ts",
       "import": "./dist/page.js"

@@ -1754,9 +1754,46 @@ has on disk until the next publish of its language.
 > down every request is a 500, and under a layout that sets
 > `dynamicParams = false` every prerendered page of that language answers 404
 > (with `next start` until it restarts, which brings back the pre-publish
-> pages). From a Route Handler (say, a webhook for writes that bypass the
-> drawer), call `revalidateTag(tag, "max")` with the tag helpers from
-> `inscribed/server`, as the actions do.
+> pages). Your own code marks them stale with `revalidateTag(tag, "max")` and
+> the tag helpers from `inscribed/server`, as the actions do.
+
+#### Writes that bypass the drawer
+
+The actions run only for what the drawer publishes. A bot or an import script
+that writes to the backend directly leaves every cached read of what it changed
+in place, so the site keeps the old version until the next publish in that
+collection. `inscribed/revalidate` gives the backend a route to report its
+writes to:
+
+```js
+// app/cms-revalidate/route.js
+import { createRevalidateHandler } from "inscribed/revalidate";
+
+export const POST = createRevalidateHandler({
+  secret: process.env.CMS_REVALIDATE_SECRET,
+});
+```
+
+The backend calls it after its write has committed:
+
+```http
+POST /cms-revalidate
+Authorization: Bearer <CMS_REVALIDATE_SECRET>
+Content-Type: application/json
+
+{ "collections": ["news", "staff"] }
+```
+
+Each collection's tag is marked stale the way a publish marks it, and since
+every record read carries its collection's tag too, naming the collection
+covers its records. A tag of your own that a collection feeds goes in `tags`,
+which gets the changed keys: `tags: (keys) => (keys.includes("staff") ?
+["schedule"] : [])`. Without a secret every request is refused.
+
+The proxy's matcher runs on every path it does not exclude, and it would send
+this one under the default language, where nothing answers. Add the route's
+name to the exclusions, `(?!api|cms-revalidate|...)`, or keep the route under
+`/api` when nothing in front of the app sends `/api` elsewhere.
 
 The global slugs (header/footer/site-wide blocks) come back in the site read's
 own `global` list and are held once on the client, apart from any page, so a
@@ -1996,6 +2033,7 @@ bundle:
 | `inscribed/server` | server only | `getCmsSiteContent`, `getCmsContent`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsSiteTag`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
 | `inscribed/page` | server only | `createCmsPage` (returns `CmsPage`, `localePath`, `getCmsRoute`, and the server collection bindings), `createCmsConfig` |
 | `inscribed/actions` | Server Action | `revalidateCmsSlug`, `revalidateCmsCollection` |
+| `inscribed/revalidate` | Route Handler | `createRevalidateHandler` |
 | `inscribed/middleware` | proxy | `createCmsMiddleware` (for `proxy.js`) |
 
 Import `inscribed/server` and `inscribed/page` only from Server Components, route

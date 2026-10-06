@@ -8,6 +8,7 @@ export default defineConfig({
     compose: "src/compose.js",
     server: "src/server/get-content.js",
     actions: "src/server/actions.js",
+    revalidate: "src/server/revalidate.js",
     page: "src/server/cms-page.jsx",
     middleware: "src/middleware.js",
     "cli-sync": "src/cli/sync.js",

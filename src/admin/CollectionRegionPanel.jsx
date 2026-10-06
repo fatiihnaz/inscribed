@@ -41,7 +41,7 @@ import { stableStringify } from "../shared/util/stable-stringify.js";
 
 import { titleFieldOf, imageFieldName, sortableColumns } from "./collection/collection-format.js";
 import { ListToolbar } from "./collection/ListToolbar.jsx";
-import { DerivedRows, RegionSection } from "./collection/RegionSection.jsx";
+import { DEFAULT_DRAWER_PAGE_SIZE, DerivedRows, RegionSection } from "./collection/RegionSection.jsx";
 import { ItemDetailPane } from "./collection/ItemDetailPane.jsx";
 import { CreateButton, CreatePane } from "./collection/CreatePane.jsx";
 import {
@@ -188,8 +188,10 @@ export function CollectionRegionPanel({ collectionKey, scope = "page", panelId, 
   // and share its cache entry, else fall back to a dedicated unfiltered fetch.
   const virtualListParams = useMemo(() => {
     const unfiltered = sections.find((s) => s.filter === undefined);
+    // The section's own default, or the two spellings of one window are two
+    // cache keys and the first page is read twice.
     return buildListParams({
-      offset: unfiltered?.pageOffset ?? 0, limit: unfiltered?.pageLimit, locale,
+      offset: unfiltered?.pageOffset ?? 0, limit: unfiltered?.pageLimit ?? DEFAULT_DRAWER_PAGE_SIZE, locale,
     });
   }, [sections, locale]);
 

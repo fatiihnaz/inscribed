@@ -30,7 +30,7 @@ import {
   filterChipStyle, filterChipKeyStyle, filterChipValueStyle, regionCountStyle,
 } from "./collection-styles.js";
 
-const DEFAULT_DRAWER_PAGE_SIZE = 50;
+export const DEFAULT_DRAWER_PAGE_SIZE = 50;
 
 /**
  * The caller's claim-derived slugs that have no record yet, as ordinary rows

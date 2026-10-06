@@ -1,9 +1,9 @@
 /**
- * @file `inscribed/middleware`: the Next.js middleware the SDK needs, so an app
- * doesn't have to hand-write it.
+ * @file `inscribed/middleware`: the Next.js proxy (`proxy.js`, formerly
+ * middleware) the SDK needs, so an app doesn't have to hand-write it.
  *
- * This entry is deliberately thin on imports. Middleware runs in the edge
- * runtime, where `next/headers` and Server Actions can't, which is why the
+ * This entry is deliberately thin on imports. The proxy runs ahead of
+ * rendering, where `next/headers` and Server Actions can't, which is why the
  * app's `createCmsPage` module is unreachable from here and the locale list has
  * to come in as an argument.
  */
@@ -37,11 +37,11 @@ const PATHNAME_HEADER = "x-pathname";
  * @returns {(req: import("next/server").NextRequest) => NextResponse}
  *
  * @example
- * // middleware.js
+ * // proxy.js
  * import { createCmsMiddleware } from "inscribed/middleware";
  * import * as cms from "./cms.config.js";
  *
- * export const middleware = createCmsMiddleware(cms);
+ * export const proxy = createCmsMiddleware(cms);
  * export const config = {
  *   matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
  * };

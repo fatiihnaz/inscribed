@@ -632,7 +632,7 @@ you import decides where the data is fetched:
 | `inscribed/collections` | client, on mount | you are already inside a `"use client"` component |
 
 The server form reads the route's language off the request header the
-middleware sets, so a page rendering one is served per request rather than
+proxy sets, so a page rendering one is served per request rather than
 prerendered. That suits records that change constantly; the page's own blocks
 still come from the static site read either way.
 
@@ -1032,7 +1032,7 @@ row) only asks for a retry, since there is nothing to compare.
 
 ### Localization
 
-Three steps, no new files. Declare the languages once somewhere the middleware
+Three steps, no new files. Declare the languages once somewhere the proxy
 can also read — `cms.config.js`, which the `cms-sync` CLI already looks for:
 
 ```js
@@ -1045,7 +1045,7 @@ at the root with no prefix. There is no separate `defaultLocale` option, because
 the backend derives its own default the same way and two inputs are two things
 that can disagree. List the language your existing content is written in first.
 
-Hand that to both the config and the middleware:
+Hand that to both the config and the proxy:
 
 ```js
 // app/lib/cms.jsx
@@ -1055,11 +1055,11 @@ export const cmsConfig = createCmsConfig({ baseUrl: process.env.CMS_URL, locales
 ```
 
 ```js
-// middleware.js
+// proxy.js
 import { createCmsMiddleware } from "inscribed/middleware";
 import * as cms from "./cms.config.js";
 
-export const middleware = createCmsMiddleware(cms);
+export const proxy = createCmsMiddleware(cms);
 export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"] };
 ```
 
@@ -1103,9 +1103,9 @@ route out of static rendering, so anything under `app/[locale]/` should take
 `params.locale` instead.
 
 The default language stays at the root and the others sit behind their prefix:
-`/about` is Turkish, `/en/about` is English. The middleware rewrites the
+`/about` is Turkish, `/en/about` is English. The proxy rewrites the
 unprefixed path onto `app/[locale]/` so `tr` never reaches the address bar; a
-site that prefixes every language needs no middleware at all. It also sets the
+site that prefixes every language needs no proxy at all. It also sets the
 `x-pathname` header that `getCmsRoute()`, a record redirect built without
 `path`, and a [collection binding](#fetching-on-the-server) rendered outside
 `<CmsPage>` fall back to; under `<CmsPage>` the bindings take the language from
@@ -1113,7 +1113,7 @@ it and read no header.
 
 A leading segment counts as a locale only when `locales` lists it, so a page at
 `/en-masse` is not mistaken for English. (Reading also handles a prefix on
-*every* language, if you would rather write your own middleware for that; the
+*every* language, if you would rather write your own proxy for that; the
 bundled one and `localePath` commit to default-at-root.)
 
 Reach the active language from a component — no locale prop threading, no second
@@ -1952,7 +1952,7 @@ bundle:
 | `inscribed/server` | server only | `getCmsSiteContent`, `getCmsContent`, `getCmsCollection`, `getCmsCollectionItem`, `syncCmsManifest`, `syncAll`, `cmsSiteTag`, `cmsCacheTag`, `cmsCollectionTag`, `cmsCollectionItemTag` |
 | `inscribed/page` | server only | `createCmsPage` (returns `CmsPage`, `localePath`, `getCmsRoute`, and the server collection bindings), `createCmsConfig` |
 | `inscribed/actions` | Server Action | `revalidateCmsSlug`, `revalidateCmsCollection` |
-| `inscribed/middleware` | edge | `createCmsMiddleware` |
+| `inscribed/middleware` | proxy | `createCmsMiddleware` (for `proxy.js`) |
 
 Import `inscribed/server` and `inscribed/page` only from Server Components, route
 handlers, or build scripts, never from a Client Component.

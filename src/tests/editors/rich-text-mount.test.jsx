@@ -64,3 +64,17 @@ describe("a rich text editor opening on HTML it rewrites", () => {
     expect(onChange.mock.calls[0][0]).toContain("Üç");
   });
 });
+
+describe("a rich text editor re-rendered with nothing changed", () => {
+  // Each `setOptions` re-applies the editor's props to the view, which a hover
+  // on the page region or any drawer re-render used to cost every editor.
+  it("leaves the editor's options alone", async () => {
+    const onChange = vi.fn();
+    const { editor, rerender } = await mount({ value: "<p>Bir</p>", onChange });
+    const setOptions = vi.spyOn(editor, "setOptions");
+
+    act(() => rerender({}));
+
+    expect(setOptions).not.toHaveBeenCalled();
+  });
+});

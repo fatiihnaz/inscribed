@@ -12,7 +12,7 @@
  * minimal one that inherits the page's typography.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -21,6 +21,17 @@ import Link from "@tiptap/extension-link";
 // diff upstream (JSON equality vs block.value) matches a freshly-seeded empty
 // block instead of marking it permanently dirty.
 const EMPTY_DOC_HTML = "<p></p>";
+
+// Shared by every instance: `useEditor` compares extensions by identity on each
+// render and calls `setOptions` on the editor whenever they differ.
+const EXTENSIONS = [
+  StarterKit.configure({ heading: { levels: [2, 3] } }),
+  Link.configure({
+    openOnClick: false,
+    autolink: true,
+    HTMLAttributes: { rel: "noopener noreferrer" },
+  }),
+];
 
 /**
  * @param {Object} params
@@ -32,20 +43,14 @@ const EMPTY_DOC_HTML = "<p></p>";
  */
 export function useRichTextEditor({ value, onChange, disabled, contentClass = "inscribed-rte-content" }) {
   const suppressUpdateRef = useRef(true);
+  const editorProps = useMemo(() => ({ attributes: { class: contentClass } }), [contentClass]);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ heading: { levels: [2, 3] } }),
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-        HTMLAttributes: { rel: "noopener noreferrer" },
-      }),
-    ],
+    extensions: EXTENSIONS,
     content: value || "",
     editable: !disabled,
     immediatelyRender: false,
-    editorProps: { attributes: { class: contentClass } },
+    editorProps,
     onUpdate: ({ editor }) => {
       if (suppressUpdateRef.current) return;
       const html = editor.getHTML();

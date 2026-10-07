@@ -640,6 +640,15 @@ awaits its `params` comes late enough while the layout awaits nothing slower
 than `params` before `<CmsPage>`; a synchronous page does not. A
 single-language site has no language to find and reads nothing.
 
+A `<CollectionItem>` reads its record in that language too, so a record placed
+on a page in another language shows its translation (or `missing` when it has
+none). It never falls back to the header: rendered before `<CmsPage>` has
+published the language, it reads the record as it was asked for, and `next
+build` warns. `locale` pins the language, which on a detail route takes that
+order out of play (`locale={locale}` from the page's params), and
+`locale={null}` reads without one. The client form reads the slug as it is
+given.
+
 Opt in with the `collections` option; the factory then returns the components
 beside `CmsPage`:
 
@@ -1929,6 +1938,9 @@ still satisfies the contract, and serves a single-language site correctly.
 The one exception is `getCollection`, which reads its locale from `params`
 alongside `filter` / `offset` / `limit`: for a list the language narrows the
 window, and `params` is what the client hashes into its cache key.
+`getCollectionItem` given a `locale` asks for the record's translation in that
+language, and answers 404 when it has none; a collection detail route reads that
+way so a record never serves under another language's prefix.
 
 `getSiteContent` answers with every synced slug's blocks in one language, as
 two lists of the same kind of entry:

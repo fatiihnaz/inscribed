@@ -244,7 +244,7 @@ export function createRestTransport({ baseUrl, cdnUrl = null, clientKey = null }
 
     async getCollectionItem(key, slug, opts = {}) {
       const res = await fetch(
-        `${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}`,
+        withLocale(new URL(`${base}/cms/collections/${encodeURIComponent(key)}/${encodeURIComponent(slug)}`), opts),
         {
           method: "GET",
           headers: headers(opts.accessToken),

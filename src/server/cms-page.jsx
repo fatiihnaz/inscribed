@@ -278,6 +278,8 @@ export function createCmsPage(options) {
     }
   }
 
+  const localized = normalizedConfig.locales.length > 0;
+
   /**
    * @param {{ locale?: string, children: React.ReactNode }} props
    */
@@ -412,9 +414,15 @@ export function createCmsPage(options) {
    * @returns {Promise<import("../shared/contracts/schemas.js").CollectionItemResponse>}
    */
   async function settleCollectionItem(key, slug, options, routeLocale) {
+    // Read in the route's language: the backend answers that language's
+    // translation, which the slug comparison below turns into a redirect, and a
+    // 404 when there is none, rather than serving another language's record here.
+    // `locale: null` reads without one.
+    const asked = options?.locale !== undefined ? options.locale : readRequestLocale();
+    const locale = localized ? routeLocale ?? asked ?? undefined : undefined;
     let item;
     try {
-      item = await getCmsCollectionItem(serverConfig, key, slug, options);
+      item = await getCmsCollectionItem(serverConfig, key, slug, { ...options, locale });
     } catch (err) {
       if (/** @type {*} */ (err)?.isNotFound) notFound();
       // Reports and decides whether this render may be cached; the page has no
@@ -437,13 +445,16 @@ export function createCmsPage(options) {
    * say what it is about without also having to know how Next resolves a route.
    *
    * The canonical link is what this is for, and it is the part that always
-   * works. Measured against Next 15 in a production build:
+   * works. Measured against Next 15, and again on Next 16 for a page built on
+   * demand, in a production build:
    *
    *   - from here, the redirect does *not* reach the wire as a status. Metadata
    *     streams, so the response has already started: Next falls back to a
-   *     `<meta http-equiv="refresh">`. The visitor still lands on the right
-   *     page; a crawler sees 200, and the canonical link is what tells it where
-   *     the record actually lives.
+   *     `<meta http-equiv="refresh">`, and a 404 to a not-found page sent with
+   *     200 and `noindex`. The visitor still lands on the right page; a crawler
+   *     sees 200, and the canonical link is what tells it where the record
+   *     actually lives. An `htmlLimitedBots` in next.config matching every
+   *     user agent turns the streaming off, and both become real statuses.
    *   - from the page body it is a real 308, but only while the segment has no
    *     `loading.js`. With one, the shell flushes first and it degrades exactly
    *     as above. And awaiting there costs the page its streaming.
@@ -486,8 +497,11 @@ export function createCmsPage(options) {
       // Reached only when the redirect above did not happen, which includes the
       // case where it could not: the canonical link is what carries the record's
       // real address to search engines either way, so it is built from the
-      // record rather than from what the route asked for.
-      const canonical = await canonicalAddress(item.slug, resolveOptions, params?.locale);
+      // record rather than from what the route asked for. That includes its
+      // language: a record of a collection with none answers under every prefix,
+      // and only the default language's address may call itself canonical.
+      const canonicalLocale = localized ? item.locale ?? normalizedConfig.defaultLocale : params?.locale;
+      const canonical = await canonicalAddress(item.slug, resolveOptions, canonicalLocale);
       const mapped = map ? await map(item) : null;
 
       return {
@@ -629,10 +643,13 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
     );
   }
 
-  async function RecordBody({ collection, slug, group, label, missing, error: errorNode, children }) {
+  async function RecordBody({ collection, slug, locale: pinned, group, label, missing, error: errorNode, children }) {
+    // The page's language, as `CollectionItem.metadata` reads it, so the two
+    // reads are one request and agree on which translation is shown.
+    const locale = pinned !== undefined ? pinned ?? undefined : itemLocale(serverConfig);
     let item = null;
     try {
-      item = await getCmsCollectionItem(serverConfig, collection, slug);
+      item = await getCmsCollectionItem(serverConfig, collection, slug, locale ? { locale } : undefined);
     } catch (err) {
       // This one already told absence apart from failure, which is the split
       // `handleSsrFailure` now applies everywhere; it keeps its own `missing`
@@ -654,12 +671,16 @@ function createServerCollections(serverConfig, { CollectionRecord, CollectionRow
     );
   }
 
-  /** @param {Record<string, *>} props */
-  function CollectionItem({ collection, slug, group, label, fallback, missing, error: errorNode, children }) {
+  /**
+   * @param {Record<string, *>} props
+   *   `locale` pins the language read, `null` for none. Omit it and the record
+   *   is read in the page's language: its translation when it is in another.
+   */
+  function CollectionItem({ collection, slug, locale, group, label, fallback, missing, error: errorNode, children }) {
     return (
       <Suspense fallback={fallback ?? null}>
         <RecordBody
-          collection={collection} slug={slug} group={group} label={label}
+          collection={collection} slug={slug} locale={locale} group={group} label={label}
           missing={missing} error={errorNode}
         >
           {children}
@@ -842,3 +863,33 @@ async function regionLocale(config) {
 
 /** Same once-per-process budget as the warnings above. */
 let warnedRegionHeaderRead = false;
+let warnedItemBeforeLocale = false;
+
+/**
+ * The language a server collection item reads in when it was not given one:
+ * what `<CmsPage>` published, never the request, which would make the route
+ * dynamic where an item never did. One that renders first reads its record as
+ * it was asked for.
+ *
+ * @param {CmsConfig} config
+ * @returns {string | undefined}
+ */
+function itemLocale(config) {
+  if (!config.locales?.length) return undefined;
+  const published = readRequestLocale();
+  if (published === undefined) {
+    const building = process.env.NEXT_PHASE === "phase-production-build";
+    if (!warnedItemBeforeLocale && (building || process.env.NODE_ENV !== "production")) {
+      warnedItemBeforeLocale = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[inscribed] a server <CollectionItem> rendered before <CmsPage> had published the route's " +
+          "language, so it reads its record in none, and CollectionItem.metadata may show another " +
+          "translation. Make the page async and await its params, or pass locale={...} to the item.",
+      );
+    }
+    return undefined;
+  }
+  if (published !== null && !config.locales.includes(published)) notFound();
+  return published ?? undefined;
+}

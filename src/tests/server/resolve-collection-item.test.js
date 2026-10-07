@@ -278,7 +278,8 @@ describe("keeping a detail route static", () => {
     });
     const { CollectionItem } = createCmsPage({
       config: { baseUrl: "https://api.test", locales: ["tr", "en"] },
-      transport: { getCollectionItem: async () => ITEM },
+      // A localized record answers in the language it was asked for.
+      transport: { getCollectionItem: async () => ({ ...ITEM, locale }) },
       Provider: () => null,
       collections: {
         CollectionProvider: () => null,
@@ -333,6 +334,104 @@ describe("keeping a detail route static", () => {
       redirectedTo = String(/** @type {*} */ (err)?.digest ?? "").split(";")[2] ?? null;
     }
     expect(redirectedTo).toBe("/en/news/yeni-adres");
+  });
+});
+
+/**
+ * Record slugs are unique across languages, so a language switcher that swaps
+ * the prefix lands on `/en/news/<turkish slug>`. That address must not serve
+ * the Turkish record as a page of its own.
+ */
+describe("a record opened under another language's prefix", () => {
+  const TR_RECORD = {
+    ...ITEM,
+    slug: "yeni-urun",
+    locale: "tr",
+    translations: [{ locale: "en", slug: "new-product" }],
+  };
+  const path = (slug, { locale }) => (!locale || locale === "tr" ? `/news/${slug}` : `/${locale}/news/${slug}`);
+
+  /**
+   * @param {{ locales?: string[], params: *, respond: (slug: string, opts: *) => * }} args
+   */
+  async function run({ locales = ["tr", "en"], params, respond }) {
+    vi.resetModules();
+    const { createCmsPage } = await import("../../server/cms-page.jsx");
+    requestHeaders.current = new Headers();
+    /** @type {*[]} */
+    const reads = [];
+    const { CollectionItem } = createCmsPage({
+      config: { baseUrl: "https://api.test", locales },
+      transport: {
+        getCollectionItem: async (key, slug, opts) => {
+          reads.push(opts.locale);
+          return respond(slug, opts);
+        },
+      },
+      Provider: () => null,
+      collections: { CollectionProvider: () => null, CollectionRecord: () => null, CollectionRows: () => null },
+    });
+    let meta = null;
+    let redirectedTo = null;
+    let missing = false;
+    try {
+      meta = await CollectionItem.metadata("news", { path })({ params });
+    } catch (err) {
+      const digest = String(/** @type {*} */ (err)?.digest ?? "");
+      if (digest === "NEXT_NOT_FOUND") missing = true;
+      else if (digest.startsWith("NEXT_REDIRECT")) redirectedTo = digest.split(";")[2];
+      else throw err;
+    }
+    return { meta, redirectedTo, notFound: missing, reads };
+  }
+
+  it("asks for the record in the route's language", async () => {
+    const out = await run({
+      params: { slug: "yeni-urun", locale: "tr" },
+      respond: () => TR_RECORD,
+    });
+    expect(out.reads).toEqual(["tr"]);
+    expect(out.meta.alternates.canonical).toBe("/news/yeni-urun");
+  });
+
+  it("redirects to the translation when the language has one", async () => {
+    const out = await run({
+      params: { slug: "yeni-urun", locale: "en" },
+      respond: (slug, opts) => (opts.locale === "en"
+        ? { ...TR_RECORD, slug: "new-product", locale: "en", translations: [{ locale: "tr", slug: "yeni-urun" }] }
+        : TR_RECORD),
+    });
+    expect(out.redirectedTo).toBe("/en/news/new-product");
+  });
+
+  it("404s when the language has no translation", async () => {
+    const out = await run({
+      params: { slug: "yeni-urun", locale: "en" },
+      respond: () => { throw new CmsApiError({ status: 404, detail: "Not found" }); },
+    });
+    expect(out.notFound).toBe(true);
+  });
+
+  it("points a record with no language at the default language's address", async () => {
+    // Its collection is not localized, so the backend answers it under every
+    // prefix; only one of those may call itself canonical.
+    const { locale: _, translations: __, ...plain } = TR_RECORD;
+    const out = await run({
+      params: { slug: "yeni-urun", locale: "en" },
+      respond: () => plain,
+    });
+    expect(out.redirectedTo).toBe(null);
+    expect(out.meta.alternates.canonical).toBe("/news/yeni-urun");
+  });
+
+  it("sends no language on a single-language site", async () => {
+    const out = await run({
+      locales: [],
+      params: { slug: "yeni-adres" },
+      respond: () => ITEM,
+    });
+    expect(out.reads).toEqual([undefined]);
+    expect(out.meta.alternates.canonical).toBe("/news/yeni-adres");
   });
 });
 
@@ -460,5 +559,23 @@ describe("failures", () => {
       slug: "eski-adres",
       error: new CmsApiError({ status: 500, detail: "boom" }),
     })).rejects.toThrow("boom");
+  });
+});
+
+describe("resolveCollectionItem on a localized site", () => {
+  it("reads without a language when told locale: null", async () => {
+    vi.resetModules();
+    const { createCmsPage } = await import("../../server/cms-page.jsx");
+    requestHeaders.current = new Headers({ "x-pathname": "/en/haber/yeni-adres" });
+    /** @type {*[]} */
+    const reads = [];
+    const { resolveCollectionItem } = createCmsPage({
+      config: { baseUrl: "https://api.test", locales: ["tr", "en"] },
+      transport: { getCollectionItem: async (key, slug, opts) => { reads.push(opts.locale); return ITEM; } },
+      Provider: () => null,
+    });
+    await resolveCollectionItem("news", "yeni-adres", { locale: "en" });
+    await resolveCollectionItem("news", "yeni-adres", { locale: null });
+    expect(reads).toEqual(["en", undefined]);
   });
 });

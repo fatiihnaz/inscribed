@@ -137,10 +137,12 @@ export function CollectionRecord({ collection, slug, item, group, label, fromReg
   const cardGroup = group ?? groupPrefix;
   const cardLabel = label ?? `${collection} · ${recordSlug}`;
 
-  // Case alone is normalisation, not an alias, so it warns about neither.
+  // Case alone is normalisation, not an alias, so it warns about neither. Nor
+  // does a translation read in the page's language: that slug is still live.
+  const isTranslation = Boolean(item.translations?.some((t) => t.slug.toLowerCase() === slug.toLowerCase()));
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
-    if (recordSlug.toLowerCase() === slug.toLowerCase()) return;
+    if (recordSlug.toLowerCase() === slug.toLowerCase() || isTranslation) return;
     // Naming the redirect matters more than naming the binding: editing keeps
     // working either way, so the part that goes unnoticed is the old URL still
     // serving the page, splitting the record across two addresses.
@@ -152,7 +154,7 @@ export function CollectionRecord({ collection, slug, item, group, label, fromReg
         `serving the page: export CollectionItem.metadata("${collection}") as generateMetadata ` +
         "to settle it.",
     );
-  }, [collection, slug, recordSlug]);
+  }, [collection, slug, recordSlug, isTranslation]);
 
   // Hand the binding to the drawer for its Page-tab card. Public visitors
   // register too, keeping register/unregister symmetric across mode switches.

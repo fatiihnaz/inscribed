@@ -62,6 +62,7 @@
  *   method or a 404 fails with the endpoint's name.
  * @property {(key: string, params?: CollectionListParams, opts?: CmsRequestOptions) => Promise<CollectionListResponse>} getCollection
  * @property {(key: string, slug: string, opts?: CmsRequestOptions) => Promise<CollectionItemResponse>} getCollectionItem
+ *   With `locale`, the record's translation in that language, or a 404 when it has none.
  * @property {(key: string, params: { q?: string, slugs?: string[], locale?: string | null, limit?: number }, opts?: CmsRequestOptions) => Promise<CollectionLookupResponse>} [lookupCollection]
  *   Names and slugs for a picker, without the records behind them. Optional on
  *   the seam: a transport that has not implemented it makes collection-backed

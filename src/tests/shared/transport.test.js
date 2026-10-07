@@ -432,7 +432,7 @@ describe("locale", () => {
     expect(groupOf()).toBeNull();
   });
 
-  it("qualifies creates and the new-item draft slot, but no per-slug endpoint", async () => {
+  it("qualifies creates, the new-item draft slot and translation reads, but not a record's draft", async () => {
     const t = createRestTransport({ baseUrl: BASE });
 
     fetchResolves({ id: "1", slug: "s", data: {} });
@@ -453,12 +453,16 @@ describe("locale", () => {
     await t.upsertCollectionItem("News", "s", { data: {}, version: null }, { accessToken: "tok", locale: "en" });
     expect(localeOf()).toBe("en");
 
-    // A slug is unique across the whole collection, translations included, so
-    // the read-only and draft endpoints already name one row in one language.
+    // On a read the language asks for that language's translation of the row.
     fetchResolves({ id: "1", slug: "s", data: {} });
     await t.getCollectionItem("News", "s", { accessToken: "tok", locale: "en" });
+    expect(lastCall()[0]).toBe(`${BASE}/cms/collections/News/s?locale=en`);
+    fetchResolves({ id: "1", slug: "s", data: {} });
+    await t.getCollectionItem("News", "s", { accessToken: "tok" });
     expect(lastCall()[0]).toBe(`${BASE}/cms/collections/News/s`);
 
+    // A slug is unique across the whole collection, translations included, so
+    // the draft endpoint already names one row in one language.
     fetchResolves(undefined, 204);
     await t.deleteCollectionItemDraft("News", "s", { accessToken: "tok", locale: "en" });
     expect(lastCall()[0]).toBe(`${BASE}/cms/collections/News/s/draft`);

@@ -350,6 +350,7 @@ export async function getCmsCollectionItem(config, key, slug, options) {
   const transport = config.transport ?? createRestTransport(config);
   const item = await transport.getCollectionItem(key, slug, {
     accessToken,
+    locale: options?.locale ?? undefined,
     cache: {
       revalidate: options?.revalidate ?? false,
       tags: [

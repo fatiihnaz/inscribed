@@ -76,6 +76,18 @@ export function localizePath(slug, locale, config) {
   return slug === "/" ? `/${locale}` : `/${locale}${slug}`;
 }
 
+/**
+ * A collection record's address from a template whose one dynamic segment
+ * takes the slug: `/news/[slug]` and `yeni-urun` give `/news/yeni-urun`.
+ *
+ * @param {string} template
+ * @param {string} slug
+ * @returns {string}
+ */
+export function recordPath(template, slug) {
+  return template.replace(/\[[^\]]+\]/, encodeURIComponent(slug));
+}
+
 /** Stable empty list, so callers can put the result straight in a dep array. */
 const NO_LOCALES = /** @type {string[]} */ ([]);
 

@@ -49,12 +49,13 @@ import { getCmsCollection, getCmsCollectionItem, getCmsSiteContent } from "./get
 import { EMPTY_SITE } from "../core/site-blocks.js";
 import { ensureCmsConfig } from "../shared/config.js";
 import { normalizePanels } from "../shared/panels.js";
-import { localizePath, resolveCmsRoute } from "../shared/route.js";
+import { localizePath, recordPath, resolveCmsRoute } from "../shared/route.js";
 import { buildListParams } from "../collections/params.js";
 import { publicAuth } from "../defaults/auth.js";
 import { handleSsrFailure } from "./ssr-failure.js";
 import {
-  absoluteUrl, fillSlug, imageOf, languageLinks, pageSeoFields, seedIn, seoMetadata, textOf,
+  absoluteUrl, fillSlug, imageOf, languageLinks, pageSeoFields, recordLanguages, recordSeoFields,
+  seedIn, seoMetadata, textOf,
 } from "../shared/seo.js";
 
 // Re-exported here (not from the client entry) because config factories run in
@@ -564,22 +565,29 @@ export function createCmsPage(options) {
    * URL and same tags, so Next serves the second from its cache. Measured, not
    * assumed: one request per page render reaches the backend.
    *
+   * A collection with an entry under `seo` in the config needs nothing more:
+   * its `path` builds the addresses, its fields fill the title, description,
+   * share image and noindex, and the record's translations become hreflang.
+   *
    * @param {string} key
    * @param {((item: import("../shared/contracts/schemas.js").CollectionItemResponse) => *) | Record<string, *>} [mapOrOptions]
-   *   A function mapping the record to metadata fields is the common case.
-   *   Pass an object instead to reach the rest: `map` (the same function),
-   *   `param` (route segment holding the slug, default `"slug"`), plus anything
-   *   `resolveCollectionItem` takes. `path` is the one worth passing: without it
-   *   the canonical link is derived from the request and the route goes dynamic.
-   * @returns {(props: { params: * }) => Promise<*>}
+   *   A function mapping the record to metadata fields, which win over the
+   *   `seo` ones. Pass an object instead to reach the rest: `map` (the same
+   *   function), `param` (route segment holding the slug, default `"slug"`),
+   *   plus anything `resolveCollectionItem` takes. Without a `path` here or in
+   *   the config, the canonical link is derived from the request and the route
+   *   goes dynamic.
+   * @returns {(props: { params: * }, parent?: import("next").ResolvingMetadata) => Promise<import("next").Metadata>}
    */
   function collectionMetadata(key, mapOrOptions) {
     const options = typeof mapOrOptions === "function"
       ? { map: mapOrOptions }
       : (mapOrOptions ?? {});
-    const { map, param = "slug", ...resolveOptions } = options;
+    const { map, param = "slug", ...rest } = options;
+    const seo = normalizedConfig.seo?.[key] ?? null;
+    const resolveOptions = rest.path || !seo?.path ? rest : { ...rest, path: recordPathOf(seo.path) };
 
-    return async function generateMetadata(props) {
+    return async function generateMetadata(props, parent) {
       const params = await props?.params;
       const slug = params?.[param];
       if (typeof slug !== "string") {
@@ -597,16 +605,32 @@ export function createCmsPage(options) {
       // language: a record of a collection with none answers under every prefix,
       // and only the default language's address may call itself canonical.
       const canonicalLocale = localized ? item.locale ?? normalizedConfig.defaultLocale : params?.locale;
-      const canonical = await canonicalAddress(item.slug, resolveOptions, canonicalLocale);
-      const mapped = map ? await map(item) : null;
+      const address = await canonicalAddress(item.slug, resolveOptions, canonicalLocale);
+      const canonical = address ? absoluteUrl(address, normalizedConfig.siteUrl) : null;
+      const languages = localized && resolveOptions.path
+        ? recordLanguages(item, resolveOptions.path, normalizedConfig)
+        : undefined;
+      const [mapped, inherited] = await Promise.all([map ? map(item) : null, parent]);
+      if (languages) warnIfRelativeLinks(normalizedConfig, inherited);
 
+      const base = seo
+        ? seoMetadata({ fields: recordSeoFields(item.data, seo), canonical, languages, inherited: inherited?.openGraph })
+        : { alternates: { ...(canonical ? { canonical } : null), ...(languages ? { languages } : null) } };
       return {
+        ...base,
         ...mapped,
-        // Spread last so a caller setting its own `alternates` (hreflang for a
-        // translated record, say) keeps them, and can override the canonical.
-        alternates: { ...(canonical ? { canonical } : null), ...mapped?.alternates },
+        // Merged last so a caller's own `alternates` keep what they do not set.
+        alternates: { ...base.alternates, ...mapped?.alternates },
       };
     };
+  }
+
+  /**
+   * @param {string} template   A record's address, e.g. `/news/[slug]`.
+   * @returns {(slug: string, context: { locale: string|null }) => string}
+   */
+  function recordPathOf(template) {
+    return (slug, { locale }) => localePath(recordPath(template, slug), locale ?? undefined);
   }
 
   /**

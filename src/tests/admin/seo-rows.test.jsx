@@ -20,6 +20,7 @@ vi.mock("next/navigation", () => ({
 
 import { CmsProvider } from "../../core/CmsProvider.jsx";
 import { BlockCard } from "../../admin/BlockCard.jsx";
+import { RecordSeo } from "../../admin/RecordSeo.jsx";
 import { useCmsContext } from "../../shared/state/cms-context.js";
 import { useStoreSelector } from "../../shared/state/store.js";
 import { en } from "../../shared/i18n/en/index.js";
@@ -88,5 +89,31 @@ describe("a page's seo rows", () => {
     fireEvent.click(/** @type {Element} */ (document.querySelector("input[type=checkbox]")));
     expect(screen.queryByText(en["seo.noindexConfirmTitle"])).toBe(null);
     expect(drafts.get("seo.noindex")).toBe(false);
+  });
+});
+
+describe("a record's seo section", () => {
+  const config = {
+    baseUrl: "https://api.test",
+    seo: { news: { path: "/news/[slug]", title: "title", description: ["seoDescription", "summary"], noindex: "hidden" } },
+  };
+  /** @param {{ values: *, cfg?: * }} props */
+  const renderSection = ({ values, cfg = config }) => render(
+    <CmsProvider config={cfg}>
+      <RecordSeo collection="news" values={values} />
+    </CmsProvider>,
+  );
+
+  it("shows what search reads and which field it comes from", () => {
+    renderSection({ values: { title: "Yeni ürün", seoDescription: "", summary: "<p>Özet metni</p>", hidden: false } });
+    expect(screen.getByText("Yeni ürün")).toBeTruthy();
+    expect(screen.getByText("Özet metni")).toBeTruthy();
+    expect(screen.getByText(en["seo.fromField"].replace("{field}", "summary"))).toBeTruthy();
+    expect(screen.getByText(en["seo.recordVisible"])).toBeTruthy();
+  });
+
+  it("is absent for a collection with no seo entry", () => {
+    const { container } = renderSection({ values: { title: "x" }, cfg: { baseUrl: "https://api.test" } });
+    expect(container.querySelector("section")).toBe(null);
   });
 });

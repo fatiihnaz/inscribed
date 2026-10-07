@@ -163,4 +163,10 @@ export const panel = Object.freeze({
   "seo.noindexConfirmLabel": "Sayfayı arama motorlarından gizlemeyi onayla",
   "seo.noindexConfirm": "Gizle",
   "seo.noindexCancel": "Görünür kalsın",
+  "seo.recordHeading": "SEO",
+  "seo.recordNote": "Kaydın alanlarından doldurulur; değiştirmek için o alanları düzenleyin.",
+  "seo.fromField": "{field} alanından",
+  "seo.recordEmpty": "Boş",
+  "seo.recordHidden": "Aramada gizli",
+  "seo.recordVisible": "Aramada görünür",
 });

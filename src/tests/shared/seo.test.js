@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { absoluteUrl, fillSlug, seedIn, textOf } from "../../shared/seo.js";
+import { absoluteUrl, clip, fillSlug, recordLanguages, seedIn, textOf } from "../../shared/seo.js";
 
 describe("textOf", () => {
   it("reduces rich text to its words", () => {
@@ -10,6 +10,13 @@ describe("textOf", () => {
   it("leaves plain text alone apart from its whitespace", () => {
     expect(textOf("  a < b\n and c  ")).toBe("a < b and c");
     expect(textOf(null)).toBe("");
+  });
+});
+
+describe("clip", () => {
+  it("cuts at a word boundary", () => {
+    expect(clip("one two three four", 12)).toBe("one two…");
+    expect(clip("short", 12)).toBe("short");
   });
 });
 
@@ -44,5 +51,29 @@ describe("absoluteUrl", () => {
     expect(absoluteUrl("/en/about", "https://site.test")).toBe("https://site.test/en/about");
     expect(absoluteUrl("/", "https://site.test")).toBe("https://site.test");
     expect(absoluteUrl("/about", null)).toBe("/about");
+  });
+});
+
+describe("recordLanguages", () => {
+  const config = /** @type {*} */ ({ locales: ["tr", "en", "de"], defaultLocale: "tr", siteUrl: null });
+  const pathOf = (slug, { locale }) => (locale === "tr" ? `/news/${slug}` : `/${locale}/news/${slug}`);
+
+  it("points to the translations the site has a language for", () => {
+    const links = recordLanguages(
+      { slug: "new", locale: "en", translations: [{ locale: "tr", slug: "yeni" }, { locale: "fr", slug: "nouveau" }] },
+      pathOf,
+      config,
+    );
+    expect(links).toEqual({ en: "/en/news/new", tr: "/news/yeni", "x-default": "/news/yeni" });
+  });
+
+  it("leaves out x-default when the default language has no translation", () => {
+    const links = recordLanguages({ slug: "new", locale: "en", translations: [{ locale: "de", slug: "neu" }] }, pathOf, config);
+    expect(links).toEqual({ en: "/en/news/new", de: "/de/news/neu" });
+  });
+
+  it("says nothing for a record alone in its language, or with none", () => {
+    expect(recordLanguages({ slug: "new", locale: "en", translations: [] }, pathOf, config)).toBeUndefined();
+    expect(recordLanguages({ slug: "new" }, pathOf, config)).toBeUndefined();
   });
 });

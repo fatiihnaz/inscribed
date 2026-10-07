@@ -1,6 +1,7 @@
 /**
- * @file Next metadata from a page's `seo.*` blocks. Pure, so `cms-page.jsx`
- * only wires reads in.
+ * @file Next metadata from CMS content: a page's `seo.*` blocks and the record
+ * fields a collection maps to search. Pure, so the server builds metadata with
+ * it and the drawer shows a record's from the same rules.
  */
 
 import { localizePath } from "./route.js";
@@ -42,6 +43,20 @@ export function textOf(value) {
     ? value.replace(/<[^>]*>/g, " ").replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (_, name) => ENTITIES[name])
     : value;
   return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Shorten to `max` characters at a word boundary.
+ *
+ * @param {string} text
+ * @param {number} max
+ * @returns {string}
+ */
+export function clip(text, max) {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > 0 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
 /**
@@ -150,6 +165,58 @@ export function languageLinks(path, config) {
     links[locale] = absoluteUrl(localizePath(path, locale, config), config.siteUrl);
   }
   if (config.defaultLocale) links["x-default"] = links[config.defaultLocale];
+  return links;
+}
+
+/**
+ * A record's SEO from the fields its collection maps: the first field with a
+ * value wins, and a description is cut to what a result snippet shows.
+ *
+ * @param {Record<string, *> | null | undefined} data
+ * @param {import("./config.js").CollectionSeo} seo
+ * @returns {SeoFields}
+ */
+export function recordSeoFields(data, seo) {
+  /**
+   * @template T
+   * @param {readonly string[]} names
+   * @param {(value: *) => T} read
+   * @returns {T | null}
+   */
+  const first = (names, read) => {
+    for (const name of names) {
+      const value = read(data?.[name]);
+      if (value) return value;
+    }
+    return null;
+  };
+  return {
+    title: first(seo.title, textOf) ?? "",
+    description: clip(first(seo.description, textOf) ?? "", 160),
+    image: first(seo.image, imageOf),
+    noindex: seo.noindex.map((name) => boolOf(data?.[name])).find((value) => value != null) ?? false,
+  };
+}
+
+/**
+ * hreflang for a record and its translations, in the languages the site has.
+ * Undefined when there is no other language to point to.
+ *
+ * @param {{ slug: string, locale?: string, translations?: { locale: string|null, slug: string }[] }} item
+ * @param {(slug: string, context: { locale: string|null }) => string} pathOf   The localized path of a slug.
+ * @param {CmsConfig} config
+ * @returns {Record<string, string> | undefined}
+ */
+export function recordLanguages(item, pathOf, config) {
+  if (!item.locale) return undefined;
+  /** @type {Record<string, string>} */
+  const links = {};
+  for (const member of [{ locale: item.locale, slug: item.slug }, ...(item.translations ?? [])]) {
+    if (!member.locale || !member.slug || !config.locales.includes(member.locale)) continue;
+    links[member.locale] = absoluteUrl(pathOf(member.slug, { locale: member.locale }), config.siteUrl);
+  }
+  if (Object.keys(links).length < 2) return undefined;
+  if (config.defaultLocale && links[config.defaultLocale]) links["x-default"] = links[config.defaultLocale];
   return links;
 }
 

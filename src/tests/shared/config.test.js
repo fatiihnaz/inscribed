@@ -103,3 +103,25 @@ describe("createCmsConfig siteUrl", () => {
     expect(() => createCmsConfig({ baseUrl: "https://api.test", siteUrl: "/" })).toThrow(/absolute/);
   });
 });
+
+describe("createCmsConfig seo", () => {
+  it("lists every field, one name or several", () => {
+    const cfg = createCmsConfig({
+      baseUrl: "https://api.test",
+      seo: { news: { path: "/news/[slug]", title: "title", description: ["seoDescription", "summary"] } },
+    });
+    expect(cfg.seo.news).toEqual({
+      path: "/news/[slug]", title: ["title"], description: ["seoDescription", "summary"], image: [], noindex: [],
+    });
+    // A second pass, as crossing to the client makes, keeps it.
+    expect(createCmsConfig({ ...cfg }).seo).toEqual(cfg.seo);
+  });
+
+  it("names the mistake in an entry", () => {
+    const base = { baseUrl: "https://api.test" };
+    expect(() => createCmsConfig({ ...base, seo: { news: { titel: "title" } } })).toThrow(/not titel/);
+    expect(() => createCmsConfig({ ...base, seo: { news: { path: "/news" } } })).toThrow(/one dynamic segment/);
+    expect(() => createCmsConfig({ ...base, seo: { news: { path: "/[a]/[b]" } } })).toThrow(/one dynamic segment/);
+    expect(() => createCmsConfig({ ...base, seo: { news: { title: [""] } } })).toThrow(/names a field/);
+  });
+});

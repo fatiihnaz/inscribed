@@ -808,7 +808,9 @@ because a renamed record keeps answering to its old slug: without it two URLs
 serve one record and a crawler picks. `path` is how that address gets built, and
 it is the one option worth passing. Leave it out and the address is derived from
 the request instead, which makes the whole route dynamic for the sake of one
-link.
+link. A collection with an `seo` entry in the config names its path and its
+search fields there once, and the call shrinks to `CollectionItem.metadata("news")`;
+see [Search & metadata](#search--metadata).
 
 An `Image` field gets the same treatment as an image region: hover the picture
 for replace/remove, or drop one onto the empty field. Alt text stays in the
@@ -1453,6 +1455,66 @@ template, which would name the site twice. A dynamic-segment page
 content, and builds its links from the route's params. A page that doesn't call
 `CmsPage.metadata` keeps whatever `metadata` it exports, and gets no canonical
 link.
+
+#### A collection record's fields
+
+A record's search fields are fields it already has, so a collection maps them
+instead of adding new ones. The mapping lives in the config rather than in the
+page, because the drawer and the language switcher read it in the browser:
+
+```js
+// app/lib/cms-config.js
+export const cmsConfig = createCmsConfig({
+  // ...
+  seo: {
+    news: {
+      path: "/news/[slug]",                       // where a record lives
+      title: "title",
+      description: ["seoDescription", "summary"], // the first with text wins
+      image: "cover",
+      noindex: "hidden",                          // optional: a Bool field
+    },
+  },
+});
+```
+
+```jsx
+// app/[locale]/news/[slug]/page.jsx
+export const generateStaticParams = CollectionItem.staticParams("news");
+export const generateMetadata = CollectionItem.metadata("news");
+```
+
+`path` does the job of the option shown under
+[Editing a field in place](#editing-a-field-in-place): its one dynamic segment
+takes the record's slug, and the language prefix is added for you. A `RichText`
+field is reduced to its text, and a description is cut at about 160 characters,
+what a search result shows. `map` still works and wins over the mapped fields,
+for anything computed (`openGraph.publishedTime`, say). The record's card in the
+drawer shows what each one reads and which field it comes from, **read-only**:
+editors change the field itself.
+
+A translation has its own slug (`yeni-urun`, `new-product`), so hreflang comes
+from the record's `translations` rather than from swapping the prefix. For the
+same reason the record is read in the route's language: `/en/news/yeni-urun`
+redirects to `/en/news/new-product`, or answers 404 when the record has no
+English version. A record whose collection has no languages is the same under
+every prefix, so its canonical link names the default language's address.
+
+**Status codes.** Next streams `generateMetadata` to browsers and to crawlers
+that run JavaScript, so on a record page built on demand (one `staticParams`
+did not list) that redirect and that 404 arrive inside a page with status 200:
+a `<meta http-equiv="refresh">` and a not-found page marked `noindex`. Search
+engines honor both, but the first visitor's response is what gets cached for
+that address. Turn the streaming off to send a real 308 and 404 to everyone; a
+page built on demand then waits for its metadata, which reads the same record
+the page does, while prerendered pages are unaffected:
+
+```js
+// next.config.js
+module.exports = {
+  htmlLimitedBots: /.*/,
+};
+```
 
 ### Theming
 

@@ -69,6 +69,19 @@ import { DEFAULT_ADMIN_LOCALE } from "./i18n/default-locale.js";
  * @property {string|null} siteUrl
  *   The site's public origin, no trailing slash. Search engines want canonical
  *   and hreflang addresses absolute, and this is what they are built on.
+ * @property {Readonly<Record<string, CollectionSeo>>|null} seo
+ *   Per collection key: where a record lives and which of its fields search
+ *   engines read. In the config rather than the page factory because the
+ *   browser reads it too.
+ */
+
+/**
+ * @typedef {Object} CollectionSeo
+ * @property {string|null} path   A record's address, its one dynamic segment taking the slug: `/news/[slug]`.
+ * @property {readonly string[]} title
+ * @property {readonly string[]} description   Tried in order; the first field with text wins.
+ * @property {readonly string[]} image
+ * @property {readonly string[]} noindex       A Bool field that keeps the record out of search.
  */
 
 /**
@@ -85,6 +98,8 @@ import { DEFAULT_ADMIN_LOCALE } from "./i18n/default-locale.js";
  * @param {CmsTheme} [opts.theme]   Overrides for the admin/editing visual tokens (accent, fonts, radius, …). Unknown keys are dropped; unset keys keep their defaults.
  * @param {string[]} [opts.slugs]   Fallback for a backend with no `GET /cms/content/all`: the page slugs to read one by one. Setting it turns the whole-site read off on the server and in the browser alike. Leave it out against the reference backend.
  * @param {string} [opts.siteUrl]   The site's public origin, e.g. `"https://example.com"`. Canonical and hreflang links are built on it.
+ * @param {Record<string, { path?: string, title?: string | string[], description?: string | string[], image?: string | string[], noindex?: string | string[] }>} [opts.seo]
+ *   Per collection key, a record's address and the fields its metadata comes from.
  * @returns {CmsConfig}
  */
 
@@ -99,6 +114,7 @@ export function createCmsConfig({
   theme,
   slugs,
   siteUrl,
+  seo,
   ...rest
 }) {
   if (!baseUrl || typeof baseUrl !== "string") {
@@ -134,7 +150,45 @@ export function createCmsConfig({
     theme: normalizeTheme(theme),
     slugs: normalizeSlugs(slugs),
     siteUrl: normalizeSiteUrl(siteUrl),
+    seo: normalizeSeo(seo),
   });
+}
+
+const SEO_FIELDS = ["title", "description", "image", "noindex"];
+
+/**
+ * @param {Record<string, *> | undefined | null} seo
+ * @returns {Readonly<Record<string, CollectionSeo>> | null}
+ */
+function normalizeSeo(seo) {
+  if (seo == null) return null;
+  if (typeof seo !== "object" || Array.isArray(seo)) {
+    throw new Error("createCmsConfig: seo maps a collection key to { path, title, description, image, noindex }");
+  }
+  /** @type {Record<string, CollectionSeo>} */
+  const out = {};
+  for (const [key, entry] of Object.entries(seo)) {
+    const unknown = Object.keys(entry ?? {}).filter((name) => name !== "path" && !SEO_FIELDS.includes(name));
+    if (!entry || typeof entry !== "object" || unknown.length > 0) {
+      throw new Error(`createCmsConfig: seo.${key} takes path, ${SEO_FIELDS.join(", ")}${unknown.length ? `, not ${unknown.join(", ")}` : ""}`);
+    }
+    const path = entry.path ?? null;
+    if (path !== null && (typeof path !== "string" || !path.startsWith("/") || (path.match(/\[[^\]]+\]/g) ?? []).length !== 1)) {
+      throw new Error(`createCmsConfig: seo.${key}.path is a record's address with one dynamic segment for the slug, like "/news/[slug]"`);
+    }
+    /** @type {Record<string, readonly string[]>} */
+    const fields = {};
+    for (const name of SEO_FIELDS) {
+      const value = entry[name] ?? [];
+      const list = Array.isArray(value) ? value : [value];
+      if (list.some((field) => typeof field !== "string" || field === "")) {
+        throw new Error(`createCmsConfig: seo.${key}.${name} names a field of the record, or a list of them`);
+      }
+      fields[name] = Object.freeze([...list]);
+    }
+    out[key] = Object.freeze({ path, .../** @type {*} */ (fields) });
+  }
+  return Object.freeze(out);
 }
 
 /**

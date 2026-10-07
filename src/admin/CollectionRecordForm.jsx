@@ -16,6 +16,7 @@ import { CmsApiError } from "../shared/contracts/errors.js";
 import { useCmsStrings } from "../core/hooks/use-cms-strings.js";
 import { useEditorDirty, useEditorValues } from "../collections/hooks/use-collection-editor.js";
 import { CollectionFieldsForm } from "../collections/CollectionFieldsForm.jsx";
+import { RecordSeo } from "./RecordSeo.jsx";
 import { buttonBaseStyle } from "./drawer-styles.js";
 import { TEXT_MUTED, TEXT_FAINT, FONT_SANS, STATUS_OK, STATUS_WARN, STATUS_DANGER, ACCENT, SURFACE_1, SURFACE_2, HAIRLINE, COLLECTION_ACCENT, COLLECTION_SOFT, COLLECTION_LINE, R_BADGE, R_PILL, dynamicSize } from "../shared/style/tokens.js";
 
@@ -124,6 +125,8 @@ export function CollectionRecordForm({
         disabled={disabled}
         variant={variant}
       />
+
+      <RecordSeo collection={collection} values={values} />
 
       {children}
 

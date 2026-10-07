@@ -160,7 +160,7 @@ export const panel = Object.freeze({
   "changes.mark.listItem": "list item",
   "changes.mark.code": "code",
 
-  // A page's search fields.
+  // A page's search fields, and the ones a record's own fields fill.
   "seo.group": "SEO",
   "seo.title": "Title",
   "seo.description": "Description",
@@ -178,4 +178,10 @@ export const panel = Object.freeze({
   "seo.noindexConfirmLabel": "Confirm hiding this page from search engines",
   "seo.noindexConfirm": "Hide it",
   "seo.noindexCancel": "Keep it visible",
+  "seo.recordHeading": "SEO",
+  "seo.recordNote": "Filled from the record's fields; edit those to change it.",
+  "seo.fromField": "from {field}",
+  "seo.recordEmpty": "Empty",
+  "seo.recordHidden": "Hidden from search",
+  "seo.recordVisible": "Shown in search",
 });

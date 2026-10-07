@@ -27,6 +27,7 @@
 import { isValidElement, lazy, Suspense, useContext, useEffect, useId, useMemo } from "react";
 
 import { useCmsContext } from "../shared/state/cms-context.js";
+import { recordLanguagePaths } from "../shared/route.js";
 import { collectionItemBindingId, useCollectionContext } from "./context.js";
 import { CollectionItemContext } from "./item-context.js";
 import { CmsGroupContext, CmsGroupVisibilityContext } from "../shared/state/group-context.js";
@@ -118,7 +119,9 @@ export function CollectionItem({
  * }} props
  */
 export function CollectionRecord({ collection, slug, item, group, label, fromRegion, children }) {
-  const { isAdmin, uiStore, setActiveBlock } = useCmsContext();
+  const {
+    config, isAdmin, uiStore, setActiveBlock, registerLanguagePaths, unregisterLanguagePaths,
+  } = useCmsContext();
   const {
     registerCollectionBinding, unregisterCollectionBinding, collectionStore, requestCollectionItem,
   } = useCollectionContext();
@@ -168,6 +171,19 @@ export function CollectionRecord({ collection, slug, item, group, label, fromReg
     bindingId, collection, recordSlug, cardGroup, cardLabel, fromRegion,
     registerCollectionBinding, unregisterCollectionBinding,
   ]);
+
+  // Where the record lives in each language, for the language switcher. A
+  // region's rows are listed, not the page on screen, so they say nothing.
+  const template = config.seo?.[collection]?.path ?? null;
+  const languagePaths = useMemo(
+    () => (template && !fromRegion ? recordLanguagePaths(template, item) : null),
+    [template, fromRegion, item],
+  );
+  useEffect(() => {
+    if (!languagePaths) return undefined;
+    registerLanguagePaths(scopeId, languagePaths);
+    return () => unregisterLanguagePaths(scopeId);
+  }, [scopeId, languagePaths, registerLanguagePaths, unregisterLanguagePaths]);
 
   // A record inside a hidden or locked `<CmsGroup>` follows the group, the same
   // way content blocks do. Registered under the binding id because that is what

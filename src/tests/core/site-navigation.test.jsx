@@ -27,6 +27,7 @@ import { EditableRegion } from "../../core/EditableRegion.jsx";
 import { useCmsContent } from "../../core/hooks/use-cms-content.js";
 import { useCmsRoute } from "../../core/hooks/use-cms-route.js";
 import { createCmsConfig } from "../../shared/config.js";
+import { useCmsContext } from "../../shared/state/cms-context.js";
 
 const BASE = "https://api.test";
 
@@ -160,6 +161,65 @@ describe("the route as the hooks see it", () => {
     nav.pathname = "/en/news/42";
     const { container } = render(tree({ config }, <Switch />));
     expect(container.textContent).toBe("/news/42");
+  });
+
+  describe("on a page that is a collection record", () => {
+    /** Declares the paths a record shown on the page would. */
+    function Record({ paths }) {
+      const { registerLanguagePaths, unregisterLanguagePaths } = useCmsContext();
+      React.useEffect(() => {
+        registerLanguagePaths("record", paths);
+        return () => unregisterLanguagePaths("record");
+      }, [paths, registerLanguagePaths, unregisterLanguagePaths]);
+      return null;
+    }
+    function Switch() {
+      const { path, localePath } = useCmsRoute();
+      return <span>{`${localePath(path, "tr")}|${localePath(path, "en")}|${localePath("/about", "en")}`}</span>;
+    }
+    const config = createCmsConfig({ baseUrl: BASE, locales: ["tr", "en"] });
+
+    it("switches to the translation's own address", () => {
+      nav.pathname = "/news/yeni-urun";
+      const paths = { tr: "/news/yeni-urun", en: "/news/new-product" };
+      const { container } = render(tree({ config }, <><Record paths={paths} /><Switch /></>));
+      expect(container.textContent).toBe("/news/yeni-urun|/en/news/new-product|/en/about");
+    });
+
+    it("switches to that language's home when the record has no translation", () => {
+      nav.pathname = "/news/yeni-urun";
+      const { container } = render(tree({ config }, <><Record paths={{ tr: "/news/yeni-urun" }} /><Switch /></>));
+      expect(container.textContent).toBe("/news/yeni-urun|/en|/en/about");
+    });
+
+    it("leaves a component that only reads the route alone when the record registers", () => {
+      nav.pathname = "/news/yeni-urun";
+      let renders = 0;
+      function RouteReader() {
+        renders += 1;
+        const { slug } = useCmsRoute();
+        return <i>{slug}</i>;
+      }
+      const paths = { tr: "/news/yeni-urun", en: "/news/new-product" };
+      const { container } = render(tree({ config }, <><RouteReader /><Record paths={paths} /><Switch /></>));
+      expect(renders).toBe(1);
+      expect(container.querySelector("span")?.textContent).toContain("/en/news/new-product");
+    });
+
+    it("gives a switcher mounted after the record its address at once", () => {
+      nav.pathname = "/news/yeni-urun";
+      const paths = { tr: "/news/yeni-urun", en: "/news/new-product" };
+      const { container, rerender } = render(tree({ config }, <Record paths={paths} />));
+      rerender(tree({ config }, <><Record paths={paths} /><Switch /></>));
+      expect(container.querySelector("span")?.textContent).toBe("/news/yeni-urun|/en/news/new-product|/en/about");
+    });
+
+    it("ignores a record that is not the page on screen", () => {
+      nav.pathname = "/news/yeni-urun";
+      const paths = { tr: "/news/baska", en: "/news/other" };
+      const { container } = render(tree({ config }, <><Record paths={paths} /><Switch /></>));
+      expect(container.textContent).toBe("/news/yeni-urun|/en/news/yeni-urun|/en/about");
+    });
   });
 
   it("matches the slug the backend stores, in the site's language", () => {

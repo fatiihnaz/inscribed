@@ -358,6 +358,7 @@ export function CmsProvider({
       itemSchemas: new Map(),
       choiceSources: new Map(),
       editorVisibility: new Map(),
+      languagePaths: new Map(),
     })),
   );
 
@@ -534,6 +535,32 @@ export function CmsProvider({
         const editorVisibility = new Map(s.editorVisibility);
         editorVisibility.delete(blockPath);
         return { ...s, editorVisibility };
+      });
+    },
+    [registryStore],
+  );
+
+  const registerLanguagePaths = useCallback(
+    /** @param {string} id @param {Record<string, string>} paths */
+    (id, paths) => {
+      registryStore.set((s) => {
+        if (s.languagePaths.get(id) === paths) return s;
+        const languagePaths = new Map(s.languagePaths);
+        languagePaths.set(id, paths);
+        return { ...s, languagePaths };
+      });
+    },
+    [registryStore],
+  );
+
+  const unregisterLanguagePaths = useCallback(
+    /** @param {string} id */
+    (id) => {
+      registryStore.set((s) => {
+        if (!s.languagePaths.has(id)) return s;
+        const languagePaths = new Map(s.languagePaths);
+        languagePaths.delete(id);
+        return { ...s, languagePaths };
       });
     },
     [registryStore],
@@ -1330,6 +1357,8 @@ export function CmsProvider({
       unregisterChoiceSource,
       registerEditorVisibility,
       unregisterEditorVisibility,
+      registerLanguagePaths,
+      unregisterLanguagePaths,
 
       onAfterSave: stableOnAfterSave,
       onAfterCollectionSave: stableOnAfterCollectionSave,
@@ -1374,6 +1403,8 @@ export function CmsProvider({
       unregisterChoiceSource,
       registerEditorVisibility,
       unregisterEditorVisibility,
+      registerLanguagePaths,
+      unregisterLanguagePaths,
       stableOnAfterSave,
       stableOnAfterCollectionSave,
       stableGetAccessToken,

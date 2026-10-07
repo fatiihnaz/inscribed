@@ -99,6 +99,10 @@ import { createContext, useContext } from "react";
  *   default admin gate. These props are runtime-only (not in the manifest), so
  *   this is how the drawer learns them. `"hidden"` drops the block from the
  *   drawer; `"readonly"` keeps the card but locks it.
+ * @property {Map<string, Record<string, string>>} languagePaths
+ *   Where a record shown on the page lives in each language, prefix-free. A
+ *   record's slug differs per language, so this is what `useCmsRoute` switches
+ *   to instead of swapping the prefix, once the record is the page on screen.
  */
 
 /**
@@ -185,6 +189,8 @@ import { createContext, useContext } from "react";
  * @property {(blockPath: string) => void} unregisterChoiceSource
  * @property {(blockPath: string, mode: "hidden"|"readonly") => void} registerEditorVisibility
  * @property {(blockPath: string) => void} unregisterEditorVisibility
+ * @property {(id: string, paths: Record<string, string>) => void} registerLanguagePaths
+ * @property {(id: string) => void} unregisterLanguagePaths
  *
  * @property {(slug: string, locale?: string|null) => Promise<void>} onAfterSave
  *   Called after a successful save, once per slug and language written,

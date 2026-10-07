@@ -88,6 +88,24 @@ export function recordPath(template, slug) {
   return template.replace(/\[[^\]]+\]/, encodeURIComponent(slug));
 }
 
+/**
+ * Where a record and its translations live, by language, prefix-free. Null for
+ * a record with no language, whose address is the same in every one.
+ *
+ * @param {string} template
+ * @param {{ slug: string, locale?: string|null, translations?: { locale: string|null, slug: string }[] }} item
+ * @returns {Record<string, string> | null}
+ */
+export function recordLanguagePaths(template, item) {
+  if (!item.locale) return null;
+  /** @type {Record<string, string>} */
+  const paths = { [item.locale]: recordPath(template, item.slug) };
+  for (const translation of item.translations ?? []) {
+    if (translation.locale && translation.slug) paths[translation.locale] = recordPath(template, translation.slug);
+  }
+  return paths;
+}
+
 /** Stable empty list, so callers can put the result straight in a dep array. */
 const NO_LOCALES = /** @type {string[]} */ ([]);
 

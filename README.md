@@ -1516,6 +1516,16 @@ module.exports = {
 };
 ```
 
+#### The language switcher
+
+`useCmsRoute().localePath(path, "en")` swaps the prefix, which is right for a
+page and wrong for a record. On a record's page (its collection has an
+`seo.path`) it goes to the translation's address instead, or to that language's
+home page when there is none. The switcher's code stays as it is: the record on
+the page tells it where its translations live. That happens once the page
+hydrates, so the server-rendered link still swaps the prefix; the redirect above
+is what a crawler following it lands on.
+
 ### Theming
 
 The admin panel and the page-side editing affordances are styled through a set

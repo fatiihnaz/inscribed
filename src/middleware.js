@@ -26,8 +26,9 @@ const PATHNAME_HEADER = "x-pathname";
  *    disagree about which language the page is in.
  *
  * 2. Rewrites an unprefixed path onto the default locale, so `/about` is served
- *    by `/[locale]/about` without `tr` ever reaching the address bar. Paths that
- *    already carry a known locale pass straight through.
+ *    by `/[locale]/about` without `tr` ever reaching the address bar. Paths under
+ *    another language's prefix pass straight through, and the default
+ *    language's own prefix (`/tr/about`) redirects to the unprefixed path.
  *
  * Pass no `locales` and step 2 is skipped entirely: a single-language site gets
  * exactly the header-only middleware it had before.
@@ -62,6 +63,13 @@ export function createCmsMiddleware(config = {}) {
     // already prefixed" can't drift between the rewrite and the render.
     const { locale } = resolveCmsRoute(pathname, { locales, defaultLocale });
     if (pathname === `/${locale}` || pathname.startsWith(`/${locale}/`)) {
+      // The default language lives at the root, so its prefixed form would be a
+      // second address for every page.
+      if (locale === defaultLocale) {
+        const url = req.nextUrl.clone();
+        url.pathname = pathname.slice(locale.length + 1) || "/";
+        return NextResponse.redirect(url, 308);
+      }
       return NextResponse.next({ request: { headers } });
     }
 

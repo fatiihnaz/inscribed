@@ -1081,6 +1081,10 @@ The matcher leaves out paths with a dot in them, so `public/` files such as
 the default language and answered with a 404. A page whose slug has a dot in it
 would be left out the same way; spell those out in the matcher if you have any.
 
+A request for the default language under its own prefix (`/tr/about`) is
+redirected to the unprefixed address with a 308, so each page has one address
+per language rather than two that serve the same content.
+
 Then move your routes under `app/[locale]/` and make that folder's layout the
 **root layout**, so the language is a segment param and nothing has to read the
 request to learn it:

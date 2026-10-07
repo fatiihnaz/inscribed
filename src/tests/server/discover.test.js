@@ -283,3 +283,84 @@ describe("discoverManifests", () => {
     expect(warnings.some((w) => w.message.includes("export `locales` from cms.config.js"))).toBe(true);
   });
 });
+
+describe("page metadata", () => {
+  const appRoot = path.join(fixturesRoot, "discover-seo");
+
+  it("gives a page the seo blocks its CmsPage.metadata call declares, after its regions", async () => {
+    const { manifests } = await discoverManifests({ appRoot, locales: ["tr", "en"] });
+    const about = manifests.find((m) => m.slug === "/hakkinda");
+
+    expect(about.blocks.map((b) => [b.blockPath, b.blockType])).toEqual([
+      ["body", "LongText"],
+      ["seo.title", "ShortText"],
+      ["seo.description", "LongText"],
+      ["seo.image", "Image"],
+      ["seo.noindex", "Bool"],
+    ]);
+    const seo = Object.fromEntries(about.blocks.map((b) => [b.blockPath, b]));
+    expect(seo["seo.title"].defaultValue).toBe("Hakkında");
+    expect(seo["seo.title"].defaultValues).toEqual({ tr: "Hakkında", en: "About" });
+    expect(seo["seo.description"].defaultValue).toBe("");
+    expect(seo["seo.image"].defaultValue).toEqual({ src: "/og.png", alt: "Bina" });
+    expect(seo["seo.noindex"].defaultValue).toBe(true);
+  });
+
+  it("gives a page with no regions rows of its own through the call alone", async () => {
+    const { manifests } = await discoverManifests({ appRoot, locales: ["tr", "en"] });
+    const contact = manifests.find((m) => m.slug === "/iletisim");
+    expect(contact.blocks.map((b) => b.blockPath)).toEqual(["seo.title", "seo.description", "seo.image", "seo.noindex"]);
+    expect(contact.blocks[2].defaultValue).toEqual({ src: "", alt: "" });
+  });
+
+  it("refuses a slug that is not the page's own", async () => {
+    const { manifests, errors, warnings } = await discoverManifests({ appRoot, locales: ["tr", "en"] });
+
+    expect(manifests.find((m) => m.slug === "/yanlis")).toBeUndefined();
+    expect(manifests.find((m) => m.slug === "/baska")).toBeUndefined();
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toContain('CmsPage.metadata("/baska")');
+    expect(errors[0].message).toContain('Write "/yanlis"');
+    expect(warnings.some((w) => w.message.includes('not "titel"'))).toBe(true);
+  });
+
+  it("leaves a collection detail route's metadata call alone", async () => {
+    const { manifests } = await discoverManifests({ appRoot, locales: ["tr", "en"] });
+    expect(manifests.find((m) => m.slug === "/news/[slug]")).toBeUndefined();
+  });
+});
+
+describe("page metadata, other ways of writing it", () => {
+  const appRoot = path.join(fixturesRoot, "discover-seo");
+
+  it("finds the call inside a generateMetadata of the page's own, and behind satisfies", async () => {
+    const { manifests } = await discoverManifests({ appRoot, locales: ["tr", "en"] });
+    const wrapped = manifests.find((m) => m.slug === "/sarili");
+    expect(wrapped.blocks.map((b) => b.blockPath)).toEqual(["seo.title", "seo.description", "seo.image", "seo.noindex"]);
+    expect(wrapped.blocks[0].defaultValue).toBe("Sarılı");
+    expect(manifests.find((m) => m.slug === "/ts")).toBeDefined();
+  });
+
+  it("says so when the slug is not a literal", async () => {
+    const { manifests, warnings } = await discoverManifests({ appRoot, locales: ["tr", "en"] });
+    expect(manifests.find((m) => m.slug === "/degisken")).toBeUndefined();
+    expect(warnings.some((w) => w.message.includes("takes the page's slug as a string literal"))).toBe(true);
+  });
+});
+
+describe("page metadata, what counts as the call", () => {
+  const appRoot = path.join(fixturesRoot, "discover-seo");
+
+  it("reads a template literal slug, and only the CmsPage call", async () => {
+    const { manifests, errors } = await discoverManifests({ appRoot, locales: ["tr", "en"] });
+    expect(manifests.find((m) => m.slug === "/sablon")).toBeDefined();
+    expect(manifests.find((m) => m.slug === "/yabanci")).toBeDefined();
+    expect(errors.some((e) => e.message.includes("/share.png"))).toBe(false);
+  });
+
+  it("asks for a literal only in a page file", async () => {
+    const { warnings } = await discoverManifests({ appRoot, locales: ["tr", "en"] });
+    const literal = warnings.filter((w) => w.message.includes("takes the page's slug as a string literal"));
+    expect(literal.map((w) => path.basename(path.dirname(w.file)))).toEqual(["degisken"]);
+  });
+});

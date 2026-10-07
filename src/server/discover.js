@@ -52,6 +52,8 @@ import path from "node:path";
 
 import { parseSync } from "oxc-parser";
 
+import { SEO_BLOCKS } from "../shared/seo.js";
+
 /**
  * @import { SyncManifestRequest, ManifestBlockItem, BlockType, DeclarableBlockType } from "../shared/contracts/schemas.js"
  */
@@ -101,6 +103,9 @@ const UNRESOLVED = Symbol("unresolved");
  *   the way React context does at runtime. Sites outside a group are recorded
  *   too: without them "rendered unprefixed" and "imported but never rendered"
  *   are indistinguishable, and only the latter may inherit the caller's prefix.
+ * @property {{ slug: string, regions: DiscoveredRegion[], loc: { line: number, column: number } | null } | null} pageSeo
+ *   The first `CmsPage.metadata("/slug", defaults)` call in the file: the slug
+ *   it names and the `seo.*` blocks it declares. Read on page files only.
  */
 
 /**
@@ -114,6 +119,8 @@ const UNRESOLVED = Symbol("unresolved");
  * @typedef {Object} DiscoveryResult
  * @property {SyncManifestRequest[]} manifests
  * @property {DiscoveryWarning[]} warnings
+ * @property {DiscoveryWarning[]} errors
+ *   Mistakes that would sync rows nothing reads, so the CLI refuses to push.
  * @property {Map<string, string>} roots
  *   Slug -> the page file it was derived from. Diagnostics only, kept off
  *   `manifests` because those are the request bodies sent to the backend.
@@ -176,6 +183,8 @@ export async function discoverManifests(options = {}) {
   const bySlug = new Map();
   /** @type {Map<string, string>} */
   const roots = new Map();
+  /** @type {DiscoveryWarning[]} */
+  const errors = [];
 
   // Page-scoped regions: walk every page file, follow imports DFS, file each
   // non-global region under the slug derived from that file's path. Global
@@ -211,6 +220,20 @@ export async function discoverManifests(options = {}) {
       if (region.scope === "global") continue;
       if (blockMap.has(region.blockPath)) continue;
       blockMap.set(region.blockPath, regionToEntry(region, nextSortOrder++));
+    }
+
+    const seo = analyses.get(rootFile)?.pageSeo;
+    if (!seo) continue;
+    if (seo.slug !== slug) {
+      errors.push({
+        file: rootFile,
+        loc: seo.loc,
+        message: `CmsPage.metadata("${seo.slug}") is in the page whose slug is "${slug}". Write "${slug}": the slug is how the page finds its seo blocks.`,
+      });
+      continue;
+    }
+    for (const region of seo.regions) {
+      if (!blockMap.has(region.blockPath)) blockMap.set(region.blockPath, regionToEntry(region, nextSortOrder++));
     }
   }
 
@@ -249,7 +272,7 @@ export async function discoverManifests(options = {}) {
   }
   manifests.sort((a, b) => a.slug.localeCompare(b.slug));
 
-  return { manifests, warnings, roots };
+  return { manifests, warnings, errors, roots };
 }
 
 /**
@@ -659,6 +682,7 @@ async function analyzeFile(filePath, aliases, locales) {
     importBindings: new Map(),
     regions: [],
     componentRefs: [],
+    pageSeo: null,
   };
   /** @type {DiscoveryWarning[]} */
   const warnings = [];
@@ -731,6 +755,11 @@ async function analyzeFile(filePath, aliases, locales) {
         }
         case "CallExpression": {
           const callee = node.callee;
+          if (callee.type === "MemberExpression") {
+            const seo = readPageSeo(node, filePath, warnings, locator, locales);
+            if (seo && !analysis.pageSeo) analysis.pageSeo = seo;
+            return;
+          }
           if (callee.type !== "Identifier") return;
 
           // useCmsBlock("path", { blockType, defaultValue }): read-only block
@@ -833,6 +862,62 @@ async function analyzeFile(filePath, aliases, locales) {
   });
 
   return { analysis, warnings };
+}
+
+/**
+ * `CmsPage.metadata("/slug", defaults)`, read as the page's `seo.*` blocks
+ * wherever the page file calls it: exported as is, or inside a
+ * `generateMetadata` of its own. Named as the README names it, since nothing
+ * else here can tell the factory's `CmsPage` from any other `.metadata`.
+ *
+ * @param {*} call   A `CallExpression` on a member.
+ * @param {string} filePath
+ * @param {DiscoveryWarning[]} warnings
+ * @param {Locator} locator
+ * @param {string[]} [locales]
+ * @returns {FileAnalysis["pageSeo"]}
+ */
+function readPageSeo(call, filePath, warnings, locator, locales) {
+  const callee = call.callee;
+  if (callee.computed || callee.property?.name !== "metadata") return null;
+  if (callee.object?.type !== "Identifier" || callee.object.name !== "CmsPage") return null;
+  const loc = locOf(call, locator);
+  const slug = evalLiteral(call.arguments[0]);
+  if (typeof slug !== "string") {
+    // A helper module wrapping the call is fine; a page file is where it had to be literal.
+    if (PAGE_FILES.includes(path.basename(filePath))) {
+      warnings.push({
+        file: filePath,
+        loc,
+        message: 'CmsPage.metadata(...) takes the page\'s slug as a string literal ("/about"); cms-sync reads no other form, so this page gets no seo blocks.',
+      });
+    }
+    return null;
+  }
+
+  const declaration = `CmsPage.metadata("${slug}", ...)`;
+  let defaults = call.arguments[1] ? evalLiteral(call.arguments[1]) : {};
+  if (defaults === UNRESOLVED || defaults === null || typeof defaults !== "object" || Array.isArray(defaults)) {
+    warnings.push({ file: filePath, loc, message: `${declaration} defaults must be a static object literal. Syncing the seo blocks empty.` });
+    defaults = {};
+  }
+  const known = SEO_BLOCKS.map((block) => block.key);
+  const stray = Object.keys(defaults).filter((key) => !known.includes(key));
+  if (stray.length > 0) {
+    warnings.push({ file: filePath, loc, message: `${declaration} takes ${quoted(known)}, not ${quoted(stray)}. Ignoring those.` });
+  }
+
+  return {
+    slug,
+    loc,
+    regions: SEO_BLOCKS.map((block) => ({
+      blockPath: block.blockPath,
+      blockType: block.blockType,
+      ...localeSeeds(defaults[block.key] ?? block.empty, block.empty, locales, {
+        declaration, blockType: block.blockType, filePath, loc, warnings,
+      }),
+    })),
+  };
 }
 
 /**

@@ -2367,7 +2367,7 @@ function GroupCard({
         <span style={groupIconStyle} aria-hidden="true">
           <Folder size={13} />
         </span>
-        <span style={groupNameStyle}>{groupName}</span>
+        <span style={groupNameStyle}>{groupName === "seo" ? t("seo.group") : groupName}</span>
         <span style={groupCountStyle}>
           {blocks.length}
           {dirty ? <span style={groupDirtyDotStyle} aria-label={t("drawer.unsavedDot")} /> : null}

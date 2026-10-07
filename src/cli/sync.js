@@ -56,17 +56,25 @@ const appRoot = args.appRoot
   ? path.resolve(process.cwd(), args.appRoot)
   : path.resolve(process.cwd(), "app");
 
-const { manifests, warnings, roots } = await discoverManifests({
+const { manifests, warnings, errors, roots } = await discoverManifests({
   appRoot,
   globalSlug: args.globalSlug,
   locales,
 });
 
+/** @param {{ file: string, loc: { line: number, column: number } | null }} w */
+const whereOf = (w) => (w.loc
+  ? `${path.relative(process.cwd(), w.file)}:${w.loc.line}:${w.loc.column}`
+  : path.relative(process.cwd(), w.file));
+
 for (const w of warnings) {
-  const where = w.loc
-    ? `${path.relative(process.cwd(), w.file)}:${w.loc.line}:${w.loc.column}`
-    : path.relative(process.cwd(), w.file);
-  console.warn(`[inscribed-discover] ${where}\n  ${w.message}`);
+  console.warn(`[inscribed-discover] ${whereOf(w)}\n  ${w.message}`);
+}
+
+if (errors.length > 0) {
+  for (const e of errors) console.error(`[inscribed-discover] ${whereOf(e)}\n  ${e.message}`);
+  console.error("[inscribed-discover] Nothing was pushed.");
+  process.exit(1);
 }
 
 // An empty manifest is almost always a discovery mistake (wrong --app-root, a

@@ -53,6 +53,9 @@ import { localizePath, resolveCmsRoute } from "../shared/route.js";
 import { buildListParams } from "../collections/params.js";
 import { publicAuth } from "../defaults/auth.js";
 import { handleSsrFailure } from "./ssr-failure.js";
+import {
+  absoluteUrl, fillSlug, imageOf, languageLinks, pageSeoFields, seedIn, seoMetadata, textOf,
+} from "../shared/seo.js";
 
 // Re-exported here (not from the client entry) because config factories run in
 // server modules (app/lib/cms.jsx), and the index bundle's "use client" would
@@ -197,7 +200,12 @@ function readRequestLocale() {
 /**
  * @param {CreateCmsPageOptions} options
  * @returns {{
- *   CmsPage: (props: { locale?: string, children: React.ReactNode }) => Promise<React.ReactElement>,
+ *   CmsPage: ((props: { locale?: string, children: React.ReactNode }) => Promise<React.ReactElement>) & {
+ *     metadata: (slug: string, defaults?: { title?: *, description?: *, image?: *, noindex?: * }) =>
+ *       (props: { params?: * }, parent?: import("next").ResolvingMetadata) => Promise<import("next").Metadata>,
+ *     siteMetadata: (options?: { siteName?: string | Record<string, string>, titleTemplate?: string | Record<string, string> }) =>
+ *       (props: { params?: * }) => Promise<import("next").Metadata>,
+ *   },
  *   localePath: (slug: string, locale?: string) => string,
  *   getCmsRoute: () => Promise<import("../shared/route.js").CmsRoute>,
  *   resolveCollectionItem: (key: string, slug: string, options?: import("./get-content.js").GetCmsContentOptions & { path?: (slug: string) => string }) => Promise<import("../shared/contracts/schemas.js").CollectionItemResponse>,
@@ -278,7 +286,22 @@ export function createCmsPage(options) {
     }
   }
 
+  // Once per request: the layout and the metadata helpers all read the site,
+  // and an outage should reach `onSsrError` once, not once per reader.
+  const readSiteOnce = cache(readSite);
   const localized = normalizedConfig.locales.length > 0;
+
+  /**
+   * The language a metadata helper renders in, or `undefined` for a segment
+   * value that is not one, which `<CmsPage>` answers with a 404 anyway.
+   *
+   * @param {Record<string, *>} params
+   * @returns {string | null | undefined}
+   */
+  function metadataLocale(params) {
+    if (!localized) return null;
+    return normalizedConfig.locales.includes(params.locale) ? params.locale : undefined;
+  }
 
   /**
    * @param {{ locale?: string, children: React.ReactNode }} props
@@ -309,7 +332,7 @@ export function createCmsPage(options) {
     // sit in front of every content request.
     const [session, initialSite] = await Promise.all([
       getSession(),
-      readSite(resolvedLocale),
+      readSiteOnce(resolvedLocale),
     ]);
 
     return (
@@ -324,6 +347,79 @@ export function createCmsPage(options) {
         {children}
       </Provider>
     );
+  }
+
+  /**
+   * A whole `generateMetadata` for a page whose title, description, share image
+   * and indexing editors manage from the drawer. `cms-sync` reads this call and
+   * gives the page `seo.title`, `seo.description`, `seo.image` and `seo.noindex`,
+   * seeded from `defaults` (one value or one per language).
+   *
+   * The slug is written out because `generateMetadata` is never told the page's
+   * address, only its params; `cms-sync` fails when it differs from the one the
+   * file derives.
+   *
+   * @param {string} slug   The page's slug, as `cms-sync --dry-run` lists it.
+   * @param {{ title?: *, description?: *, image?: *, noindex?: boolean | Record<string, boolean> }} [defaults]
+   * @returns {(props: { params?: * }, parent?: Promise<*>) => Promise<Record<string, *>>}
+   */
+  function pageMetadata(slug, defaults) {
+    if (typeof slug !== "string" || !slug.startsWith("/")) {
+      throw new Error(`CmsPage.metadata: the first argument is the page's slug, a path starting with "/". Got ${JSON.stringify(slug)}.`);
+    }
+    return async function generateMetadata(props, parent) {
+      const params = (await props?.params) ?? {};
+      const locale = metadataLocale(params);
+      if (locale === undefined) return {};
+
+      const [site, inherited] = await Promise.all([readSiteOnce(locale), parent]);
+      const page = site.pages.find((entry) => entry.slug === slug);
+      warnIfUnsynced(slug, page, site);
+      if (localized) warnIfRelativeLinks(normalizedConfig, inherited);
+
+      const path = fillSlug(slug, params);
+      return seoMetadata({
+        fields: pageSeoFields(page?.blocks, defaults, locale, normalizedConfig.locales),
+        canonical: absoluteUrl(localePath(path, locale ?? undefined), normalizedConfig.siteUrl),
+        languages: localized ? languageLinks(path, normalizedConfig) : undefined,
+        // The home page's title is the site's own, so the template would name the site twice.
+        absoluteTitle: slug === "/",
+        inherited: inherited?.openGraph,
+      });
+    };
+  }
+
+  /**
+   * A whole `generateMetadata` for the root layout: `metadataBase` from
+   * `siteUrl`, the title template, and the home page's `seo.image` as the share
+   * image of every page that has none of its own.
+   *
+   * @param {{ siteName?: string | Record<string, string>, titleTemplate?: string | Record<string, string> }} [options]
+   *   `titleTemplate` defaults to `"%s | {siteName}"`.
+   * @returns {(props: { params?: * }) => Promise<Record<string, *>>}
+   */
+  function siteMetadata(options) {
+    return async function generateMetadata(props) {
+      const params = (await props?.params) ?? {};
+      const locale = metadataLocale(params);
+      if (locale === undefined) return {};
+
+      const name = textOf(seedIn(options?.siteName, locale, normalizedConfig.locales));
+      const template = seedIn(options?.titleTemplate, locale, normalizedConfig.locales) ?? `%s | ${name}`;
+      const site = await readSiteOnce(locale);
+      const home = site.pages.find((entry) => entry.slug === "/");
+      const image = imageOf(home?.blocks.find((block) => block.blockPath === "seo.image")?.value);
+
+      return {
+        ...(normalizedConfig.siteUrl ? { metadataBase: new URL(normalizedConfig.siteUrl) } : null),
+        ...(name ? { title: { default: name, template } } : null),
+        openGraph: {
+          type: "website",
+          ...(name ? { siteName: name } : null),
+          ...(image ? { images: [image] } : null),
+        },
+      };
+    };
   }
 
   /**
@@ -569,6 +665,9 @@ export function createCmsPage(options) {
     };
   }
 
+  CmsPage.metadata = pageMetadata;
+  CmsPage.siteMetadata = siteMetadata;
+
   const serverCollections = collections
     ? createServerCollections(serverConfig, collections, onSsrError)
     : null;
@@ -792,6 +891,41 @@ async function canonicalPathFor(canonicalSlug) {
 let warnedMissingRedirectPath = false;
 let warnedDerivedCanonical = false;
 let warnedStaticParamsCap = false;
+let warnedRelativeLinks = false;
+/** @type {Set<string>} */
+const warnedUnsynced = new Set();
+
+/**
+ * @param {string} slug
+ * @param {import("../shared/contracts/schemas.js").SitePageContent | undefined} page
+ * @param {import("../core/site-blocks.js").SiteContent} site
+ */
+function warnIfUnsynced(slug, page, site) {
+  // An empty site is a failed read, which has already said so.
+  if (process.env.NODE_ENV === "production" || site.pages.length === 0 || warnedUnsynced.has(slug)) return;
+  if (page?.blocks.some((block) => block.blockPath.startsWith("seo."))) return;
+  warnedUnsynced.add(slug);
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[inscribed] CmsPage.metadata("${slug}"): the backend holds no seo blocks for this page, so the ` +
+      "defaults in code are showing. Run cms-sync, and compare the slug with what cms-sync --dry-run lists.",
+  );
+}
+
+/**
+ * @param {CmsConfig} config
+ * @param {Record<string, *> | null | undefined} inherited   The parent segments' resolved metadata.
+ */
+function warnIfRelativeLinks(config, inherited) {
+  if (config.siteUrl || inherited?.metadataBase || warnedRelativeLinks) return;
+  if (process.env.NODE_ENV === "production") return;
+  warnedRelativeLinks = true;
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[inscribed] hreflang links are relative, and search engines only read absolute ones. " +
+      "Set siteUrl in createCmsConfig (or metadataBase in the root layout).",
+  );
+}
 
 /**
  * Where a record canonically lives: the redirect target when a slug turns out

@@ -34,6 +34,7 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
   - [Collections](#collections)
   - [Editing & drafts](#editing--drafts)
   - [Localization](#localization)
+  - [Search & metadata](#search--metadata)
   - [Theming](#theming)
   - [Panel language](#panel-language)
   - [Access control](#access-control)
@@ -133,6 +134,7 @@ export const cmsConfig = createCmsConfig({
   baseUrl: process.env.CMS_URL,          // backend root, no trailing slash
   cdnUrl: process.env.CMS_CDN_URL,       // optional: image-upload root
   clientKey: process.env.CMS_CLIENT_KEY, // optional: this site's Client key on the reference backend; enables built-in auth + anonymous published reads
+  siteUrl: process.env.SITE_URL,         // optional: public origin, for absolute canonical and hreflang links
   // globalSlug: "__global",             // optional: slug for site-wide blocks
   // theme: { accent: "#3b82f6" },       // optional: override the panel palette (see Theming)
 });
@@ -352,8 +354,10 @@ where the rest of the row's shape is:
 the list does not do.
 
 **A block with nothing on the page.** For a value with no presence on screen at
-all (a document title, a meta tag, a setting that only reaches an API call),
-declare it from the hook instead, which has no element to wrap:
+all (a setting that only reaches an API call, say), declare it from the hook
+instead, which has no element to wrap. A page's title and description have a
+helper of their own, which reaches the document head on the server; see
+[Search & metadata](#search--metadata).
 
 ```jsx
 const { value: apiKey } = useCmsBlock("settings.key", {
@@ -1355,6 +1359,101 @@ whatever someone has written a catalog for.
 Omit `locales` and none of this engages: no `locale` reaches the wire, tags keep
 their pre-i18n shape, and the backend answers with the Client's default language.
 
+### Search & metadata
+
+How a page appears in search results and in shared links. Every part below is
+optional, and each reads the content the site already brought, so none of them
+costs a request of its own.
+
+**The site's address.** Search engines want canonical links and hreflang
+**absolute**, so the config names the site's public origin:
+
+```js
+// app/lib/cms-config.js
+export const cmsConfig = createCmsConfig({
+  baseUrl: process.env.CMS_URL,
+  locales,
+  siteUrl: process.env.SITE_URL, // "https://example.com"
+});
+```
+
+Without it canonical links stay relative, and so do hreflang links, which
+Google ignores (dev warns).
+
+#### The root layout
+
+```jsx
+// app/[locale]/layout.jsx
+import { CmsPage } from "../lib/cms.jsx";
+
+export const generateMetadata = CmsPage.siteMetadata({ siteName: "Acme" });
+```
+
+It sets `metadataBase` from `siteUrl`, the title template (`%s | Acme`, or pass
+`titleTemplate`), `og:site_name`, and the home page's share image (below) as the
+image of every page without one of its own. `siteName` also takes one value per
+language: `{ tr: "Acme", en: "Acme Inc." }`. It replaces the layout's static
+`metadata` export, since Next takes one or the other per segment.
+
+#### A page's own fields
+
+```jsx
+// app/[locale]/hakkinda/page.jsx
+import { CmsPage } from "../../lib/cms.jsx";
+
+export const generateMetadata = CmsPage.metadata("/hakkinda", {
+  title: { tr: "Hakkında", en: "About" },
+  description: { tr: "Bölümün tarihi ve kadrosu.", en: "The department's history and staff." },
+});
+```
+
+`cms-sync` reads the call, exported as it is or inside a `generateMetadata` of
+the page's own, and its slug and defaults have to be **plain literals**, as a
+region's props do: discovery reads the source rather than running it. The page
+gets four blocks, seeded from the defaults (one value, or one per language as
+with `defaultValue`):
+
+| Block | Type | Becomes |
+| ----- | ---- | ------- |
+| `seo.title` | `ShortText` | `<title>` (the browser tab and the search result) and `og:title` |
+| `seo.description` | `LongText` | the meta description and `og:description` |
+| `seo.image` | `Image` | `og:image`, with its alt text |
+| `seo.noindex` | `Bool` | `robots: noindex, follow` |
+
+Editors find them in the page's SEO group in the drawer, one set per language,
+with drafts and publish like any block; a publish refreshes the page's head with
+its content. The drawer counts the title and the description, and turning
+noindex on asks first, since a page taken out of search comes back only after
+the next crawl.
+
+The slug is written out because `generateMetadata` is never told the page's
+address, only its params. `cms-sync` fails when it differs from the slug the
+file derives (`cms-sync --dry-run` lists them), rather than syncing blocks that
+nothing reads.
+
+**When a field is empty**, it falls back in this order, and never to another
+page's value:
+
+| Field | Empty in the CMS | Empty in code too |
+| ----- | ---------------- | ----------------- |
+| Title | the code's default for that language | the layout's `title.default` (the site name) |
+| Description | the code's default | none: the tag is dropped and Google writes its own snippet |
+| Image | the code's default | the layout's image (the home page's, with `siteMetadata`) |
+| Noindex | the code's default | indexable |
+
+A description falls back to nothing rather than to the site's because the same
+description on every page helps no search result. The defaults in code seed the
+blocks on the first sync only, as `defaultValue` does: changing them later
+leaves what editors wrote alone (see `--reseed` under [CLI](#cli-cms-sync)).
+
+The page also gets its canonical link and hreflang for every language, with
+`x-default` on the default one. The home page's title is used whole, outside the
+template, which would name the site twice. A dynamic-segment page
+(`/search/[q]`) shares one set of fields across its URLs, as it shares its
+content, and builds its links from the route's params. A page that doesn't call
+`CmsPage.metadata` keeps whatever `metadata` it exports, and gets no canonical
+link.
+
 ### Theming
 
 The admin panel and the page-side editing affordances are styled through a set
@@ -2061,7 +2160,9 @@ Discovers `<EditableRegion>` / `<EditableChoice>` / `<EditableList>` (and `useCm
 `app/`, rooted at each `page.{js,jsx,ts,tsx}` file, and pushes the manifest to
 the backend. When discovery finds no regions at all it exits with an error
 instead of pushing, since reconciling against an empty manifest soft-deletes
-every remote slug.
+every remote slug. It also gives each page that calls
+`CmsPage.metadata("/slug", ...)` the page's `seo.*` blocks, and refuses to push
+when that slug is not the one the file derives.
 
 ```
 cms-sync [options]

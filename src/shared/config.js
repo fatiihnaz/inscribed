@@ -66,6 +66,9 @@ import { DEFAULT_ADMIN_LOCALE } from "./i18n/default-locale.js";
  *   render and the editor's read in the browser both go page by page and never
  *   ask for the whole site. Null otherwise, which is the normal case; the
  *   reference backend answers the site in one request.
+ * @property {string|null} siteUrl
+ *   The site's public origin, no trailing slash. Search engines want canonical
+ *   and hreflang addresses absolute, and this is what they are built on.
  */
 
 /**
@@ -81,6 +84,7 @@ import { DEFAULT_ADMIN_LOCALE } from "./i18n/default-locale.js";
  * @param {Record<string, string>} [opts.adminStrings]   Overrides for panel wording, keyed flat (`"drawer.save"`). Supply a few to reword, or a whole catalog to add a language. Anything omitted falls back to English.
  * @param {CmsTheme} [opts.theme]   Overrides for the admin/editing visual tokens (accent, fonts, radius, …). Unknown keys are dropped; unset keys keep their defaults.
  * @param {string[]} [opts.slugs]   Fallback for a backend with no `GET /cms/content/all`: the page slugs to read one by one. Setting it turns the whole-site read off on the server and in the browser alike. Leave it out against the reference backend.
+ * @param {string} [opts.siteUrl]   The site's public origin, e.g. `"https://example.com"`. Canonical and hreflang links are built on it.
  * @returns {CmsConfig}
  */
 
@@ -94,6 +98,7 @@ export function createCmsConfig({
   adminStrings,
   theme,
   slugs,
+  siteUrl,
   ...rest
 }) {
   if (!baseUrl || typeof baseUrl !== "string") {
@@ -128,7 +133,20 @@ export function createCmsConfig({
     adminStrings: normalizeAdminStrings(adminStrings),
     theme: normalizeTheme(theme),
     slugs: normalizeSlugs(slugs),
+    siteUrl: normalizeSiteUrl(siteUrl),
   });
+}
+
+/**
+ * @param {string | undefined | null} siteUrl
+ * @returns {string | null}
+ */
+function normalizeSiteUrl(siteUrl) {
+  if (siteUrl == null || siteUrl === "") return null;
+  if (typeof siteUrl !== "string" || !/^https?:\/\/[^/\s]+/.test(siteUrl)) {
+    throw new Error(`createCmsConfig: siteUrl must be an absolute http(s) address, got "${siteUrl}"`);
+  }
+  return siteUrl.replace(/\/+$/, "");
 }
 
 /**

@@ -35,6 +35,7 @@ import { FieldEditor } from "../editors/FieldEditor.jsx";
 import { FieldMessage } from "../editors/FieldMessage.jsx";
 import { ListEditor } from "../editors/ListEditor.jsx";
 import { BlockConflictNotice } from "./BlockConflictNotice.jsx";
+import { NoindexConfirm, SeoNote, isSeoBlock } from "./SeoNotes.jsx";
 import { TranslationPrompt } from "./TranslationPrompt.jsx";
 import { canEditInOtherLanguages } from "./translation-scope.js";
 import { CardHeader, disclosureBodyStyle, disclosureRowStyle, rowClassName, rowInsetStyle } from "./block-card-chrome.jsx";
@@ -189,6 +190,20 @@ function BlockRow({
   const isDirty = !readOnly && isBlockDirty(block, hasDraft, draft);
   const choices = useChoiceEntry(block.blockPath);
 
+  const seo = isSeoBlock(block.blockPath);
+  // Undoing a hidden page takes a crawl, so turning noindex on asks first.
+  const [confirmingNoindex, setConfirmingNoindex] = useState(false);
+  const change = block.blockPath === "seo.noindex"
+    ? (/** @type {*} */ next) => {
+      if (next === true && value !== true) {
+        setConfirmingNoindex(true);
+        return;
+      }
+      setConfirmingNoindex(false);
+      onChange(next);
+    }
+    : onChange;
+
   const restingOpen = density === "compact" ? false : defaultOpen;
   const [isOpen, setIsOpen] = useState(restingOpen);
   // The editor waits for the row's first opening and then stays: a shut rich
@@ -255,7 +270,7 @@ function BlockRow({
         isDirty={isDirty || translationsEdited}
         readOnly={readOnly}
         topLevel={topLevel}
-        displayPath={displayPath}
+        displayPath={seo ? t(block.blockPath) : displayPath}
         preview={blockPreview(block.blockType, value, t)}
         onHeaderClick={handleHeaderClick}
         onReset={() => {
@@ -287,8 +302,19 @@ function BlockRow({
             onTakeTheirs={onTakeTheirs}
             onKeepMine={onKeepMine}
           />
+          {block.blockPath === "seo.noindex" ? (
+            <NoindexConfirm
+              show={confirmingNoindex}
+              onConfirm={() => {
+                setConfirmingNoindex(false);
+                onChange(true);
+              }}
+              onCancel={() => setConfirmingNoindex(false)}
+            />
+          ) : null}
           <div style={editorSlotStyle}>
-            {editorMounted ? renderEditor(block, value, onChange, itemSchema, readOnly, t, choices) : null}
+            {editorMounted ? renderEditor(block, value, change, itemSchema, readOnly, t, choices) : null}
+            {seo && editorMounted ? <SeoNote block={block} value={value} /> : null}
             {/* The padlock in the gutter says the field is locked; this says
                 why, which is the part an editor can act on. */}
             {readOnly ? <FieldMessage>{t("block.readOnlyTitle")}</FieldMessage> : null}

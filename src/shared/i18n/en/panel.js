@@ -159,4 +159,23 @@ export const panel = Object.freeze({
   "changes.mark.quote": "quote",
   "changes.mark.listItem": "list item",
   "changes.mark.code": "code",
+
+  // A page's search fields.
+  "seo.group": "SEO",
+  "seo.title": "Title",
+  "seo.description": "Description",
+  "seo.image": "Share image",
+  "seo.noindex": "Hide from search engines",
+  "seo.titleNote_one": "{count} character. The browser tab and search results show it, with the site name after it.",
+  "seo.titleNote_other": "{count} characters. The browser tab and search results show it, with the site name after it.",
+  "seo.homeTitleNote_one": "{count} character. The home page's whole title: no site name is added.",
+  "seo.homeTitleNote_other": "{count} characters. The home page's whole title: no site name is added.",
+  "seo.descriptionNote": "{count} / 160 characters. Search results show about this much.",
+  "seo.homeImageNote": "Also the share image of every page without one of its own.",
+  "seo.noindexOn": "Once published, this page leaves search results.",
+  "seo.noindexConfirmTitle": "Hide this page from search engines?",
+  "seo.noindexConfirmBody": "Once published it leaves search results, and coming back waits for the next crawl.",
+  "seo.noindexConfirmLabel": "Confirm hiding this page from search engines",
+  "seo.noindexConfirm": "Hide it",
+  "seo.noindexCancel": "Keep it visible",
 });

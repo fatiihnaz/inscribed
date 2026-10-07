@@ -86,3 +86,20 @@ describe("createCmsConfig slugs", () => {
     expect(() => createCmsConfig({ baseUrl: "https://api.test", slugs: "/about" })).toThrow(/array/);
   });
 });
+
+describe("createCmsConfig siteUrl", () => {
+  it("defaults to null and keeps an origin without its trailing slash", () => {
+    expect(createCmsConfig({ baseUrl: "https://api.test" }).siteUrl).toBe(null);
+    expect(createCmsConfig({ baseUrl: "https://api.test", siteUrl: "https://site.test/" }).siteUrl).toBe("https://site.test");
+  });
+
+  it("survives a second pass, as it does crossing to the client", () => {
+    const cfg = createCmsConfig({ baseUrl: "https://api.test", siteUrl: "https://site.test" });
+    expect(createCmsConfig({ ...cfg }).siteUrl).toBe("https://site.test");
+  });
+
+  it("rejects an address that is not absolute", () => {
+    expect(() => createCmsConfig({ baseUrl: "https://api.test", siteUrl: "site.test" })).toThrow(/absolute/);
+    expect(() => createCmsConfig({ baseUrl: "https://api.test", siteUrl: "/" })).toThrow(/absolute/);
+  });
+});

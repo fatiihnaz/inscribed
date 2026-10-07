@@ -206,6 +206,7 @@ function readRequestLocale() {
  *       (props: { params?: * }, parent?: import("next").ResolvingMetadata) => Promise<import("next").Metadata>,
  *     siteMetadata: (options?: { siteName?: string | Record<string, string>, titleTemplate?: string | Record<string, string> }) =>
  *       (props: { params?: * }) => Promise<import("next").Metadata>,
+ *     sitemap: (options?: { extra?: string[], exclude?: string[] }) => () => Promise<import("next").MetadataRoute.Sitemap>,
  *   },
  *   localePath: (slug: string, locale?: string) => string,
  *   getCmsRoute: () => Promise<import("../shared/route.js").CmsRoute>,
@@ -421,6 +422,110 @@ export function createCmsPage(options) {
         },
       };
     };
+  }
+
+  /**
+   * A whole `app/sitemap.js`: every page the site has content for, in every
+   * language and with hreflang, and every record of a collection whose `seo`
+   * entry names a `path`, dated by its last update. Whatever is noindex stays
+   * out. Read under the same cache tags as the pages, so a publish refreshes it.
+   *
+   * A failed read throws rather than serving an empty sitemap: a crawler retries
+   * an error, but reads an empty sitemap as a site with nothing on it.
+   *
+   * @param {{ extra?: string[], exclude?: string[] }} [options]
+   *   `extra` lists pages with no CMS content (`/iletisim`), in every language;
+   *   `exclude` drops slugs from the list.
+   * @returns {() => Promise<import("next").MetadataRoute.Sitemap>}
+   */
+  function sitemap(options) {
+    const siteUrl = normalizedConfig.siteUrl;
+    if (!siteUrl) {
+      throw new Error("CmsPage.sitemap needs siteUrl in createCmsConfig: a sitemap lists absolute addresses.");
+    }
+    const exclude = new Set(options?.exclude ?? []);
+    const locales = localized ? normalizedConfig.locales : [null];
+
+    return async function generateSitemap() {
+      const sites = await Promise.all(locales.map((locale) => getCmsSiteContent(serverConfig, { locale })));
+
+      /** @type {Map<string, Set<string|null>>} */
+      const indexable = new Map();
+      sites.forEach((site, i) => {
+        for (const page of site.pages) {
+          if (page.slug.includes("[") || exclude.has(page.slug)) continue;
+          if (pageSeoFields(page.blocks, undefined, locales[i], normalizedConfig.locales).noindex) continue;
+          if (!indexable.has(page.slug)) indexable.set(page.slug, new Set());
+          /** @type {Set<string|null>} */ (indexable.get(page.slug)).add(locales[i]);
+        }
+      });
+      for (const slug of options?.extra ?? []) {
+        if (!exclude.has(slug)) indexable.set(slug, new Set(locales));
+      }
+
+      /** @type {import("next").MetadataRoute.Sitemap} */
+      const entries = [];
+      for (const slug of [...indexable.keys()].sort()) {
+        const pageLocales = /** @type {Set<string|null>} */ (indexable.get(slug));
+        const languages = localized
+          ? Object.fromEntries(Object.entries(languageLinks(slug, normalizedConfig))
+            .filter(([tag]) => pageLocales.has(tag === "x-default" ? normalizedConfig.defaultLocale : tag)))
+          : {};
+        const alternates = pageLocales.size > 1 ? { alternates: { languages } } : null;
+        for (const locale of locales) {
+          if (!pageLocales.has(locale)) continue;
+          entries.push({ url: absoluteUrl(localePath(slug, locale ?? undefined), siteUrl), ...alternates });
+        }
+      }
+
+      for (const [key, seo] of Object.entries(normalizedConfig.seo ?? {})) {
+        if (seo.path) entries.push(...await recordEntries(key, seo, recordPathOf(seo.path), locales));
+      }
+      return entries;
+    };
+  }
+
+  /**
+   * One collection's records for the sitemap, every language's rows read first
+   * so hreflang only points at translations that are listed themselves.
+   *
+   * @param {string} key
+   * @param {import("../shared/config.js").CollectionSeo} seo
+   * @param {(slug: string, context: { locale: string|null }) => string} pathOf
+   * @param {(string|null)[]} locales
+   * @returns {Promise<import("next").MetadataRoute.Sitemap>}
+   */
+  async function recordEntries(key, seo, pathOf, locales) {
+    const PAGE_SIZE = 100;
+    /** @type {Map<string, import("../shared/contracts/schemas.js").CollectionItemResponse>} */
+    const listed = new Map();
+    for (const locale of locales) {
+      for (let offset = 0, total = Infinity; offset < total; offset += PAGE_SIZE) {
+        const page = await getCmsCollection(serverConfig, key, buildListParams({ limit: PAGE_SIZE, offset, locale }));
+        total = page.total;
+        if (page.items.length === 0) break;
+        for (const item of page.items) {
+          // A collection with no languages answers every language's read alike.
+          if (!recordSeoFields(item.data, seo).noindex) listed.set(`${item.locale ?? ""}:${item.slug}`, item);
+        }
+      }
+    }
+
+    const siteUrl = /** @type {string} */ (normalizedConfig.siteUrl);
+    /** @type {import("next").MetadataRoute.Sitemap} */
+    const entries = [];
+    for (const item of listed.values()) {
+      const translations = item.translations?.filter((t) => listed.has(`${t.locale ?? ""}:${t.slug}`));
+      const languages = localized ? recordLanguages({ ...item, translations }, pathOf, normalizedConfig) : undefined;
+      const image = recordSeoFields(item.data, seo).image;
+      entries.push({
+        url: absoluteUrl(pathOf(item.slug, { locale: item.locale ?? normalizedConfig.defaultLocale }), siteUrl),
+        ...(item.updatedAt ? { lastModified: item.updatedAt } : null),
+        ...(languages ? { alternates: { languages } } : null),
+        ...(image ? { images: [image.url] } : null),
+      });
+    }
+    return entries;
   }
 
   /**
@@ -691,6 +796,7 @@ export function createCmsPage(options) {
 
   CmsPage.metadata = pageMetadata;
   CmsPage.siteMetadata = siteMetadata;
+  CmsPage.sitemap = sitemap;
 
   const serverCollections = collections
     ? createServerCollections(serverConfig, collections, onSsrError)

@@ -396,10 +396,9 @@
  *   record with no translations is simply the only member of its own group.
  *   Pass it back as `translationOf` to create a sibling in another language.
  * @property {{ locale: string, slug: string }[]} [translations]
- *   The group's *other* members, one per language. Only the single-record read
- *   carries it: a list would need one lookup per row, and nothing on a list
- *   needs to know. This row's own locale and slug are not repeated here.
- *   Absent on a backend without translation support.
+ *   The group's *other* members, one per language, on a single read and on
+ *   each row of a list of a localized collection. This row's own locale and
+ *   slug are not repeated here. Absent on a backend without translation support.
  * @property {*} data
  * @property {number} version
  *   Optimistic concurrency token for the *content*. Archiving and restoring

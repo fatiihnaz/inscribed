@@ -75,6 +75,9 @@ implementing that interface. See [Bring your own backend](#bring-your-own-backen
   page.
 - **Draft autosave.** Edits debounce to a draft endpoint as you type; publish is
   an explicit save.
+- **Search metadata.** Editors manage each page's title, description, share
+  image and indexing from the drawer, records map theirs from their own fields,
+  and canonical links, hreflang and a sitemap follow from the content.
 - **Backend-agnostic core.** A single `CmsTransport` seam isolates all data
   access. A REST adapter is the default; swap it for any backend.
 - **Auth-agnostic core.** Session, admin detection, and access tokens are
@@ -1525,6 +1528,44 @@ home page when there is none. The switcher's code stays as it is: the record on
 the page tells it where its translations live. That happens once the page
 hydrates, so the server-rendered link still swaps the prefix; the redirect above
 is what a crawler following it lands on.
+
+#### Sitemap
+
+```js
+// app/sitemap.js
+import { CmsPage } from "./lib/cms.jsx";
+
+export default CmsPage.sitemap({ extra: ["/iletisim"] });
+```
+
+It lists every page the site has content for in every language, with hreflang,
+and every record of a collection whose `seo` entry names a `path`, dated by its
+last update and with its mapped image. Template pages, anything noindex and the
+slugs in `exclude` stay out; `extra` adds the pages with no CMS content of their
+own (a form, a page of fixed copy). It needs `siteUrl`, since a sitemap lists
+absolute addresses, and it reads under the same cache tags as the pages, so a
+publish refreshes it. A failed read throws instead of serving an empty sitemap:
+a crawler retries an error, but takes an empty sitemap at its word.
+
+> **Not listed:** a page's last-modified date. Nothing records one reliably (a
+> sync touches block rows too), and Google ignores dates that are not accurate,
+> so pages carry none while records carry `updatedAt`. One sitemap holds up to
+> 50,000 addresses.
+
+`robots.txt` is the app's own, and is where the sitemap is announced:
+
+```js
+// app/robots.js
+export default function robots() {
+  return {
+    rules: { userAgent: "*", allow: "/" },
+    sitemap: `${process.env.SITE_URL}/sitemap.xml`,
+  };
+}
+```
+
+Both files sit at the root of `app/`, beside `[locale]/`. The proxy matcher
+already skips them, since their paths have a dot.
 
 ### Theming
 
